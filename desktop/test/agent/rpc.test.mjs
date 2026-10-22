@@ -119,7 +119,7 @@ test('有 token 能调用 list_components', async () => {
   assert.equal(body.result.isError, false);
 });
 
-test('Agent token 文件权限为 600', () => {
+test('Agent token 文件权限为 600（仅 POSIX；Windows 无 POSIX 位）', { skip: process.platform === 'win32' }, () => {
   const tokenDir = join(sandbox, 'agent-token-test');
   const created = createAgentTokenFile(tokenDir);
   assert.equal(statSync(created.tokenFile).mode & 0o777, 0o600);
