@@ -1,20 +1,26 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { after, before, test } from 'node:test';
 import { PackRegistry } from '../../src/packs/registry.ts';
 import { AgentTools } from '../../src/agent/tools.ts';
+import { createAgentCommandBus, SIMPLE_BOM_NOTE } from '../../src/agent/commands.ts';
 
 let sandbox;
 let tools;
+let bridge;
 
 before(() => {
   sandbox = mkdtempSync(join(tmpdir(), 'cad-tools-test-'));
   const builtin = join(sandbox, 'builtin', 'smc-cn');
   mkdirSync(builtin, { recursive: true });
   writeFileSync(join(builtin, 'manifest.json'), JSON.stringify({
-    schemaVersion: 1, id: 'smc-cn', name: 'SMC', vendor: 'SMC', version: '1.0.0'
+    schemaVersion: 1,
+    id: 'smc-cn',
+    name: 'SMC',
+    vendor: 'SMC',
+    version: '1.0.0'
   }));
   writeFileSync(join(builtin, 'parts.json'), JSON.stringify([
     { id: 'MXQ20-50', model: 'MXQ20-50.stp', category: '气缸', specs: { 缸径: '20 mm' } }
@@ -24,24 +30,93 @@ before(() => {
     userDir: join(sandbox, 'user'),
     stateFile: join(sandbox, 'packs-state.json')
   });
-  tools = new AgentTools(registry);
+  bridge = {
+    calls: [],
+    async call(method, args) {
+      this.calls.push({ method, args });
+      if (method === 'getBom') return [];
+      if (method === 'runInterference') {
+        return {
+          hits: 25,
+          items: Array.from({ length: 25 }, (_value, index) => ({
+            a: `A${index}`,
+            b: `B${index}`,
+            volume: index,
+            severity: 'warning'
+          }))
+        };
+      }
+      if (method === 'insertComponent') return { ok: true, meshIndex: 0, name: args[0].model };
+      if (method === 'removeComponent') return { ok: true };
+      if (method === 'importPath') return { ok: true, meshCount: 1, triangleCount: 12 };
+      return { ok: false, message: `unexpected ${method}` };
+    }
+  };
+  tools = new AgentTools(registry, createAgentCommandBus(registry, bridge));
 });
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('注册六个工具且 list_components 可用', async () => {
-  assert.equal(tools.list().length, 6);
+test('工具表为 7 个且不存在 NOT_IMPLEMENTED', () => {
+  assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
+    'get_bom',
+    'import_cad',
+    'insert_component',
+    'list_components',
+    'run_interference_check',
+    'search_components',
+    'undo_last'
+  ]);
+  for (const tool of tools.list()) {
+    assert.doesNotMatch(JSON.stringify(tool), /NOT_IMPLEMENTED|尚未实现|未实现/);
+  }
+});
+
+test('list_components 保持原有筛选行为', async () => {
   const result = await tools.call('list_components', { category: '气缸' });
   assert.equal(result.ok, true);
   assert.equal(result.count, 1);
   assert.equal(result.components[0].model, 'MXQ20-50.stp');
 });
 
-test('未实现工具返回结构化 NOT_IMPLEMENTED', async () => {
-  const result = await tools.call('insert_component', { partId: 'MXQ20-50' });
-  assert.deepEqual(result, {
-    ok: false,
-    code: 'NOT_IMPLEMENTED',
-    message: '插入操作必须与 UI 共用事务/撤销栈，当前版本尚未接入。'
+test('import_cad 经命令总线返回网格与三角面统计', async () => {
+  const result = await tools.call('import_cad', {
+    path: resolve('test', 'fixtures', 'cube.stp')
   });
+  assert.equal(result.ok, true);
+  assert.equal(result.meshCount, 1);
+  assert.equal(result.triangleCount, 12);
+  assert.equal(bridge.calls.at(-1).method, 'importPath');
+});
+
+test('get_bom 空模型返回空数组与 note', async () => {
+  const result = await tools.call('get_bom', {});
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.rows, []);
+  assert.equal(result.note, SIMPLE_BOM_NOTE);
+});
+
+test('run_interference_check 返回命中数并截断前 20 条', async () => {
+  const result = await tools.call('run_interference_check', {});
+  assert.equal(result.ok, true);
+  assert.equal(result.hits, 25);
+  assert.equal(result.items.length, 20);
+});
+
+test('insert_component 返回 meshIndex/name，undo_last 走总线撤销', async () => {
+  const inserted = await tools.call('insert_component', { partId: 'MXQ20-50', name: '定位气缸' });
+  assert.equal(inserted.ok, true);
+  assert.equal(inserted.meshIndex, 0);
+  assert.equal(inserted.name, '定位气缸');
+
+  const undone = await tools.call('undo_last', {});
+  assert.equal(undone.ok, true);
+  assert.equal(undone.command, 'insert_component');
+  assert.equal(bridge.calls.at(-1).method, 'removeComponent');
+});
+
+test('insert_component 对未知 partId 返回 PART_NOT_FOUND', async () => {
+  const result = await tools.call('insert_component', { partId: 'NOT-EXIST' });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'PART_NOT_FOUND');
 });

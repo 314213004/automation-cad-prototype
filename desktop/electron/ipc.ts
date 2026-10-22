@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'no
 import { extname } from 'node:path';
 import { join } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
-import type { AgentRpcInfo } from '../src/agent/rpc';
 import { FactoryManager } from '../src/factory/manager.ts';
 import type { TagValue } from '../src/factory/types.ts';
 import { PlcManager } from '../src/plc/manager.ts';
@@ -17,6 +16,7 @@ import {
   ensureExportExtension,
   validateExportFileName
 } from '../src/export/file';
+import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
 
 export interface IpcContext {
   builtinDir: string;
@@ -26,10 +26,10 @@ export interface IpcContext {
   plcConfigFile: string;
   syncConfigFile: string;
   version: string;
-  getAgentInfo(): (AgentRpcInfo & { toolCount: number; error?: string }) | { error: string };
+  getAgentInfo(): unknown;
 }
 
-export const CAD_EXTENSIONS = ['.step', '.stp', '.iges', '.igs', '.brep', '.stl', '.obj', '.gltf', '.glb'];
+export { CAD_EXTENSIONS } from '../src/shared/cad';
 
 function exportPayload(data: unknown): string | Uint8Array {
   if (typeof data === 'string') return data;
@@ -203,7 +203,7 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     if (typeof filePath !== 'string' || !filePath) throw new Error('缺少文件路径');
     if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new Error(`文件不存在：${filePath}`);
     const ext = extname(filePath).toLowerCase();
-    if (!CAD_EXTENSIONS.includes(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
+    if (!isCadExtension(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
     return readFileSync(filePath);
   });
 

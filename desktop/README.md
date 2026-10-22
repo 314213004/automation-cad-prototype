@@ -21,11 +21,12 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - CAD 解析统计（`cube.stp` → 1 个零件 / 12 个三角面）；
 - 无 WebGL 时显示「当前环境不支持 WebGL，无法显示 3D 模型」降级面板，并展示解析统计；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
-- 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层。
+- 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
+- 智能体注册表为 7 个工具，渲染桥能读取场景与 BOM（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_AGENT_BRIDGE_OK`）。
 
 ## MCP（stdio）接入
 
-MCP 入口直接复用 `src/agent/tools.ts` 的 6 个工具：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`。
+MCP 入口直接复用 `src/agent/tools.ts` 的 7 个工具：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`undo_last`。写操作依赖运行中的桌面渲染层；独立 stdio 进程没有渲染桥时会返回结构化 `AGENT_UNAVAILABLE`，不会假装成功。
 
 先构建：
 
@@ -77,6 +78,8 @@ stdio 本身是受信任的本机通道，不需要读取 userData 下的 Agent 
 
 - Windows：`%APPDATA%/AutomationCAD/agent-token`
 - Linux：`~/.config/AutomationCAD/agent-token`
+
+顶栏「智能体」面板显示服务地址/端口、工具数、token 文件路径、7 个工具说明与最近 5 条命令历史；不显示 token，也不提供聊天或 LLM 接入。
 
 请求必须带 `Authorization: Bearer <token>`。示例：
 

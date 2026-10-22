@@ -12,6 +12,20 @@ export interface CadSelectionInfo {
   bounds: { min: [number, number, number]; max: [number, number, number] };
 }
 
+export interface CadScenePart {
+  name: string;
+  triangles: number;
+  bbox: { min: [number, number, number]; max: [number, number, number] };
+}
+
+export interface CadBomRow {
+  no: number;
+  name: string;
+  spec: string;
+  qty: number;
+  mat: string;
+}
+
 export interface CadViewerOptions {
   container: HTMLElement;
   partsElement: HTMLElement;
@@ -237,6 +251,127 @@ export class CadViewer {
     }));
   }
 
+  getSceneParts(): CadScenePart[] {
+    return this.parts.map((part) => {
+      const box = this.partBounds(part);
+      return {
+        name: part.data.name,
+        triangles: part.triangleCount,
+        bbox: {
+          min: [box.min.x, box.min.y, box.min.z],
+          max: [box.max.x, box.max.y, box.max.z]
+        }
+      };
+    });
+  }
+
+  getSelectionSnapshot(): { name: string; bbox: number[] } | null {
+    if (this.selected === null) return null;
+    const part = this.parts[this.selected];
+    if (!part) return null;
+    const box = this.partBounds(part);
+    return {
+      name: part.data.name,
+      bbox: [box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z]
+    };
+  }
+
+  getBomRows(): CadBomRow[] {
+    return this.modelParts.map((part, index) => ({
+      no: index + 1,
+      name: part.name,
+      spec: part.name,
+      qty: 1,
+      mat: '—'
+    }));
+  }
+
+  addPlaceholderPart(name: string): number {
+    if (this.degraded || !this.renderer) {
+      throw new Error('当前环境不支持 WebGL，无法插入占位件');
+    }
+    const displayName = name.trim();
+    if (!displayName) throw new Error('占位件名称不能为空');
+
+    const currentBounds = this.totalBounds();
+    const centerX = currentBounds.isEmpty() ? 10 : currentBounds.max.x + 12;
+    const geometry = new THREE.BoxGeometry(20, 20, 20);
+    const material = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(DEFAULT_COLORS[this.parts.length % DEFAULT_COLORS.length] ?? 0x14b8a6),
+      metalness: 0.22,
+      roughness: 0.58,
+      wireframe: this.wireframe,
+      side: THREE.DoubleSide
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = displayName;
+    mesh.position.set(centerX, 0, 10);
+    mesh.userData.placeholder = true;
+
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(geometry),
+      new THREE.LineBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.9 })
+    );
+    edges.name = `${displayName}-wire`;
+    mesh.add(edges);
+    mesh.updateMatrixWorld(true);
+
+    const index = this.parts.length;
+    mesh.userData.partIndex = index;
+    const data: CadMeshData = {
+      name: displayName,
+      positions: new Float32Array(),
+      normals: null,
+      indices: null
+    };
+    this.parts.push({ data, mesh, triangleCount: 12 });
+    this.group.add(mesh);
+    const box = this.partBounds({ data, mesh, triangleCount: 12 });
+    this.modelParts.push({
+      name: displayName,
+      bbox: {
+        min: [box.min.x, box.min.y, box.min.z],
+        max: [box.max.x, box.max.y, box.max.z]
+      }
+    });
+    this.renderPartList();
+    this.syncPartCount();
+    this.selectPart(index);
+    return index;
+  }
+
+  removePart(index: number): boolean {
+    if (this.degraded || !Number.isInteger(index)) return false;
+    const part = this.parts[index];
+    if (!part) return false;
+
+    this.group.remove(part.mesh);
+    part.mesh.traverse((object) => {
+      const renderable = object as THREE.Mesh;
+      renderable.geometry?.dispose();
+      const materials = Array.isArray(renderable.material) ? renderable.material : [renderable.material];
+      for (const material of materials) {
+        if (!material) continue;
+        const shared = this.parts.some((candidate, candidateIndex) =>
+          candidateIndex !== index && candidate.mesh.material === material
+        );
+        if (!shared) material.dispose();
+      }
+    });
+
+    this.parts.splice(index, 1);
+    this.modelParts.splice(index, 1);
+    this.parts.forEach((candidate, candidateIndex) => {
+      candidate.mesh.userData.partIndex = candidateIndex;
+    });
+    this.selected = null;
+    if (this.selectionHelper) this.selectionHelper.visible = false;
+    this.renderPartList();
+    this.renderDetail(null);
+    this.syncPartCount();
+    return true;
+  }
+
   getExportRoot(): THREE.Object3D {
     if (this.parts.length > 0) return this.group;
     if (!this.importedResult) throw new Error('请先打开 CAD 文件再导出 3D 模型');
@@ -359,10 +494,16 @@ export class CadViewer {
     const bounds = new THREE.Box3();
     if (this.parts.length === 0) return bounds;
     for (const part of this.parts) {
-      part.mesh.geometry.computeBoundingBox();
-      if (part.mesh.geometry.boundingBox) bounds.union(part.mesh.geometry.boundingBox.clone().applyMatrix4(part.mesh.matrixWorld));
+      const partBox = this.partBounds(part);
+      if (!partBox.isEmpty()) bounds.union(partBox);
     }
     return bounds;
+  }
+
+  private partBounds(part: LoadedPart): THREE.Box3 {
+    part.mesh.updateMatrixWorld(true);
+    part.mesh.geometry.computeBoundingBox();
+    return part.mesh.geometry.boundingBox?.clone().applyMatrix4(part.mesh.matrixWorld) ?? new THREE.Box3();
   }
 
   private updateGrid(center: THREE.Vector3, radius?: number): void {
@@ -408,6 +549,11 @@ export class CadViewer {
     });
   }
 
+  private syncPartCount(): void {
+    const count = document.getElementById('cadPartCount');
+    if (count) count.textContent = String(this.parts.length);
+  }
+
   private renderDetail(info: CadSelectionInfo | null): void {
     this.onSelect?.(info);
     if (!info) {
@@ -428,8 +574,7 @@ export class CadViewer {
   }
 
   private selectionInfo(part: LoadedPart, index: number): CadSelectionInfo {
-    part.mesh.geometry.computeBoundingBox();
-    const box = part.mesh.geometry.boundingBox?.clone().applyMatrix4(part.mesh.matrixWorld) ?? new THREE.Box3();
+    const box = this.partBounds(part);
     const size = box.getSize(new THREE.Vector3());
     return {
       index,

@@ -9,7 +9,9 @@
 | 纯逻辑单测 | `test/**/*.test.mjs` | `npm test`（`node --test`） | 不依赖 Electron |
 | CAD 解析 | `test/cad/step.test.mjs` | 同上 | 用 `test/fixtures/cube.stp`，断言 12 面 / 300³ mm |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
-| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 6 个工具 |
+| 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
+| 工具表 | `test/agent/tools.test.mjs` | 同上 | 7 工具、BOM 空数组、干涉截断、插入与撤销 |
+| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 7 个工具 |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例 |
@@ -23,13 +25,15 @@
 SMOKE_CAD_OK triangles=12 meshes=1
 SMOKE_WEBGL_FALLBACK_OK meshes=1 triangles=12 bounds=300.000 × 300.000 × 300.000 mm
 SMOKE_UI_OK stations=2 tags=8 packs=2 parts=9 overlay=1
-SMOKE_ELEC_LIB_OK parts=44 categories=12 symbols=10
+SMOKE_ELEC_LIB_OK parts=44 categories=12 symbols=34
 SMOKE_SYNC_UI_OK fields=8 apiKey=password enabled=checkbox
 SMOKE_SYNC_PACKAGE_OK files=4 sha=1
 SMOKE_PLC_OK points=28
 SMOKE_COMMISSION_OK steps=6 passed=6
 SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
 SMOKE_COMMISSION_PDF_OK path=.../report.pdf
+SMOKE_AGENT_TOOLS_OK tools=7 implemented=7
+SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -55,14 +59,14 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 101 个单测全绿（含数据包 symbol 校验、iec-cn 数据契约、参考表生成、符号映射扫描）
-- ✅ smoke 含电气元件面板按需加载/放置、PLC、6 步上电、3 用例与联调 PDF 断言
+- ✅ 126 个单测全绿（含命令总线、7 工具、WebGL 桥错误、数据包与同步）
+- ✅ smoke 含智能体 7 工具/场景/BOM、电气元件面板、PLC、6 步上电、3 用例与联调 PDF 断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 
 ## 待办
 
-1. 补 `importPath` 的异常用例（损坏文件、超大文件、非 CAD 文件）。
+1. 补损坏 CAD 文件、超大文件的真实渲染层导入异常用例。
 2. 增加 Windows 端的 smoke（GitHub Actions windows-latest 上跑 `--headless-smoke`）。
 3. 把 10 万面 STEP 纳入基准，设阈值（如 <5s）防回归。
 4. 服务端 `design-sync` 落地后，用本地 `material-flow-system` 测试库替换 mock 做端到端验证。

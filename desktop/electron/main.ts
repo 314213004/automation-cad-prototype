@@ -7,6 +7,7 @@ import { registerIpcHandlers, CAD_EXTENSIONS } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
+import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
@@ -33,7 +34,20 @@ if (!gotLock) {
 
 let mainWindow: BrowserWindow | null = null;
 let agentServer: AgentRpcServer | null = null;
+let agentTools: AgentTools | null = null;
+let commandBus: CommandBus | null = null;
 let agentInfo: (AgentRpcInfo & { toolCount: number }) | { error: string } = { error: 'Agent 服务尚未启动' };
+
+function publicAgentInfo(): unknown {
+  if ('error' in agentInfo) return agentInfo;
+  const tools = agentTools?.summaries().map(({ name, description }) => ({ name, description })) ?? [];
+  return {
+    ...agentInfo,
+    toolCount: tools.length,
+    tools,
+    history: commandBus?.history().slice(-5) ?? []
+  };
+}
 
 function desktopRoot(): string {
   return resolve(__dirname, '..');
@@ -508,6 +522,40 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        const summaries = agentTools?.summaries() ?? [];
+        if (summaries.length !== 7) {
+          console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_TOOLS_OK tools=${summaries.length} implemented=${summaries.length}`);
+
+        const bridgeState = await window.webContents.executeJavaScript(
+          `(() => {
+            const bridge = window.__AgentBridge;
+            if (!bridge) return { ready: false, scene: 0, bom: 0, error: 'missing_bridge' };
+            const scene = bridge.getScene();
+            const bom = bridge.getBom();
+            return {
+              ready: bridge.ready() === true,
+              scene: Array.isArray(scene?.parts) ? 1 : 0,
+              bom: Array.isArray(bom) ? 1 : 0,
+              error: (scene && scene.message) || (bom && bom.message) || ''
+            };
+          })()`
+        ) as { ready: boolean; scene: number; bom: number; error?: string };
+        if (!bridgeState.ready || bridgeState.scene !== 1 || bridgeState.bom !== 1) {
+          console.error('SMOKE_FAIL agent_bridge', JSON.stringify(bridgeState));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_BRIDGE_OK scene=${bridgeState.scene} bom=${bridgeState.bom}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -591,9 +639,11 @@ function buildMenu(window: BrowserWindow): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function startAgent(registry: PackRegistry): Promise<void> {
+async function startAgent(registry: PackRegistry, commands: CommandBus): Promise<void> {
   const { token, tokenFile } = createAgentTokenFile(app.getPath('userData'));
-  const tools = new AgentTools(registry);
+  const tools = new AgentTools(registry, commands);
+  agentTools = tools;
+  commandBus = commands;
   agentServer = new AgentRpcServer({
     tools,
     token,
@@ -629,13 +679,14 @@ async function bootstrap(): Promise<void> {
     plcConfigFile: join(app.getPath('userData'), 'plc.json'),
     syncConfigFile: join(app.getPath('userData'), 'sync.json'),
     version: app.getVersion(),
-    getAgentInfo: () => agentInfo
+    getAgentInfo: publicAgentInfo
   });
 
   mainWindow = createWindow();
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  await startAgent(registry);
+  commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow));
+  await startAgent(registry, commandBus);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();

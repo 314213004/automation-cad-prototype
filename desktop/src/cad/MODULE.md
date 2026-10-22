@@ -60,6 +60,7 @@ Response: { id, ok: true, result: CadImportResult } | { id, ok: false, error: st
 - ✅ STL/OBJ/GLTF/GLB
 - ✅ 零件树、三角面统计、包围盒测量、fit、线框、拖放导入
 - ✅ WebGL 降级（3 条单测）
+- ✅ 智能体占位件（20×20×20 mm 实体 + 线框）、按索引移除与重排、场景/选择/BOM 快照
 - ⏳ DXF 二维图纸（`dxf-parser`，未接）
 - ⏳ 剖切面、爆炸视图、装配树层级（当前是平铺 mesh 列表）
 
@@ -68,3 +69,4 @@ Response: { id, ok: true, result: CadImportResult } | { id, ok: false, error: st
 1. 引入 DXF：图纸视图（白纸 + 墨线）与三维视图分离。
 2. 单位识别 + 英寸/毫米切换。
 3. 十万面以上模型的分块加载与 LOD（当前一次性建 geometry）。
+4. 当前 BOM 是查看器快照（零件名/数量 1/材料 `—`），后续接入原型真实装配 BOM。

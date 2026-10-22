@@ -1,5 +1,6 @@
 import type { PackRegistry } from '../packs/registry';
 import type { ComponentPart } from '../shared/types';
+import type { CommandResult } from './commands';
 
 export interface AgentTool {
   name: string;
@@ -14,10 +15,9 @@ export interface AgentToolSummary {
   inputSchema: Record<string, unknown>;
 }
 
-export interface NotImplementedResult {
-  ok: false;
-  code: 'NOT_IMPLEMENTED';
-  message: string;
+export interface AgentCommandExecutor {
+  execute(name: string, args?: Record<string, unknown>): Promise<CommandResult>;
+  undoLast(): Promise<CommandResult>;
 }
 
 const COMPONENT_FILTER_SCHEMA = {
@@ -30,20 +30,44 @@ const COMPONENT_FILTER_SCHEMA = {
   additionalProperties: false
 };
 
-function notImplemented(message: string): NotImplementedResult {
-  return { ok: false, code: 'NOT_IMPLEMENTED', message };
-}
+const EMPTY_SCHEMA = {
+  type: 'object',
+  properties: {},
+  additionalProperties: false
+};
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function commandFailure(result: CommandResult): Record<string, unknown> {
+  return {
+    ok: false,
+    code: result.error?.code ?? 'COMMAND_FAILED',
+    message: result.error?.message ?? '命令执行失败'
+  };
+}
+
+function commandSuccess(result: CommandResult): Record<string, unknown> {
+  if (!result.ok) return commandFailure(result);
+  return {
+    ok: true,
+    ...(isRecord(result.data) ? result.data : result.data === undefined ? {} : { data: result.data })
+  };
+}
+
 export class AgentTools {
   private readonly registry: PackRegistry;
+  private readonly commands: AgentCommandExecutor | undefined;
   private readonly tools = new Map<string, AgentTool>();
 
-  constructor(registry: PackRegistry) {
+  constructor(registry: PackRegistry, commands?: AgentCommandExecutor) {
     this.registry = registry;
+    this.commands = commands;
     this.registerDefaults();
   }
 
@@ -81,6 +105,19 @@ export class AgentTools {
     return this.registry.listParts(filter);
   }
 
+  private unavailable(): Record<string, unknown> {
+    return {
+      ok: false,
+      code: 'AGENT_UNAVAILABLE',
+      message: '命令总线未接入渲染层，请在 AutomationCAD 桌面应用内调用'
+    };
+  }
+
+  private async execute(name: string, args: Record<string, unknown> = {}): Promise<CommandResult | null> {
+    if (!this.commands) return null;
+    return await this.commands.execute(name, args);
+  }
+
   private registerDefaults(): void {
     this.add({
       name: 'list_components',
@@ -116,46 +153,71 @@ export class AgentTools {
         required: ['path'],
         additionalProperties: false
       },
-      handler: async () => notImplemented('Agent 触发的 CAD 导入尚未接入渲染层事务通道。')
+      handler: async (args) => {
+        const result = await this.execute('import_cad', args);
+        return result ? commandSuccess(result) : this.unavailable();
+      }
     });
 
     this.add({
       name: 'get_bom',
-      description: '读取当前装配体的 BOM。',
-      inputSchema: {
-        type: 'object',
-        properties: { assemblyId: { type: 'string' } },
-        additionalProperties: true
-      },
-      handler: async () => notImplemented('当前原型尚未建立可事务读取的装配 BOM 数据源。')
+      description: '读取当前装配体的简化 BOM（当前 CAD 零件 + 已插入占位件）。',
+      inputSchema: EMPTY_SCHEMA,
+      handler: async () => {
+        const result = await this.execute('get_bom');
+        return result ? commandSuccess(result) : this.unavailable();
+      }
     });
 
     this.add({
       name: 'run_interference_check',
-      description: '对当前装配体执行包围盒级干涉初筛。',
-      inputSchema: {
-        type: 'object',
-        properties: { assemblyId: { type: 'string' } },
-        additionalProperties: true
-      },
-      handler: async () => notImplemented('干涉检查需要装配事务和真实零件姿态，当前版本仅提供查看器。')
+      description: '对当前装配体执行包围盒级干涉初筛，返回命中数与前 20 条。',
+      inputSchema: EMPTY_SCHEMA,
+      handler: async () => {
+        const result = await this.execute('run_interference');
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        const data = isRecord(result.data) ? result.data : {};
+        const items = Array.isArray(data.items) ? data.items.slice(0, 20) : [];
+        return {
+          ok: true,
+          hits: Number(data.hits ?? items.length),
+          items
+        };
+      }
     });
 
     this.add({
       name: 'insert_component',
-      description: '把标准件插入当前装配体。',
+      description: '把数据包中的标准件作为占位件插入当前装配体。',
       inputSchema: {
         type: 'object',
         properties: {
-          partId: { type: 'string' },
-          x: { type: 'number' },
-          y: { type: 'number' },
-          z: { type: 'number' }
+          partId: { type: 'string', description: '数据包中的元器件 id' },
+          name: { type: 'string', description: '可选的显示名称，缺省使用型号' }
         },
         required: ['partId'],
         additionalProperties: false
       },
-      handler: async () => notImplemented('插入操作必须与 UI 共用事务/撤销栈，当前版本尚未接入。')
+      handler: async (args) => {
+        const partId = getString(args.partId);
+        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: 'insert_component 需要 partId 参数' };
+        const part = this.registry.listParts().find((candidate) => candidate.id === partId);
+        if (!part) return { ok: false, code: 'PART_NOT_FOUND', message: `元器件不存在：${partId}` };
+        const name = getString(args.name);
+        const result = await this.execute('insert_component', { partId, ...(name ? { name } : {}) });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'undo_last',
+      description: '撤销最近一次可撤销的写操作（当前支持占位件插入）。',
+      inputSchema: EMPTY_SCHEMA,
+      handler: async () => {
+        if (!this.commands) return this.unavailable();
+        return commandSuccess(await this.commands.undoLast());
+      }
     });
   }
 }

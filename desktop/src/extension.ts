@@ -10,6 +10,7 @@ import { initPackPanel } from './packs/ui';
 import { initElecLibraryPanel } from './packs/elec-ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import { initSyncPanel } from './sync/ui';
+import { initAgentPanel } from './agent/ui';
 import type { SyncUploadPayload } from './sync/types';
 import type { InterferenceHit, InterferencePart } from './mech/interference';
 import { initInterferencePanel, type InterferencePanelHandle } from './mech/interference-ui';
@@ -525,10 +526,9 @@ async function inspectPath(path: string): Promise<CadImportResult['stats']> {
   return result.stats;
 }
 
-async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
+async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImportResult> {
   if (busy) {
-    showNotice('已有文件正在解析，请稍候', true);
-    return;
+    throw new Error('已有文件正在解析，请稍候');
   }
   openOverlay();
   setBusy(true, `正在解析 ${name}…`);
@@ -544,26 +544,46 @@ async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
     setBusy(false);
     setEmptyVisible(false);
     showNotice(`${name} 已加载 · ${result.stats.triangleCount} 个三角面`);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     busy = false;
     updateLoading(true, `打开失败：${message}`, true);
     setEmptyVisible(true);
-    showNotice(message, true);
     console.error('[cad] 导入失败', error);
+    throw error;
+  }
+}
+
+async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
+  try {
+    await loadCadBuffer(buffer, name);
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function loadCadPath(path: string): Promise<CadImportResult> {
+  const name = fileNameFromPath(path);
+  if (!window.desktop) {
+    throw new Error('当前为浏览器预览模式，请使用拖入文件或桌面版打开');
+  }
+  try {
+    updateLoading(true, `正在读取 ${name}…`);
+    const bytes = await window.desktop.readFileBuffer(path);
+    return await loadCadBuffer(toArrayBuffer(bytes), name);
+  } catch (error) {
+    busy = false;
+    updateLoading(true, `读取失败：${error instanceof Error ? error.message : String(error)}`, true);
+    setEmptyVisible(true);
+    throw error;
   }
 }
 
 async function importPath(path: string): Promise<void> {
   const name = fileNameFromPath(path);
-  if (!window.desktop) {
-    showNotice('当前为浏览器预览模式，请使用拖入文件或桌面版打开。', true);
-    return;
-  }
   try {
-    updateLoading(true, `正在读取 ${name}…`);
-    const bytes = await window.desktop.readFileBuffer(path);
-    await importBuffer(toArrayBuffer(bytes), name);
+    await loadCadPath(path);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     busy = false;
@@ -617,6 +637,119 @@ async function importPack(path: string): Promise<void> {
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), true);
   }
+}
+
+function agentBridgeReady(): boolean {
+  return Boolean(root && window.__AUTOMATION_CAD_EXTENSION_READY__ === true);
+}
+
+function agentBridgeUnavailable(): { ok: false; message: string } {
+  return { ok: false, message: '渲染层尚未就绪' };
+}
+
+function initAgentBridge(): void {
+  if (window.__AgentBridge) return;
+  const bridge = {
+    ready: (): boolean => agentBridgeReady(),
+    getScene: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const currentViewer = ensureViewer();
+        return {
+          parts: currentViewer.getSceneParts(),
+          source: currentFileName || null
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    getSelection: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        return ensureViewer().getSelectionSnapshot();
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    getBom: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        return ensureViewer().getBomRows();
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    insertComponent: (part: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!part || typeof part !== 'object') return { ok: false, message: '零件参数不合法' };
+      const source = part as Record<string, unknown>;
+      const id = typeof source.id === 'string' ? source.id.trim() : '';
+      const model = typeof source.model === 'string' ? source.model.trim() : '';
+      const category = typeof source.category === 'string' ? source.category.trim() : '';
+      if (!id || !model || !category) return { ok: false, message: '零件参数缺少 id/model/category' };
+      try {
+        const name = model || id;
+        const meshIndex = ensureViewer().addPlaceholderPart(name);
+        return { ok: true, meshIndex, name };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    removeComponent: (meshIndex: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (typeof meshIndex !== 'number' || !Number.isInteger(meshIndex)) {
+        return { ok: false, message: 'meshIndex 必须是非负整数' };
+      }
+      try {
+        if (!ensureViewer().removePart(meshIndex)) {
+          return { ok: false, message: `零件索引不存在：${meshIndex}` };
+        }
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    runInterference: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        initMechUi();
+        const hits = interference?.run(ensureViewer().getModelParts()) ?? [];
+        return {
+          hits: hits.length,
+          items: hits.map((hit) => ({
+            a: hit.a,
+            b: hit.b,
+            volume: hit.volumeApprox,
+            severity: hit.severity
+          }))
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    importPath: async (path: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };
+      try {
+        const result = await loadCadPath(path.trim());
+        return {
+          ok: true,
+          meshCount: result.stats.meshCount,
+          triangleCount: result.stats.triangleCount
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        showNotice(`导入失败：${message}`, true);
+        return { ok: false, message };
+      }
+    }
+  };
+  Object.defineProperty(window, '__AgentBridge', {
+    value: Object.freeze(bridge),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
 }
 
 function bindWindowEvents(): void {
@@ -689,6 +822,7 @@ function init(): void {
   initPackPanel();
   initElecLibraryPanel();
   initSyncPanel({ buildPayload: buildSyncPayload });
+  initAgentPanel();
   buildOverlay();
   initMechUi();
   injectStressTab();
@@ -709,6 +843,7 @@ function init(): void {
     exportData,
     exportReportPdf: exportPdfReport
   };
+  initAgentBridge();
   window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
 }
 

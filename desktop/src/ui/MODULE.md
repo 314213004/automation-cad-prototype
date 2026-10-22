@@ -9,7 +9,7 @@ main.ts did-finish-load
   └─ <script src="file://.../dist/extension.js">（IIFE）
        └─ init()
             ├─ injectStyles()      # cad.css + panels.css 插到 <head>
-            ├─ buildEntryButton() # 顶栏追加「CAD 查看」「工厂」「数据包」「智慧工厂」
+            ├─ buildEntryButton() # 顶栏追加「CAD 查看」「工厂」「数据包」「智慧工厂」「电气元件」「联调」「智能体」
             ├─ buildOverlay()     # #automationCadOverlay
             └─ bindWindowEvents() # 拖放、Esc、菜单事件
 ```
@@ -23,16 +23,19 @@ main.ts did-finish-load
 | `[data-cad-action="open\|fit\|wire\|close"]` | 覆盖层工具条 |
 | `#cadNotice` | 加载/错误提示条 |
 | `window.AutomationCadViewer` | `{ open, close, importPath, inspectPath }`，smoke 测试用 |
+| `window.__AgentBridge` | 受控工具桥：场景/选择/BOM/插入/移除/干涉/导入；不暴露 DOM |
 | `window.__AUTOMATION_CAD_EXTENSION_READY__` | 注入完成标志，smoke 等待它 |
 
 工厂面板与数据包面板分别由 `initFactoryPanel()` / `initPackPanel()` 在 `src/extension.ts` 里初始化，样式在 `src/ui/panels.css`。
 智慧工厂同步面板由 `initSyncPanel()` 初始化，导出物由 `buildSyncPayload()` 复用 `export/` 生成后交给主进程。
+智能体面板由 `src/agent/ui.ts` 的 `initAgentPanel()` 初始化，只展示服务地址/端口、工具数、token 文件路径、7 个工具与最近 5 条命令历史，不接 LLM。
 
 ## 数据流
 
 - 打开 CAD：菜单/按钮/拖放 → `desktop.readFileBuffer(path)` → Worker 解析 → viewer 渲染
 - 工厂：面板 → `window.desktop.factory.*` → 主进程 Manager → 适配器 → `onValues` 事件回推 UI
 - 数据包：面板 → `desktop.packs.*`；「插入」写 `localStorage` 覆盖层，不改原型数据
+- 智能体：外部 Agent → 主进程命令总线 → `window.__AgentBridge` → `CadViewer`；写操作统一进撤销栈
 
 ## 坑点
 
@@ -50,6 +53,8 @@ main.ts did-finish-load
 - ✅ 工厂面板（状态灯、连接表单、工位树、实时值、写入确认）
 - ✅ 数据包面板（列表、开关、导入、删除、搜索、插入）
 - ✅ 智慧工厂同步面板（设置、密钥掩码、测试连接、立即同步、最近结果/包列表）
+- ✅ 智能体面板（服务状态、7 工具、最近 5 条命令历史、刷新）
+- ✅ `window.__AgentBridge`（只读/受控，未就绪返回中文结构化错误）
 - ⏳ 面板宽度/折叠记忆、键盘可达性（焦点环）
 - ⏳ 与原型「标准件库」视图的深度联动（当前是 localStorage 覆盖层）
 

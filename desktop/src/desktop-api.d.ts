@@ -155,6 +155,58 @@ interface DesktopSyncUploadPayload {
   bom: Array<{ no: number; name: string; spec: string; qty: number; mat: string; remark?: string }>;
 }
 
+interface DesktopAgentToolInfo {
+  name: string;
+  description: string;
+}
+
+interface DesktopAgentHistoryEntry {
+  name: string;
+  at: string;
+  ok: boolean;
+}
+
+interface DesktopAgentInfo {
+  host?: string;
+  port?: number;
+  url?: string;
+  tokenFile?: string;
+  toolCount?: number;
+  tools?: DesktopAgentToolInfo[];
+  history?: DesktopAgentHistoryEntry[];
+  error?: string;
+}
+
+interface AgentBridgeFailure {
+  ok: false;
+  message: string;
+}
+
+interface AgentBridgeScenePart {
+  name: string;
+  triangles: number;
+  bbox: { min: number[]; max: number[] };
+}
+
+interface AgentBridgeBomRow {
+  no: number;
+  name: string;
+  spec: string;
+  qty: number;
+  mat: string;
+}
+
+interface AgentBridgeApi {
+  ready(): boolean;
+  getScene(): { parts: AgentBridgeScenePart[]; source: string | null } | AgentBridgeFailure;
+  getSelection(): { name: string; bbox: number[] } | AgentBridgeFailure | null;
+  getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
+  insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
+  removeComponent(meshIndex: number): { ok: boolean; message?: string };
+  runInterference(): { hits: number; items: { a: string; b: string; volume: number; severity: string }[] } | AgentBridgeFailure;
+  importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -172,7 +224,7 @@ interface Window {
       remove(id: string): Promise<{ ok: boolean }>;
       listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
-    agent: { info(): Promise<unknown> };
+    agent: { info(): Promise<DesktopAgentInfo> };
     factory: {
       info(): Promise<unknown>;
       status(): Promise<DesktopFactoryResult<DesktopFactoryStatusInfo>>;
@@ -213,6 +265,7 @@ interface Window {
     onImportPack(callback: (payload: { path: string }) => void): () => void;
     onSetDomain(callback: (domain: 'mech' | 'elec') => void): () => void;
   };
+  __AgentBridge?: AgentBridgeApi;
   ElecDomain?: {
     setDomain(domain: 'mech' | 'elec'): void;
     insertSymbol(key: string, opts?: { x?: number; y?: number }): { ok: boolean; tag?: string; id?: string; message?: string };
