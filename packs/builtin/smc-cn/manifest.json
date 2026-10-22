@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "smc-cn",
+  "name": "SMC 常用气动元件",
+  "vendor": "SMC",
+  "version": "1.0.0",
+  "license": "数据仅用于选型演示，型号与参数以厂商样本为准",
+  "description": "非标自动化常用 SMC 气缸、电磁阀、磁性开关、接头与气源处理元件。"
+}

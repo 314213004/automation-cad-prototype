@@ -1,0 +1,44 @@
+.commission-drawer{width:520px}
+.commission-panel{display:flex;flex-direction:column;gap:0}
+.commission-status{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid #343a40;border-radius:4px;background:#1d2124;font-size:11px;color:#aab3ba}
+.commission-lamp{width:8px;height:8px;border-radius:50%;background:#5d666e;box-shadow:0 0 0 2px rgba(93,102,110,.18)}
+.commission-lamp[data-state="connected"]{background:#3fb27a;box-shadow:0 0 0 2px rgba(63,178,122,.2)}
+.commission-lamp[data-state="connecting"]{background:#e8b84a;box-shadow:0 0 0 2px rgba(232,184,74,.2)}
+.commission-lamp[data-state="error"]{background:#f04438;box-shadow:0 0 0 2px rgba(240,68,56,.2)}
+.commission-status strong{margin-left:auto;color:#d7dee3;font:10px/1.4 var(--font-mono,monospace)}
+.commission-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.commission-grid .acp-field{margin:0}
+.commission-actions{display:flex;align-items:center;gap:6px;margin-top:9px;flex-wrap:wrap}
+.commission-table{width:100%;border-collapse:collapse;font-size:10px}
+.commission-table th{padding:5px 6px;border-bottom:1px solid #3a4249;color:#7f8a92;text-align:left;font-weight:500;background:#1d2124}
+.commission-table td{padding:5px 6px;border-bottom:1px solid #2d3237;color:#b8c0c7;vertical-align:middle}
+.commission-table tr:last-child td{border-bottom:0}
+.commission-table .mono{font:9px/1.35 var(--font-mono,monospace);color:#8f9aa3}
+.commission-table input{width:54px;height:23px;padding:2px 4px;border:1px solid #3c434a;border-radius:2px;background:#16181b;color:#d6dde2;font:9px/1 var(--font-mono,monospace);text-align:right}
+.commission-table-scroll{max-height:230px;overflow:auto;border:1px solid #343a40;border-radius:4px}
+.commission-step{display:grid;grid-template-columns:18px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 9px;border-bottom:1px solid #2d3237;font-size:11px;color:#aab3ba}
+.commission-step:last-child{border-bottom:0}
+.commission-step-status{width:16px;height:16px;border-radius:50%;border:1px solid #4b555d;display:grid;place-items:center;color:#8f9aa3;font-size:9px}
+.commission-step[data-state="pass"] .commission-step-status{border-color:#2a6b4d;background:#1d3a2d;color:#72d8a9}
+.commission-step[data-state="fail"] .commission-step-status{border-color:#7b3c38;background:#3a2322;color:#ff9b93}
+.commission-step[data-state="run"] .commission-step-status{border-color:#7c6637;background:#3a3120;color:#e8c878}
+.commission-step em{font-style:normal;color:#6f7b84;font:9px/1 var(--font-mono,monospace)}
+.commission-step-msg{grid-column:2 / -1;color:#9b6d68;font-size:9px;line-height:1.45}
+.commission-case{border:1px solid #343a40;border-radius:4px;background:#23272b;margin-bottom:7px;padding:9px 10px}
+.commission-case-head{display:flex;align-items:center;gap:7px}
+.commission-case-head b{font-size:11px;color:#dfe5e9}
+.commission-case-head span{margin-left:auto;font:9px/1 var(--font-mono,monospace);color:#7f8a92}
+.commission-case p{margin:4px 0 7px;color:#7f8a92;font-size:9px;line-height:1.5}
+.commission-case-actions{display:flex;gap:6px}
+.commission-badge{display:inline-flex;align-items:center;padding:1px 5px;border-radius:8px;font:9px/1.4 var(--font-mono,monospace);border:1px solid #414850;color:#8f9aa3}
+.commission-badge.pass{border-color:#2a6b4d;background:#1d3a2d;color:#72d8a9}
+.commission-badge.fail{border-color:#7b3c38;background:#3a2322;color:#ff9b93}
+.commission-monitor-value{font:10px/1.3 var(--font-mono,monospace);color:#b9f2e9;text-align:right;white-space:nowrap}
+.commission-force{display:flex;gap:4px;align-items:center;justify-content:flex-end}
+.commission-force input{width:54px!important}
+.commission-force button{height:23px;padding:0 5px;border:1px solid #414850;border-radius:2px;background:#2a2f34;color:#b8c0c7;font-size:9px}
+.commission-force button:hover{background:#343a40;color:#fff}
+.commission-result-wrap{max-height:230px;overflow:auto;border:1px solid #343a40;border-radius:4px}
+.commission-summary{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 0}
+.commission-summary .acp-pill{font-size:9px;padding:3px 7px}
+@media (max-width: 1180px){.commission-drawer{width:470px}}

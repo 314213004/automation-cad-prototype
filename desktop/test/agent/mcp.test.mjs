@@ -1,0 +1,72 @@
+import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { after, before, test } from 'node:test';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { PackRegistry } from '../../src/packs/registry.ts';
+import { AgentTools } from '../../src/agent/tools.ts';
+import { buildMcpServer } from '../../src/agent/mcp.ts';
+
+let sandbox;
+let client;
+let server;
+
+before(async () => {
+  sandbox = mkdtempSync(join(tmpdir(), 'cad-mcp-test-'));
+  const builtin = join(sandbox, 'builtin', 'smc-cn');
+  mkdirSync(builtin, { recursive: true });
+  writeFileSync(join(builtin, 'manifest.json'), JSON.stringify({
+    schemaVersion: 1, id: 'smc-cn', name: 'SMC', vendor: 'SMC', version: '1.0.0'
+  }));
+  writeFileSync(join(builtin, 'parts.json'), JSON.stringify([
+    { id: 'MXQ20-50', model: 'MXQ20-50.stp', category: '气缸', specs: {} }
+  ]));
+  const registry = new PackRegistry({
+    builtinDir: join(sandbox, 'builtin'),
+    userDir: join(sandbox, 'user'),
+    stateFile: join(sandbox, 'packs-state.json')
+  });
+  const tools = new AgentTools(registry);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  server = buildMcpServer(tools, { name: 'automation-cad-test', version: '0.1.0-test' });
+  client = new Client({ name: 'mcp-test-client', version: '1.0.0' });
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+});
+
+after(async () => {
+  await client?.close();
+  await server?.close();
+  rmSync(sandbox, { recursive: true, force: true });
+});
+
+test('MCP server 通过 in-memory transport 列出 6 个复用工具', async () => {
+  const result = await client.listTools();
+  assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
+    'get_bom',
+    'import_cad',
+    'insert_component',
+    'list_components',
+    'run_interference_check',
+    'search_components'
+  ]);
+  for (const tool of result.tools) {
+    assert.equal(typeof tool.description, 'string');
+    assert.equal(tool.inputSchema.type, 'object');
+  }
+});
+
+test('MCP 工具调用直接复用 AgentTools 结果', async () => {
+  const result = await client.callTool({ name: 'list_components', arguments: {} });
+  assert.equal(result.isError, false);
+  assert.equal(result.structuredContent.count, 1);
+  assert.equal(result.structuredContent.components[0].id, 'MXQ20-50');
+});
+
+test('MCP 未知工具返回 isError', async () => {
+  const result = await client.callTool({ name: 'not_a_tool', arguments: {} });
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /未知工具/);
+});

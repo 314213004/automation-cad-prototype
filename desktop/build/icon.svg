@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#262A2E"/>
+      <stop offset="1" stop-color="#16191C"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#14B8A6"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0F766E"/>
+      <stop offset="1" stop-color="#115E59"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3D8BFD"/>
+      <stop offset="1" stop-color="#2563C9"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="url(#bg)"/>
+  <rect x="16.75" y="16.75" width="478.5" height="478.5" rx="103.25" fill="none" stroke="#3A4046" stroke-width="1.5"/>
+
+  <!-- 等轴测立方体：顶面 + 左面 + 右面 -->
+  <g stroke-linejoin="round">
+    <path d="M256 120 L392 198 L256 276 L120 198 Z" fill="url(#top)" opacity="0.95"/>
+    <path d="M120 198 L256 276 L256 424 L120 346 Z" fill="url(#left)" opacity="0.92"/>
+    <path d="M392 198 L256 276 L256 424 L392 346 Z" fill="url(#right)" opacity="0.9"/>
+  </g>
+  <!-- 内嵌线框，暗示建模网格 -->
+  <g fill="none" stroke="#0B1216" stroke-width="7" opacity="0.45" stroke-linecap="round">
+    <path d="M256 120 L256 276"/>
+    <path d="M120 198 L256 276 L392 198"/>
+    <path d="M188 159 L324 237"/>
+    <path d="M188 237 L324 315"/>
+  </g>
+  <!-- 右下角卡尺刻度 -->
+  <g stroke="#E6EDF3" stroke-width="8" stroke-linecap="round" opacity="0.9">
+    <path d="M342 372 L396 340"/>
+    <path d="M352 388 L376 374"/>
+  </g>
+</svg>

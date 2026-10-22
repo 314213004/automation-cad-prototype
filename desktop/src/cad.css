@@ -1,0 +1,203 @@
+.cad-entry-btn{
+  display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px;
+  margin-left:4px; border:1px solid #3b4a48; border-radius:var(--r,3px);
+  color:#b9f2e9; background:linear-gradient(180deg,#223533,#1d2c2b);
+  font:inherit; font-size:12px; white-space:nowrap;
+}
+.cad-entry-btn:hover{border-color:#2b8f84; background:#253d3a; color:#e5fffa}
+.cad-entry-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.cad-entry-badge{font:9px/1 var(--font-mono,monospace); color:#5fd6c7; border:1px solid #2a5b55; border-radius:2px; padding:2px 3px}
+
+.cad-overlay{
+  position:fixed; inset:0; z-index:2147483000; display:flex; flex-direction:column;
+  background:#1e2124; color:#e6e9ec; font-family:var(--font-ui,"Microsoft YaHei",sans-serif);
+}
+.cad-overlay[hidden]{display:none !important}
+.cad-topbar{
+  height:52px; flex:0 0 52px; display:flex; align-items:center; gap:14px; padding:0 12px;
+  border-bottom:1px solid #33383d; background:linear-gradient(180deg,#272b2f,#202327);
+}
+.cad-brand{display:flex; align-items:center; gap:9px; min-width:190px}
+.cad-brand-mark{width:30px;height:30px;border:1px solid #3b4a48;border-radius:4px;display:grid;place-items:center;color:#5fd6c7;background:#1a2927}
+.cad-brand-mark svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
+.cad-brand-title{font-size:13px;font-weight:600;letter-spacing:.02em;line-height:1.2}
+.cad-brand-sub{font-size:10px;color:#7f8a92;line-height:1.3}
+.cad-actions{display:flex;align-items:center;gap:4px}
+.cad-btn{
+  display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid #414850;border-radius:3px;
+  background:#262a2e;color:#cbd2d8;font:inherit;font-size:12px;cursor:pointer;
+}
+.cad-btn:hover{background:#2d3237;border-color:#566069;color:#fff}
+.cad-btn.is-active{border-color:#1f9c8d;color:#b9f2e9;background:#243a37}
+.cad-btn-primary{border-color:#1b8f82;background:#1d5c54;color:#eafffb}
+.cad-btn-primary:hover{background:#24756b}
+.cad-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
+.cad-spacer{flex:1}
+.cad-file-info{max-width:44vw;color:#8f9aa3;font:11px/1.4 var(--font-mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-main{flex:1;display:flex;min-height:0}
+.cad-sidebar{
+  width:300px;flex:0 0 300px;display:flex;flex-direction:column;min-height:0;
+  background:#1e2124;border-right:1px solid #33383d;
+}
+.cad-side-head{height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;padding:0 11px;border-bottom:1px solid #33383d;color:#a8b0b8;font-size:11px;letter-spacing:.06em}
+.cad-side-head b{font:10px/1 var(--font-mono,monospace);color:#6f7b84;background:#17191c;border:1px solid #343a40;border-radius:10px;padding:3px 7px}
+.cad-parts{flex:1;overflow:auto;padding:5px}
+.cad-parts-empty{padding:25px 14px;color:#66717a;font-size:11px;text-align:center;line-height:1.8}
+.cad-part-row{
+  width:100%;display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:6px;
+  min-height:28px;padding:3px 7px;border:1px solid transparent;border-radius:2px;color:#b8c0c7;text-align:left;cursor:pointer;
+}
+.cad-part-row:hover{background:#282c30;color:#e6e9ec}
+.cad-part-row.is-selected{background:rgba(61,139,253,.14);border-color:rgba(61,139,253,.45);color:#eaf3ff}
+.cad-part-index{font:9px/1 var(--font-mono,monospace);color:#66717a}
+.cad-part-name{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cad-part-tris{font:9px/1 var(--font-mono,monospace);color:#6e777f}
+.cad-detail{flex:0 0 auto;max-height:265px;overflow:auto;border-top:1px solid #33383d;padding:10px 11px 12px;background:#1b1e21}
+.cad-detail-empty{font-size:11px;color:#66717a;line-height:1.6}
+.cad-detail-title{font-size:12px;color:#e6e9ec;font-weight:600;word-break:break-all;margin-bottom:8px}
+.cad-detail-grid{display:grid;grid-template-columns:54px 1fr;gap:4px 8px;margin:0;font-size:10px}
+.cad-detail-grid dt{color:#6e777f}
+.cad-detail-grid dd{margin:0;color:#b8c0c7;font-family:var(--font-mono,"Consolas",monospace);font-variant-numeric:tabular-nums;word-break:break-all}
+.cad-viewport{position:relative;flex:1;min-width:0;min-height:0;background:#2a2d31;overflow:hidden}
+.cad-host{position:absolute;inset:0}
+.cad-canvas{display:block;width:100%;height:100%;outline:none}
+.cad-empty{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:11px;
+  pointer-events:none;color:#8b969f;background:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:40px 40px;text-align:center;
+}
+.cad-empty[hidden]{display:none !important}
+.cad-empty-ico{width:58px;height:58px;border:1px solid #4a535b;border-radius:8px;display:grid;place-items:center;color:#6f7b84;background:rgba(30,33,36,.8)}
+.cad-empty-ico svg{width:31px;height:31px;fill:none;stroke:currentColor;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.cad-empty-title{font-size:14px;color:#aab3ba}
+.cad-empty-sub{font-size:11px;color:#6e777f;line-height:1.8}
+.cad-hint{
+  position:absolute;left:12px;bottom:10px;padding:4px 8px;border:1px solid rgba(255,255,255,.07);
+  border-radius:2px;background:rgba(20,22,24,.72);color:#77828b;font:9px/1.3 var(--font-mono,monospace);pointer-events:none;
+}
+.cad-loading{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);min-width:270px;padding:15px 17px;
+  border:1px solid #3d454c;border-radius:5px;background:rgba(30,33,36,.96);box-shadow:0 12px 36px rgba(0,0,0,.4);
+  color:#c7cfd5;font-size:11px;text-align:center;z-index:2;
+}
+.cad-loading[hidden]{display:none !important}
+.cad-spinner{width:24px;height:24px;margin:0 auto 10px;border:2px solid #3c444b;border-top-color:#14b8a6;border-radius:50%;animation:cad-spin .8s linear infinite}
+@keyframes cad-spin{to{transform:rotate(360deg)}}
+.cad-loading-error{color:#ffaaa2}
+.cad-footer{
+  height:28px;flex:0 0 28px;display:flex;align-items:center;gap:12px;padding:0 12px;
+  border-top:1px solid #33383d;background:#191c1f;color:#77828b;font:10px/1 var(--font-mono,monospace);
+  white-space:nowrap;overflow:hidden;
+}
+.cad-footer strong{color:#aab3ba;font-weight:500}
+.cad-footer-flex{flex:1}
+.cad-unit-note{color:#d6b76d}
+.cad-overlay.is-drag::after{
+  content:"释放以打开 CAD 文件";position:absolute;inset:12px;border:2px dashed #14b8a6;border-radius:7px;
+  display:grid;place-items:center;background:rgba(20,184,166,.08);color:#b9f2e9;font-size:16px;pointer-events:none;z-index:5;
+}
+.cad-notice{
+  position:fixed;right:18px;bottom:42px;z-index:2147483600;max-width:420px;padding:9px 12px;
+  border:1px solid #3f5551;border-radius:4px;background:#22302e;color:#c9f4ee;font:11px/1.5 var(--font-ui,sans-serif);
+  box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(5px);transition:opacity .16s,transform .16s;pointer-events:none;
+}
+.cad-notice.is-on{opacity:1;transform:translateY(0)}
+.cad-notice.is-error{border-color:#6d3c3c;background:#332323;color:#ffc9c4}
+
+/* WebGL 不可用时的解析统计降级面板 */
+.cad-webgl-fallback{
+  position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;
+  gap:10px;padding:28px;text-align:center;color:#c7cfd5;
+  background:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:40px 40px;
+}
+.cad-fallback-ico{width:58px;height:58px;border:1px solid #6d4a4a;border-radius:8px;display:grid;place-items:center;color:#e0a3a3;background:rgba(51,35,35,.72)}
+.cad-fallback-ico svg{width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.cad-fallback-title{font-size:15px;color:#f0c9c5;font-weight:600}
+.cad-fallback-sub{font-size:11px;color:#8f9aa3;line-height:1.7;max-width:560px}
+.cad-fallback-stats{
+  display:grid;grid-template-columns:minmax(64px,auto) minmax(0,1fr);gap:6px 16px;margin:8px 0 0;
+  padding:12px 16px;border:1px solid #3d444b;border-radius:4px;background:rgba(24,27,30,.86);
+  font:10px/1.5 var(--font-mono,monospace);text-align:left;max-width:640px;min-width:380px;
+}
+.cad-fallback-stats dt{color:#78838c}
+.cad-fallback-stats dd{margin:0;color:#c9d2d9;word-break:break-all;font-variant-numeric:tabular-nums}
+.cad-fallback-stats .cad-fallback-reason{color:#d7a7a2}
+
+/* P2-A 机械校核与导出 */
+.cad-export-wrap{position:relative}
+.cad-export-caret{font-size:9px;color:#7f8a92;margin-left:-2px}
+.cad-export-menu{
+  position:absolute;right:0;top:34px;z-index:30;width:196px;padding:5px;
+  border:1px solid #414850;border-radius:4px;background:#202428;box-shadow:0 14px 34px rgba(0,0,0,.5);
+}
+.cad-export-menu[hidden]{display:none !important}
+.cad-export-menu button{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;height:29px;padding:0 9px;
+  border:0;border-radius:2px;background:transparent;color:#cbd2d8;font:inherit;font-size:11px;text-align:left;cursor:pointer;
+}
+.cad-export-menu button:hover{background:#2b3035;color:#fff}
+.cad-export-menu em{font:9px/1 var(--font-mono,monospace);color:#6f7b84;font-style:normal}
+.cad-export-sep{display:block;height:1px;margin:4px 3px;background:#343a40}
+.cad-side-tabs{height:34px;flex:0 0 34px;display:flex;align-items:stretch;border-bottom:1px solid #33383d;background:#1a1d20}
+.cad-side-tab{
+  min-width:72px;padding:0 14px;border:0;border-right:1px solid #2e3439;background:transparent;
+  color:#7f8a92;font:inherit;font-size:11px;cursor:pointer;
+}
+.cad-side-tab:hover{color:#d3dae0;background:#24282c}
+.cad-side-tab.is-active{color:#b9f2e9;background:#22302e;box-shadow:inset 0 -2px 0 #14b8a6}
+.cad-side-pane{flex:1;display:flex;flex-direction:column;min-height:0}
+.cad-side-pane[hidden]{display:none !important}
+.cad-stress-head{height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;padding:0 11px;border-bottom:1px solid #33383d;color:#a8b0b8;font-size:11px;letter-spacing:.04em}
+.cad-stress-head b{font:9px/1 var(--font-mono,monospace);color:#6f7b84;font-weight:400}
+.cad-stress-list{flex:1;overflow:auto;padding:7px}
+.cad-calc{border:1px solid #343a40;border-radius:4px;background:#23272b;margin-bottom:7px;overflow:hidden}
+.cad-calc header{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-bottom:1px solid #30353a;background:#1e2225}
+.cad-calc header b{font-size:11px;color:#dfe5e9;font-weight:600}
+.cad-calc header span{font:9px/1.4 var(--font-mono,monospace);color:#758089;word-break:break-word}
+.cad-calc-fields{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 9px}
+.cad-calc-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cad-calc-field>span:first-child{color:#7f8a92;font-size:9px}
+.cad-calc-input{display:flex;align-items:center;height:25px;border:1px solid #3c434a;border-radius:2px;background:#16181b;overflow:hidden}
+.cad-calc-input input,.cad-calc-input select{
+  width:100%;min-width:0;height:23px;padding:0 5px;border:0;outline:0;background:transparent;
+  color:#d6dde2;font:10px/1 var(--font-mono,monospace);appearance:textfield;
+}
+.cad-calc-input input:focus,.cad-calc-input select:focus{background:#1d2226}
+.cad-calc-input i{flex:0 0 auto;padding:0 5px;color:#66717a;font:8px/1 var(--font-mono,monospace);font-style:normal}
+.cad-calc-result{padding:8px 9px 9px;border-top:1px solid #30353a;background:#1e2225}
+.cad-calc-verdict{padding:6px 7px;border:1px solid #5a4c2d;border-radius:3px;background:#302a1e;color:#e8d49b;font-size:10px;line-height:1.55}
+.cad-calc-result.is-pass .cad-calc-verdict{border-color:#2a5b55;background:#1c2b29;color:#8ee0d4}
+.cad-calc-result.is-fail .cad-calc-verdict{border-color:#6d3c3c;background:#332323;color:#ffc9c4}
+.cad-calc-result.is-error .cad-calc-verdict{border-color:#6d3c3c;background:#332323;color:#ffc9c4}
+.cad-calc-formula{margin-top:6px;padding:6px 7px;border:1px solid #30353a;border-radius:2px;background:#191c1f;color:#8d9aa3;font:8px/1.55 var(--font-mono,monospace);word-break:break-all;max-height:78px;overflow:auto}
+.cad-calc-outputs{display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;margin:6px 0 0}
+.cad-calc-outputs>div{display:flex;justify-content:space-between;gap:6px;border-bottom:1px dotted #343a40;padding:2px 0}
+.cad-calc-outputs dt{color:#6e777f;font-size:8px}
+.cad-calc-outputs dd{margin:0;color:#b9c2c9;font:8px/1.5 var(--font-mono,monospace);font-variant-numeric:tabular-nums}
+.cad-inspector{width:318px;flex:0 0 318px;display:flex;flex-direction:column;min-height:0;background:#1e2124;border-left:1px solid #33383d}
+.cad-inspector-body{flex:1;overflow:auto;padding:8px}
+.cad-interference-actions{display:flex;gap:5px;margin-bottom:7px}
+.cad-interference-actions .cad-btn{flex:1;justify-content:center;height:28px;font-size:11px}
+.cad-interference-note{padding:7px 8px;margin-bottom:7px;border:1px dashed #343a40;border-radius:3px;color:#6f7b84;font-size:9px;line-height:1.55}
+.cad-interference-list{display:flex;flex-direction:column;gap:5px}
+.cad-interference-empty{padding:24px 12px;text-align:center;color:#66717a;font-size:10px;line-height:1.7;border:1px dashed #343a40;border-radius:4px}
+.cad-interference-hit{
+  position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:4px 7px;align-items:center;
+  padding:7px 8px;border:1px solid #343a40;border-left:2px solid #b58a3a;border-radius:3px;background:#23272b;cursor:pointer;
+}
+.cad-interference-hit:hover,.cad-interference-hit.is-active{background:#2a3035;border-color:#4a5963;border-left-color:#14b8a6}
+.cad-interference-hit[data-severity="error"]{border-left-color:#d9534f}
+.cad-hit-sev{grid-row:span 2;align-self:start;padding:2px 4px;border:1px solid #6b5a33;border-radius:2px;background:#302a1e;color:#e8d49b;font-size:8px;text-align:center}
+.cad-interference-hit[data-severity="error"] .cad-hit-sev{border-color:#6d3c3c;background:#332323;color:#ffc9c4}
+.cad-hit-name{color:#d7dee3;font-size:10px;line-height:1.35;word-break:break-all}
+.cad-hit-metric{color:#8b969f;font:8px/1.4 var(--font-mono,monospace);white-space:nowrap}
+.cad-hit-overlap,.cad-hit-volume{grid-column:2}
+.cad-hit-ignore{grid-column:3;grid-row:2;align-self:end;padding:2px 5px;border:1px solid #414850;border-radius:2px;background:#2a2f34;color:#8b969f;font-size:8px;cursor:pointer}
+.cad-hit-ignore:hover{border-color:#6d3c3c;color:#ffc9c4;background:#332323}
+.cad-stress-root-tab{position:relative}
+.cad-stress-root-tab::after{content:"";position:absolute;right:7px;top:7px;width:4px;height:4px;border-radius:50%;background:#14b8a6}
