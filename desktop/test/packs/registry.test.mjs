@@ -205,3 +205,24 @@ test('仓库内置 smc-cn 包含 8 个真实型号', () => {
   }
   assert.equal(actual.listParts({ q: 'SMC' }).length, 8);
 });
+
+
+test('导入缺少 manifest 必填字段的 ZIP 返回具体原因', async () => {
+  const bad = manifest('missing-vendor');
+  delete bad.vendor;
+  const zip = zipPath('missing-vendor.zip', {
+    'manifest.json': bad,
+    'parts.json': parts()
+  });
+  await assert.rejects(() => registry().importZip(zip), /缺少字段：vendor/);
+  assert.equal((await registry().scan()).length, 0);
+});
+
+test('导入与内置包 id 冲突的 ZIP 返回具体原因', async () => {
+  writePack(join(builtinDir, 'smc-cn'), manifest('smc-cn'));
+  const zip = zipPath('conflict.zip', {
+    'manifest.json': manifest('smc-cn'),
+    'parts.json': parts()
+  });
+  await assert.rejects(() => registry().importZip(zip), /数据包 id 已存在：smc-cn/);
+});

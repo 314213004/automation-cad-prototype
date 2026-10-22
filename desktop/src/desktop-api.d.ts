@@ -17,6 +17,54 @@ interface DesktopPackInfo {
   error?: string;
 }
 
+interface DesktopComponentPart {
+  id: string;
+  model: string;
+  category: string;
+  vendor?: string;
+  specs: Record<string, string | number>;
+  asset?: string;
+  thumbnail?: string;
+  price?: number;
+  packId?: string;
+  packName?: string;
+}
+
+interface DesktopFactoryResult<T> {
+  ok: boolean;
+  data?: T;
+  code?: string;
+  message?: string;
+}
+
+interface DesktopFactoryStatusInfo {
+  kind: 'demo' | 'opcua' | 'mqtt' | null;
+  status: 'disconnected' | 'connecting' | 'connected' | 'error';
+  config?: Record<string, unknown>;
+  connectedAt?: string;
+  error?: string;
+}
+
+interface DesktopTagNode {
+  id: string;
+  name: string;
+  kind?: 'station' | 'folder' | 'tag';
+  dataType?: 'boolean' | 'number' | 'string' | 'unknown';
+  unit?: string;
+  writable?: boolean;
+  station?: string;
+  children?: DesktopTagNode[];
+}
+
+interface DesktopTagValue {
+  id: string;
+  value: unknown;
+  quality: 'good' | 'bad' | 'uncertain';
+  timestamp: string;
+  dataType?: 'boolean' | 'number' | 'string' | 'unknown';
+  unit?: string;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -26,21 +74,26 @@ interface Window {
     getPathForFile(file: File): string;
     packs: {
       list(): Promise<DesktopPackInfo[]>;
+      chooseZip(): Promise<{ canceled: boolean; filePaths: string[] }>;
       importZip(path: string): Promise<DesktopPackInfo>;
       setEnabled(id: string, enabled: boolean): Promise<{ ok: boolean }>;
       remove(id: string): Promise<{ ok: boolean }>;
-      listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<unknown[]>;
+      listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
     agent: { info(): Promise<unknown> };
     factory: {
       info(): Promise<unknown>;
-      status(): Promise<unknown>;
-      connect(config: unknown): Promise<unknown>;
-      disconnect(): Promise<unknown>;
-      browse(nodeId?: string): Promise<unknown>;
-      readTags(ids: string[]): Promise<unknown>;
-      writeTag(id: string, value: unknown): Promise<unknown>;
-      subscribe(ids: string[]): Promise<unknown>;
+      status(): Promise<DesktopFactoryResult<DesktopFactoryStatusInfo>>;
+      list(): Promise<DesktopFactoryResult<{ kind: string; label: string }[]>>;
+      getConfig(): Promise<DesktopFactoryResult<Record<string, unknown> | null>>;
+      connect(config: unknown): Promise<DesktopFactoryResult<DesktopFactoryStatusInfo>>;
+      disconnect(): Promise<DesktopFactoryResult<DesktopFactoryStatusInfo>>;
+      browse(nodeId?: string): Promise<DesktopFactoryResult<DesktopTagNode[]>>;
+      readTags(ids: string[]): Promise<DesktopFactoryResult<Record<string, DesktopTagValue>>>;
+      writeTag(id: string, value: unknown): Promise<DesktopFactoryResult<null>>;
+      subscribe(ids: string[]): Promise<DesktopFactoryResult<string[]>>;
+      onValues(callback: (value: DesktopTagValue) => void): () => void;
+      onStatus(callback: (status: DesktopFactoryStatusInfo) => void): () => void;
     };
     onOpenCad(callback: (payload: { path: string; source: string }) => void): () => void;
     onImportPack(callback: (payload: { path: string }) => void): () => void;

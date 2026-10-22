@@ -124,6 +124,16 @@ python3 -m http.server 8099
 
 `app.js` 中的 3D 视口由 `(x−y)·cos30 / (x+y)·0.5−z` 实时投影生成，选中/命中/悬停态全部走 CSS `data-*` 属性切换，不重建 DOM。
 
+### Win11 桌面版（desktop）
+
+`desktop/` 在不改动原型文件的前提下注入 CAD 轻量化查看、数据包管理、智慧工厂面板，并提供 JSON-RPC 与 MCP（stdio）Agent 入口。构建、测试、MCP 的 Claude/Codex 配置示例见 [desktop/README.md](desktop/README.md)。
+
+```bash
+cd desktop
+npm run build:ext && npm test
+npm run smoke
+```
+
 ## 已知限制
 
 这是 UI 原型，不是可用的 CAD 工具：

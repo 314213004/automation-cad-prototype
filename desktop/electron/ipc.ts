@@ -3,11 +3,14 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
 import type { AgentRpcInfo } from '../src/agent/rpc';
+import { FactoryManager } from '../src/factory/manager.ts';
+import type { TagValue } from '../src/factory/types.ts';
 
 export interface IpcContext {
   builtinDir: string;
   userDir: string;
   stateFile: string;
+  factoryConfigFile: string;
   version: string;
   getAgentInfo(): (AgentRpcInfo & { toolCount: number; error?: string }) | { error: string };
 }
@@ -24,6 +27,14 @@ export function createPackRegistry(context: Pick<IpcContext, 'builtinDir' | 'use
 
 export function registerIpcHandlers(context: IpcContext): PackRegistry {
   const registry = createPackRegistry(context);
+  const factory = new FactoryManager({ configFile: context.factoryConfigFile });
+  const broadcast = (channel: string, payload: unknown): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(channel, payload);
+    }
+  };
+  factory.on('status', (status: unknown) => broadcast('factory:status', status));
+  factory.on('values', (value: TagValue) => broadcast('factory:values', value));
 
   ipcMain.handle('app:version', () => ({
     app: context.version,
@@ -81,26 +92,48 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     });
   });
 
+  ipcMain.handle('packs:choose-zip', async () => {
+    const window = BrowserWindow.getFocusedWindow();
+    const options: OpenDialogOptions = {
+      title: '导入数据包',
+      properties: ['openFile'],
+      filters: [{ name: '数据包 ZIP', extensions: ['zip'] }]
+    };
+    const result = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    return { canceled: result.canceled, filePaths: result.filePaths };
+  });
+
   ipcMain.handle('agent:info', () => context.getAgentInfo());
 
-  const factoryInfo = () => ({
-    ok: true,
-    adapters: ['demo', 'opcua', 'mqtt'],
-    connected: false,
-    status: 'disconnected'
+  ipcMain.handle('factory:info', () => ({ ok: true, adapters: factory.list(), status: factory.getStatus() }));
+  ipcMain.handle('factory:list', () => ({ ok: true, data: factory.list() }));
+  ipcMain.handle('factory:status', () => ({ ok: true, data: factory.getStatus() }));
+  ipcMain.handle('factory:config', () => factory.getConfig());
+  ipcMain.handle('factory:connect', (_event, config: unknown) => factory.connect(config));
+  ipcMain.handle('factory:disconnect', () => factory.disconnect());
+  ipcMain.handle('factory:browse', (_event, nodeId: unknown) => {
+    if (nodeId !== undefined && typeof nodeId !== 'string') {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: 'nodeId 必须是字符串' };
+    }
+    return factory.browse(nodeId);
   });
-  ipcMain.handle('factory:info', factoryInfo);
-  ipcMain.handle('factory:status', factoryInfo);
-  for (const channel of ['factory:connect', 'factory:disconnect', 'factory:browse', 'factory:read-tags', 'factory:write-tag', 'factory:subscribe']) {
-    ipcMain.handle(channel, () => ({
-      ok: false,
-      code: 'NOT_IMPLEMENTED',
-      message: '智慧工厂适配器将在 M4 接入。'
-    }));
-  }
+  ipcMain.handle('factory:read-tags', (_event, ids: unknown) => {
+    if (!Array.isArray(ids)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位 id 必须是数组' };
+    return factory.readTags(ids);
+  });
+  ipcMain.handle('factory:write-tag', (_event, id: unknown, value: unknown) => {
+    if (typeof id !== 'string') return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    return factory.writeTag(id, value);
+  });
+  ipcMain.handle('factory:subscribe', (_event, ids: unknown) => {
+    if (!Array.isArray(ids)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位 id 必须是数组' };
+    return factory.subscribe(ids, (value) => broadcast('factory:values', value));
+  });
 
   app.on('before-quit', () => {
-    // 清理由主进程持有的资源；注册表本身无长连接。
+    void factory.disconnect();
   });
 
   return registry;

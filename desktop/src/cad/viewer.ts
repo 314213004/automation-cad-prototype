@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CadImportResult, CadMeshData } from '../shared/types';
+import { probeWebGL } from './webgl';
 
 export interface CadSelectionInfo {
   index: number;
@@ -32,20 +33,22 @@ export class CadViewer {
   private readonly detailElement: HTMLElement;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.01, 1_000_000);
-  private readonly renderer: THREE.WebGLRenderer;
-  private readonly controls: OrbitControls;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private controls: OrbitControls | null = null;
   private readonly raycaster = new THREE.Raycaster();
   private readonly pointer = new THREE.Vector2();
-  private readonly resizeObserver: ResizeObserver;
+  private resizeObserver: ResizeObserver | null = null;
   private readonly group = new THREE.Group();
   private readonly selectionBox = new THREE.Box3();
-  private readonly selectionHelper: THREE.Box3Helper;
+  private selectionHelper: THREE.Box3Helper | null = null;
   private grid: THREE.GridHelper | null = null;
   private parts: LoadedPart[] = [];
   private selected: number | null = null;
   private pointerDown = { x: 0, y: 0 };
   private wireframe = false;
   private active = false;
+  private degraded = false;
+  private fallbackElement: HTMLElement | null = null;
   private onStats: ((text: string) => void) | undefined;
   private onSelect: ((info: CadSelectionInfo | null) => void) | undefined;
   private animationRunning = false;
@@ -67,40 +70,59 @@ export class CadViewer {
     this.scene.add(fill);
 
     this.camera.up.set(0, 0, 1);
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.domElement.className = 'cad-canvas';
-    this.container.appendChild(this.renderer.domElement);
+    const capability = probeWebGL(() => document.createElement('canvas'));
+    if (!capability.ok) {
+      this.enterDegradedMode(capability.reason ?? 'WebGL 不可用', null);
+      return;
+    }
 
-    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
-    this.controls.screenSpacePanning = true;
-    this.controls.mouseButtons = {
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    } catch (error) {
+      this.enterDegradedMode(
+        error instanceof Error ? error.message : String(error),
+        null
+      );
+      return;
+    }
+    this.renderer = renderer;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.className = 'cad-canvas';
+    this.container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(this.camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.screenSpacePanning = true;
+    controls.mouseButtons = {
       LEFT: THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.PAN,
       RIGHT: THREE.MOUSE.PAN
     };
+    this.controls = controls;
 
-    this.selectionHelper = new THREE.Box3Helper(this.selectionBox, 0x14b8a6);
-    this.selectionHelper.visible = false;
-    this.selectionHelper.renderOrder = 20;
-    const helperMaterial = this.selectionHelper.material as THREE.LineBasicMaterial;
+    const selectionHelper = new THREE.Box3Helper(this.selectionBox, 0x14b8a6);
+    selectionHelper.visible = false;
+    selectionHelper.renderOrder = 20;
+    const helperMaterial = selectionHelper.material as THREE.LineBasicMaterial;
     helperMaterial.depthTest = false;
     helperMaterial.transparent = true;
     helperMaterial.opacity = 0.9;
-    this.scene.add(this.selectionHelper);
+    this.selectionHelper = selectionHelper;
+    this.scene.add(selectionHelper);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
-    this.renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
-    this.renderer.domElement.addEventListener('pointerup', this.handlePointerUp);
+    renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
+    renderer.domElement.addEventListener('pointerup', this.handlePointerUp);
     this.partsElement.addEventListener('click', this.handlePartClick);
     this.resize();
   }
 
   setActive(active: boolean): void {
+    if (this.degraded || !this.renderer) return;
     this.active = active;
     if (active && !this.animationRunning) {
       this.animationRunning = true;
@@ -113,6 +135,10 @@ export class CadViewer {
   }
 
   load(result: CadImportResult, fileName: string): void {
+    if (this.degraded) {
+      this.loadDegraded(result, fileName);
+      return;
+    }
     this.clearModel();
     const materialCache = new Map<string, THREE.MeshStandardMaterial>();
     result.meshes.forEach((data, index) => {
@@ -156,6 +182,7 @@ export class CadViewer {
   }
 
   fit(): void {
+    if (this.degraded || !this.controls) return;
     const bounds = this.totalBounds();
     if (bounds.isEmpty()) {
       this.camera.position.set(760, -760, 620);
@@ -182,6 +209,7 @@ export class CadViewer {
   }
 
   toggleWireframe(): boolean {
+    if (this.degraded) return false;
     this.wireframe = !this.wireframe;
     for (const part of this.parts) {
       const material = part.mesh.material as THREE.MeshStandardMaterial;
@@ -192,6 +220,8 @@ export class CadViewer {
   }
 
   selectPart(index: number | null, focus = false): void {
+    if (this.degraded) return;
+    if (!this.selectionHelper) return;
     if (index === null || !this.parts[index]) {
       this.selected = null;
       this.selectionHelper.visible = false;
@@ -212,28 +242,34 @@ export class CadViewer {
       row.classList.toggle('is-selected', Number((row as HTMLElement).dataset.partIndex) === index);
     });
     if (focus) {
+      const controls = this.controls;
+      if (!controls) return;
       const center = this.selectionBox.getCenter(new THREE.Vector3());
-      const currentOffset = this.camera.position.clone().sub(this.controls.target);
-      this.controls.target.copy(center);
+      const currentOffset = this.camera.position.clone().sub(controls.target);
+      controls.target.copy(center);
       this.camera.position.copy(center).add(currentOffset);
-      this.controls.update();
+      controls.update();
     }
     this.renderDetail(this.selectionInfo(part, index));
   }
 
   dispose(): void {
     this.setActive(false);
-    this.resizeObserver.disconnect();
-    this.renderer.domElement.removeEventListener('pointerdown', this.handlePointerDown);
-    this.renderer.domElement.removeEventListener('pointerup', this.handlePointerUp);
+    this.resizeObserver?.disconnect();
+    if (this.renderer) {
+      this.renderer.domElement.removeEventListener('pointerdown', this.handlePointerDown);
+      this.renderer.domElement.removeEventListener('pointerup', this.handlePointerUp);
+    }
     this.partsElement.removeEventListener('click', this.handlePartClick);
     this.clearModel();
-    this.renderer.dispose();
-    this.renderer.domElement.remove();
+    this.renderer?.dispose();
+    this.renderer?.domElement.remove();
+    this.fallbackElement?.remove();
+    this.fallbackElement = null;
   }
 
   private readonly renderFrame = (): void => {
-    if (!this.active) return;
+    if (!this.active || !this.renderer || !this.controls) return;
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
@@ -269,6 +305,7 @@ export class CadViewer {
   }
 
   private resize(): void {
+    if (!this.renderer) return;
     const width = Math.max(this.container.clientWidth, 1);
     const height = Math.max(this.container.clientHeight, 1);
     this.camera.aspect = width / height;
@@ -338,6 +375,7 @@ export class CadViewer {
   };
 
   private readonly handlePointerUp = (event: PointerEvent): void => {
+    if (!this.renderer) return;
     if (event.button !== 0) return;
     const moved = Math.hypot(event.clientX - this.pointerDown.x, event.clientY - this.pointerDown.y);
     if (moved > 4) return;
@@ -356,7 +394,7 @@ export class CadViewer {
 
   private clearModel(): void {
     this.selected = null;
-    this.selectionHelper.visible = false;
+    if (this.selectionHelper) this.selectionHelper.visible = false;
     for (const part of this.parts) {
       part.mesh.geometry.dispose();
       const material = part.mesh.material as THREE.Material;
@@ -366,5 +404,95 @@ export class CadViewer {
     this.parts = [];
     this.partsElement.innerHTML = '';
     this.renderDetail(null);
+  }
+
+  private enterDegradedMode(reason: string, result: CadImportResult | null, fileName?: string): void {
+    this.degraded = true;
+    this.container.innerHTML = '';
+    const panel = document.createElement('div');
+    panel.id = 'cadWebglFallback';
+    panel.className = 'cad-webgl-fallback';
+    panel.dataset.reason = reason;
+    panel.dataset.meshCount = result ? String(result.stats.meshCount) : '0';
+    panel.dataset.triangleCount = result ? String(result.stats.triangleCount) : '0';
+    panel.innerHTML = `
+      <div class="cad-fallback-ico">${this.fallbackIcon()}</div>
+      <div class="cad-fallback-title">当前环境不支持 WebGL，无法显示 3D 模型</div>
+      <div class="cad-fallback-sub">文件仍可在后台解析；以下为解析统计，3D 渲染已停用。</div>
+      <dl class="cad-fallback-stats">
+        <dt>文件</dt><dd data-cad-fallback="file">${fileName ? this.escapeHtml(fileName) : '未打开文件'}</dd>
+        <dt>零件数</dt><dd data-cad-fallback="meshes">${result ? result.stats.meshCount : 0}</dd>
+        <dt>三角面</dt><dd data-cad-fallback="triangles">${result ? result.stats.triangleCount.toLocaleString('zh-CN') : 0}</dd>
+        <dt>包围盒</dt><dd data-cad-fallback="bounds">${result ? this.boundsText(result) : '—'}</dd>
+        <dt>原因</dt><dd class="cad-fallback-reason">${this.escapeHtml(reason)}</dd>
+      </dl>`;
+    this.container.appendChild(panel);
+    this.fallbackElement = panel;
+    this.partsElement.innerHTML = '<div class="cad-parts-empty">WebGL 不可用，零件树暂停显示</div>';
+    this.detailElement.innerHTML = '<div class="cad-detail-empty">当前环境不支持 3D 渲染，已切换为解析统计视图。</div>';
+    if (result) {
+      const bounds = this.rawBounds(result);
+      this.onStats?.(
+        `${fileName ?? 'CAD 文件'} · ${result.stats.meshCount} 个零件 · ` +
+        `${result.stats.triangleCount.toLocaleString('zh-CN')} 个三角面 · ` +
+        `${bounds.sizeText} mm · ${result.stats.format} · WebGL 不可用`
+      );
+    }
+  }
+
+  private loadDegraded(result: CadImportResult, fileName: string): void {
+    const bounds = this.rawBounds(result);
+    this.enterDegradedMode(this.fallbackElement?.dataset.reason ?? 'WebGL 不可用', result, fileName);
+    const boundsCell = this.fallbackElement?.querySelector<HTMLElement>('[data-cad-fallback="bounds"]');
+    if (boundsCell) boundsCell.textContent = `${bounds.sizeText} mm`;
+  }
+
+  private rawBounds(result: CadImportResult): {
+    min: [number, number, number];
+    max: [number, number, number];
+    sizeText: string;
+  } {
+    const min: [number, number, number] = [Infinity, Infinity, Infinity];
+    const max: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+    for (const mesh of result.meshes) {
+      const positions = mesh.positions;
+      for (let index = 0; index + 2 < positions.length; index += 3) {
+        const x = positions[index]!;
+        const y = positions[index + 1]!;
+        const z = positions[index + 2]!;
+        if (x < min[0]) min[0] = x;
+        if (y < min[1]) min[1] = y;
+        if (z < min[2]) min[2] = z;
+        if (x > max[0]) max[0] = x;
+        if (y > max[1]) max[1] = y;
+        if (z > max[2]) max[2] = z;
+      }
+    }
+    if (!Number.isFinite(min[0])) {
+      return { min: [0, 0, 0], max: [0, 0, 0], sizeText: '0 × 0 × 0' };
+    }
+    const size: [number, number, number] = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+    return { min, max, sizeText: size.map((value) => value.toFixed(3)).join(' × ') };
+  }
+
+  private boundsText(result: CadImportResult): string {
+    return `${this.rawBounds(result).sizeText} mm`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (character) => {
+      const entities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      };
+      return entities[character] ?? character;
+    });
+  }
+
+  private fallbackIcon(): string {
+    return '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/><path d="M3.4 12.6L12.6 3.4"/></svg>';
   }
 }

@@ -15,6 +15,7 @@ const desktopApi = {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   packs: {
     list: () => ipcRenderer.invoke('packs:list'),
+    chooseZip: () => ipcRenderer.invoke('packs:choose-zip'),
     importZip: (zipPath: string) => ipcRenderer.invoke('packs:import-zip', zipPath),
     setEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('packs:set-enabled', id, enabled),
     remove: (id: string) => ipcRenderer.invoke('packs:remove', id),
@@ -26,12 +27,24 @@ const desktopApi = {
   factory: {
     info: () => ipcRenderer.invoke('factory:info'),
     status: () => ipcRenderer.invoke('factory:status'),
+    list: () => ipcRenderer.invoke('factory:list'),
+    getConfig: () => ipcRenderer.invoke('factory:config'),
     connect: (config: unknown) => ipcRenderer.invoke('factory:connect', config),
     disconnect: () => ipcRenderer.invoke('factory:disconnect'),
     browse: (nodeId?: string) => ipcRenderer.invoke('factory:browse', nodeId),
     readTags: (ids: string[]) => ipcRenderer.invoke('factory:read-tags', ids),
     writeTag: (id: string, value: unknown) => ipcRenderer.invoke('factory:write-tag', id, value),
-    subscribe: (ids: string[]) => ipcRenderer.invoke('factory:subscribe', ids)
+    subscribe: (ids: string[]) => ipcRenderer.invoke('factory:subscribe', ids),
+    onValues: (callback: (value: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, value: unknown) => callback(value);
+      ipcRenderer.on('factory:values', listener);
+      return () => ipcRenderer.removeListener('factory:values', listener);
+    },
+    onStatus: (callback: (status: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+      ipcRenderer.on('factory:status', listener);
+      return () => ipcRenderer.removeListener('factory:status', listener);
+    }
   },
   onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);

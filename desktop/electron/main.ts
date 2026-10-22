@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registerIpcHandlers, CAD_EXTENSIONS } from './ipc';
@@ -14,7 +15,13 @@ app.setName(APP_NAME);
 if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
   app.commandLine.appendSwitch('no-sandbox');
 }
-if (HEADLESS_SMOKE) app.disableHardwareAcceleration();
+if (HEADLESS_SMOKE) {
+  app.disableHardwareAcceleration();
+  // CI 的 xvfb 环境没有 GPU；显式关闭 WebGL 以稳定覆盖降级面板路径。
+  app.commandLine.appendSwitch('disable-webgl');
+  // 避免与开发机上正在运行的实例争抢单实例锁。
+  app.setPath('userData', mkdtempSync(join(tmpdir(), 'automationcad-smoke-')));
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -122,6 +129,101 @@ function createWindow(): BrowserWindow {
           return;
         }
       }
+      if (existsSync(fixture)) {
+        try {
+          const rendered = await window.webContents.executeJavaScript(
+            `(async () => {
+              window.AutomationCadViewer.open();
+              await window.AutomationCadViewer.importPath(${JSON.stringify(fixture)});
+              const fallback = document.getElementById('cadWebglFallback');
+              return fallback ? {
+                text: fallback.innerText || fallback.textContent || '',
+                meshCount: Number(fallback.dataset.meshCount || 0),
+                triangleCount: Number(fallback.dataset.triangleCount || 0),
+                bounds: fallback.querySelector('[data-cad-fallback="bounds"]')?.textContent || ''
+              } : null;
+            })()`
+          ) as { text: string; meshCount: number; triangleCount: number; bounds: string } | null;
+          if (!rendered) {
+            console.error('SMOKE_FAIL webgl_fallback_missing');
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          if (!rendered.text.includes('当前环境不支持 WebGL，无法显示 3D 模型') ||
+              rendered.meshCount !== 1 || rendered.triangleCount !== 12) {
+            console.error('SMOKE_FAIL webgl_fallback', JSON.stringify(rendered));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_WEBGL_FALLBACK_OK meshes=${rendered.meshCount} triangles=${rendered.triangleCount} bounds=${rendered.bounds}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL webgl_fallback_import', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+      }
+      try {
+        const ui = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            window.AutomationCadViewer.close();
+            const factoryEntry = document.getElementById('factoryEntryButton');
+            const packEntry = document.getElementById('packEntryButton');
+            if (!factoryEntry || !packEntry) return { error: '扩展入口按钮缺失' };
+
+            factoryEntry.click();
+            await wait(120);
+            const kind = document.getElementById('factoryKind');
+            kind.value = 'demo';
+            kind.dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('factoryConnect').click();
+            await wait(700);
+            const stations = document.querySelectorAll('#factoryStations .acp-station').length;
+            const tags = document.querySelectorAll('#factoryStations .acp-tag').length;
+            const factoryStatus = document.getElementById('factoryStatusBar')?.textContent || '';
+            document.getElementById('factoryDisconnect').click();
+            await wait(200);
+
+            packEntry.click();
+            await wait(350);
+            const packRows = document.querySelectorAll('#packList .acp-pack-row').length;
+            const search = document.getElementById('packSearch');
+            search.value = 'SMC';
+            search.dispatchEvent(new Event('input', { bubbles: true }));
+            await wait(450);
+            const partRows = document.querySelectorAll('#packResults [data-part-row]').length;
+            document.querySelector('#packResults [data-insert-part]')?.click();
+            const overlay = JSON.parse(localStorage.getItem('automationcad.parts.overlay.v1') || '{"parts":[]}');
+            return {
+              stations,
+              tags,
+              factoryStatus,
+              packRows,
+              partRows,
+              overlayCount: Array.isArray(overlay.parts) ? overlay.parts.length : 0
+            };
+          })()`
+        ) as {
+          error?: string;
+          stations: number;
+          tags: number;
+          factoryStatus: string;
+          packRows: number;
+          partRows: number;
+          overlayCount: number;
+        };
+        if (ui.error || ui.stations !== 2 || ui.tags !== 8 || !ui.factoryStatus.includes('已连接：demo') ||
+            ui.packRows < 1 || ui.partRows < 1 || ui.overlayCount < 1) {
+          console.error('SMOKE_FAIL ui', JSON.stringify(ui));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_UI_OK stations=${ui.stations} tags=${ui.tags} packs=${ui.packRows} parts=${ui.partRows} overlay=${ui.overlayCount}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL ui_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -213,7 +315,7 @@ async function startAgent(registry: PackRegistry): Promise<void> {
     token,
     version: app.getVersion(),
     host: '127.0.0.1',
-    port: 7420
+    port: HEADLESS_SMOKE ? 0 : 7420
   });
   try {
     const info = await agentServer.start(tokenFile);
@@ -239,6 +341,7 @@ async function bootstrap(): Promise<void> {
     builtinDir: builtinPacksDir(),
     userDir: userPacksDir(),
     stateFile: join(app.getPath('userData'), 'packs-state.json'),
+    factoryConfigFile: join(app.getPath('userData'), 'factory.json'),
     version: app.getVersion(),
     getAgentInfo: () => agentInfo
   });

@@ -7,11 +7,13 @@
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
-    "build:ext": "tsc --noEmit && vite build && node scripts/build-electron.mjs",
+    "build:ext": "tsc --noEmit && vite build && node scripts/build-electron.mjs && node scripts/build-mcp.mjs",
     "start": "electron .",
     "test": "node --test",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
-    "dist:win": "electron-builder --win nsis --x64"
+    "dist:win": "electron-builder --win nsis --x64",
+    "build:mcp": "node scripts/build-mcp.mjs",
+    "mcp": "node dist-electron/mcp.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
