@@ -344,6 +344,30 @@ interface Window {
     setDomain(domain: 'mech' | 'elec'): void;
     insertSymbol(key: string, opts?: { x?: number; y?: number }): { ok: boolean; tag?: string; id?: string; message?: string };
   };
+  __Enclosure?: {
+    add(partId: string, x?: number, y?: number): Promise<{
+      id: string;
+      partId: string;
+      model: string;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+      railId?: string;
+    } | null>;
+    state(): {
+      placed: number;
+      overlap: number;
+      collisions: number;
+      ratio: number;
+      usedMm2: number;
+      plate: { width: number; height: number; rails: { id: string; y: number; height: number; label: string }[] };
+      placements: { id: string; partId: string; model: string; x: number; y: number; w: number; h: number; railId?: string }[];
+    } | null;
+    open(): void;
+    close(): void;
+    clear(): void;
+  };
   __AUTOMATION_CAD_EXTENSION_READY__?: boolean;
   AutomationCadViewer?: {
     open(): void;

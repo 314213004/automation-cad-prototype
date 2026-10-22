@@ -375,6 +375,35 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        const enclosure = await window.webContents.executeJavaScript(
+          `(async () => {
+            const api = window.__Enclosure;
+            if (!api) return { error: '底板布置 API 缺失' };
+            const first = await api.add('iC65N-C16-1P', 120, 180);
+            const second = await api.add('iC65N-C16-1P', 126, 180);
+            const state = api.state();
+            api.close();
+            return {
+              added: Boolean(first && second),
+              placed: state?.placed || 0,
+              overlap: state?.overlap || 0,
+              ratio: state?.ratio || 0,
+              status: document.getElementById('encStatus')?.textContent || ''
+            };
+          })()`
+        ) as { error?: string; added: boolean; placed: number; overlap: number; ratio: number; status: string };
+        if (enclosure.error || !enclosure.added || enclosure.placed !== 2 || enclosure.overlap !== 1 || !(enclosure.ratio > 0) || !enclosure.status.includes('已放置')) {
+          console.error('SMOKE_FAIL enclosure_canvas', JSON.stringify(enclosure));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1 ratio>0');
+      } catch (error) {
+        console.error('SMOKE_FAIL enclosure_canvas_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const syncUi = await window.webContents.executeJavaScript(
           `(async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

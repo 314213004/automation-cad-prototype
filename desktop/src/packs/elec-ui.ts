@@ -7,6 +7,7 @@ import {
   notify,
   type DrawerHandle
 } from '../ui/panels';
+import { addPartToEnclosure } from '../enclosure/canvas';
 
 const ELEC_ICON = '<svg viewBox="0 0 16 16"><path d="M10.8 1.8L4.4 8.6h3.2l-1.4 5.6 6.4-7.5H9.3z"/></svg>';
 const CACHE_TTL_MS = 30_000;
@@ -49,6 +50,11 @@ function desktop() {
 
 function hasSymbol(part: DesktopComponentPart): boolean {
   return typeof part.symbol === 'string' && part.symbol.trim() !== '';
+}
+
+function hasDims(part: DesktopComponentPart): boolean {
+  const dims = part.dims;
+  return Boolean(dims && Number.isFinite(dims.w) && Number.isFinite(dims.h) && dims.w > 0 && dims.h > 0);
 }
 
 function partKey(part: DesktopComponentPart): string {
@@ -139,12 +145,13 @@ function specSummary(part: DesktopComponentPart): string {
 function rowHtml(part: DesktopComponentPart, index: number): string {
   const key = partKey(part);
   const symbol = hasSymbol(part) ? part.symbol!.trim() : '';
+  const placeable = hasDims(part);
   const isOpen = expanded.has(key);
   const specs = Object.entries(part.specs ?? {});
   const detail = specs.length
     ? specs.map(([name, value]) => `<dt>${escapeHtml(name)}</dt><dd>${escapeHtml(String(value))}</dd>`).join('')
     : '<dt>参数</dt><dd>该元件暂无参数</dd>';
-  return `<article class="elec-part-row" data-elec-part="${escapeHtml(key)}" data-elec-symbol="${escapeHtml(symbol)}">
+  return `<article class="elec-part-row" data-elec-part="${escapeHtml(key)}" data-elec-symbol="${escapeHtml(symbol)}" draggable="true">
     <button type="button" class="elec-part-head" data-elec-toggle aria-expanded="${isOpen}">
       <span class="acp-part-main">
         <span class="acp-part-model">${escapeHtml(part.model)}</span>
@@ -154,6 +161,7 @@ function rowHtml(part: DesktopComponentPart, index: number): string {
     </button>
     <div class="elec-part-actions">
       <button type="button" class="acp-btn acp-btn-primary" data-elec-insert="${index}" ${symbol ? '' : 'disabled'}>放入图纸</button>
+      ${placeable ? `<button type="button" class="acp-btn" data-elec-plate="${index}">放入底板</button>` : ''}
       ${symbol ? '' : '<span class="elec-part-hint">该元件暂无原理图符号，可在元件属性中查看参数</span>'}
     </div>
     <div class="elec-part-detail" ${isOpen ? '' : 'hidden'}><dl class="elec-spec-list">${detail}</dl></div>
@@ -215,6 +223,23 @@ function renderRows(): void {
       const index = Number(button.dataset.elecInsert);
       const part = Number.isInteger(index) ? shownParts[index] : undefined;
       if (part) insertPart(part);
+    });
+  });
+  ui.results.querySelectorAll<HTMLButtonElement>('[data-elec-plate]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.elecPlate);
+      const part = Number.isInteger(index) ? shownParts[index] : undefined;
+      if (part) void addPartToEnclosure(partKey(part));
+    });
+  });
+  ui.results.querySelectorAll<HTMLElement>('[data-elec-part]').forEach((row) => {
+    row.addEventListener('dragstart', (event) => {
+      const key = row.dataset.elecPart ?? '';
+      const part = shownParts.find((item) => partKey(item) === key);
+      if (!part || !event.dataTransfer) return;
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData('application/x-automationcad-part', key);
+      event.dataTransfer.setData('text/plain', key);
     });
   });
 }
@@ -282,7 +307,7 @@ export function initElecLibraryPanel(): void {
     </div>
     <div class="elec-cats" id="elecLibCategories"></div>
     <div id="elecLibResults"><div class="acp-empty">首次打开时才会按需读取电气元件包。</div></div>
-    <div class="acp-note">列表来自已启用的数据包，首次打开时读取一次并在本地缓存 30 秒；切换分类和搜索不会重复调用 IPC。无符号元件仅供参数查看。</div>`;
+    <div class="acp-note">列表来自已启用的数据包，首次打开时读取一次并在本地缓存 30 秒；切换分类和搜索不会重复调用 IPC。无符号元件仅供参数查看。带外形尺寸的条目可拖入「底板布置」画布。</div>`;
   drawer.footer.innerHTML = '<span class="acp-pill">按需加载</span><span class="acp-pill">缓存 30s</span><span class="acp-pill">12 个电气分类</span>';
 
   const status = drawer.body.querySelector<HTMLElement>('#elecLibStatus');

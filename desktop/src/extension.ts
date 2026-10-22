@@ -8,6 +8,7 @@ import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
 import { initElecLibraryPanel } from './packs/elec-ui';
+import { closeEnclosure, initEnclosureUi } from './enclosure/canvas';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel } from './agent/ui';
@@ -405,6 +406,7 @@ function requiredElement(id: string): HTMLElement {
 }
 
 function openOverlay(): void {
+  closeEnclosure();
   buildOverlay();
   if (!root) return;
   overlayOpen = true;
@@ -821,6 +823,7 @@ function init(): void {
   });
   initPackPanel();
   initElecLibraryPanel();
+  initEnclosureUi();
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();
   buildOverlay();
