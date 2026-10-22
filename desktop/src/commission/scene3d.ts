@@ -1,14 +1,54 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { probeWebGL } from '../cad/webgl';
+import { probeWebGL } from '../cad/webgl.ts';
+import { type ActuatorConfig, type MachineConfig, validateMachineConfig } from './machine-config.ts';
+
+// 诚实边界：这里的“联动”来自 machine-config.ts 中的点位/执行机构配置。
+// STEP 文件只提供几何，没有轴类型、行程、方向或运动学关系，因此本场景不会从 STEP
+// 自动识别机构。当前验证的是配置驱动 + 多工位多轴渲染，不是任意 STEP 自动联动。
 
 export interface Commission3DStats {
   frames: number;
   ticks: number;
+  /** 基座数 + 执行机构数，传感器不计入部件数。 */
   parts: number;
+  stations: number;
+  sensors: number;
+  actuators: number;
   webgl: boolean;
   enabled: boolean;
   active: boolean;
+}
+
+export interface ActuatorMotionSnapshot {
+  id: string;
+  kind: ActuatorConfig['kind'];
+  /** cylinder: 0~1；gripper: 0~1（1 为闭合）；rotary: 0~90 度。 */
+  target: number;
+  value: number;
+  from: number;
+  startedAt: number;
+  durationMs: number;
+}
+
+interface MutableMotion extends ActuatorMotionSnapshot {
+  startedFrom: number;
+}
+
+interface ActuatorVisual {
+  config: ActuatorConfig;
+  group: THREE.Group;
+  rod?: THREE.Mesh;
+  jawLeft?: THREE.Group;
+  jawRight?: THREE.Group;
+  rotor?: THREE.Group;
+  travel: number;
+}
+
+interface SensorVisual {
+  mesh: THREE.Mesh;
+  material: THREE.MeshStandardMaterial;
+  onColor: THREE.Color;
 }
 
 interface HighlightMaterial {
@@ -18,18 +58,111 @@ interface HighlightMaterial {
   emissiveIntensity: number;
 }
 
-const PART_COUNT = 5;
+type PointValues = Record<string, boolean | number>;
+
 const BACKGROUND = 0x2a2d31;
-const SENSOR_ON = 0x2dd4bf;
-const SENSOR_OFF = 0x5d666e;
+const SENSOR_OFF = new THREE.Color(0x5d666e);
+const SENSOR_DEFAULT_ON = new THREE.Color(0x2dd4bf);
 const FAULT_COLOR = 0xff4d4f;
+const STATION_SPACING = 2.9;
+
+function defaultNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+function pointIsOn(values: PointValues, point: string | undefined): boolean {
+  if (!point) return false;
+  return values[point] === true || values[point.toUpperCase()] === true;
+}
 
 function standardMaterial(color: number, metalness = 0.35, roughness = 0.55): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness });
 }
 
+/**
+ * 与 Three.js 解耦的逐轴状态机，便于用假 clock 验证目标值与插值。
+ * 气缸未收到伸展/缩回信号时保持当前目标；两者同时为 true 时缩回优先。
+ */
+export class MachineMotion {
+  private readonly config: MachineConfig;
+  private readonly clock: () => number;
+  private readonly states = new Map<string, MutableMotion>();
+  private readonly sensorStates = new Map<string, boolean>();
+
+  constructor(config: MachineConfig, clock: () => number = defaultNow) {
+    this.config = config;
+    this.clock = clock;
+    for (const actuator of config.actuators) {
+      this.states.set(actuator.id, {
+        id: actuator.id,
+        kind: actuator.kind,
+        target: 0,
+        value: 0,
+        from: 0,
+        startedFrom: 0,
+        startedAt: clock(),
+        durationMs: actuator.durationMs ?? 400
+      });
+    }
+    for (const sensor of config.sensors) this.sensorStates.set(sensor.point.toUpperCase(), false);
+  }
+
+  update(values: PointValues, now: number = this.clock()): void {
+    for (const actuator of this.config.actuators) {
+      const state = this.states.get(actuator.id);
+      if (!state) continue;
+      const nextTarget = this.targetFor(actuator, state.target, values);
+      if (nextTarget !== state.target) {
+        state.startedFrom = state.value;
+        state.from = state.value;
+        state.startedAt = now;
+        state.target = nextTarget;
+      }
+    }
+    for (const sensor of this.config.sensors) {
+      this.sensorStates.set(sensor.point.toUpperCase(), pointIsOn(values, sensor.point));
+    }
+  }
+
+  advance(now: number = this.clock()): void {
+    for (const state of this.states.values()) {
+      const elapsed = Math.max(0, now - state.startedAt);
+      const ratio = Math.min(1, elapsed / Math.max(1, state.durationMs));
+      const eased = ratio * ratio * (3 - 2 * ratio);
+      state.value = ratio >= 1 ? state.target : state.startedFrom + (state.target - state.startedFrom) * eased;
+    }
+  }
+
+  snap(): void {
+    for (const state of this.states.values()) state.value = state.target;
+  }
+
+  getActuator(id: string): ActuatorMotionSnapshot | undefined {
+    const state = this.states.get(id);
+    return state ? { ...state } : undefined;
+  }
+
+  isSensorOn(point: string): boolean {
+    return this.sensorStates.get(point.trim().toUpperCase()) === true;
+  }
+
+  private targetFor(actuator: ActuatorConfig, current: number, values: PointValues): number {
+    if (actuator.kind === 'cylinder') {
+      let target = current;
+      if (pointIsOn(values, actuator.extendPoint)) target = 1;
+      if (pointIsOn(values, actuator.retractPoint)) target = 0;
+      return target;
+    }
+    if (actuator.kind === 'gripper') return pointIsOn(values, actuator.gripPoint) ? 1 : 0;
+    return pointIsOn(values, actuator.point) ? 90 : 0;
+  }
+}
+
 export class CommissionScene3D {
   private readonly container: HTMLElement;
+  private readonly config: MachineConfig;
+  private readonly clock: () => number;
+  private readonly motion: MachineMotion;
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(42, 1, 0.05, 200);
   private readonly controlsRoot = new THREE.Group();
@@ -41,31 +174,21 @@ export class CommissionScene3D {
   private degraded = false;
   private enabled = true;
   private active = false;
-  private latestValues: Record<string, boolean | number> = {};
+  private latestValues: PointValues = {};
   private frames = 0;
   private ticks = 0;
-  private targetPosition = 0;
-  private position = 0;
-  private positionFrom = 0;
-  private positionStartedAt = 0;
-  private jawAngle = 0;
-  private jawFrom = 0;
-  private jawTarget = 0;
-  private jawStartedAt = 0;
   private highlightedPoint: string | null = null;
   private highlightedMaterials: HighlightMaterial[] = [];
-
-  private rod: THREE.Mesh | null = null;
-  private slide: THREE.Mesh | null = null;
-  private cylinder: THREE.Mesh | null = null;
-  private gripper: THREE.Group | null = null;
-  private jawLeft: THREE.Group | null = null;
-  private jawRight: THREE.Group | null = null;
-  private readonly sensors = new Map<string, THREE.Mesh>();
+  private readonly stationGroups = new Map<string, THREE.Group>();
+  private readonly actuatorVisuals = new Map<string, ActuatorVisual>();
+  private readonly sensorVisuals = new Map<string, SensorVisual>();
   private readonly targets = new Map<string, THREE.Object3D[]>();
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, config: MachineConfig, clock: () => number = defaultNow) {
     this.container = container;
+    this.config = validateMachineConfig(config);
+    this.clock = clock;
+    this.motion = new MachineMotion(this.config, clock);
     this.scene.background = new THREE.Color(BACKGROUND);
     this.scene.add(this.controlsRoot);
     this.buildLights();
@@ -82,51 +205,28 @@ export class CommissionScene3D {
     this.sync();
   }
 
-  update(values: Record<string, boolean | number>): void {
+  update(values: PointValues): void {
     this.latestValues = { ...values };
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = this.clock();
     if (this.enabled) {
       this.ticks += 1;
       this.frames += 1;
     }
-
-    const extend = values.Y0 === true;
-    const retract = values.Y1 === true;
-    const nextPosition = retract ? 0 : extend ? 1 : this.targetPosition;
-    if (nextPosition !== this.targetPosition) {
-      this.positionFrom = this.position;
-      this.positionStartedAt = now;
-      this.targetPosition = nextPosition;
-    }
-
-    const nextJaw = values.Y2 === true ? 25 : 0;
-    if (nextJaw !== this.jawTarget) {
-      this.jawFrom = this.jawAngle;
-      this.jawStartedAt = now;
-      this.jawTarget = nextJaw;
-    }
-
-    for (let index = 0; index < 4; index += 1) {
-      this.paintSensor(`X${index}`, values[`X${index}`] === true);
-    }
-
-    if (this.degraded || !this.renderer) {
-      this.position = this.targetPosition;
-      this.jawAngle = this.jawTarget;
-      this.applyTransforms();
-      return;
-    }
-    this.advance(now);
+    this.motion.update(values, now);
+    if (this.degraded || !this.renderer) this.motion.snap();
+    else this.motion.advance(now);
+    this.paintSensors();
+    this.applyTransforms();
   }
 
   highlight(pointId: string, on: boolean): void {
+    const normalized = pointId.trim().toUpperCase();
     if (!on) {
-      if (this.highlightedPoint === pointId) this.clearHighlight();
+      if (this.highlightedPoint === normalized) this.clearHighlight();
       return;
     }
     this.clearHighlight();
-    const normalized = pointId.trim().toUpperCase();
-    const targets = this.targets.get(normalized) ?? this.targets.get('BASE') ?? [];
+    const targets = this.targets.get(normalized) ?? [];
     for (const target of targets) {
       target.traverse((node) => {
         if (!(node instanceof THREE.Mesh)) return;
@@ -164,11 +264,22 @@ export class CommissionScene3D {
     return {
       frames: this.frames,
       ticks: this.ticks,
-      parts: PART_COUNT,
+      parts: this.stationGroups.size + this.actuatorVisuals.size,
+      stations: this.config.stations.length,
+      sensors: this.sensorVisuals.size,
+      actuators: this.actuatorVisuals.size,
       webgl: Boolean(this.renderer) && !this.degraded,
       enabled: this.enabled,
       active: this.active
     };
+  }
+
+  motionState(actuatorId: string): ActuatorMotionSnapshot | undefined {
+    return this.motion.getActuator(actuatorId);
+  }
+
+  sensorOn(point: string): boolean {
+    return this.motion.isSensorOn(point);
   }
 
   dispose(): void {
@@ -223,14 +334,14 @@ export class CommissionScene3D {
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
-    controls.minDistance = 4;
-    controls.maxDistance = 24;
-    controls.target.set(0.7, 0.75, 0);
+    controls.minDistance = 3;
+    controls.maxDistance = 32;
+    controls.target.set(0, 0.65, 0);
     controls.update();
     this.controls = controls;
 
-    this.camera.position.set(7.2, 4.8, 7.8);
-    this.camera.lookAt(0.7, 0.75, 0);
+    this.camera.position.set(7.4, 6.2, 7.4);
+    this.camera.lookAt(0, 0.65, 0);
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(() => this.resize());
       this.resizeObserver.observe(this.container);
@@ -268,45 +379,46 @@ export class CommissionScene3D {
 
   private readonly animate = (time: number): void => {
     if (!this.renderer || !this.enabled || !this.active) return;
-    this.advance(time);
+    this.motion.advance(time);
+    this.applyTransforms();
     this.controls?.update();
     this.renderer.render(this.scene, this.camera);
     this.ticks += 1;
     this.frames += 1;
   };
 
-  private advance(now: number): void {
-    const positionElapsed = Math.max(0, now - this.positionStartedAt);
-    const positionT = Math.min(1, positionElapsed / 400);
-    const eased = positionT < 0.5 ? 2 * positionT * positionT : 1 - ((-2 * positionT + 2) ** 2) / 2;
-    this.position = this.positionFrom + (this.targetPosition - this.positionFrom) * eased;
-    if (positionT >= 1) this.position = this.targetPosition;
-
-    const jawElapsed = Math.max(0, now - this.jawStartedAt);
-    const jawT = Math.min(1, jawElapsed / 220);
-    this.jawAngle = this.jawFrom + (this.jawTarget - this.jawFrom) * jawT;
-    if (jawT >= 1) this.jawAngle = this.jawTarget;
-    this.applyTransforms();
-  }
-
   private applyTransforms(): void {
-    const travel = 0.9;
-    if (this.rod) this.rod.position.x = 1.1 + this.position * travel;
-    if (this.slide) this.slide.position.x = 2.55 + this.position * travel;
-    if (this.gripper) this.gripper.position.x = 3.25 + this.position * travel;
-    const radians = THREE.MathUtils.degToRad(this.jawAngle);
-    if (this.jawLeft) this.jawLeft.rotation.x = radians;
-    if (this.jawRight) this.jawRight.rotation.x = -radians;
+    for (const visual of this.actuatorVisuals.values()) {
+      const state = this.motion.getActuator(visual.config.id);
+      if (!state) continue;
+      if (visual.config.kind === 'cylinder' && visual.rod) {
+        visual.rod.position.x = 0.18 + state.value * visual.travel;
+      } else if (visual.config.kind === 'gripper') {
+        const opening = 0.14 + (1 - state.value) * 0.14;
+        if (visual.jawLeft) visual.jawLeft.position.z = opening;
+        if (visual.jawRight) visual.jawRight.position.z = -opening;
+      } else if (visual.config.kind === 'rotary' && visual.rotor) {
+        visual.rotor.rotation.y = THREE.MathUtils.degToRad(state.value);
+      }
+    }
   }
 
-  private paintSensor(id: string, on: boolean): void {
-    if (this.highlightedPoint === id) return;
-    const sensor = this.sensors.get(id);
-    if (!sensor) return;
-    const material = sensor.material as THREE.MeshStandardMaterial;
-    material.color.setHex(on ? SENSOR_ON : SENSOR_OFF);
-    material.emissive.setHex(on ? SENSOR_ON : 0x000000);
-    material.emissiveIntensity = on ? 1.15 : 0.05;
+  private paintSensors(): void {
+    for (const sensor of this.config.sensors) {
+      const key = sensor.point.toUpperCase();
+      if (this.highlightedPoint === key) continue;
+      const visual = this.sensorVisuals.get(key);
+      if (!visual) continue;
+      const on = this.motion.isSensorOn(sensor.point);
+      visual.material.color.copy(on ? visual.onColor : SENSOR_OFF);
+      visual.material.emissive.copy(on ? visual.onColor : new THREE.Color(0x000000));
+      visual.material.emissiveIntensity = on ? 1.15 : 0.05;
+    }
+  }
+
+  private addTarget(key: string, objects: THREE.Object3D[]): void {
+    this.targets.set(key, objects);
+    this.targets.set(key.toUpperCase(), objects);
   }
 
   private buildLights(): void {
@@ -320,106 +432,154 @@ export class CommissionScene3D {
   }
 
   private buildModel(): void {
-    const base = new THREE.Mesh(new THREE.BoxGeometry(7, 0.6, 3.4), standardMaterial(0x5c646b, 0.25, 0.72));
-    base.position.set(0, -0.3, 0);
-    this.controlsRoot.add(base);
-    this.targets.set('BASE', [base]);
+    const stationCount = this.config.stations.length;
+    const columns = Math.max(1, Math.ceil(Math.sqrt(stationCount)));
+    const rows = Math.ceil(stationCount / columns);
+    const originX = -((columns - 1) * STATION_SPACING) / 2;
+    const originZ = -((rows - 1) * STATION_SPACING) / 2;
 
-    const grid = new THREE.GridHelper(12, 24, 0x5d6770, 0x3a4047);
-    grid.position.y = -0.61;
+    const grid = new THREE.GridHelper(Math.max(9, columns * STATION_SPACING + 2), 32, 0x5d6770, 0x3a4047);
+    grid.position.y = -0.54;
     this.controlsRoot.add(grid);
 
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.55, 1.55), standardMaterial(0x7d8b96, 0.45, 0.42));
-    slide.position.set(2.55, 0.28, 0);
-    this.slide = slide;
-    this.controlsRoot.add(slide);
+    for (const [index, station] of this.config.stations.entries()) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const group = new THREE.Group();
+      group.position.set(originX + column * STATION_SPACING, 0, originZ + row * STATION_SPACING);
+      this.controlsRoot.add(group);
 
-    const cylinder = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.48, 0.48, 2.6, 36),
-      standardMaterial(0x9aa7b2, 0.55, 0.32)
-    );
-    cylinder.rotation.z = Math.PI / 2;
-    cylinder.position.set(-0.8, 0.72, 0);
-    this.cylinder = cylinder;
-    this.controlsRoot.add(cylinder);
-
-    const rod = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.15, 0.15, 1.8, 28),
-      standardMaterial(0xc7d0d7, 0.8, 0.22)
-    );
-    rod.rotation.z = Math.PI / 2;
-    rod.position.set(1.1, 0.72, 0);
-    this.rod = rod;
-    this.controlsRoot.add(rod);
-
-    const gripper = new THREE.Group();
-    gripper.position.set(3.25, 0.72, 0);
-    this.gripper = gripper;
-    this.controlsRoot.add(gripper);
-
-    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.7, 0.9), standardMaterial(0x68747e, 0.45, 0.45));
-    gripper.add(mount);
-
-    const jawGeometry = new THREE.BoxGeometry(0.55, 0.68, 0.12);
-    const jawMaterial = standardMaterial(0x23b7a5, 0.35, 0.38);
-    const jawLeft = new THREE.Group();
-    jawLeft.position.set(0.16, 0.3, 0.34);
-    const leftMesh = new THREE.Mesh(jawGeometry, jawMaterial.clone());
-    leftMesh.position.y = -0.3;
-    jawLeft.add(leftMesh);
-    jawLeft.rotation.x = 0;
-    gripper.add(jawLeft);
-    this.jawLeft = jawLeft;
-
-    const jawRight = new THREE.Group();
-    jawRight.position.set(0.16, 0.3, -0.34);
-    const rightMesh = new THREE.Mesh(jawGeometry, jawMaterial.clone());
-    rightMesh.position.y = -0.3;
-    jawRight.add(rightMesh);
-    jawRight.rotation.x = -0;
-    gripper.add(jawRight);
-    this.jawRight = jawRight;
-
-    for (let index = 0; index < 4; index += 1) {
-      const sensor = new THREE.Mesh(
-        new THREE.SphereGeometry(0.16, 20, 14),
-        new THREE.MeshStandardMaterial({ color: SENSOR_OFF, emissive: 0x000000, emissiveIntensity: 0.05, metalness: 0.1, roughness: 0.35 })
-      );
-      sensor.position.set(-2.35 + index * 1.05, 0.23, 1.48);
-      sensor.userData.pointId = `X${index}`;
-      this.sensors.set(`X${index}`, sensor);
-      this.targets.set(`X${index}`, [sensor]);
-      this.controlsRoot.add(sensor);
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2.55, 0.45, 2.55), standardMaterial(0x5c646b, 0.25, 0.72));
+      base.position.y = -0.24;
+      group.add(base);
+      this.stationGroups.set(station, group);
+      this.addTarget(station, [base]);
     }
 
-    this.targets.set('ROD', [rod]);
-    this.targets.set('SLIDE', [slide]);
-    this.targets.set('CYLINDER', [cylinder]);
-    this.targets.set('GRIPPER', [gripper]);
-    const outputs: Record<string, string[]> = {
-      Y0: ['ROD'],
-      Y1: ['ROD'],
-      Y2: ['GRIPPER'],
-      Y3: ['CYLINDER'],
-      Y4: ['SLIDE'],
-      Y5: ['BASE'],
-      Y6: ['SLIDE'],
-      Y7: ['SLIDE'],
-      Y8: ['BASE'],
-      X4: ['SLIDE'],
-      X5: ['SLIDE'],
-      X6: ['SLIDE'],
-      X7: ['SLIDE'],
-      X8: ['BASE'],
-      X9: ['BASE'],
-      X10: ['BASE'],
-      X11: ['CYLINDER'],
-      X14: ['BASE']
-    };
-    for (const [point, names] of Object.entries(outputs)) {
-      const objects = names.flatMap((name) => this.targets.get(name) ?? []);
-      if (objects.length > 0) this.targets.set(point, objects);
+    const actuatorSlots = new Map<string, number>();
+    for (const actuator of this.config.actuators) {
+      const stationGroup = this.stationGroups.get(actuator.station);
+      if (!stationGroup) continue;
+      const slot = actuatorSlots.get(actuator.station) ?? 0;
+      actuatorSlots.set(actuator.station, slot + 1);
+      const group = new THREE.Group();
+      group.position.set(...(actuator.position ?? this.defaultActuatorPosition(slot)));
+      stationGroup.add(group);
+      const visual = this.buildActuator(actuator, group);
+      this.actuatorVisuals.set(actuator.id, visual);
+      this.addTarget(actuator.id, [group]);
+      for (const point of [actuator.extendPoint, actuator.retractPoint, actuator.gripPoint, actuator.point]) {
+        if (point) this.addTarget(point, [group]);
+      }
     }
+
+    const sensorSlots = new Map<string, number>();
+    for (const sensor of this.config.sensors) {
+      const stationGroup = this.stationGroups.get(sensor.station);
+      if (!stationGroup) continue;
+      const slot = sensorSlots.get(sensor.station) ?? 0;
+      sensorSlots.set(sensor.station, slot + 1);
+      const material = new THREE.MeshStandardMaterial({
+        color: SENSOR_OFF,
+        emissive: 0x000000,
+        emissiveIntensity: 0.05,
+        metalness: 0.1,
+        roughness: 0.35
+      });
+      const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.11, 18, 12), material);
+      sphere.position.set(-0.78 + slot * 0.52, 0.16, 1.04);
+      sphere.userData.pointId = sensor.point;
+      stationGroup.add(sphere);
+      const key = sensor.point.toUpperCase();
+      this.sensorVisuals.set(key, {
+        mesh: sphere,
+        material,
+        onColor: new THREE.Color(sensor.color ?? SENSOR_DEFAULT_ON)
+      });
+      const partTargets = this.targets.get(sensor.part) ?? this.targets.get(sensor.part.toUpperCase()) ?? [];
+      this.addTarget(sensor.point, [sphere, ...partTargets]);
+    }
+
+    this.paintSensors();
     this.applyTransforms();
   }
+
+  private defaultActuatorPosition(slot: number): [number, number, number] {
+    const positions: [number, number, number][] = [
+      [-0.72, 0.55, -0.38],
+      [0.05, 0.55, -0.38],
+      [0.76, 0.65, 0.35]
+    ];
+    return positions[slot] ?? [0, 0.55, 0];
+  }
+
+  private buildActuator(config: ActuatorConfig, group: THREE.Group): ActuatorVisual {
+    if (config.kind === 'cylinder') return this.buildCylinder(config, group);
+    if (config.kind === 'gripper') return this.buildGripper(config, group);
+    return this.buildRotary(config, group);
+  }
+
+  private buildCylinder(config: ActuatorConfig, group: THREE.Group): ActuatorVisual {
+    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.18, 0.34), standardMaterial(0x4f5961, 0.4, 0.5));
+    mount.position.y = -0.13;
+    group.add(mount);
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.58, 24), standardMaterial(0x9aa7b2, 0.55, 0.32));
+    body.rotation.z = Math.PI / 2;
+    body.position.x = -0.2;
+    group.add(body);
+
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.7, 18), standardMaterial(0xc7d0d7, 0.8, 0.22));
+    rod.rotation.z = Math.PI / 2;
+    rod.position.x = 0.18;
+    group.add(rod);
+
+    return {
+      config,
+      group,
+      rod,
+      travel: ((config.travelMm ?? 40) / 40) * 0.34
+    };
+  }
+
+  private buildGripper(config: ActuatorConfig, group: THREE.Group): ActuatorVisual {
+    const mount = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.22, 0.42), standardMaterial(0x68747e, 0.45, 0.45));
+    mount.position.y = -0.08;
+    group.add(mount);
+
+    const jawGeometry = new THREE.BoxGeometry(0.24, 0.42, 0.09);
+    const jawMaterial = standardMaterial(0x23b7a5, 0.35, 0.38);
+    const jawLeft = new THREE.Group();
+    jawLeft.position.set(0.16, 0.13, 0.14);
+    jawLeft.add(new THREE.Mesh(jawGeometry, jawMaterial.clone()));
+    group.add(jawLeft);
+
+    const jawRight = new THREE.Group();
+    jawRight.position.set(0.16, 0.13, -0.14);
+    jawRight.add(new THREE.Mesh(jawGeometry, jawMaterial.clone()));
+    group.add(jawRight);
+
+    return { config, group, jawLeft, jawRight, travel: 0 };
+  }
+
+  private buildRotary(config: ActuatorConfig, group: THREE.Group): ActuatorVisual {
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.16, 24), standardMaterial(0x59636b, 0.5, 0.42));
+    base.position.y = -0.14;
+    group.add(base);
+
+    const rotor = new THREE.Group();
+    rotor.position.y = 0.04;
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.22, 20), standardMaterial(0xb2bec7, 0.65, 0.28));
+    rotor.add(hub);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.1, 0.16), standardMaterial(0xf59e0b, 0.4, 0.4));
+    arm.position.set(0.3, 0.16, 0);
+    rotor.add(arm);
+    group.add(rotor);
+
+    return { config, group, rotor, travel: 0 };
+  }
+}
+
+export function createScene3D(container: HTMLElement, config: MachineConfig, clock?: () => number): CommissionScene3D {
+  return new CommissionScene3D(container, config, clock);
 }

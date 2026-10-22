@@ -10,11 +10,14 @@ import {
 import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
 import { runSequence, type SequenceIo, type SequenceResult, type Step, type StepResult } from './sequence.ts';
 import { diagnose, type Diagnosis } from './diagnose.ts';
-import { CommissionScene3D, type Commission3DStats } from './scene3d.ts';
+import { demoMachineConfig } from './machine-config.ts';
+import { createScene3D, type Commission3DStats, type CommissionScene3D } from './scene3d.ts';
 import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
 import commissionStyles from './commission.css?inline';
 
 const COMMISSION_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 13.5V8h2.5v5.5M8 13.5V4.5h2.5v9M11.5 13.5V6.5H14v7"/><path d="M3.5 5.5l2.5-2 2 1.2 3.5-2.5"/></svg>';
+const MACHINE_CONFIG = demoMachineConfig();
+const MACHINE_SUMMARY = `机型：${MACHINE_CONFIG.stations.length} 工位 · ${MACHINE_CONFIG.actuators.length} 执行机构 · ${MACHINE_CONFIG.sensors.length} 传感器`;
 
 const STATUS_LABEL: Record<PlcStatus, string> = {
   disconnected: '未连接',
@@ -771,6 +774,7 @@ function buildPanel(): void {
         <strong id="commissionStatusDetail">未建立通信</strong>
       </div>
       <div class="acp-section-title"><span>3D 联动</span><label class="acp-switch"><input type="checkbox" id="commission3dToggle" checked>启用</label></div>
+      <div class="acp-note" id="commission3dMachine">${MACHINE_SUMMARY}</div>
       <div class="commission-3d" id="commission3dHost"></div>
       <div class="acp-section-title"><span>PLC 连接</span><b>28 点位</b></div>
       <div class="acp-field">
@@ -861,7 +865,7 @@ function buildPanel(): void {
     export: get<HTMLButtonElement>('#commissionExport'),
     summary: get<HTMLElement>('#commissionSummary')
   };
-  scene3d = new CommissionScene3D(elements.scene3dHost);
+  scene3d = createScene3D(elements.scene3dHost, MACHINE_CONFIG);
   scene3d.setEnabled(elements.scene3dToggle.checked);
   scene3d.setActive(drawer.isOpen());
   scene3dObserver?.disconnect();
@@ -894,7 +898,17 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
   };
   Object.defineProperty(window, '__Commission3D', {
     value: Object.freeze({
-      stats: (): Commission3DStats => scene3d?.stats() ?? { frames: 0, ticks: 0, parts: 0, webgl: false, enabled: false, active: false },
+      stats: (): Commission3DStats => scene3d?.stats() ?? {
+        frames: 0,
+        ticks: 0,
+        parts: 0,
+        stations: 0,
+        sensors: 0,
+        actuators: 0,
+        webgl: false,
+        enabled: false,
+        active: false
+      },
       update: (incoming: Record<string, boolean | number>): void => scene3d?.update(incoming),
       highlight: (pointId: string, on: boolean): void => scene3d?.highlight(pointId, on),
       lastDiagnosis: (): Diagnosis[] => lastDiagnoses.map((diagnosis) => ({

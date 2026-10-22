@@ -318,7 +318,17 @@ interface Window {
   };
   __AgentBridge?: AgentBridgeApi;
   __Commission3D?: {
-    stats(): { frames: number; ticks: number; parts: number; webgl: boolean; enabled: boolean; active: boolean };
+    stats(): {
+      frames: number;
+      ticks: number;
+      parts: number;
+      stations: number;
+      sensors: number;
+      actuators: number;
+      webgl: boolean;
+      enabled: boolean;
+      active: boolean;
+    };
     update(values: Record<string, boolean | number>): void;
     highlight(pointId: string, on: boolean): void;
     lastDiagnosis(): {

@@ -36,7 +36,8 @@ SMOKE_PLC_OK points=28
 SMOKE_COMMISSION_OK steps=6 passed=6
 SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
 SMOKE_COMMISSION_PDF_OK path=.../report.pdf
-SMOKE_COMMISSION_3D_OK ticks=... parts=5
+SMOKE_COMMISSION_3D_OK ticks=... parts=16
+SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16 ticks=...
 SMOKE_DIAGNOSE_OK codes=1
 SMOKE_AGENT_TOOLS_OK tools=7 implemented=7
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
@@ -66,7 +67,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 157 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包、同步与联调诊断）
+- ✅ 169 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包、同步、联调诊断与配置驱动 3D）
 - ✅ smoke 含智能体 7 工具/场景/BOM/对话面板、电气元件面板、PLC、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立

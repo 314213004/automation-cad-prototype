@@ -446,10 +446,14 @@ function createWindow(): BrowserWindow {
             await wait(450);
             const pointRows = document.querySelectorAll('#commissionPoints tr[data-plc-point]').length;
             const monitorRows = document.querySelectorAll('#commissionMonitor tr[data-monitor-point]').length;
+            const machine3d = document.getElementById('commission3dMachine')?.textContent || '';
             const lamp = document.getElementById('commissionLamp')?.dataset.state || '';
             const connectText = document.getElementById('commissionStatusText')?.textContent || '';
             if (pointRows !== 28 || monitorRows !== 28 || lamp !== 'connected' || !connectText.includes('已连接')) {
               return { error: 'PLC 连接或点位表异常', pointRows, monitorRows, lamp, connectText };
+            }
+            if (!machine3d.includes('4 工位') || !machine3d.includes('12 执行机构') || !machine3d.includes('16 传感器')) {
+              return { error: '3D 机型摘要异常', machine3d };
             }
 
             document.getElementById('commissionPowerRun').click();
@@ -486,19 +490,27 @@ function createWindow(): BrowserWindow {
             const diagCards = document.querySelectorAll('#commissionDiagnosis .commission-diagnosis-card').length;
             document.getElementById('commissionDisconnect').click();
             await wait(120);
-            return { pointRows, monitorRows, powerText, casePass, caseRows, failRows, exportButton, pdfPath, stats3d, failedCase, diagCodes, diagCards };
+            return { pointRows, monitorRows, machine3d, powerText, casePass, caseRows, failRows, exportButton, pdfPath, stats3d, failedCase, diagCodes, diagCards };
           })()`
         ) as {
           error?: string;
           pointRows: number;
           monitorRows: number;
+          machine3d: string;
           powerText: string;
           casePass: number;
           caseRows: number;
           failRows: number;
           exportButton: boolean;
           pdfPath: string;
-          stats3d: { frames: number; ticks: number; parts: number } | null;
+          stats3d: {
+            frames: number;
+            ticks: number;
+            parts: number;
+            stations: number;
+            sensors: number;
+            actuators: number;
+          } | null;
           failedCase: boolean;
           diagCodes: number;
           diagCards: number;
@@ -527,12 +539,24 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_COMMISSION_PDF_OK path=${plcUi.pdfPath}`);
-        if (!plcUi.stats3d || plcUi.stats3d.frames < 3 || plcUi.stats3d.ticks < 3 || plcUi.stats3d.parts !== 5) {
+        if (!plcUi.stats3d || plcUi.stats3d.frames < 3 || plcUi.stats3d.ticks < 3 || plcUi.stats3d.parts < 16) {
           console.error('SMOKE_FAIL commission_3d', JSON.stringify(plcUi.stats3d));
           setTimeout(() => app.exit(1), 100);
           return;
         }
         console.log(`SMOKE_COMMISSION_3D_OK ticks=${plcUi.stats3d.ticks} parts=${plcUi.stats3d.parts}`);
+        if (
+          plcUi.stats3d.stations !== 4 ||
+          plcUi.stats3d.actuators !== 12 ||
+          plcUi.stats3d.sensors !== 16 ||
+          plcUi.stats3d.parts < 16 ||
+          plcUi.stats3d.ticks < 10
+        ) {
+          console.error('SMOKE_FAIL commission_3d_scale', JSON.stringify(plcUi.stats3d));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COMMISSION_3D_SCALE_OK stations=${plcUi.stats3d.stations} actuators=${plcUi.stats3d.actuators} sensors=${plcUi.stats3d.sensors} parts=${plcUi.stats3d.parts} ticks=${plcUi.stats3d.ticks}`);
         if (plcUi.failedCase !== false || plcUi.diagCodes < 1 || plcUi.diagCards < 1) {
           console.error('SMOKE_FAIL diagnose', JSON.stringify({ failedCase: plcUi.failedCase, diagCodes: plcUi.diagCodes, diagCards: plcUi.diagCards }));
           setTimeout(() => app.exit(1), 100);
