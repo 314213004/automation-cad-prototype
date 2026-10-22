@@ -36,6 +36,10 @@
   "build": {
     "appId": "cn.automationcad.desktop",
     "productName": "AutomationCAD",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
     "directories": {
       "output": "release"
     },
