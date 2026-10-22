@@ -57,6 +57,31 @@ function requireText(value: string, label: string): string {
   return text;
 }
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** 按运行环境时区生成带偏移的 ISO 时间，例如 2026-10-22T22:00:00+08:00。 */
+export function toLocalIsoString(date: Date): string {
+  if (Number.isNaN(date.getTime())) throw new Error('日期无效');
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offset = `${sign}${pad2(Math.floor(absoluteOffset / 60))}:${pad2(absoluteOffset % 60)}`;
+  const year = String(date.getFullYear()).padStart(4, '0');
+  return `${year}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}${offset}`;
+}
+
+const ISO_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function validateCreatedAt(createdAt: string): string {
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/.test(createdAt)) throw new Error('createdAt 必须带时区偏移');
+  if (!ISO_WITH_OFFSET.test(createdAt) || Number.isNaN(Date.parse(createdAt))) {
+    throw new Error('createdAt 必须是合法的 ISO 时间');
+  }
+  return createdAt;
+}
+
 /**
  * 固定产物路径打包，缺失或空文件跳过并记录，避免把空壳文件当作有效图纸上传。
  */
@@ -64,8 +89,13 @@ export function buildDesignPackage(sources: DesignPackageSources): DesignPackage
   const projectId = requireText(sources.projectId, 'projectId');
   const projectName = requireText(sources.projectName, 'projectName');
   const appVersion = requireText(sources.appVersion, 'appVersion');
-  const createdAt = sources.createdAt ?? new Date().toISOString();
-  if (Number.isNaN(Date.parse(createdAt))) throw new Error('createdAt 必须是合法的 ISO 时间');
+  const createdAt = validateCreatedAt(sources.createdAt ?? toLocalIsoString(new Date()));
+  const bom = sources.bom.map((row) => {
+    if (!Number.isInteger(row.qty) || row.qty <= 0) {
+      throw new Error(`BOM 数量必须是正整数：${row.name}`);
+    }
+    return { ...row };
+  });
 
   const candidates: SourceFile[] = [
     { path: PACKAGE_ENTRIES.bom, kind: 'BOM', value: sources.bomCsv },
@@ -106,7 +136,7 @@ export function buildDesignPackage(sources: DesignPackageSources): DesignPackage
     createdAt,
     bomSha256: bomBytes ? sha256Hex(bomBytes) : '',
     files,
-    bom: sources.bom.map((row) => ({ ...row }))
+    bom
   };
   const manifestJson = JSON.stringify(manifest, null, 2);
   zip.addFile(PACKAGE_ENTRIES.manifest, Buffer.from(manifestJson, 'utf8'));

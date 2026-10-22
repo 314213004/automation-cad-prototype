@@ -96,7 +96,7 @@ test('testConnection 对 401 与 404 返回可操作中文提示', async () => {
     assert.match(unauthorized.message, /401/);
     const missing = await client.testConnection();
     assert.equal(missing.ok, false);
-    assert.match(missing.message, /设备 DEV-001 不存在/);
+    assert.match(missing.message, /机台编号 device_no DEV-001 不存在/);
     assert.match(missing.message, /404/);
   } finally {
     await server.close();

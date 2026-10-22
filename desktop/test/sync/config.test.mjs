@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import {
+  SYNC_CONFIG_DEFAULTS,
   maskApiKey,
   mergeSyncConfig,
   publicSyncConfig,
@@ -60,4 +61,19 @@ test('空或掩码 apiKey 保存时保留原密钥，新密钥才覆盖', () => 
   writeFileSync(configFile, '{bad json');
   assert.throws(() => readSyncConfig(configFile), /不是合法 JSON/);
   assert.equal(readFileSync(configFile, 'utf8'), '{bad json');
+});
+
+test('默认配置的机台编号为空，公开配置仍保持脱敏', () => {
+  assert.equal(SYNC_CONFIG_DEFAULTS.deviceId, '');
+  const visible = publicSyncConfig({
+    baseUrl: 'https://f.example.com',
+    apiKey: 'secret-key-4321',
+    deviceId: 'DEV-001',
+    projectId: 'asm',
+    enabled: true
+  });
+  assert.equal(visible.deviceId, 'DEV-001');
+  assert.equal(visible.apiKeyMasked, '****4321');
+  assert.equal(visible.hasApiKey, true);
+  assert.equal('apiKey' in visible, false);
 });

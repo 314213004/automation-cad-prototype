@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { dirname } from 'node:path';
 import type { SyncConfig, SyncPublicConfig } from './types.ts';
 
+/** deviceId 为智慧工厂侧机台编号（device_no）。 */
 export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   baseUrl: '',
   apiKey: '',

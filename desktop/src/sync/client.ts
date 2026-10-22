@@ -34,7 +34,7 @@ function readableError(error: unknown): string {
 
 function requireConfig(config: SyncConfig): void {
   if (!config.baseUrl.trim()) throw new Error('请先填写智慧工厂 baseUrl');
-  if (!config.deviceId.trim()) throw new Error('请先填写 deviceId');
+  if (!config.deviceId.trim()) throw new Error('请先填写机台编号 device_no');
   if (!config.apiKey.trim()) throw new Error('请先填写 apiKey');
 }
 
@@ -56,7 +56,7 @@ function statusMessage(label: string, status: number, body: string): string {
   if (status === 401 || status === 403) {
     return `${label}失败：设计密钥无效或权限不足（${status}），请在智慧工厂管理台检查接入密钥${suffix}`;
   }
-  if (status === 404) return `${label}失败：接口或设备不存在（404），请检查 baseUrl 与 deviceId${suffix}`;
+  if (status === 404) return `${label}失败：接口或机台不存在（404），请检查 baseUrl 与机台编号 device_no${suffix}`;
   if (status === 409) return `${label}失败：同指纹设计包正在处理中（409），请稍后重试${suffix}`;
   if (status === 413) return `${label}失败：设计包超过服务端大小限制（413）${suffix}`;
   if (status >= 500) return `${label}失败：智慧工厂服务异常（${status}），请稍后重试${suffix}`;
@@ -133,7 +133,7 @@ export class SyncClient {
       if (response.status === 404) {
         return {
           ok: false,
-          message: `连接失败：设备 ${this.config.deviceId} 不存在或无图纸数据（404），请检查 deviceId 与 baseUrl`
+          message: `连接失败：机台编号 device_no ${this.config.deviceId} 不存在或无图纸数据（404），请检查机台编号 device_no 与 baseUrl`
         };
       }
       return { ok: false, message: statusMessage('连接智慧工厂', response.status, body) };

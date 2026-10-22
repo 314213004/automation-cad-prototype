@@ -111,7 +111,7 @@ async function testConnection(): Promise<void> {
   if (!api || busy) return;
   if (!(await saveConfig(true))) return;
   setBusy(true);
-  setStatus('正在测试 baseUrl、deviceId 与 API Key…', 'idle');
+  setStatus('正在测试 baseUrl、机台编号 device_no 与 API Key…', 'idle');
   try {
     const result = await api.sync.test();
     if (!result.ok) {
@@ -263,7 +263,7 @@ export function initSyncPanel(options: SyncPanelOptions): void {
     </div>
     <div class="acp-row">
       <div class="acp-field" style="flex:1;min-width:0">
-        <span>deviceId</span>
+        <span>机台编号（device_no）</span>
         <input class="acp-input" id="syncDeviceId" placeholder="DEV-001" autocomplete="off">
       </div>
       <div class="acp-field" style="flex:1;min-width:0">
