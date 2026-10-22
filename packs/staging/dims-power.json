@@ -1,0 +1,530 @@
+[
+ {
+  "id": "iC65N-C16-1P",
+  "w": 18,
+  "h": 85,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "se.com"
+ },
+ {
+  "id": "iC65N-C6-1P",
+  "w": 18,
+  "h": 85,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "se.com"
+ },
+ {
+  "id": "iC65N-C16-2P",
+  "w": 36,
+  "h": 94,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 36,
+  "source": "se.com"
+ },
+ {
+  "id": "iC65N-C32-3P",
+  "w": 54,
+  "h": 94,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "se.com"
+ },
+ {
+  "id": "iC65N-C25-3P",
+  "w": 54,
+  "h": 94,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "se.com"
+ },
+ {
+  "id": "iC65N-C40-4P",
+  "w": 72,
+  "h": 94,
+  "d": 78.5,
+  "railMount": true,
+  "moduleWidth": 72,
+  "source": "se.com"
+ },
+ {
+  "id": "iDPNa-Vigi+-C16-1P+N",
+  "w": 18,
+  "h": 96.1,
+  "d": 65.8,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "se.com"
+ },
+ {
+  "id": "iID-2P-40A-30mA-A",
+  "w": 36,
+  "h": 81,
+  "d": 73,
+  "railMount": true,
+  "moduleWidth": 36,
+  "source": "se.com"
+ },
+ {
+  "id": "iPRD40-4P-350",
+  "w": 72,
+  "h": 85,
+  "d": 69,
+  "railMount": true,
+  "moduleWidth": 72,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D09M7C",
+  "w": 45,
+  "h": 77,
+  "d": 86,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D12M7C",
+  "w": 45,
+  "h": 77,
+  "d": 86,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D18M7C",
+  "w": 45,
+  "h": 77,
+  "d": 86,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D18BDC",
+  "w": 45,
+  "h": 77,
+  "d": 86,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D25M7C",
+  "w": 45,
+  "h": 85,
+  "d": 92,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D25Q7C",
+  "w": 45,
+  "h": 85,
+  "d": 92,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D40AM7C",
+  "w": 55,
+  "h": 122,
+  "d": 120,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D50AM7C",
+  "w": 55,
+  "h": 122,
+  "d": 120,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D65AM7C",
+  "w": 55,
+  "h": 122,
+  "d": 120,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LC1D95M7C",
+  "w": 85,
+  "h": 127,
+  "d": 130,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD10C",
+  "w": 45,
+  "h": 66,
+  "d": 70,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD14C",
+  "w": 45,
+  "h": 66,
+  "d": 70,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD21C",
+  "w": 45,
+  "h": 66,
+  "d": 70,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD22C",
+  "w": 45,
+  "h": 66,
+  "d": 70,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD32C",
+  "w": 45,
+  "h": 66,
+  "d": 70,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD3355C",
+  "w": 70,
+  "h": 81,
+  "d": 115,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "LRD3359C",
+  "w": 70,
+  "h": 81,
+  "d": 115,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "RXM2AB2BD",
+  "w": 26.9,
+  "h": 79,
+  "d": 78.45,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "RXM2AB2P7",
+  "w": 26.9,
+  "h": 79,
+  "d": 78.45,
+  "railMount": true,
+  "source": "se.com"
+ },
+ {
+  "id": "NSX100N-TMD100-3P",
+  "w": 105,
+  "h": 161,
+  "d": 86,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "NSX250N-TMD250-3P",
+  "w": 105,
+  "h": 161,
+  "d": 86,
+  "railMount": false,
+  "source": "se.com"
+ },
+ {
+  "id": "5SY6116-7",
+  "w": 18,
+  "h": 90,
+  "d": 76,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "5SY6332-7",
+  "w": 54,
+  "h": 90,
+  "d": 76,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "5SY63-C16",
+  "w": 54,
+  "h": 90,
+  "d": 76,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RT2016-1BB41",
+  "w": 45,
+  "h": 58,
+  "d": 73,
+  "railMount": true,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RT2026-1BB40",
+  "w": 45,
+  "h": 85,
+  "d": 107,
+  "railMount": true,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RT2036-1AN20",
+  "w": 55,
+  "h": 114,
+  "d": 130,
+  "railMount": true,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RU2116-1JB0",
+  "w": 45,
+  "h": 76,
+  "d": 70,
+  "railMount": false,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RU2126-4BB0",
+  "w": 45,
+  "h": 85,
+  "d": 85,
+  "railMount": false,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RU2126-4CB0",
+  "w": 45,
+  "h": 85,
+  "d": 85,
+  "railMount": false,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3RP2540-1AB30",
+  "w": 22.5,
+  "h": 100,
+  "d": 90,
+  "railMount": true,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3SK1111-1AB30",
+  "w": 22.5,
+  "h": 100,
+  "d": 121.6,
+  "railMount": true,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "3NW7013",
+  "w": 18,
+  "h": 81,
+  "d": 64,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "industry.siemens.com"
+ },
+ {
+  "id": "S201-C16",
+  "w": 17.5,
+  "h": 88,
+  "d": 69,
+  "railMount": true,
+  "moduleWidth": 17.5,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "S203-C32",
+  "w": 52.5,
+  "h": 88,
+  "d": 69,
+  "railMount": true,
+  "moduleWidth": 52.5,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "S204-C40",
+  "w": 70,
+  "h": 88,
+  "d": 69,
+  "railMount": true,
+  "moduleWidth": 70,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "DS201-C16-A30",
+  "w": 35,
+  "h": 85,
+  "d": 69,
+  "railMount": true,
+  "moduleWidth": 35,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "AX25-30-10-80",
+  "w": 44,
+  "h": 76.3,
+  "d": 74,
+  "railMount": true,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "TA25DU-25M",
+  "w": 44,
+  "h": 80,
+  "d": 94,
+  "railMount": false,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "TA42DU-42M",
+  "w": 54,
+  "h": 90,
+  "d": 111,
+  "railMount": false,
+  "source": "new.abb.com"
+ },
+ {
+  "id": "PNOZ-s3-750103",
+  "w": 17.5,
+  "h": 98,
+  "d": 120,
+  "railMount": true,
+  "source": "pilz.com"
+ },
+ {
+  "id": "PNOZ-s4-750104",
+  "w": 22.5,
+  "h": 98,
+  "d": 120,
+  "railMount": true,
+  "source": "pilz.com"
+ },
+ {
+  "id": "PLC-RSC-24DC-21",
+  "w": 6.2,
+  "h": 80,
+  "d": 94,
+  "railMount": true,
+  "moduleWidth": 6.2,
+  "source": "phoenixcontact.com"
+ },
+ {
+  "id": "NXB-63-C16-1P",
+  "w": 18,
+  "h": 80,
+  "d": 76.8,
+  "railMount": true,
+  "moduleWidth": 18,
+  "source": "chint.com"
+ },
+ {
+  "id": "NXB-63-C20-2P",
+  "w": 36,
+  "h": 80,
+  "d": 77.8,
+  "railMount": true,
+  "moduleWidth": 36,
+  "source": "chint.com"
+ },
+ {
+  "id": "NXB-63-D20-2P",
+  "w": 36,
+  "h": 80,
+  "d": 77.8,
+  "railMount": true,
+  "moduleWidth": 36,
+  "source": "chint.com"
+ },
+ {
+  "id": "NXB-63-C32-3P",
+  "w": 54,
+  "h": 80,
+  "d": 77.8,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "chint.com"
+ },
+ {
+  "id": "NXB-63-C63-3P",
+  "w": 54,
+  "h": 80,
+  "d": 77.8,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "chint.com"
+ },
+ {
+  "id": "NXB-63-D32-3P",
+  "w": 54,
+  "h": 80,
+  "d": 77.8,
+  "railMount": true,
+  "moduleWidth": 54,
+  "source": "chint.com"
+ },
+ {
+  "id": "MY2NJ-DC24",
+  "w": 28,
+  "h": 36,
+  "d": 21.5,
+  "railMount": false,
+  "source": "omron.com"
+ },
+ {
+  "id": "MY2NJ-AC220",
+  "w": 28,
+  "h": 36,
+  "d": 21.5,
+  "railMount": false,
+  "source": "omron.com"
+ },
+ {
+  "id": "MY4NJ-DC24",
+  "w": 28,
+  "h": 36,
+  "d": 21.5,
+  "railMount": false,
+  "source": "omron.com"
+ },
+ {
+  "id": "MY4NJ-AC220",
+  "w": 28,
+  "h": 36,
+  "d": 21.5,
+  "railMount": false,
+  "source": "omron.com"
+ },
+ {
+  "id": "MY4NJ-DC12",
+  "w": 28,
+  "h": 36,
+  "d": 21.5,
+  "railMount": false,
+  "source": "omron.com"
+ }
+]
