@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { registerIpcHandlers, CAD_EXTENSIONS } from './ipc';
+import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
@@ -551,6 +551,48 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_BRIDGE_OK scene=${bridgeState.scene} bom=${bridgeState.bom}`);
+
+        const chatUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const entry = document.getElementById('agentEntryButton');
+            if (!entry) return { error: '智能体入口按钮缺失' };
+            entry.click();
+            let fields = 0;
+            let log = 0;
+            for (let attempt = 0; attempt < 50; attempt += 1) {
+              await wait(100);
+              const drawer = document.getElementById('agentDrawer');
+              fields = drawer?.querySelectorAll('.acp-field').length || 0;
+              log = drawer?.querySelectorAll('.acp-chat-log').length || 0;
+              if (fields === 6 && log === 1) break;
+            }
+            const drawer = document.getElementById('agentDrawer');
+            return {
+              fields,
+              log,
+              send: Boolean(document.getElementById('agentChatSend')),
+              input: Boolean(document.getElementById('agentChatInput')),
+              apiKeyPassword: document.getElementById('agentLlmApiKey')?.type === 'password',
+              visible: Boolean(drawer && !drawer.hidden)
+            };
+          })()`
+        ) as {
+          error?: string;
+          fields: number;
+          log: number;
+          send: boolean;
+          input: boolean;
+          apiKeyPassword: boolean;
+          visible: boolean;
+        };
+        if (chatUi.error || chatUi.fields !== 6 || chatUi.log !== 1 ||
+            !chatUi.send || !chatUi.input || !chatUi.apiKeyPassword || !chatUi.visible) {
+          console.error('SMOKE_FAIL agent_chat_ui', JSON.stringify(chatUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_CHAT_UI_OK fields=${chatUi.fields} log=${chatUi.log}`);
       } catch (error) {
         console.error('SMOKE_FAIL agent_exception', error);
         setTimeout(() => app.exit(1), 100);
@@ -687,6 +729,12 @@ async function bootstrap(): Promise<void> {
 
   commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow));
   await startAgent(registry, commandBus);
+  registerAgentChatIpc({
+    userDataDir: app.getPath('userData'),
+    getTools: () => agentTools,
+    getBus: () => commandBus,
+    getWindow: () => mainWindow
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();

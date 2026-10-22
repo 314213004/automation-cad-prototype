@@ -18,6 +18,8 @@
 | 数据包 UI | ✅ | `desktop/src/packs/ui.ts` |
 | Agent JSON-RPC（token + 7 工具 + 命令总线） | ✅ | `desktop/src/agent/` |
 | Agent MCP stdio | ✅ | `desktop/src/agent/mcp.ts` |
+| MCP 写工具代理（stdio → 桌面 RPC） | ✅ 本地假服务验证 | `desktop/src/agent/mcp-proxy.ts` |
+| 应用内智能体对话（LLM 工具调用 + 设置） | ✅ 本地假 LLM 验证 | `desktop/src/agent/{llm,session,ui}.ts` |
 | 智慧工厂 demo 适配器（2 工位 8 点位） | ✅ | `desktop/src/factory/demo.ts` |
 | 智慧工厂 OPC UA / MQTT 适配器 | ✅ 已实现，未连真实设备验证 | `desktop/src/factory/` |
 | 工厂面板（实时值/连接/写入确认） | ✅ | `desktop/src/factory/ui.ts` |
@@ -25,14 +27,14 @@
 | PLC 仿真 + Modbus TCP | ✅ 仿真实测，Modbus 未连真机 | `desktop/src/plc/` |
 | 通电联调（6 步 + 3 用例 + PDF） | ✅ | `desktop/src/commission/` |
 | 电气元件库（iec-cn，44 型号/12 分类） | ✅ 按需加载、分类检索、放入原理图 | `packs/builtin/iec-cn/`、`desktop/src/packs/elec-ui.ts` |
-| 单元测试 | ✅ 126/126 | `desktop/test/` |
+| 单元测试 | ✅ 146/146 | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
 | 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
 ## 验证记录（真实执行）
 
-- `npm test` → 126 pass / 0 fail
-- `npm run smoke` → `SMOKE_UI_OK` / `SMOKE_SYNC_UI_OK fields=8` / `SMOKE_SYNC_PACKAGE_OK files=4 sha=1` / `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK` / `SMOKE_AGENT_TOOLS_OK tools=7 implemented=7` / `SMOKE_AGENT_BRIDGE_OK scene=1 bom=1` / `SMOKE_OK`
+- `npm test` → 146 pass / 0 fail
+- `npm run smoke` → `SMOKE_UI_OK` / `SMOKE_SYNC_UI_OK fields=8` / `SMOKE_SYNC_PACKAGE_OK files=4 sha=1` / `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK` / `SMOKE_AGENT_TOOLS_OK tools=7 implemented=7` / `SMOKE_AGENT_BRIDGE_OK scene=1 bom=1` / `SMOKE_AGENT_CHAT_UI_OK fields=6 log=1` / `SMOKE_OK`
 - CDP 实测：载入 cube.stp → 12 三角面 / 300×300×300 mm；工厂 demo 连接成功、browse 返回 2 工位 8 点位
 - Windows 产物：`unzip -t` 通过，含 `AutomationCAD.exe`(PE32+ x64)、`resources/app.asar`、`resources/web/index.html`、`resources/packs/builtin/smc-cn`
 
@@ -42,7 +44,7 @@
 2. 未做代码签名 → Win11 SmartScreen 会拦一次；应用图标仍是 Electron 默认图标。
 3. OPC UA 只支持 SecurityPolicy=None，未接真实 PLC 验证；MQTT 未连真实 broker 验证。
 4. 便携包 472 MB（Electron 45 + node-opcua 依赖），后续可按需懒加载 node-opcua 或改 sidecar 瘦身。
-5. 独立 stdio MCP 进程没有渲染桥，写工具需通过桌面应用内置 JSON-RPC 调用；后续可加本机 RPC 代理。
+5. 应用内对话的测试连接与工具调用只使用本地假服务验证；真实 LLM 的兼容性需按服务商补充验证。
 6. 智慧工厂设计同步只完成桌面客户端；`material-flow-system` 尚未落地 `/api/v1/design-sync/*`，当前集成测试仅使用本地 HTTP mock。
 
 ## 下一批建议

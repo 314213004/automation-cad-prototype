@@ -6,11 +6,17 @@
 
 ```
 tools.ts（AgentTools + 7 个 AgentTool）
- ├─ rpc.ts   → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
- ├─ mcp.ts   → MCP stdio server，工具定义直接复用
+ ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
+ ├─ mcp.ts        → MCP stdio server，工具定义直接复用
+ ├─ mcp-proxy.ts  → stdio MCP → 桌面 RPC 写工具代理（10 秒超时）
  └─ commands.ts
       ├─ CommandBus        注册、执行、history、撤销栈
       └─ RendererBridge    BrowserWindow.webContents.executeJavaScript（10 秒超时）
+
+应用内对话
+ ├─ llm-config.ts  → userData/agent-llm.json（600，UI 只读掩码）
+ ├─ llm.ts         → OpenAI 兼容 /chat/completions + tools
+ └─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
 ```
 
 渲染层通过 `extension.ts` 暴露受控的 `window.__AgentBridge`，不暴露 DOM。主进程命令总线只允许调用白名单方法。
@@ -55,6 +61,22 @@ interface Bridge {
 - `insert_component` 成功后将 `meshIndex` 作为 undo token 入栈；`undo_last` 调用 `removeComponent` 后索引会重排。
 - `PART_NOT_FOUND`、`UNSUPPORTED_FORMAT`、`FILE_NOT_FOUND`、`RENDERER_TIMEOUT`、`RENDERER_UNAVAILABLE` 均为结构化错误码。
 
+## MCP 写工具代理
+
+- 独立 stdio MCP 启动时读取 `userData/agent-token`，调用 `POST http://127.0.0.1:7420/rpc` 的 `tools/call`，工具名和参数原样转发，默认 10 秒超时。
+- 桌面可达时所有已知工具都转发，写操作走主进程 CommandBus 与渲染桥。
+- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 5 个工具返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
+- 代理错误不包含 token；401 单独返回鉴权错误，不降级成“桌面未运行”。
+
+## 应用内智能体对话
+
+- `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
+- UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
+- `llm.ts` 以 OpenAI 兼容格式发送 7 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
+- `insert_component`、`import_cad`、`undo_last` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
+- 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
+
 ## JSON-RPC 协议
 
 ```
@@ -96,11 +118,12 @@ window.__AgentBridge = {
 - ✅ MCP stdio（真实握手 `tools/list` 返回 7 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、干涉、导入
-- ✅ 单测：126/126；smoke：`SMOKE_AGENT_TOOLS_OK tools=7 implemented=7`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`
+- ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
+- ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
+- ✅ 单测：146/146；smoke：`SMOKE_AGENT_TOOLS_OK tools=7 implemented=7`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`
 - ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources
 
 ## 待办
 
 1. 为 MCP 增加 `resources`（当前装配树、数据包清单），让 Agent 能先读后写。
 2. 把 `updateProperty / deleteNode` 也接入命令总线与撤销栈。
-3. 独立 stdio MCP 通过本机 RPC 代理写操作（需要 app 运行时发现与 token 读取）。

@@ -22,11 +22,11 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 无 WebGL 时显示「当前环境不支持 WebGL，无法显示 3D 模型」降级面板，并展示解析统计；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
 - 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
-- 智能体注册表为 7 个工具，渲染桥能读取场景与 BOM（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_AGENT_BRIDGE_OK`）。
+- 智能体注册表为 7 个工具，渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK`）。
 
 ## MCP（stdio）接入
 
-MCP 入口直接复用 `src/agent/tools.ts` 的 7 个工具：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`undo_last`。写操作依赖运行中的桌面渲染层；独立 stdio 进程没有渲染桥时会返回结构化 `AGENT_UNAVAILABLE`，不会假装成功。
+MCP 入口直接复用 `src/agent/tools.ts` 的 7 个工具：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`undo_last`。MCP 进程会读取桌面 token 并优先把工具调用转发到 `127.0.0.1:7420`；桌面未启动时，只读检索回退本地 registry，其余工具返回 `DESKTOP_NOT_RUNNING`，不会假装成功。
 
 先构建：
 
@@ -66,7 +66,7 @@ command = "node"
 args = ["C:\\path\\to\\automation-cad-prototype\\desktop\\dist-electron\\mcp.cjs"]
 ```
 
-stdio 本身是受信任的本机通道，不需要读取 userData 下的 Agent token。MCP 进程会读取：
+stdio 本身是受信任的本机通道；MCP 进程只在代理写工具时读取 userData 下的 Agent token，且不会打印 token。MCP 进程会读取：
 
 - 内置包：仓库 `packs/builtin`，或环境变量 `AUTOMATIONCAD_BUILTIN_PACKS` 指定的目录；
 - 用户包：`%APPDATA%/AutomationCAD/packs`（Linux 为 `~/.config/AutomationCAD/packs`）；
@@ -79,7 +79,7 @@ stdio 本身是受信任的本机通道，不需要读取 userData 下的 Agent 
 - Windows：`%APPDATA%/AutomationCAD/agent-token`
 - Linux：`~/.config/AutomationCAD/agent-token`
 
-顶栏「智能体」面板显示服务地址/端口、工具数、token 文件路径、7 个工具说明与最近 5 条命令历史；不显示 token，也不提供聊天或 LLM 接入。
+顶栏「智能体」面板提供对话、工具调用卡片和模型设置（OpenAI 兼容 `baseUrl` / `model` / `apiKey` / 最大轮数），并显示服务地址、工具数与最近命令；不显示 token。模型配置保存在 `%APPDATA%/AutomationCAD/agent-llm.json`（权限 600），apiKey 在 UI 只回显掩码。写工具执行前会请求确认。
 
 请求必须带 `Authorization: Bearer <token>`。示例：
 

@@ -17,6 +17,11 @@ import {
   validateExportFileName
 } from '../src/export/file';
 import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
+import type { AgentTools } from '../src/agent/tools.ts';
+import type { CommandBus } from '../src/agent/commands.ts';
+import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
+import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
+import { AgentSession } from '../src/agent/session.ts';
 
 export interface IpcContext {
   builtinDir: string;
@@ -27,6 +32,13 @@ export interface IpcContext {
   syncConfigFile: string;
   version: string;
   getAgentInfo(): unknown;
+}
+
+export interface AgentChatIpcContext {
+  userDataDir: string;
+  getTools(): AgentTools | null;
+  getBus(): CommandBus | null;
+  getWindow(): BrowserWindow | null;
 }
 
 export { CAD_EXTENSIONS } from '../src/shared/cad';
@@ -414,4 +426,97 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   });
 
   return registry;
+}
+
+export function registerAgentChatIpc(context: AgentChatIpcContext): void {
+  let session: AgentSession | null = null;
+
+  const clearSession = (): void => {
+    session = null;
+  };
+
+  const getSession = (): AgentSession => {
+    if (session) return session;
+    const tools = context.getTools();
+    const bus = context.getBus();
+    if (!tools || !bus) throw new Error('智能体服务尚未启动');
+    const config = readLlmConfig(context.userDataDir);
+    if (!config.apiKey) throw new Error('请先在模型设置中填写 API Key');
+    const llm = new OpenAiCompatibleClient({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      model: config.model,
+      tools: tools.summaries()
+    });
+    session = new AgentSession({
+      llm,
+      bus,
+      maxIterations: config.maxIterations,
+      confirmWrite: async (name, args) => {
+        const window = context.getWindow();
+        if (!window || window.isDestroyed()) return false;
+        const serialized = JSON.stringify(args);
+        const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
+        const result = await dialog.showMessageBox(window, {
+          type: 'question',
+          title: '智能体写操作确认',
+          message: `智能体请求执行 ${name}，参数：${summary}，是否允许？`,
+          detail: '该操作会修改当前装配体。',
+          buttons: ['允许', '拒绝'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true
+        });
+        return result.response === 0;
+      }
+    });
+    return session;
+  };
+
+  ipcMain.handle('agent:llm:get', () => publicLlmConfig(readLlmConfig(context.userDataDir)));
+
+  ipcMain.handle('agent:llm:save', (_event, patch: unknown) => {
+    const saved = saveLlmConfig(context.userDataDir, patch);
+    clearSession();
+    return publicLlmConfig(saved);
+  });
+
+  ipcMain.handle('agent:llm:test', async (_event, patch: unknown) => {
+    let config: ReturnType<typeof readLlmConfig>;
+    try {
+      const existing = readLlmConfig(context.userDataDir);
+      config = patch === undefined ? existing : mergeLlmConfig(existing, patch);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+    if (!config.apiKey) return { ok: false, message: '请先在模型设置中填写 API Key' };
+    return await testLlmConnection(config);
+  });
+
+  ipcMain.handle('agent:chat:history', () => ({ ok: true, messages: session?.history() ?? [] }));
+
+  ipcMain.handle('agent:chat:clear', () => {
+    clearSession();
+    return { ok: true, messages: [] };
+  });
+
+  ipcMain.handle('agent:chat:send', async (_event, text: unknown) => {
+    if (typeof text !== 'string' || !text.trim()) {
+      return { ok: false, message: '请输入要发送给智能体的内容', messages: session?.history() ?? [] };
+    }
+    if (text.length > 20_000) {
+      return { ok: false, message: '消息过长，请控制在 20000 字以内', messages: session?.history() ?? [] };
+    }
+    try {
+      const current = getSession();
+      const reply = await current.run(text);
+      return { ok: true, reply, messages: current.history() };
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+        messages: session?.history() ?? []
+      };
+    }
+  });
 }

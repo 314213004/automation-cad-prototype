@@ -1,20 +1,10 @@
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { PackRegistry } from '../packs/registry.ts';
 import { AgentTools } from './tools.ts';
 import { buildMcpServer } from './mcp.ts';
-
-function appDataDir(): string {
-  if (process.platform === 'win32') {
-    return join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'), 'AutomationCAD');
-  }
-  if (process.platform === 'darwin') {
-    return join(homedir(), 'Library', 'Application Support', 'AutomationCAD');
-  }
-  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'AutomationCAD');
-}
+import { defaultUserDataDir, DesktopRpcProxy } from './mcp-proxy.ts';
 
 function builtinPacksDir(): string {
   const candidates = [
@@ -27,17 +17,21 @@ function builtinPacksDir(): string {
 }
 
 async function main(): Promise<void> {
-  const userData = appDataDir();
+  const userData = defaultUserDataDir();
   const registry = new PackRegistry({
     builtinDir: builtinPacksDir(),
     userDir: join(userData, 'packs'),
     stateFile: join(userData, 'packs-state.json')
   });
   const tools = new AgentTools(registry);
-  const server = buildMcpServer(tools, {
-    name: 'automation-cad',
-    version: process.env.npm_package_version || '0.1.0'
-  });
+  const server = buildMcpServer(
+    tools,
+    {
+      name: 'automation-cad',
+      version: process.env.npm_package_version || '0.1.0'
+    },
+    { proxy: new DesktopRpcProxy({ userDataDir: userData }) }
+  );
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[mcp] AutomationCAD stdio ready · tools=${tools.list().length} · userData=${userData}`);

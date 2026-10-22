@@ -33,6 +33,11 @@ interface AgentInfo {
 let drawer: ReturnType<typeof createDrawer> | null = null;
 let refreshButton: HTMLButtonElement | null = null;
 let body: HTMLElement | null = null;
+let infoState: AgentInfo = {};
+let llmState: DesktopAgentLlmConfig | null = null;
+let messages: DesktopAgentChatMessage[] = [];
+let thinking = false;
+let apiKeyDirty = false;
 
 function serviceAddress(info: AgentInfo): string {
   if (info.host && info.port) return `${info.host}:${info.port}`;
@@ -45,36 +50,69 @@ function timeText(at: string): string {
   return Number.isNaN(date.getTime()) ? at : date.toLocaleString('zh-CN', { hour12: false });
 }
 
-function render(info: AgentInfo): void {
-  if (!body) return;
-  if (info.error) {
-    body.innerHTML = `<div class="acp-status is-on is-error">${escapeHtml(info.error)}</div>
-      <div class="acp-note">服务未启动时工具不可调用。请检查主进程日志与 7420 端口占用情况。</div>`;
-    return;
-  }
+function fieldElement(id: string): HTMLInputElement | HTMLTextAreaElement | null {
+  return body?.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${id}`) ?? null;
+}
 
-  const tools = Array.isArray(info.tools) ? info.tools : [];
-  const history = Array.isArray(info.history) ? info.history.slice(-5).reverse() : [];
-  const toolCount = info.toolCount ?? tools.length;
+function setStatus(id: string, text: string, isError = false): void {
+  const element = body?.querySelector<HTMLElement>(`#${id}`);
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle('is-error', isError);
+  element.classList.toggle('is-ok', !isError && Boolean(text));
+}
+
+function renderShell(): void {
+  if (!body) return;
+  const tools = Array.isArray(infoState.tools) ? infoState.tools : [];
+  const history = Array.isArray(infoState.history) ? infoState.history.slice(-5).reverse() : [];
+  const toolCount = infoState.toolCount ?? tools.length;
   body.innerHTML = `
-    <div class="acp-section-title">本机服务 <b>${toolCount} 个工具</b></div>
-    <div class="acp-pack-row">
-      <div class="acp-pack-main">
-        <div>
-          <div class="acp-pack-name">${escapeHtml(serviceAddress(info))}</div>
-          <div class="acp-pack-meta">HTTP JSON-RPC · Bearer token · 仅监听本机</div>
-        </div>
-        <span class="acp-pack-count">${toolCount}</span>
-      </div>
-      <div class="acp-pack-actions">
-        <span class="acp-pill">服务地址 / 端口</span>
-        <span class="acp-pill">token 文件</span>
-      </div>
+    <div class="acp-section-title">对话 <b id="agentChatCount">0</b></div>
+    <div class="acp-chat-log" id="agentChatLog">
+      <div class="acp-empty">输入任务后，智能体会按需调用工具。写操作会先弹出确认。</div>
     </div>
     <div class="acp-field">
-      <span>token 文件路径（不显示 token）</span>
-      <div class="acp-note">${escapeHtml(info.tokenFile || '—')}</div>
+      <span>消息</span>
+      <textarea class="acp-textarea acp-chat-input" id="agentChatInput" rows="3" maxlength="20000" placeholder="例如：搜索 SMC 气缸并插入一个占位件"></textarea>
+      <div class="acp-row">
+        <button type="button" class="acp-btn acp-btn-primary" id="agentChatSend">发送</button>
+        <button type="button" class="acp-btn" id="agentChatClear">清空</button>
+        <span class="acp-pill" id="agentChatStatus">就绪</span>
+      </div>
+      <div class="acp-note acp-chat-feedback" id="agentChatFeedback" hidden></div>
     </div>
+
+    <div class="acp-section-title">模型设置 <b>OpenAI 兼容</b></div>
+    <div class="acp-field">
+      <span>baseUrl</span>
+      <input class="acp-input" id="agentLlmBaseUrl" type="url" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="acp-field">
+      <span>model</span>
+      <input class="acp-input" id="agentLlmModel" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="acp-field">
+      <span>apiKey</span>
+      <input class="acp-input" id="agentLlmApiKey" type="password" autocomplete="new-password" spellcheck="false" placeholder="输入新密钥；留空保留原值">
+    </div>
+    <div class="acp-field">
+      <span>最大轮数</span>
+      <input class="acp-input" id="agentLlmMaxIterations" type="number" min="1" max="50" step="1">
+    </div>
+    <div class="acp-row">
+      <button type="button" class="acp-btn acp-btn-primary" id="agentLlmSave">保存</button>
+      <button type="button" class="acp-btn" id="agentLlmTest">测试连接</button>
+      <span class="acp-pill" id="agentLlmStatus"></span>
+    </div>
+
+    <div class="acp-section-title">本机服务 <b>${toolCount} 个工具</b></div>
+    <div class="acp-field">
+      <span>token 文件路径（不显示 token）</span>
+      <div class="acp-note">${escapeHtml(infoState.tokenFile || '—')}</div>
+    </div>
+    <div class="acp-note">服务：${escapeHtml(serviceAddress(infoState))} · HTTP JSON-RPC · 仅监听本机</div>
+
     <div class="acp-section-title">工具列表 <b>${toolCount}</b></div>
     ${tools.length === 0 ? '<div class="acp-empty">尚无工具注册</div>' : tools.map((tool) => `
       <div class="acp-pack-row">
@@ -86,6 +124,7 @@ function render(info: AgentInfo): void {
           <span class="acp-pill is-ok">可用</span>
         </div>
       </div>`).join('')}
+
     <div class="acp-section-title">最近命令 <b>${history.length}/5</b></div>
     ${history.length === 0 ? '<div class="acp-empty">尚无命令历史。工具调用后会在此显示名称、时间与结果。</div>' : history.map((entry) => `
       <div class="acp-pack-row">
@@ -96,8 +135,219 @@ function render(info: AgentInfo): void {
           </div>
           <span class="acp-pill ${entry.ok ? 'is-ok' : 'is-error'}">${entry.ok ? '成功' : '失败'}</span>
         </div>
-      </div>`).join('')}
-    <div class="acp-note">本面板只展示工具与命令状态，不提供聊天，也不直接连接 LLM。</div>`;
+      </div>`).join('')}`;
+
+  bindControls();
+  fillConfig();
+  renderMessages();
+  updateBusyState();
+}
+
+function fillConfig(): void {
+  if (!llmState) return;
+  const baseUrl = fieldElement('agentLlmBaseUrl');
+  const model = fieldElement('agentLlmModel');
+  const apiKey = fieldElement('agentLlmApiKey');
+  const maxIterations = fieldElement('agentLlmMaxIterations');
+  if (baseUrl) baseUrl.value = llmState.baseUrl;
+  if (model) model.value = llmState.model;
+  if (apiKey) apiKey.value = llmState.apiKey;
+  if (maxIterations) maxIterations.value = String(llmState.maxIterations);
+  apiKeyDirty = false;
+}
+
+function toolResultMap(): Map<string, DesktopAgentChatMessage> {
+  const map = new Map<string, DesktopAgentChatMessage>();
+  for (const message of messages) {
+    if (message.role === 'tool' && message.tool_call_id) map.set(message.tool_call_id, message);
+  }
+  return map;
+}
+
+function summaryText(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit)}…` : value;
+}
+
+function renderToolCard(call: DesktopAgentToolCall, result: DesktopAgentChatMessage | undefined): string {
+  let status = '待执行';
+  let tone = 'is-warn';
+  let detail = '';
+  if (result) {
+    let ok = true;
+    try {
+      const parsed = JSON.parse(result.content ?? '') as unknown;
+      ok = !(typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false);
+      detail = summaryText(result.content ?? '', 260);
+    } catch {
+      detail = summaryText(result.content ?? '', 260);
+    }
+    status = ok ? '成功' : '失败';
+    tone = ok ? 'is-ok' : 'is-error';
+  }
+  return `
+    <div class="acp-chat-tool ${tone}" data-tool-call-id="${escapeHtml(call.id)}">
+      <div class="acp-chat-tool-head">
+        <span class="acp-pack-name">${escapeHtml(call.function.name)}</span>
+        <span class="acp-pill ${tone}">${status}</span>
+      </div>
+      <div class="acp-pack-meta">参数：${escapeHtml(summaryText(call.function.arguments, 180))}</div>
+      ${detail ? `<div class="acp-pack-meta">结果：${escapeHtml(detail)}</div>` : ''}
+    </div>`;
+}
+
+function renderMessages(): void {
+  const log = body?.querySelector<HTMLElement>('#agentChatLog');
+  const count = body?.querySelector<HTMLElement>('#agentChatCount');
+  if (!log) return;
+  if (messages.length === 0) {
+    log.innerHTML = '<div class="acp-empty">输入任务后，智能体会按需调用工具。写操作会先弹出确认。</div>';
+    if (count) count.textContent = '0';
+    return;
+  }
+
+  const results = toolResultMap();
+  const rendered = new Set<string>();
+  const blocks: string[] = [];
+  for (const message of messages) {
+    if (message.role === 'user') {
+      blocks.push(`<div class="acp-chat-msg is-user"><div class="acp-chat-role">你</div><div class="acp-chat-bubble">${escapeHtml(message.content ?? '')}</div></div>`);
+      continue;
+    }
+    if (message.role === 'assistant') {
+      if (message.content) {
+        blocks.push(`<div class="acp-chat-msg is-assistant"><div class="acp-chat-role">助手</div><div class="acp-chat-bubble">${escapeHtml(message.content)}</div></div>`);
+      }
+      for (const call of message.tool_calls ?? []) {
+        rendered.add(call.id);
+        blocks.push(renderToolCard(call, results.get(call.id)));
+      }
+      continue;
+    }
+    if (message.role === 'tool' && message.tool_call_id && !rendered.has(message.tool_call_id)) {
+      const id = message.tool_call_id;
+      const name = message.name ?? 'tool';
+      blocks.push(renderToolCard({ id, type: 'function', function: { name, arguments: '{}' } }, message));
+    }
+  }
+  log.innerHTML = blocks.join('');
+  log.scrollTop = log.scrollHeight;
+  if (count) count.textContent = String(messages.length);
+}
+
+function updateBusyState(): void {
+  const send = body?.querySelector<HTMLButtonElement>('#agentChatSend');
+  const clear = body?.querySelector<HTMLButtonElement>('#agentChatClear');
+  if (send) {
+    send.disabled = thinking;
+    send.textContent = thinking ? '思考中…' : '发送';
+  }
+  if (clear) clear.disabled = thinking;
+  setStatus('agentChatStatus', thinking ? '思考中…' : '就绪');
+}
+
+function chatFeedback(message: string, isError = false): void {
+  const element = body?.querySelector<HTMLElement>('#agentChatFeedback');
+  if (!element) return;
+  element.hidden = !message;
+  element.textContent = message;
+  element.classList.toggle('is-error', isError);
+}
+
+async function sendMessage(): Promise<void> {
+  if (!body || thinking) return;
+  const input = fieldElement('agentChatInput');
+  const text = input?.value.trim() ?? '';
+  if (!text) return;
+  if (!window.desktop) {
+    chatFeedback('智能体对话仅在桌面版可用。', true);
+    return;
+  }
+  thinking = true;
+  chatFeedback('');
+  if (input) input.value = '';
+  updateBusyState();
+  try {
+    const result = await window.desktop.agent.chat.send(text);
+    messages = Array.isArray(result.messages) ? result.messages : messages;
+    renderMessages();
+    if (!result.ok) chatFeedback(result.message || '智能体请求失败', true);
+  } catch (error) {
+    chatFeedback(`智能体请求失败：${errorMessage(error)}`, true);
+  } finally {
+    thinking = false;
+    updateBusyState();
+  }
+}
+
+async function clearMessages(): Promise<void> {
+  if (!window.desktop) return;
+  try {
+    const result = await window.desktop.agent.chat.clear();
+    messages = Array.isArray(result.messages) ? result.messages : [];
+    renderMessages();
+    chatFeedback('');
+  } catch (error) {
+    chatFeedback(`清空失败：${errorMessage(error)}`, true);
+  }
+}
+
+async function saveSettings(): Promise<void> {
+  if (!window.desktop) return;
+  const baseUrl = fieldElement('agentLlmBaseUrl')?.value.trim() ?? '';
+  const model = fieldElement('agentLlmModel')?.value.trim() ?? '';
+  const apiKey = fieldElement('agentLlmApiKey')?.value ?? '';
+  const maxIterations = Number(fieldElement('agentLlmMaxIterations')?.value ?? '');
+  const payload: Record<string, unknown> = { baseUrl, model, maxIterations };
+  if (apiKeyDirty) payload.apiKey = apiKey;
+  const button = body?.querySelector<HTMLButtonElement>('#agentLlmSave');
+  if (button) button.disabled = true;
+  setStatus('agentLlmStatus', '保存中…');
+  try {
+    llmState = await window.desktop.agent.saveLlmConfig(payload);
+    fillConfig();
+    messages = [];
+    renderMessages();
+    setStatus('agentLlmStatus', '已保存，对话已重置');
+  } catch (error) {
+    setStatus('agentLlmStatus', `保存失败：${errorMessage(error)}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function testSettings(): Promise<void> {
+  if (!window.desktop) return;
+  const baseUrl = fieldElement('agentLlmBaseUrl')?.value.trim() ?? '';
+  const model = fieldElement('agentLlmModel')?.value.trim() ?? '';
+  const apiKey = fieldElement('agentLlmApiKey')?.value ?? '';
+  const maxIterations = Number(fieldElement('agentLlmMaxIterations')?.value ?? '');
+  const payload: Record<string, unknown> = { baseUrl, model, maxIterations };
+  if (apiKeyDirty) payload.apiKey = apiKey;
+  const button = body?.querySelector<HTMLButtonElement>('#agentLlmTest');
+  if (button) button.disabled = true;
+  setStatus('agentLlmStatus', '测试中…');
+  try {
+    const result = await window.desktop.agent.testLlm(payload);
+    setStatus('agentLlmStatus', result.message, !result.ok);
+  } catch (error) {
+    setStatus('agentLlmStatus', `测试失败：${errorMessage(error)}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+function bindControls(): void {
+  body?.querySelector<HTMLButtonElement>('#agentChatSend')?.addEventListener('click', () => { void sendMessage(); });
+  body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
+  body?.querySelector<HTMLButtonElement>('#agentLlmSave')?.addEventListener('click', () => { void saveSettings(); });
+  body?.querySelector<HTMLButtonElement>('#agentLlmTest')?.addEventListener('click', () => { void testSettings(); });
+  body?.querySelector<HTMLInputElement>('#agentLlmApiKey')?.addEventListener('input', () => { apiKeyDirty = true; });
+  body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void sendMessage();
+    }
+  });
 }
 
 async function refresh(): Promise<void> {
@@ -106,9 +356,19 @@ async function refresh(): Promise<void> {
   body.innerHTML = '<div class="acp-empty">正在读取智能体状态…</div>';
   try {
     if (!window.desktop) throw new Error('智能体面板仅在桌面版可用');
-    render(await window.desktop.agent.info() as AgentInfo);
+    const [info, config, chat] = await Promise.all([
+      window.desktop.agent.info() as Promise<AgentInfo>,
+      window.desktop.agent.getLlmConfig(),
+      window.desktop.agent.chat.history()
+    ]);
+    infoState = info;
+    llmState = config;
+    messages = Array.isArray(chat.messages) ? chat.messages : [];
+    renderShell();
   } catch (error) {
-    render({ error: `读取智能体状态失败：${errorMessage(error)}` });
+    infoState = { error: `读取智能体状态失败：${errorMessage(error)}` };
+    body.innerHTML = `<div class="acp-status is-on is-error">${escapeHtml(infoState.error ?? '')}</div>
+      <div class="acp-note">请检查主进程日志与 7420 端口占用情况。密钥只保存在本机 userData 中。</div>`;
   } finally {
     if (refreshButton) refreshButton.disabled = false;
   }
@@ -122,10 +382,10 @@ export function initAgentPanel(): void {
     drawer.open();
     void refresh();
   });
-  drawer = createDrawer('agentDrawer', '智能体', '工具总线 · 本机服务状态');
+  drawer = createDrawer('agentDrawer', '智能体', '对话 · 工具调用 · 模型设置');
   body = drawer.body;
-  drawer.footer.innerHTML = '<button type="button" class="acp-btn acp-btn-primary" id="agentRefresh">刷新</button><span class="acp-pill">只读状态</span><span class="acp-pill">不显示 token</span>';
+  drawer.footer.innerHTML = '<button type="button" class="acp-btn acp-btn-primary" id="agentRefresh">刷新</button><span class="acp-pill">LLM 工具调用</span><span class="acp-pill">密钥仅主进程</span>';
   refreshButton = drawer.footer.querySelector<HTMLButtonElement>('#agentRefresh');
   refreshButton?.addEventListener('click', () => { void refresh(); });
-  render({});
+  renderShell();
 }

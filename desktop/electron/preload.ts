@@ -24,7 +24,15 @@ const desktopApi = {
     listParts: (filter?: { q?: string; category?: string; packId?: string }) => ipcRenderer.invoke('packs:list-parts', filter ?? {})
   },
   agent: {
-    info: () => ipcRenderer.invoke('agent:info')
+    info: () => ipcRenderer.invoke('agent:info'),
+    getLlmConfig: () => ipcRenderer.invoke('agent:llm:get'),
+    saveLlmConfig: (config: unknown) => ipcRenderer.invoke('agent:llm:save', config),
+    testLlm: (config?: unknown) => ipcRenderer.invoke('agent:llm:test', config),
+    chat: {
+      send: (text: string) => ipcRenderer.invoke('agent:chat:send', text),
+      history: () => ipcRenderer.invoke('agent:chat:history'),
+      clear: () => ipcRenderer.invoke('agent:chat:clear')
+    }
   },
   factory: {
     info: () => ipcRenderer.invoke('factory:info'),

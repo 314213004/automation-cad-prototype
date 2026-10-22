@@ -12,6 +12,10 @@
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
 | 工具表 | `test/agent/tools.test.mjs` | 同上 | 7 工具、BOM 空数组、干涉截断、插入与撤销 |
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 7 个工具 |
+| MCP 代理 | `test/agent/mcp-proxy.test.mjs` | 同上 | 写工具转发、无桌面时只读回退/写工具降级、超时不泄露 token |
+| 模型配置 | `test/agent/llm-config.test.mjs` | 同上 | 默认值、apiKey 掩码、600 权限、掩码保存保留原密钥 |
+| LLM 客户端 | `test/agent/llm.test.mjs` | 同上 | 本地假 HTTP：tool_calls、最终文本、401 中文错误、超时、ping max_tokens=8 |
+| 会话循环 | `test/agent/session.test.mjs` | 同上 | 0/1/2 次工具调用、超轮、失败回灌、确认拒绝、20 条历史上限 |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例 |
@@ -34,6 +38,7 @@ SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
 SMOKE_COMMISSION_PDF_OK path=.../report.pdf
 SMOKE_AGENT_TOOLS_OK tools=7 implemented=7
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
+SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -59,8 +64,8 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 126 个单测全绿（含命令总线、7 工具、WebGL 桥错误、数据包与同步）
-- ✅ smoke 含智能体 7 工具/场景/BOM、电气元件面板、PLC、6 步上电、3 用例与联调 PDF 断言
+- ✅ 146 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包与同步）
+- ✅ smoke 含智能体 7 工具/场景/BOM/对话面板、电气元件面板、PLC、6 步上电、3 用例与联调 PDF 断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 

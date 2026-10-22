@@ -177,6 +177,44 @@ interface DesktopAgentInfo {
   error?: string;
 }
 
+interface DesktopAgentLlmConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  maxIterations: number;
+  hasApiKey: boolean;
+}
+
+interface DesktopAgentToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface DesktopAgentChatMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: DesktopAgentToolCall[];
+  tool_call_id?: string;
+  name?: string;
+}
+
+interface DesktopAgentChatResult {
+  ok: boolean;
+  reply?: string;
+  message?: string;
+  messages: DesktopAgentChatMessage[];
+}
+
+interface DesktopAgentLlmTestResult {
+  ok: boolean;
+  message: string;
+  model?: string;
+}
+
 interface AgentBridgeFailure {
   ok: false;
   message: string;
@@ -224,7 +262,17 @@ interface Window {
       remove(id: string): Promise<{ ok: boolean }>;
       listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
-    agent: { info(): Promise<DesktopAgentInfo> };
+    agent: {
+      info(): Promise<DesktopAgentInfo>;
+      getLlmConfig(): Promise<DesktopAgentLlmConfig>;
+      saveLlmConfig(config: Record<string, unknown>): Promise<DesktopAgentLlmConfig>;
+      testLlm(config?: Record<string, unknown>): Promise<DesktopAgentLlmTestResult>;
+      chat: {
+        send(text: string): Promise<DesktopAgentChatResult>;
+        history(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
+        clear(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
+      };
+    };
     factory: {
       info(): Promise<unknown>;
       status(): Promise<DesktopFactoryResult<DesktopFactoryStatusInfo>>;

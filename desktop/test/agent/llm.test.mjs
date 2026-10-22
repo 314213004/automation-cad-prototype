@@ -1,0 +1,169 @@
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { test } from 'node:test';
+import { OpenAiCompatibleClient, testLlmConnection } from '../../src/agent/llm.ts';
+
+const tools = [
+  'list_components',
+  'search_components',
+  'import_cad',
+  'get_bom',
+  'run_interference_check',
+  'insert_component',
+  'undo_last'
+].map((name) => ({ name, description: `${name} 描述`, inputSchema: { type: 'object', properties: {} } }));
+
+async function startServer(handler) {
+  let captured;
+  const server = createServer((request, response) => {
+    const chunks = [];
+    request.on('data', (chunk) => chunks.push(chunk));
+    request.on('end', () => {
+      captured = {
+        authorization: request.headers.authorization,
+        body: JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      };
+      handler(captured, response);
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+    get captured() {
+      return captured;
+    },
+    async close() {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  };
+}
+
+function jsonResponse(response, status, payload, statusText = '') {
+  const headers = { 'content-type': 'application/json' };
+  if (statusText) response.writeHead(status, statusText, headers);
+  else response.writeHead(status, headers);
+  response.end(JSON.stringify(payload));
+}
+
+test('LLM 客户端发送 7 个工具并解析 tool_calls', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 200, {
+      choices: [{
+        message: {
+          content: '',
+          tool_calls: [{
+            id: 'call-1',
+            type: 'function',
+            function: { name: 'list_components', arguments: '{"category":"气缸"}' }
+          }]
+        }
+      }]
+    });
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools
+    });
+    const result = await client.chat([{ role: 'user', content: '列出气缸' }]);
+    assert.equal(result.toolCalls.length, 1);
+    assert.equal(result.toolCalls[0].function.name, 'list_components');
+    assert.equal(result.toolCalls[0].function.arguments, '{"category":"气缸"}');
+    assert.equal(server.captured.authorization, 'Bearer sk-local-secret-1234');
+    assert.equal(server.captured.body.tools.length, 7);
+    assert.equal(server.captured.body.tool_choice, 'auto');
+  } finally {
+    await server.close();
+  }
+});
+
+test('LLM 客户端解析最终文本响应', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 200, {
+      choices: [{ message: { content: '  已完成检查  ' } }]
+    });
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools
+    });
+    const result = await client.chat([{ role: 'user', content: '检查干涉' }]);
+    assert.equal(result.content, '已完成检查');
+    assert.deepEqual(result.toolCalls, []);
+  } finally {
+    await server.close();
+  }
+});
+
+test('非 2xx 返回含状态码的中文错误且不泄露 apiKey', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 401, { error: { message: 'bad key' } }, 'Unauthorized');
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools
+    });
+    await assert.rejects(
+      () => client.chat([{ role: 'user', content: 'ping' }]),
+      (error) => {
+        assert.equal(error.code, 'LLM_HTTP_ERROR');
+        assert.match(error.message, /模型服务返回错误/);
+        assert.match(error.message, /HTTP 401/);
+        assert.doesNotMatch(error.message, /sk-local-secret-1234/);
+        return true;
+      }
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('LLM 请求超时返回中文超时错误', async () => {
+  const server = await startServer((_captured, response) => {
+    setTimeout(() => jsonResponse(response, 200, { choices: [{ message: { content: 'late' } }] }), 400);
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools,
+      timeoutMs: 40
+    });
+    await assert.rejects(
+      () => client.chat([{ role: 'user', content: 'ping' }]),
+      (error) => error.code === 'LLM_TIMEOUT' && /超时/.test(error.message)
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('测试连接发送 ping 且 max_tokens=8', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 200, { choices: [{ message: { content: 'pong' } }] });
+  });
+  try {
+    const result = await testLlmConnection({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      maxIterations: 6
+    });
+    assert.equal(result.ok, true);
+    assert.match(result.message, /连接成功/);
+    assert.equal(server.captured.body.max_tokens, 8);
+    assert.deepEqual(server.captured.body.messages, [{ role: 'user', content: 'ping' }]);
+    assert.equal('tools' in server.captured.body, false);
+  } finally {
+    await server.close();
+  }
+});

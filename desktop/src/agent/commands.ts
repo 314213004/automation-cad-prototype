@@ -137,6 +137,11 @@ function requiredString(args: Record<string, unknown>, key: string, label: strin
   return value.trim();
 }
 
+function optionalString(args: Record<string, unknown>, key: string): string | undefined {
+  const value = args[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 export class CommandBus {
   private readonly context: CommandContext;
   private readonly commands = new Map<string, Command>();
@@ -344,6 +349,35 @@ function registerImportCommand(bus: CommandBus): void {
 }
 
 function registerReadCommands(bus: CommandBus): void {
+  bus.register({
+    name: 'list_components',
+    async run(args, ctx) {
+      const filter: { q?: string; category?: string; packId?: string } = {};
+      const q = optionalString(args, 'q');
+      const category = optionalString(args, 'category');
+      const packId = optionalString(args, 'packId');
+      if (q) filter.q = q;
+      if (category) filter.category = category;
+      if (packId) filter.packId = packId;
+      const components = ctx.registry.listParts(filter);
+      return { ok: true, data: { count: components.length, components } };
+    }
+  });
+
+  bus.register({
+    name: 'search_components',
+    async run(args, ctx) {
+      const q = requiredString(args, 'q', 'q');
+      const filter: { q: string; category?: string; packId?: string } = { q };
+      const category = optionalString(args, 'category');
+      const packId = optionalString(args, 'packId');
+      if (category) filter.category = category;
+      if (packId) filter.packId = packId;
+      const components = ctx.registry.listParts(filter);
+      return { ok: true, data: { query: q, count: components.length, components } };
+    }
+  });
+
   bus.register({
     name: 'get_bom',
     async run(_args, ctx) {
