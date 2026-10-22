@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>滑台气缸装配体 · 自动化设计工作台</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app" id="app">
+
+  <!-- ============ 顶部主工具条 44px ============ -->
+  <header class="topbar">
+    <div class="tb-left">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 20 20" class="ico ico-logo"><path d="M10 2.2l6.4 3.7v8.2L10 17.8 3.6 14.1V5.9z"/><path d="M10 6.4l3.2 1.9v3.8L10 14l-3.2-1.9V8.3z"/></svg>
+      </span>
+      <button class="file-btn" type="button" id="fileBtn" title="文件菜单">
+        <span class="file-name">滑台气缸装配体</span><span class="file-ext">.asm</span>
+        <svg viewBox="0 0 16 16" class="ico"><path d="M4 6.5l4 4 4-4"/></svg>
+      </button>
+    </div>
+
+    <nav class="modes" id="modes" role="tablist" aria-label="工作模式">
+      <button type="button" class="mode" data-mode="model" role="tab" aria-selected="false">建模</button>
+      <button type="button" class="mode is-active" data-mode="assembly" role="tab" aria-selected="true">装配</button>
+      <button type="button" class="mode" data-mode="check" role="tab" aria-selected="false">校核</button>
+      <button type="button" class="mode" data-mode="drafting" role="tab" aria-selected="false">出图</button>
+    </nav>
+
+    <div class="tb-right">
+      <button type="button" class="tbtn" data-act="measure">
+        <svg viewBox="0 0 16 16" class="ico"><path d="M2.5 9.5l7-7 4 4-7 7z"/><path d="M5 7l1.5 1.5M7.5 4.5L9 6M9.5 2.5L11 4"/></svg>测量
+      </button>
+      <button type="button" class="tbtn" data-act="display">
+        <svg viewBox="0 0 16 16" class="ico"><path d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.7"/></svg>显示
+      </button>
+      <button type="button" class="tbtn" data-act="help">
+        <svg viewBox="0 0 16 16" class="ico"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2A1.8 1.8 0 118.9 8c-.6.3-.9.7-.9 1.3"/><circle cx="8" cy="11.6" r=".7" fill="currentColor" stroke="none"/></svg>帮助
+      </button>
+    </div>
+  </header>
+
+  <!-- ============ 上下文工具条 36px（按视图整体替换） ============ -->
+  <div class="ctxbar" id="ctxbar">
+    <div class="ctx" data-ctx="assembly">
+      <button class="tool is-active" type="button" data-tool>
+        <svg viewBox="0 0 16 16" class="ico"><path d="M3 2l8.5 4.1-3.6 1-1.1 3.6z"/></svg>选择
+      </button>
+      <button class="tool" type="button" data-tool><svg viewBox="0 0 16 16" class="ico"><path d="M8 2v12M2 8h12M8 2L6.4 4M8 2l1.6 2M8 14l-1.6-2M8 14l1.6-2M2 8l2-1.6M2 8l2 1.6M14 8l-2-1.6M14 8l-2 1.6"/></svg>移动</button>
+      <button class="tool" type="button" data-tool><svg viewBox="0 0 16 16" class="ico"><path d="M13 6.5A5.2 5.2 0 003.2 5.1M3 9.5a5.2 5.2 0 009.8 1.4"/><path d="M3 2.6v3h3M13 13.4v-3h-3"/></svg>旋转</button>
+      <span class="vsep"></span>
+      <button class="tool" type="button" data-tool><svg viewBox="0 0 16 16" class="ico"><path d="M2.5 2.5h3v3M13.5 2.5h-3v3M2.5 13.5h3v-3M13.5 13.5h-3v-3"/><path d="M5.5 8h5"/></svg>配合</button>
+      <button class="tool" type="button" data-tool><svg viewBox="0 0 16 16" class="ico"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2.2M8 12.3v2.2M1.5 8h2.2M12.3 8h2.2"/></svg>阵列</button>
+      <span class="vsep"></span>
+      <label class="switch"><input type="checkbox" checked><span>吸附</span></label>
+      <label class="switch"><input type="checkbox"><span>剖切</span></label>
+      <div class="ctx-right">
+        <span class="ctx-mono">网格 10mm · 吸附 0.5mm</span>
+      </div>
+    </div>
+
+    <div class="ctx" data-ctx="sizing" hidden>
+      <button class="tool is-active" type="button" data-tool>工况</button>
+      <button class="tool" type="button" data-tool>负载</button>
+      <button class="tool" type="button" data-tool>气源</button>
+      <span class="vsep"></span>
+      <button class="tool" type="button" data-tool>重新估算</button>
+      <button class="tool" type="button" data-tool>导出计算书</button>
+      <div class="ctx-right"><span class="ctx-mono">求解器 本地 · 12ms</span></div>
+    </div>
+
+    <div class="ctx" data-ctx="library" hidden>
+      <button class="tool is-active" type="button" data-tool>全部品牌</button>
+      <button class="tool" type="button" data-tool>在库</button>
+      <button class="tool" type="button" data-tool>仅常用</button>
+      <span class="vsep"></span>
+      <button class="tool" type="button" data-tool>批量插入</button>
+      <button class="tool" type="button" data-tool>更新索引</button>
+      <div class="ctx-right"><span class="ctx-mono">共 1,284 条 · 已同步</span></div>
+    </div>
+
+    <div class="ctx" data-ctx="check" hidden>
+      <button class="tool is-active" type="button" data-act="rerun">
+        <svg viewBox="0 0 16 16" class="ico"><path d="M2 8.4l3.4 3.4L14 3.6"/></svg>开始校核
+      </button>
+      <span class="vsep"></span>
+      <button class="tool" type="button" data-act="prev">上一处</button>
+      <button class="tool" type="button" data-act="next">下一处</button>
+      <span class="vsep"></span>
+      <label class="switch"><input type="checkbox" checked><span>仅严重</span></label>
+      <label class="switch"><input type="checkbox"><span>动态干涉</span></label>
+      <div class="ctx-right"><span class="ctx-mono" id="ctxCheckIdx">1 / 7</span></div>
+    </div>
+
+    <div class="ctx" data-ctx="drafting" hidden>
+      <button class="tool is-active" type="button" data-tool>主视图</button>
+      <button class="tool" type="button" data-tool>剖视图</button>
+      <button class="tool" type="button" data-tool>尺寸</button>
+      <button class="tool" type="button" data-tool>公差</button>
+      <span class="vsep"></span>
+      <button class="tool" type="button" data-tool>比例 1:2</button>
+      <button class="tool" type="button" data-act="export">导出 PDF</button>
+      <div class="ctx-right"><span class="ctx-mono">A2 · 594×420 · 1:2</span></div>
+    </div>
+  </div>
+
+  <!-- ============ 主区（5 视图） ============ -->
+  <main class="main" id="main">
+
+    <!-- 1. 装配工作台 -->
+    <section class="view is-active" data-view="assembly">
+      <aside class="panel panel-left" data-panel="left" data-for="assembly"></aside>
+      <div class="stage" data-stage="assembly" id="stageAssembly">
+        <svg class="scene" id="scene3d" preserveAspectRatio="xMidYMid meet" role="img" aria-label="滑台气缸装配体等轴测视图"></svg>
+
+        <div class="vp-tools" role="toolbar" aria-label="视口工具">
+          <button class="vpbtn is-active" type="button" title="选择" data-vp><svg viewBox="0 0 16 16" class="ico"><path d="M3 2l8.5 4.1-3.6 1-1.1 3.6z"/></svg></button>
+          <button class="vpbtn" type="button" title="平移" data-vp><svg viewBox="0 0 16 16" class="ico"><path d="M8 2v12M2 8h12M8 2L6.4 4M8 2l1.6 2M8 14l-1.6-2M8 14l1.6-2M2 8l2-1.6M2 8l2 1.6M14 8l-2-1.6M14 8l-2 1.6"/></svg></button>
+          <button class="vpbtn" type="button" title="剖切" data-vp><svg viewBox="0 0 16 16" class="ico"><path d="M2 6.5l6-3 6 3-6 3z"/><path d="M2 6.5v3l6 3 6-3v-3"/></svg></button>
+          <button class="vpbtn" type="button" title="缩放到适合 (F)" data-vp data-act="fit"><svg viewBox="0 0 16 16" class="ico"><path d="M2.5 2.5h3.2M2.5 2.5v3.2M13.5 2.5h-3.2M13.5 2.5v3.2M2.5 13.5h3.2M2.5 13.5v-3.2M13.5 13.5h-3.2M13.5 13.5v-3.2"/></svg></button>
+        </div>
+
+        <div class="vp-hud">
+          <span>等轴测</span><span class="hud-sep"></span><span class="mono">1:2</span><span class="hud-sep"></span><span>透视关</span>
+          <svg viewBox="0 0 34 34" class="cube" aria-hidden="true">
+            <path d="M17 4l11 6v14l-11 6-11-6V10z" fill="#2E3338" stroke="#565E66"/>
+            <path d="M17 4l11 6-11 6-11-6z" fill="#3C434A" stroke="#565E66"/>
+            <text x="17" y="16.4" text-anchor="middle" font-size="7.5" fill="#A8B0B8" font-family="monospace">上</text>
+          </svg>
+        </div>
+
+        <div class="vp-axis" aria-hidden="true">
+          <svg viewBox="0 0 56 56">
+            <path d="M14 42V14" stroke="#7C858E" stroke-width="1"/><path d="M14 42h26" stroke="#7C858E" stroke-width="1"/>
+            <path d="M14 42L3 48" stroke="#666E76" stroke-width="1"/>
+            <text x="15" y="11" font-size="8" fill="#8D969E" font-family="monospace">Z</text>
+            <text x="42" y="45" font-size="8" fill="#8D969E" font-family="monospace">X</text>
+            <text x="0" y="54" font-size="8" fill="#8D969E" font-family="monospace">Y</text>
+          </svg>
+        </div>
+
+        <div class="vp-hint" id="hint">
+          <div class="hint-body">
+            <div class="hint-title">拖一个气缸进来试试</div>
+            <div class="hint-sub">也可以从左侧「标准件库」拖入到滑台</div>
+          </div>
+          <button class="hint-close" type="button" id="hintClose" aria-label="关闭提示">
+            <svg viewBox="0 0 16 16" class="ico"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>
+          </button>
+        </div>
+
+        <div class="marquee" id="marquee" hidden></div>
+      </div>
+      <aside class="panel panel-right" data-panel="right" data-for="assembly"></aside>
+    </section>
+
+    <!-- 2. 选型计算 -->
+    <section class="view" data-view="sizing" hidden>
+      <aside class="panel panel-left" data-panel="left" data-for="sizing"></aside>
+      <div class="stage stage-flat" data-stage="sizing" id="stageSizing"></div>
+      <aside class="panel panel-right" data-panel="right" data-for="sizing"></aside>
+    </section>
+
+    <!-- 3. 标准件库 -->
+    <section class="view" data-view="library" hidden>
+      <aside class="panel panel-left" data-panel="left" data-for="library"></aside>
+      <div class="stage stage-flat" data-stage="library" id="stageLibrary"></div>
+      <aside class="panel panel-right" data-panel="right" data-for="library"></aside>
+    </section>
+
+    <!-- 4. 干涉校核 -->
+    <section class="view" data-view="check" hidden>
+      <aside class="panel panel-left" data-panel="left" data-for="check"></aside>
+      <div class="stage" data-stage="check" id="stageCheck">
+        <svg class="scene" id="sceneCheck" preserveAspectRatio="xMidYMid meet" role="img" aria-label="干涉校核剖切视图"></svg>
+        <div class="vp-tools" role="toolbar" aria-label="视口工具">
+          <button class="vpbtn is-active" type="button" title="选择" data-vp><svg viewBox="0 0 16 16" class="ico"><path d="M3 2l8.5 4.1-3.6 1-1.1 3.6z"/></svg></button>
+          <button class="vpbtn" type="button" title="剖切面" data-vp><svg viewBox="0 0 16 16" class="ico"><path d="M2 6.5l6-3 6 3-6 3z"/><path d="M2 6.5v3l6 3 6-3v-3"/></svg></button>
+          <button class="vpbtn" type="button" title="上一处" data-vp data-act="prev"><svg viewBox="0 0 16 16" class="ico"><path d="M10 3L5 8l5 5"/></svg></button>
+          <button class="vpbtn" type="button" title="下一处" data-vp data-act="next"><svg viewBox="0 0 16 16" class="ico"><path d="M6 3l5 5-5 5"/></svg></button>
+        </div>
+        <div class="vp-hud">
+          <span>剖切面 A-A</span><span class="hud-sep"></span><span class="mono">X=92</span>
+        </div>
+        <div class="vp-axis" aria-hidden="true">
+          <svg viewBox="0 0 56 56">
+            <path d="M14 42V14" stroke="#7C858E" stroke-width="1"/><path d="M14 42h26" stroke="#7C858E" stroke-width="1"/>
+            <path d="M14 42L3 48" stroke="#666E76" stroke-width="1"/>
+            <text x="15" y="11" font-size="8" fill="#8D969E" font-family="monospace">Z</text>
+            <text x="42" y="45" font-size="8" fill="#8D969E" font-family="monospace">X</text>
+            <text x="0" y="54" font-size="8" fill="#8D969E" font-family="monospace">Y</text>
+          </svg>
+        </div>
+        <div class="vp-callout" id="checkCallout" hidden>
+          <span class="dot dot-error"></span><span id="checkCalloutText">干涉</span>
+        </div>
+        <div class="marquee" id="marquee2" hidden></div>
+      </div>
+      <aside class="panel panel-right" data-panel="right" data-for="check"></aside>
+    </section>
+
+    <!-- 5. 出图与 BOM -->
+    <section class="view" data-view="drafting" hidden>
+      <aside class="panel panel-left" data-panel="left" data-for="drafting"></aside>
+      <div class="stage stage-desk" data-stage="drafting">
+        <div class="paper">
+          <svg id="sheet" viewBox="0 0 1180 820" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <div class="czoom"><span class="mono">1:2</span><span class="hud-sep"></span><span>A2</span><span class="hud-sep"></span><span>第 1 / 1 页</span></div>
+      </div>
+      <aside class="panel panel-right" data-panel="right" data-for="drafting"></aside>
+    </section>
+  </main>
+
+  <!-- ============ 状态栏 26px ============ -->
+  <footer class="statusbar">
+    <span class="st-hier" id="stHier">当前层级：装配 &gt; 滑台 &gt; 气缸</span>
+    <span class="ssep"></span>
+    <span class="st-unit">单位 <b>mm</b></span>
+    <span class="ssep"></span>
+    <span class="st-coord mono">X <b id="stX">120.00</b>　Y <b id="stY">36.00</b>　Z <b id="stZ">46.00</b></span>
+    <span class="ssep"></span>
+    <span class="st-check mono" id="stCheck" hidden>第 1/7 处</span>
+    <span class="st-msg mono" id="stMsg" hidden></span>
+    <span class="st-flex"></span>
+    <button class="st-undo" id="stUndo" hidden type="button">
+      <svg viewBox="0 0 16 16" class="ico"><path d="M4 5.5v3.2h3.2"/><path d="M4 8.7a5 5 0 108.6-3.4"/></svg>
+      <span id="stUndoText">撤销上一步：缸径 32→40</span>
+    </button>
+    <span class="ssep"></span>
+    <span class="badge badge-warning" id="stBadge"><span class="badge-dot"></span>校核 3 项待处理</span>
+  </footer>
+</div>
+
+<!-- 命令面板 -->
+<div class="scrim" id="palette" hidden>
+  <div class="palette" role="dialog" aria-modal="true" aria-label="命令面板">
+    <div class="palette-input">
+      <svg viewBox="0 0 16 16" class="ico"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4L14 14"/></svg>
+      <input id="paletteInput" type="text" placeholder="输入命令或视图名…" autocomplete="off" spellcheck="false">
+      <kbd>Esc</kbd>
+    </div>
+    <ul class="palette-list" id="paletteList" role="listbox"></ul>
+    <div class="palette-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span><span><kbd>Enter</kbd> 执行</span><span><kbd>Ctrl</kbd>+<kbd>K</kbd> 唤起</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
