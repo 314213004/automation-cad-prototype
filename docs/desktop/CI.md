@@ -1,16 +1,39 @@
-# Windows 安装包 CI（待启用）
+# Windows 安装包构建（CI）
 
-当前 GitHub token 缺 `workflow` scope，无法推送 `.github/workflows/`。启用步骤：
+工作流：[`.github/workflows/windows.yml`](../../.github/workflows/windows.yml)，运行在 `windows-latest`，产出 NSIS x64 安装包。
 
-1. 授权：`gh auth refresh -h github.com -s workflow`
-2. 把 `docs/desktop/windows.yml.example` 复制为 `.github/workflows/windows.yml`
-3. 推送后即触发 `windows-build`，产物为 `AutomationCAD-Setup-<version>.exe`（NSIS x64）
+## 触发方式
 
-在此之前，本机可产出便携包：
+当前**只支持手动触发**（没有 push / PR 自动跑）：
+
+```bash
+gh workflow run windows-build --ref main
+gh run watch
+```
+
+推 `v*` tag 时同一流程会把 `AutomationCAD-Setup-*.exe` 与 `.blockmap` 发布到 GitHub Release（`softprops/action-gh-release`）。v0.2.0 即由此产出。
+
+## 流程
+
+```
+npm ci → npm run build:ext → npm test
+       → electron-builder --win nsis --x64 --publish never
+       → upload-artifact: release/*.exe + *.blockmap（保留 14 天）
+```
+
+`CSC_IDENTITY_AUTO_DISCOVERY=false`：没有签名证书，构建时跳过签名而不是报错。安装包因此未签名，Win11 SmartScreen 首次会拦截。
+
+## 本地产物（备用）
+
+在 Linux 上交叉构建 NSIS 需要 wine32 生成卸载器；本机 PVE 装 i386 会与 apt 依赖冲突，因此只出免安装包：
+
 ```bash
 cd desktop
 ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
 ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
 npx electron-builder --win zip --x64
 ```
-（Linux 上 NSIS 需要 wine32 生成卸载器，本机 PVE 不宜安装 i386 架构。）
+
+产物在 `desktop/release/`（已在 `.gitignore` 中，不入库）。
+
+> `docs/desktop/windows.yml.example` 是启用 CI 之前的草稿，内容已被正式工作流取代，仅留作历史参考。
