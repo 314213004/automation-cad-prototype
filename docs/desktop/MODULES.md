@@ -69,6 +69,13 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 - ✅ Agent 写操作（导入/插入/撤销/BOM/干涉）+ MCP 本机代理 + 应用内对话面板
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
+## 参数化建模（P9）
+
+- `desktop/electron/parametric.ts`：sidecar 生命周期（随机端口/令牌、健康检查、30 s 构建超时、10 min 空闲退出、崩溃重启一次、进程树清理）
+- `desktop/src/parametric/features.ts`：特征树 `FeatureDoc`、中文全量校验、`compileOps`（跳过抑制、稳定顺序）、`summarize`
+- `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet）
+- 内核选型与分期见 [PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；实测见 [PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
+
 ## 维护约定
 
 1. **改模块先改文档**：新增字段/接口时同步更新该模块 `MODULE.md` 的「数据结构」。

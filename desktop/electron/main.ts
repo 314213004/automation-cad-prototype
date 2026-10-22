@@ -118,7 +118,7 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
       status?: { status: string; message: string; version?: string };
       build?: { ok: boolean; stats?: { faces?: number }; message?: string };
     };
-    if (result.error || !result.button || result.status?.status !== 'ready' || result.status.version !== '0.0.0-fake') {
+    if (result.error || !result.button || result.status?.status !== 'ready' || !result.status.version?.endsWith('-fake')) {
       throw new Error(`参数化入口状态异常：${JSON.stringify(result)}`);
     }
     if (!result.build?.ok || result.build.stats?.faces !== 19) {

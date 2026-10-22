@@ -57,7 +57,8 @@
 - 状态：🔄 已选型 build123d 0.13.0（2026-10-23 拍板），P9-1 sidecar 原型已验证
 - 实测：建模 25–50 ms、STEP 8–11 ms、回读体积/面数一致、常驻 424 MB、冷启动 2.3 s
 - 方案：[PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；对比：[PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
-- 分期：P9-1 sidecar+契约 → P9-2 主进程生命周期/IPC → P9-3 特征树 UI → P9-4 草图约束 → P9-5 装配与 BOM/成本联动
+- 分期：P9-1 ✅ sidecar+契约（`spike/build123d/app.py`）→ P9-2 ✅ 主进程生命周期/IPC（`9eda660`，388/388、`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`）→ P9-3 特征树 UI → P9-4 草图约束 → P9-5 装配与 BOM/成本联动
+- 坑：假内核脚本不能放 `test/` 下（`node --test` 会把 `test/fixtures/*.mjs` 也当测试跑，挂 276 s），已移到 `desktop/scripts/fake-parametric-sidecar.mjs`
 - 验收：`SMOKE_PARAMETRIC_OK features=4 faces=19 volume=71495.7`
 
 ## 待决策（需要老王拍板，不阻塞其他开发）

@@ -74,3 +74,12 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 - 测试注入：`AUTOMATIONCAD_PARAMETRIC_CMD` 可指向 Node 假 sidecar（smoke 用），管理器选项可缩短 `idleMs` 与端口范围。
 
 安全边界：token 只存在于主进程内存；子进程 stdout 丢弃；IPC 的 `parametric:start` 在返回前剥离 `port` / `token`；`ipc.ts` 只广播状态，构建结果由主进程代发。
+
+## 自检（参数化 sidecar）
+
+```bash
+cd desktop
+AUTOMATIONCAD_PARAMETRIC_CMD="node $PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke   # 期望 SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1
+```
+
+假内核版本号以 `-fake` 结尾，smoke 用它区分真实内核；不设该变量时输出 `SMOKE_PARAMETRIC_SIDECAR_SKIP`。

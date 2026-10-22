@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**301 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本 / 智能体 / 工厂的 headless smoke
+- 质量基线：**388 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本 / 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -109,6 +109,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 电气元件库 | iec-cn 数据包：371 型号 / 26 分类 / 219 符号 / 191 真实尺寸，插件式加载 | ✅ 桌面 |
 | **底板布置画布** | 毫米坐标 SVG、底板尺寸可设、1mm 吸附、两条 35mm 导轨、重叠标红、利用率统计、JSON 导出与刷新恢复 | ✅ 桌面 |
 | **电气合规校验** | 线号（缺号 / 格式 / 同网重复 / 跨网重号 / 相线电位不符 / 跳号）、功率统计（kW / kVA / 分相电流 / 不平衡度 / 主断路器与进线截面建议 / 24V 余量）、导线截面 vs 载流量；A3 PDF 报告 | ✅ 桌面 |
+| **参数化建模（P9-2）** | build123d sidecar：按需启动 / 随机端口与令牌 / 10 分钟空闲退出 / 崩溃重启一次 / 不可用降级只读；特征树校验与 `compileOps` 为纯函数 | ✅ 生命周期与 IPC |
 | **硬件成本统计** | 价格簿（阶梯价 / 来源 / 更新日期 / 示例价自动排除）+ 纯函数引擎：BOM × 阶梯价 + 底板推算线缆 / 端子 / 导轨 / 线槽 + 人工 + 税 / 加成 / 运费；缺价单列「待询价」 | ✅ 引擎（面板进行中） |
 
 ### CAD 与数据
@@ -204,7 +205,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（301 个）
+│   ├── test/                                 # node:test 单测与集成测试（388 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -232,7 +233,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 301 个单测（node:test）
+npm test          # 388 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
@@ -243,6 +244,7 @@ smoke 覆盖并断言：
 - 运动学标注（`SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25`）；
 - 干涉、受力、导出的计算与文件写出；
 - PLC 点位、上电序列、用例；
+- 参数化 sidecar（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `test/fixtures/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`；
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）；
