@@ -1,17 +1,7 @@
 name: windows-build
 
 on:
-  push:
-    branches: [main, feat/win11-desktop]
-    tags: ['v*']
-    paths:
-      - 'desktop/**'
-      - 'packs/**'
-      - 'index.html'
-      - 'app.js'
-      - 'styles.css'
-      - 'electrical.*'
-      - '.github/workflows/windows.yml'
+  # 仅手动触发：gh workflow run windows-build --ref main
   workflow_dispatch:
 
 jobs:
