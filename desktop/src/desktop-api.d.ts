@@ -98,6 +98,62 @@ interface DesktopPlcStatusInfo {
   error?: string;
 }
 
+interface DesktopSyncPublicConfig {
+  baseUrl: string;
+  deviceId: string;
+  projectId: string;
+  enabled: boolean;
+  hasApiKey: boolean;
+  apiKeyMasked: string;
+}
+
+interface DesktopSyncResult {
+  ok: boolean;
+  packageId?: string;
+  version?: number;
+  duplicated?: boolean;
+  message?: string;
+  stage?: '打包' | '连接' | '上传' | '解析';
+}
+
+interface DesktopSyncPackageSummary {
+  packageId: string;
+  projectId: string;
+  version: number;
+  bomSha256: string;
+  createdAt: string;
+  uploadedBy?: string;
+}
+
+interface DesktopSyncListResult {
+  ok: boolean;
+  items?: DesktopSyncPackageSummary[];
+  message?: string;
+}
+
+interface DesktopSyncDiffResult {
+  ok: boolean;
+  diff?: {
+    base: { packageId: string; version: number };
+    bomAdded: unknown[];
+    bomRemoved: unknown[];
+    bomChanged: unknown[];
+    filesAdded: string[];
+    filesChanged: string[];
+    filesRemoved: string[];
+  };
+  message?: string;
+}
+
+interface DesktopSyncUploadPayload {
+  projectName: string;
+  bomCsv: string | Uint8Array;
+  reportHtml: string;
+  glb: Uint8Array;
+  dxf: string | Uint8Array;
+  bom: Array<{ no: number; name: string; spec: string; qty: number; mat: string; remark?: string }>;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -143,6 +199,14 @@ interface Window {
       force(id: string, value: DesktopPlcValue): Promise<DesktopFactoryResult<null>>;
       onValues(callback: (values: Record<string, DesktopPlcValue>) => void): () => void;
       onStatus(callback: (status: DesktopPlcStatusInfo) => void): () => void;
+    };
+    sync: {
+      getConfig(): Promise<DesktopSyncPublicConfig>;
+      saveConfig(config: Record<string, unknown>): Promise<DesktopSyncPublicConfig>;
+      test(): Promise<DesktopSyncResult>;
+      upload(payload: DesktopSyncUploadPayload): Promise<DesktopSyncResult>;
+      list(): Promise<DesktopSyncListResult>;
+      diff(packageId: string): Promise<DesktopSyncDiffResult>;
     };
     onOpenCad(callback: (payload: { path: string; source: string }) => void): () => void;
     onImportPack(callback: (payload: { path: string }) => void): () => void;

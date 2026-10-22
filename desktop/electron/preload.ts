@@ -70,6 +70,14 @@ const desktopApi = {
       return () => ipcRenderer.removeListener('plc:status', listener);
     }
   },
+  sync: {
+    getConfig: () => ipcRenderer.invoke('sync:getConfig'),
+    saveConfig: (config: unknown) => ipcRenderer.invoke('sync:saveConfig', config),
+    test: () => ipcRenderer.invoke('sync:test'),
+    upload: (payload: unknown) => ipcRenderer.invoke('sync:upload', payload),
+    list: () => ipcRenderer.invoke('sync:list'),
+    diff: (packageId: string) => ipcRenderer.invoke('sync:diff', packageId)
+  },
   onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);
     ipcRenderer.on('desktop:open-cad', listener);

@@ -7,6 +7,10 @@ import type { AgentRpcInfo } from '../src/agent/rpc';
 import { FactoryManager } from '../src/factory/manager.ts';
 import type { TagValue } from '../src/factory/types.ts';
 import { PlcManager } from '../src/plc/manager.ts';
+import { SyncClient } from '../src/sync/client.ts';
+import { mergeSyncConfig, publicSyncConfig, readSyncConfig, writeSyncConfig } from '../src/sync/config.ts';
+import { buildDesignPackage } from '../src/sync/package.ts';
+import type { DesignBomRow, SyncConfig, SyncUploadPayload } from '../src/sync/types.ts';
 import {
   EXPORT_EXTENSIONS,
   assertAllowedTargetPath,
@@ -20,6 +24,7 @@ export interface IpcContext {
   stateFile: string;
   factoryConfigFile: string;
   plcConfigFile: string;
+  syncConfigFile: string;
   version: string;
   getAgentInfo(): (AgentRpcInfo & { toolCount: number; error?: string }) | { error: string };
 }
@@ -76,6 +81,52 @@ async function exportReport(payload: unknown): Promise<{ path: string; htmlPath:
     if (!reportWindow.isDestroyed()) reportWindow.destroy();
   }
   return { path: pdfPath, htmlPath };
+}
+
+function syncBytes(value: unknown, label: string): Uint8Array {
+  if (value instanceof Uint8Array) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  throw new Error(`${label}必须是字节数组`);
+}
+
+function syncText(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label}必须是字符串`);
+  return value;
+}
+
+function syncBom(value: unknown): DesignBomRow[] {
+  if (!Array.isArray(value)) throw new Error('BOM 必须是数组');
+  return value.map((entry, index) => {
+    if (typeof entry !== 'object' || entry === null) throw new Error(`第 ${index + 1} 条 BOM 不是对象`);
+    const row = entry as Record<string, unknown>;
+    const no = typeof row.no === 'number' ? row.no : index + 1;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const spec = typeof row.spec === 'string' ? row.spec.trim() : '';
+    const mat = typeof row.mat === 'string' ? row.mat.trim() : '';
+    const qty = typeof row.qty === 'number' && Number.isFinite(row.qty) ? row.qty : 1;
+    if (!name) throw new Error(`第 ${index + 1} 条 BOM 缺少名称`);
+    const result: DesignBomRow = { no, name, spec, qty, mat };
+    if (typeof row.remark === 'string' && row.remark.trim()) result.remark = row.remark.trim();
+    return result;
+  });
+}
+
+function parseSyncPayload(value: unknown): SyncUploadPayload {
+  if (typeof value !== 'object' || value === null) throw new Error('同步数据必须是对象');
+  const source = value as Record<string, unknown>;
+  return {
+    projectName: syncText(source.projectName, 'projectName'),
+    bomCsv: typeof source.bomCsv === 'string' ? source.bomCsv : syncBytes(source.bomCsv, 'bom.csv'),
+    reportHtml: syncText(source.reportHtml, '报告 HTML'),
+    glb: syncBytes(source.glb, 'model.glb'),
+    dxf: typeof source.dxf === 'string' ? source.dxf : syncBytes(source.dxf, 'drawing.dxf'),
+    bom: syncBom(source.bom)
+  };
 }
 
 export function createPackRegistry(context: Pick<IpcContext, 'builtinDir' | 'userDir' | 'stateFile'>): PackRegistry {
@@ -244,6 +295,117 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
       return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
     }
     return plc.force(id, value);
+  });
+
+  const syncConfig = (): SyncConfig => readSyncConfig(context.syncConfigFile);
+  const syncClient = (config: SyncConfig): SyncClient => new SyncClient(config);
+
+  ipcMain.handle('sync:getConfig', () => publicSyncConfig(syncConfig()));
+  ipcMain.handle('sync:saveConfig', (_event, patch: unknown) => {
+    const next = mergeSyncConfig(syncConfig(), patch);
+    writeSyncConfig(context.syncConfigFile, next);
+    return publicSyncConfig(next);
+  });
+  ipcMain.handle('sync:test', async () => {
+    try {
+      return await syncClient(syncConfig()).testConnection();
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle('sync:list', async () => {
+    try {
+      return await syncClient(syncConfig()).listPackages();
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle('sync:diff', async (_event, packageId: unknown) => {
+    if (typeof packageId !== 'string' || !packageId.trim()) {
+      return { ok: false, message: '缺少 packageId' };
+    }
+    try {
+      return await syncClient(syncConfig()).diff(packageId);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle('sync:upload', async (_event, value: unknown) => {
+    let payload: SyncUploadPayload;
+    try {
+      payload = parseSyncPayload(value);
+    } catch (error) {
+      return {
+        ok: false,
+        stage: '打包',
+        message: `打包失败：${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+
+    let config: SyncConfig;
+    try {
+      config = syncConfig();
+    } catch (error) {
+      return {
+        ok: false,
+        stage: '连接',
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+    if (!config.enabled) {
+      return { ok: false, stage: '上传', message: '智慧工厂同步未启用，请先在设置中打开启用开关' };
+    }
+    if (!config.baseUrl || !config.deviceId || !config.projectId) {
+      return { ok: false, stage: '连接', message: '请先完整填写 baseUrl、deviceId、projectId 与 apiKey' };
+    }
+
+    let pdf: Uint8Array;
+    try {
+      const report = await exportReport({ html: payload.reportHtml, projectName: payload.projectName });
+      pdf = new Uint8Array(readFileSync(report.path));
+    } catch (error) {
+      return {
+        ok: false,
+        stage: '打包',
+        message: `打包失败：PDF 报告生成失败：${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+
+    let built: ReturnType<typeof buildDesignPackage>;
+    try {
+      built = buildDesignPackage({
+        projectId: config.projectId,
+        projectName: payload.projectName,
+        appVersion: context.version,
+        bom: payload.bom,
+        bomCsv: payload.bomCsv,
+        pdf,
+        glb: payload.glb,
+        dxf: payload.dxf
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        stage: '打包',
+        message: `打包失败：${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+
+    let result: Awaited<ReturnType<SyncClient['uploadPackage']>>;
+    try {
+      result = await syncClient(config).uploadPackage(built.zip, built.manifest);
+    } catch (error) {
+      return {
+        ok: false,
+        stage: '上传',
+        message: `上传失败：${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+    if (result.ok && built.skipped.length > 0) {
+      const skipped = `未包含缺失文件：${built.skipped.join('、')}`;
+      return { ...result, message: result.message ? `${result.message}；${skipped}` : skipped };
+    }
+    return result;
   });
 
   app.on('before-quit', () => {

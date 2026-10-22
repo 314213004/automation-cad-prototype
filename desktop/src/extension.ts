@@ -8,6 +8,8 @@ import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
+import { initSyncPanel } from './sync/ui';
+import type { SyncUploadPayload } from './sync/types';
 import type { InterferenceHit, InterferencePart } from './mech/interference';
 import { initInterferencePanel, type InterferencePanelHandle } from './mech/interference-ui';
 import { initStressPanel, type StressConclusion } from './mech/ui';
@@ -291,6 +293,33 @@ function buildReportHtml(): string {
     stress: stressConclusions,
     ...(hasCommission && commissionReport ? { commission: commissionReport } : {})
   });
+}
+
+async function buildSyncPayload(): Promise<SyncUploadPayload> {
+  if (!viewer) throw new Error('请先在 CAD 查看器中打开模型');
+  const bomRows = currentBomRows();
+  if (bomRows.length === 0) throw new Error('当前模型没有可同步的 BOM 行');
+  const csv = toCsv(bomRows);
+  const dxf = toDxf(currentDxfShapes());
+  const glbBlob = await toMeshBlob(viewer.getExportRoot(), 'glb');
+  const glb = new Uint8Array(await glbBlob.arrayBuffer());
+  return {
+    projectName: exportBaseName(),
+    bomCsv: csv,
+    reportHtml: buildReportHtml(),
+    glb,
+    dxf,
+    bom: bomRows.map((row, index) => {
+      const bom = {
+        no: index + 1,
+        name: row.name,
+        spec: String(row.model),
+        qty: Number(row.quantity) || 1,
+        mat: row.material
+      };
+      return row.note ? { ...bom, remark: row.note } : bom;
+    })
+  };
 }
 
 async function buildExport(format: ExportFormat): Promise<{ name: string; data: string | Uint8Array; size: number }> {
@@ -657,6 +686,7 @@ function init(): void {
     }
   });
   initPackPanel();
+  initSyncPanel({ buildPayload: buildSyncPayload });
   buildOverlay();
   initMechUi();
   injectStressTab();

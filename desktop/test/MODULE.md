@@ -13,6 +13,7 @@
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例 |
+| 设计同步 | `test/sync/*.test.mjs` | 同上 | manifest/SHA、ZIP 路径、缺文件、配置脱敏、401/404/超时、幂等、diff |
 | 端到端冒烟 | `electron . --headless-smoke` | `npm run smoke` | xvfb 下加载页面、注入扩展、解析 fixture、断言 UI 结构 |
 
 ## smoke 的断言输出
@@ -25,6 +26,8 @@ SMOKE_PLC_OK points=28
 SMOKE_COMMISSION_OK steps=6 passed=6
 SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
 SMOKE_COMMISSION_PDF_OK path=.../report.pdf
+SMOKE_SYNC_UI_OK fields=8 apiKey=password enabled=checkbox
+SMOKE_SYNC_PACKAGE_OK files=4 sha=1
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -50,7 +53,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 77 个单测全绿（含 PLC 规则、Modbus 本地 TCP 读写、联调序列、报告章节）
+- ✅ 92 个单测全绿（含 PLC 规则、Modbus 本地 TCP 读写、联调序列、报告章节、设计同步本地 mock）
 - ✅ smoke 含 PLC、6 步上电、3 用例与联调 PDF 断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
@@ -60,3 +63,4 @@ npm run build:ext
 1. 补 `importPath` 的异常用例（损坏文件、超大文件、非 CAD 文件）。
 2. 增加 Windows 端的 smoke（GitHub Actions windows-latest 上跑 `--headless-smoke`）。
 3. 把 10 万面 STEP 纳入基准，设阈值（如 <5s）防回归。
+4. 服务端 `design-sync` 落地后，用本地 `material-flow-system` 测试库替换 mock 做端到端验证。

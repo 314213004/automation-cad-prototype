@@ -13,6 +13,7 @@
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号与字段约定 |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
+| 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
 | 通电联调 | [desktop/src/commission/MODULE.md](../../desktop/src/commission/MODULE.md) | 6 步上电、3 条用例、序列执行与报告 |
 | 机械校核 | [desktop/src/mech/MODULE.md](../../desktop/src/mech/MODULE.md) | 包围盒干涉初筛 + 气缸/悬臂梁/螺栓计算 |
@@ -28,7 +29,8 @@
 用户操作 ─┬─ 菜单/拖放 ──→ electron/main.ts ──IPC──→ renderer
           ├─ CAD 文件 ──→ readFileBuffer → Worker(occt WASM) → CadImportResult → three 渲染
           ├─ 数据包   ──→ packs/registry（主进程）→ listParts → 面板 / Agent
-          └─ 工厂     ──→ factory/manager → adapters → TagValue → 面板
+          ├─ 工厂     ──→ factory/manager → adapters → TagValue → 面板
+          └─ 设计同步 ──→ sync/client（主进程）→ /api/v1/design-sync/* → 面板
 
 外部 Agent ──→ agent/rpc.ts 或 mcp.ts ──→ agent/tools.ts ──→ packs/registry（只读）
 ```
@@ -42,8 +44,8 @@
 - ✅ 数据包机制 + 面板 + Agent 检索
 - ✅ 工厂三适配器 + 面板（demo 实测）
 - ✅ 机械校核（干涉 + 三类受力计算）与四种导出（P2-A，56 单测）
-- ✅ PLC 抽象 + 仿真/Modbus TCP + 通电联调（P2-B，77 单测）
-- ⏳ 智慧工厂设计包同步（P2-C，接口文档已出）
+- ✅ PLC 抽象 + 仿真/Modbus TCP + 通电联调（P2-B）
+- ✅ 智慧工厂设计包同步客户端 + 设置页（P2-C，92 单测；真实服务端待实现）
 - ⏳ Agent 写操作、真实 PLC 联调、NSIS 安装包（Issues #2/#3）
 
 ## 维护约定

@@ -90,6 +90,8 @@
 .acp-tag-write button:hover{background:#343a40;color:#fff}
 .acp-empty{padding:20px 12px;text-align:center;color:#6e777f;font-size:11px;line-height:1.8;border:1px dashed #343a40;border-radius:4px}
 .acp-note{margin-top:10px;padding:8px 10px;border:1px solid #343a40;border-radius:3px;color:#7f8a92;font-size:10px;line-height:1.6;background:#1b1e21}
+.acp-sync-result-text{margin-top:7px;color:#c9d2d8;font:10px/1.6 var(--font-mono,monospace);word-break:break-all}
+.acp-sync-package .acp-pack-main{padding-bottom:9px}
 .acp-toast{
   position:fixed;right:18px;bottom:42px;z-index:2147483600;max-width:440px;padding:9px 12px;
   border:1px solid #3f5551;border-radius:4px;background:#22302e;color:#c9f4ee;font:11px/1.5 var(--font-ui,sans-serif);

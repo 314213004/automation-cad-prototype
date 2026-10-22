@@ -96,6 +96,16 @@ curl -s http://127.0.0.1:7420/rpc \
 - 渲染层只能通过 preload 的 `window.desktop.factory.*` 访问；写点位前必须经过 `window.confirm` 二次确认。
 - 连接失败、参数错误、超时都会以中文 `{ ok: false, code, message }` 返回，不向主进程抛未捕获异常。
 
+### 设计包同步（P2-C）
+
+- 顶栏「智慧工厂」打开同步设置：`baseUrl` / `deviceId` / `projectId` / `apiKey`（密码框、保存后只回显掩码）/ 启用开关。
+- 「测试连接」走 `GET /api/v1/devices/{deviceId}/drawings`（Bearer）；「立即同步」生成 PDF / GLB / DXF / BOM，主进程打 ZIP 后上传。
+- 上传请求带 `X-Design-Key` 与 `Idempotency-Key=<zip sha256>`；服务端返回 `200 + duplicated` 时 UI 明确提示命中幂等。
+- 配置存 `%APPDATA%/AutomationCAD/sync.json`（权限 600）；网络与文件操作只在主进程，且仅由 UI 点击触发，没有后台自动同步。
+- 真实后端尚未提供 `/api/v1/design-sync/*`；当前集成测试只连本地 mock，不会访问生产或本机 `:8000`。
+
+实现细节见 [`src/sync/MODULE.md`](src/sync/MODULE.md)。
+
 ## PLC 与通电联调
 
 - 顶栏「联调」打开 PLC 连接、28 点位表、6 步上电、3 条用例和点位监视。

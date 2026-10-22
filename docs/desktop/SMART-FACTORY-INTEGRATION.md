@@ -3,6 +3,8 @@
 对象项目：`owlco001/material-flow-system`（GitHub / Gitee 同名，生产 `http://221.231.106.194:5556`，本机演示 `:8000`）。
 本文是给**智慧工厂侧**的改动说明（需求 #6），客户端实现见 `src/sync/`。
 
+> **客户端状态（2026-10-22）**：桌面端 P2-C 已完成，包含固定路径 ZIP（`manifest.json` / `bom.csv` / `report.pdf` / `model.glb` / `drawing.dxf`）、manifest SHA-256、`X-Design-Key` + `Idempotency-Key` 上传、15 秒超时中文错误、设置页与手动同步。服务端 `/api/v1/design-sync/*` 仍未实现，所以客户端集成测试只打本地 HTTP mock，**不会**请求生产 `221.231.106.194:5556` 或本机 `:8000`。本轮不改 `material-flow-system` 仓库。
+
 ## 一、现状（已实现，可直接用）
 
 鉴权：`Authorization: Bearer <token>`（`current_user` 依赖），管理台另有 Cookie + CSRF，**不适合桌面客户端**。

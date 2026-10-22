@@ -21,16 +21,17 @@
 | 智慧工厂 demo 适配器（2 工位 8 点位） | ✅ | `desktop/src/factory/demo.ts` |
 | 智慧工厂 OPC UA / MQTT 适配器 | ✅ 已实现，未连真实设备验证 | `desktop/src/factory/` |
 | 工厂面板（实时值/连接/写入确认） | ✅ | `desktop/src/factory/ui.ts` |
+| 智慧工厂设计同步（ZIP/manifest/幂等/设置页） | ✅ 本地 mock 验证，真实后端未实现 | `desktop/src/sync/` |
 | PLC 仿真 + Modbus TCP | ✅ 仿真实测，Modbus 未连真机 | `desktop/src/plc/` |
 | 通电联调（6 步 + 3 用例 + PDF） | ✅ | `desktop/src/commission/` |
-| 单元测试 | ✅ 77/77 | `desktop/test/` |
+| 单元测试 | ✅ 92/92（含设计同步 15 条） | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
 | 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
 ## 验证记录（真实执行）
 
-- `npm test` → 77 pass / 0 fail
-- `npm run smoke` → `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK steps=6 passed=6` / `SMOKE_COMMISSION_UI_OK` / `SMOKE_OK`
+- `npm test` → 92 pass / 0 fail
+- `npm run smoke` → `SMOKE_UI_OK` / `SMOKE_SYNC_UI_OK fields=8` / `SMOKE_SYNC_PACKAGE_OK files=4 sha=1` / `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK` / `SMOKE_OK`
 - CDP 实测：载入 cube.stp → 12 三角面 / 300×300×300 mm；工厂 demo 连接成功、browse 返回 2 工位 8 点位
 - Windows 产物：`unzip -t` 通过，含 `AutomationCAD.exe`(PE32+ x64)、`resources/app.asar`、`resources/web/index.html`、`resources/packs/builtin/smc-cn`
 
@@ -41,6 +42,7 @@
 3. OPC UA 只支持 SecurityPolicy=None，未接真实 PLC 验证；MQTT 未连真实 broker 验证。
 4. 便携包 472 MB（Electron 45 + node-opcua 依赖），后续可按需懒加载 node-opcua 或改 sidecar 瘦身。
 5. Agent 的 `import_cad` / `insert_component` / `run_interference_check` 仍返回 `NOT_IMPLEMENTED`（结构已就位，等 UI 侧命令总线和撤销栈接通）。
+6. 智慧工厂设计同步只完成桌面客户端；`material-flow-system` 尚未落地 `/api/v1/design-sync/*`，当前集成测试仅使用本地 HTTP mock。
 
 ## 下一批建议
 

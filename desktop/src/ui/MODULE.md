@@ -1,6 +1,6 @@
 # 模块：渲染层扩展与面板（src/extension.ts、src/ui/、src/cad.css）
 
-职责：在**不改动原型**（index.html / app.js / styles.css / electrical.*）的前提下，把桌面能力挂到现有界面：顶栏入口、CAD 覆盖层、工厂与数据包侧滑面板。
+职责：在**不改动原型**（index.html / app.js / styles.css / electrical.*）的前提下，把桌面能力挂到现有界面：顶栏入口、CAD 覆盖层、工厂 / 数据包 / 智慧工厂同步侧滑面板。
 
 ## 注入方式
 
@@ -9,7 +9,7 @@ main.ts did-finish-load
   └─ <script src="file://.../dist/extension.js">（IIFE）
        └─ init()
             ├─ injectStyles()      # cad.css + panels.css 插到 <head>
-            ├─ buildEntryButton() # 顶栏追加「CAD 查看」「工厂」「数据包」
+            ├─ buildEntryButton() # 顶栏追加「CAD 查看」「工厂」「数据包」「智慧工厂」
             ├─ buildOverlay()     # #automationCadOverlay
             └─ bindWindowEvents() # 拖放、Esc、菜单事件
 ```
@@ -26,6 +26,7 @@ main.ts did-finish-load
 | `window.__AUTOMATION_CAD_EXTENSION_READY__` | 注入完成标志，smoke 等待它 |
 
 工厂面板与数据包面板分别由 `initFactoryPanel()` / `initPackPanel()` 在 `src/extension.ts` 里初始化，样式在 `src/ui/panels.css`。
+智慧工厂同步面板由 `initSyncPanel()` 初始化，导出物由 `buildSyncPayload()` 复用 `export/` 生成后交给主进程。
 
 ## 数据流
 
@@ -48,6 +49,7 @@ main.ts did-finish-load
 - ✅ CAD 覆盖层（工具条、零件树、统计、空白态、降级态）
 - ✅ 工厂面板（状态灯、连接表单、工位树、实时值、写入确认）
 - ✅ 数据包面板（列表、开关、导入、删除、搜索、插入）
+- ✅ 智慧工厂同步面板（设置、密钥掩码、测试连接、立即同步、最近结果/包列表）
 - ⏳ 面板宽度/折叠记忆、键盘可达性（焦点环）
 - ⏳ 与原型「标准件库」视图的深度联动（当前是 localStorage 覆盖层）
 

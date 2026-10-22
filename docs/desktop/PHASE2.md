@@ -76,6 +76,14 @@
 - 客户端：设置页填 `baseUrl + apiKey + deviceId`，测试连接；「同步」按钮做增量（按 sha256 跳过未变文件）
 - 详细字段与改动清单见 `SMART-FACTORY-INTEGRATION.md`
 
+### 实现状态（2026-10-22）
+
+- ✅ 桌面客户端：`src/sync/`（固定路径 ZIP、manifest/SHA-256、15 秒超时、幂等上传、列表/diff）
+- ✅ IPC `sync:getConfig/saveConfig/test/upload/list/diff` + `desktop.sync.*`
+- ✅ 顶栏「智慧工厂」设置页：密钥掩码、启用开关、测试连接、立即同步、最近结果
+- ✅ 本地 mock 单测 15 条；smoke 输出 `SMOKE_SYNC_UI_OK` 与 `SMOKE_SYNC_PACKAGE_OK files=4 sha=1`
+- ⏳ 服务端 `/api/v1/design-sync/*` 尚未实现；本轮不改 material-flow 仓库，真实联调与绑定机台留待下一步
+
 ## 验收口径
 
 - P2-A：给定两个相交立方体 STEP，干涉模块必须报出该对且重叠量正确（±0.01mm）；受力三个公式各一条单测；导出四种格式文件非空且可被对应解析器打开

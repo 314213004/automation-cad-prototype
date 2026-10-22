@@ -7,6 +7,7 @@ import { registerIpcHandlers, CAD_EXTENSIONS } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
+import { buildDesignPackage } from '../src/sync/package';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const APP_NAME = 'AutomationCAD';
@@ -311,6 +312,63 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        const syncUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const entry = document.getElementById('syncEntryButton');
+            if (!entry) return { error: '智慧工厂入口按钮缺失' };
+            entry.click();
+            await wait(120);
+            const ids = ['syncBaseUrl', 'syncDeviceId', 'syncProjectId', 'syncApiKey', 'syncEnabled', 'syncTest', 'syncUpload', 'syncLastResult'];
+            const missing = ids.filter((id) => !document.getElementById(id));
+            const apiKeyType = document.getElementById('syncApiKey')?.getAttribute('type') || '';
+            const enabledType = document.getElementById('syncEnabled')?.getAttribute('type') || '';
+            const drawer = document.getElementById('syncDrawer');
+            return {
+              missing,
+              apiKeyType,
+              enabledType,
+              visible: Boolean(drawer && !drawer.hidden),
+              fields: ids.length
+            };
+          })()`
+        ) as { error?: string; missing: string[]; apiKeyType: string; enabledType: string; visible: boolean; fields: number };
+        if (syncUi.error || syncUi.missing.length > 0 || syncUi.apiKeyType !== 'password' ||
+            syncUi.enabledType !== 'checkbox' || !syncUi.visible) {
+          console.error('SMOKE_FAIL sync_ui', JSON.stringify(syncUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_SYNC_UI_OK fields=${syncUi.fields} apiKey=password enabled=checkbox`);
+      } catch (error) {
+        console.error('SMOKE_FAIL sync_ui_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const built = buildDesignPackage({
+          projectId: 'smoke-project',
+          projectName: '冒烟测试装配体',
+          appVersion: app.getVersion(),
+          createdAt: '2026-10-22T14:00:00.000Z',
+          bom: [{ no: 1, name: '底板', spec: 'BASE-01', qty: 1, mat: 'AL6061' }],
+          bomCsv: '序号,名称\r\n1,底板\r\n',
+          pdf: new TextEncoder().encode('%PDF-1.4 smoke'),
+          glb: new Uint8Array([0x67, 0x6c, 0x54, 0x46]),
+          dxf: '0\nSECTION\n0\nENDSEC\n'
+        });
+        if (built.manifest.files.length !== 4 || !/^[a-f0-9]{64}$/.test(built.manifest.bomSha256)) {
+          console.error('SMOKE_FAIL sync_package', JSON.stringify({ files: built.manifest.files.length, sha: built.manifest.bomSha256 }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_SYNC_PACKAGE_OK files=${built.manifest.files.length} sha=1`);
+      } catch (error) {
+        console.error('SMOKE_FAIL sync_package_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const plcUi = await window.webContents.executeJavaScript(
           `(async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -520,6 +578,7 @@ async function bootstrap(): Promise<void> {
     stateFile: join(app.getPath('userData'), 'packs-state.json'),
     factoryConfigFile: join(app.getPath('userData'), 'factory.json'),
     plcConfigFile: join(app.getPath('userData'), 'plc.json'),
+    syncConfigFile: join(app.getPath('userData'), 'sync.json'),
     version: app.getVersion(),
     getAgentInfo: () => agentInfo
   });
