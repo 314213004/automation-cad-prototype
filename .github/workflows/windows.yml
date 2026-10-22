@@ -3,6 +3,7 @@ name: windows-build
 on:
   push:
     branches: [main, feat/win11-desktop]
+    tags: ['v*']
     paths:
       - 'desktop/**'
       - 'packs/**'
@@ -17,6 +18,8 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 40
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: desktop
@@ -54,3 +57,13 @@ jobs:
             desktop/release/*.blockmap
           if-no-files-found: error
           retention-days: 14
+
+      - name: 发布到 GitHub Release（仅 tag）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+          draft: false
+          generate_release_notes: false
