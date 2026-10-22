@@ -310,6 +310,97 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        const plcUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const entry = document.getElementById('commissionEntryButton');
+            if (!entry) return { error: '联调入口按钮缺失' };
+            entry.click();
+            await wait(150);
+            const kind = document.getElementById('commissionKind');
+            kind.value = 'sim';
+            kind.dispatchEvent(new Event('change', { bubbles: true }));
+            document.getElementById('commissionConnect').click();
+            await wait(450);
+            const pointRows = document.querySelectorAll('#commissionPoints tr[data-plc-point]').length;
+            const monitorRows = document.querySelectorAll('#commissionMonitor tr[data-monitor-point]').length;
+            const lamp = document.getElementById('commissionLamp')?.dataset.state || '';
+            const connectText = document.getElementById('commissionStatusText')?.textContent || '';
+            if (pointRows !== 28 || monitorRows !== 28 || lamp !== 'connected' || !connectText.includes('已连接')) {
+              return { error: 'PLC 连接或点位表异常', pointRows, monitorRows, lamp, connectText };
+            }
+
+            document.getElementById('commissionPowerRun').click();
+            let powerText = '';
+            for (let attempt = 0; attempt < 80; attempt += 1) {
+              await wait(100);
+              powerText = document.getElementById('commissionPowerSummary')?.textContent || '';
+              if (powerText.includes('6/6 通过')) break;
+            }
+            if (!powerText.includes('6/6 通过')) return { error: '上电流程未全部通过', powerText };
+
+            document.getElementById('commissionCasesRun').click();
+            let casePass = 0;
+            for (let attempt = 0; attempt < 80; attempt += 1) {
+              await wait(100);
+              casePass = document.querySelectorAll('#commissionCases .commission-badge.pass').length;
+              if (casePass === 3) break;
+            }
+            const caseRows = document.querySelectorAll('#commissionCaseResults tr[data-case-id]').length;
+            const failRows = document.querySelectorAll('#commissionCaseResults .commission-badge.fail').length;
+            const exportButton = Boolean(document.getElementById('commissionExport'));
+            let pdfPath = '';
+            try {
+              const pdf = await window.AutomationCadViewer.exportReportPdf();
+              pdfPath = pdf.path;
+            } catch (error) {
+              return { error: '联调报告 PDF 导出失败：' + String(error) };
+            }
+            document.getElementById('commissionDisconnect').click();
+            await wait(120);
+            return { pointRows, monitorRows, powerText, casePass, caseRows, failRows, exportButton, pdfPath };
+          })()`
+        ) as {
+          error?: string;
+          pointRows: number;
+          monitorRows: number;
+          powerText: string;
+          casePass: number;
+          caseRows: number;
+          failRows: number;
+          exportButton: boolean;
+          pdfPath: string;
+        };
+        if (plcUi.error || plcUi.pointRows !== 28 || plcUi.monitorRows !== 28) {
+          console.error('SMOKE_FAIL plc', JSON.stringify(plcUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PLC_OK points=${plcUi.pointRows}`);
+        if (!plcUi.powerText.includes('6/6 通过') || plcUi.casePass !== 3 || plcUi.failRows !== 0) {
+          console.error('SMOKE_FAIL commission', JSON.stringify(plcUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_COMMISSION_OK steps=6 passed=6');
+        if (plcUi.caseRows < 18 || !plcUi.exportButton) {
+          console.error('SMOKE_FAIL commission_ui', JSON.stringify(plcUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COMMISSION_UI_OK cases=3 monitor=${plcUi.monitorRows} results=${plcUi.caseRows}`);
+        if (!plcUi.pdfPath || !existsSync(plcUi.pdfPath)) {
+          console.error('SMOKE_FAIL commission_pdf', JSON.stringify(plcUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COMMISSION_PDF_OK path=${plcUi.pdfPath}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL commission_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -428,6 +519,7 @@ async function bootstrap(): Promise<void> {
     userDir: userPacksDir(),
     stateFile: join(app.getPath('userData'), 'packs-state.json'),
     factoryConfigFile: join(app.getPath('userData'), 'factory.json'),
+    plcConfigFile: join(app.getPath('userData'), 'plc.json'),
     version: app.getVersion(),
     getAgentInfo: () => agentInfo
   });

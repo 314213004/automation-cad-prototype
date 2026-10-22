@@ -48,6 +48,28 @@ const desktopApi = {
       return () => ipcRenderer.removeListener('factory:status', listener);
     }
   },
+  plc: {
+    info: () => ipcRenderer.invoke('plc:info'),
+    status: () => ipcRenderer.invoke('plc:status'),
+    list: () => ipcRenderer.invoke('plc:list'),
+    getConfig: () => ipcRenderer.invoke('plc:config'),
+    connect: (config: unknown) => ipcRenderer.invoke('plc:connect', config),
+    disconnect: () => ipcRenderer.invoke('plc:disconnect'),
+    read: (id: string) => ipcRenderer.invoke('plc:read', id),
+    readAll: () => ipcRenderer.invoke('plc:read-all'),
+    write: (id: string, value: unknown) => ipcRenderer.invoke('plc:write', id, value),
+    force: (id: string, value: unknown) => ipcRenderer.invoke('plc:force', id, value),
+    onValues: (callback: (values: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, values: unknown) => callback(values);
+      ipcRenderer.on('plc:values', listener);
+      return () => ipcRenderer.removeListener('plc:values', listener);
+    },
+    onStatus: (callback: (status: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+      ipcRenderer.on('plc:status', listener);
+      return () => ipcRenderer.removeListener('plc:status', listener);
+    }
+  },
   onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);
     ipcRenderer.on('desktop:open-cad', listener);

@@ -6,6 +6,7 @@ import { PackRegistry } from '../src/packs/registry';
 import type { AgentRpcInfo } from '../src/agent/rpc';
 import { FactoryManager } from '../src/factory/manager.ts';
 import type { TagValue } from '../src/factory/types.ts';
+import { PlcManager } from '../src/plc/manager.ts';
 import {
   EXPORT_EXTENSIONS,
   assertAllowedTargetPath,
@@ -18,6 +19,7 @@ export interface IpcContext {
   userDir: string;
   stateFile: string;
   factoryConfigFile: string;
+  plcConfigFile: string;
   version: string;
   getAgentInfo(): (AgentRpcInfo & { toolCount: number; error?: string }) | { error: string };
 }
@@ -87,6 +89,7 @@ export function createPackRegistry(context: Pick<IpcContext, 'builtinDir' | 'use
 export function registerIpcHandlers(context: IpcContext): PackRegistry {
   const registry = createPackRegistry(context);
   const factory = new FactoryManager({ configFile: context.factoryConfigFile });
+  const plc = new PlcManager({ configFile: context.plcConfigFile });
   const broadcast = (channel: string, payload: unknown): void => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
@@ -94,6 +97,8 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   };
   factory.on('status', (status: unknown) => broadcast('factory:status', status));
   factory.on('values', (value: TagValue) => broadcast('factory:values', value));
+  plc.on('status', (status: unknown) => broadcast('plc:status', status));
+  plc.on('values', (values: unknown) => broadcast('plc:values', values));
 
   ipcMain.handle('app:version', () => ({
     app: context.version,
@@ -215,8 +220,35 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     return factory.subscribe(ids, (value) => broadcast('factory:values', value));
   });
 
+  ipcMain.handle('plc:info', () => ({ ok: true, adapters: plc.list(), status: plc.getStatus() }));
+  ipcMain.handle('plc:list', () => ({ ok: true, data: plc.list() }));
+  ipcMain.handle('plc:status', () => ({ ok: true, data: plc.getStatus() }));
+  ipcMain.handle('plc:config', () => plc.getConfig());
+  ipcMain.handle('plc:connect', (_event, config: unknown) => plc.connect(config));
+  ipcMain.handle('plc:disconnect', () => plc.disconnect());
+  ipcMain.handle('plc:read', (_event, id: unknown) => {
+    if (typeof id !== 'string') return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    return plc.read(id);
+  });
+  ipcMain.handle('plc:read-all', () => plc.readAll());
+  ipcMain.handle('plc:write', (_event, id: unknown, value: unknown) => {
+    if (typeof id !== 'string') return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    if (typeof value !== 'boolean' && typeof value !== 'number') {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
+    }
+    return plc.write(id, value);
+  });
+  ipcMain.handle('plc:force', (_event, id: unknown, value: unknown) => {
+    if (typeof id !== 'string') return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    if (typeof value !== 'boolean' && typeof value !== 'number') {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
+    }
+    return plc.force(id, value);
+  });
+
   app.on('before-quit', () => {
     void factory.disconnect();
+    void plc.disconnect();
   });
 
   return registry;

@@ -24,7 +24,7 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 | `version` | `app.getVersion()`，供 `/health` 与「关于」使用 |
 | `getAgentInfo` | 返回 `{url,port,toolCount}` 或 `{error}`，不抛异常 |
 
-`preload.ts` 暴露的命名空间：`desktop.version / openCadDialog / readFileBuffer / packs.* / agent.info / factory.* / onOpenCad / onImportPack / onSetDomain`。
+`preload.ts` 暴露的命名空间：`desktop.version / openCadDialog / readFileBuffer / packs.* / agent.info / factory.* / plc.* / onOpenCad / onImportPack / onSetDomain`。
 
 ## 路径解析（打包 vs 开发）
 
@@ -48,6 +48,7 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 
 - ✅ 单实例、菜单（打开 CAD / 导入数据包 / 域切换 / 关于）、拖放转发、最近文件（v0.1 未做）
 - ✅ headless smoke：`SMOKE_OK`，含 CAD 统计与 UI 结构断言
+- ✅ PLC 配置 `plc.json`、`plc:*` IPC 与状态/值广播；联调 PDF 走同一 `export:report` 通道
 - ✅ IPC 白名单式封装（渲染层无 fs / net 权限）
 - ⏳ 窗口图标（`build/icon.ico` 已用于 exe，窗口图标待接）
 - ⏳ 自动更新、崩溃上报

@@ -96,6 +96,13 @@ curl -s http://127.0.0.1:7420/rpc \
 - 渲染层只能通过 preload 的 `window.desktop.factory.*` 访问；写点位前必须经过 `window.confirm` 二次确认。
 - 连接失败、参数错误、超时都会以中文 `{ ok: false, code, message }` 返回，不向主进程抛未捕获异常。
 
+## PLC 与通电联调
+
+- 顶栏「联调」打开 PLC 连接、28 点位表、6 步上电、3 条用例和点位监视。
+- 适配器：`sim`（内置表达式/自锁/定时器逻辑，开箱即用）与 `modbus`（Modbus TCP，FC01/02/03/04/05/06）。
+- 配置持久化：`%APPDATA%/AutomationCAD/plc.json`；所有读写由主进程统一 10 秒超时，连接超时 5 秒。
+- 强制写入需二次确认；仿真强制值不会被规则覆盖。完成后可导出含联调章节的 A3 横向 PDF。
+
 ## 数据包 UI
 
 - 内置包只读；用户包导入 ZIP 后落到 `%APPDATA%/AutomationCAD/packs/<id>/`。

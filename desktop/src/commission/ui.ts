@@ -1,0 +1,784 @@
+import type { PlcConfig, PlcKind, PlcPoint, PlcStatus, PlcValue } from '../plc/types.ts';
+import {
+  buildEntryButton,
+  createDrawer,
+  ensurePanelStyles,
+  errorMessage,
+  escapeHtml,
+  notify
+} from '../ui/panels';
+import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
+import { runSequence, type SequenceIo, type SequenceResult, type StepResult } from './sequence.ts';
+import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
+import commissionStyles from './commission.css?inline';
+
+const COMMISSION_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 13.5V8h2.5v5.5M8 13.5V4.5h2.5v9M11.5 13.5V6.5H14v7"/><path d="M3.5 5.5l2.5-2 2 1.2 3.5-2.5"/></svg>';
+
+const STATUS_LABEL: Record<PlcStatus, string> = {
+  disconnected: '未连接',
+  connecting: '连接中…',
+  connected: '已连接',
+  error: '连接异常'
+};
+
+interface PanelOptions {
+  onExportReport(report: CommissionReport): Promise<void>;
+}
+
+interface Elements {
+  drawer: HTMLElement;
+  kind: HTMLSelectElement;
+  hostField: HTMLElement;
+  host: HTMLInputElement;
+  portField: HTMLElement;
+  port: HTMLInputElement;
+  unitField: HTMLElement;
+  unitId: HTMLInputElement;
+  connect: HTMLButtonElement;
+  disconnect: HTMLButtonElement;
+  status: HTMLElement;
+  lamp: HTMLElement;
+  statusText: HTMLElement;
+  statusDetail: HTMLElement;
+  pointsBody: HTMLElement;
+  powerList: HTMLElement;
+  powerRun: HTMLButtonElement;
+  powerStep: HTMLButtonElement;
+  powerSummary: HTMLElement;
+  cases: HTMLElement;
+  casesRun: HTMLButtonElement;
+  caseResults: HTMLElement;
+  monitorBody: HTMLElement;
+  export: HTMLButtonElement;
+  summary: HTMLElement;
+}
+
+export interface CommissionPanelHandle {
+  open(): void;
+  getReport(): CommissionReport;
+  runPowerUp(): Promise<boolean>;
+  runCase(id: string): Promise<boolean>;
+  runAllCases(): Promise<boolean>;
+}
+
+let elements: Elements | null = null;
+let optionsRef: PanelOptions | null = null;
+let drawerHandle: ReturnType<typeof createDrawer> | null = null;
+let points: PlcPoint[] = COMMISSION_POINTS.map((point) => ({ ...point }));
+let simConfig: PlcConfig = createSimulatorConfig();
+let lastStatus: { kind: PlcKind | null; status: PlcStatus; error?: string } = {
+  kind: null,
+  status: 'disconnected'
+};
+let values = new Map<string, PlcValue>();
+let powerResults: (StepResult | undefined)[] = POWER_UP_STEPS.map(() => undefined);
+let powerCursor = 0;
+let caseReports = new Map<string, SequenceResult>();
+let running = false;
+let listening = false;
+let loaded = false;
+
+function desktop() {
+  return window.desktop;
+}
+
+function ensureStyles(): void {
+  ensurePanelStyles();
+  if (document.getElementById('commission-panel-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'commission-panel-styles';
+  style.textContent = commissionStyles;
+  document.head.appendChild(style);
+}
+
+function setMessage(message: string, error = false): void {
+  if (!elements) return;
+  elements.summary.textContent = message;
+  elements.summary.classList.toggle('is-error', error);
+  if (message) notify(message, error);
+}
+
+function formatValue(value: PlcValue | undefined, unit?: string): string {
+  if (value === undefined) return '—';
+  const text = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
+  return unit ? `${text} ${unit}` : text;
+}
+
+function currentConfig(kind: PlcKind): PlcConfig {
+  const config: PlcConfig = {
+    kind,
+    points: points.map((point) => ({ ...point })),
+    pollMs: 100
+  };
+  if (kind === 'modbus') {
+    const host = elements?.host.value.trim() ?? '';
+    if (!host) throw new Error('请填写 Modbus TCP 主机地址，例如 192.168.1.10');
+    const port = Number(elements?.port.value ?? 502);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PLC 端口必须是 1 ~ 65535 的整数');
+    const unitId = Number(elements?.unitId.value ?? 1);
+    if (!Number.isInteger(unitId) || unitId < 0 || unitId > 255) throw new Error('PLC 站号必须是 0 ~ 255 的整数');
+    config.host = host;
+    config.port = port;
+    config.unitId = unitId;
+  } else {
+    config.rules = (simConfig.rules ?? createSimulatorConfig().rules ?? []).map((rule) => ({ ...rule }));
+    config.initialValues = { ...(simConfig.initialValues ?? createSimulatorConfig().initialValues ?? {}) };
+  }
+  return config;
+}
+
+function updateKindFields(): void {
+  if (!elements) return;
+  const modbus = elements.kind.value === 'modbus';
+  elements.hostField.hidden = !modbus;
+  elements.portField.hidden = !modbus;
+  elements.unitField.hidden = !modbus;
+}
+
+function renderStatus(status: { kind: PlcKind | null; status: PlcStatus; error?: string }): void {
+  if (!elements) return;
+  lastStatus = status;
+  elements.lamp.dataset.state = status.status;
+  elements.statusText.textContent = `${status.kind ?? 'PLC'} · ${STATUS_LABEL[status.status]}`;
+  elements.statusDetail.textContent = status.error ? status.error : status.status === 'connected' ? '实时值已订阅' : '未建立通信';
+  elements.status.classList.toggle('is-error', status.status === 'error');
+  elements.connect.disabled = running || status.status === 'connected' || status.status === 'connecting';
+  elements.disconnect.disabled = running || (status.status !== 'connected' && status.status !== 'error');
+}
+
+function renderPoints(): void {
+  if (!elements) return;
+  elements.pointsBody.innerHTML = points.map((point) => `<tr data-plc-point="${escapeHtml(point.id)}">
+    <td class="mono">${escapeHtml(point.id)}</td>
+    <td>${escapeHtml(point.name)}</td>
+    <td class="mono">${point.area}</td>
+    <td><input type="number" min="0" max="65535" step="1" data-point-address="${escapeHtml(point.id)}" value="${point.address}" aria-label="${escapeHtml(point.name)} 地址"></td>
+    <td class="mono">${point.dataType}${point.writable ? ' · W' : ''}</td>
+  </tr>`).join('');
+  renderMonitor();
+}
+
+function renderMonitor(): void {
+  if (!elements) return;
+  elements.monitorBody.innerHTML = points.map((point) => {
+    const value = values.get(point.id);
+    const force = point.writable
+      ? `<div class="commission-force"><input type="text" data-force-input="${escapeHtml(point.id)}" value="${escapeHtml(value === undefined ? '' : String(value))}" aria-label="${escapeHtml(point.name)} 强制值"><button type="button" data-force-point="${escapeHtml(point.id)}">强制</button></div>`
+      : '<span class="commission-badge">只读</span>';
+    return `<tr data-monitor-point="${escapeHtml(point.id)}">
+      <td class="mono">${escapeHtml(point.id)}</td>
+      <td>${escapeHtml(point.name)}</td>
+      <td class="commission-monitor-value">${escapeHtml(formatValue(value, point.unit))}</td>
+      <td>${force}</td>
+    </tr>`;
+  }).join('');
+}
+
+function updateMonitorValue(id: string, value: PlcValue): void {
+  values.set(id, value);
+  if (!elements) return;
+  const point = points.find((entry) => entry.id === id);
+  const row = elements.monitorBody.querySelector<HTMLElement>(`[data-monitor-point="${cssEscape(id)}"]`);
+  const cell = row?.querySelector<HTMLElement>('.commission-monitor-value');
+  if (cell) cell.textContent = formatValue(value, point?.unit);
+  const input = row?.querySelector<HTMLInputElement>(`[data-force-input="${cssEscape(id)}"]`);
+  if (input && document.activeElement !== input) input.value = String(value);
+}
+
+function cssEscape(value: string): string {
+  return value.replace(/["\\]/g, '\\$&');
+}
+
+function stepState(index: number): { state: string; glyph: string; time: string; message: string } {
+  const result = powerResults[index];
+  if (!result) return { state: '', glyph: String(index + 1), time: '待执行', message: '' };
+  return {
+    state: result.pass ? 'pass' : 'fail',
+    glyph: result.pass ? '✓' : '×',
+    time: `${result.durationMs} ms`,
+    message: result.message ?? ''
+  };
+}
+
+function renderPowerSteps(): void {
+  if (!elements) return;
+  elements.powerList.innerHTML = POWER_UP_STEPS.map((step, index) => {
+    const state = stepState(index);
+    return `<div class="commission-step" data-power-step="${escapeHtml(step.id)}" data-state="${state.state}">
+      <span class="commission-step-status">${state.glyph}</span>
+      <span>${escapeHtml(step.name)}</span>
+      <em>${escapeHtml(state.time)}</em>
+      ${state.message ? `<div class="commission-step-msg">${escapeHtml(state.message)}</div>` : ''}
+    </div>`;
+  }).join('');
+  const passed = powerResults.filter((result) => result?.pass === true).length;
+  elements.powerSummary.innerHTML = `<span class="acp-pill ${passed === POWER_UP_STEPS.length ? 'is-ok' : ''}">${passed}/${POWER_UP_STEPS.length} 通过</span><span class="acp-pill">逐步执行 ${Math.min(powerCursor + 1, POWER_UP_STEPS.length)}/${POWER_UP_STEPS.length}</span>`;
+  elements.powerStep.textContent = powerCursor >= POWER_UP_STEPS.length ? '重新逐步执行' : `执行第 ${powerCursor + 1} 步`;
+  elements.powerStep.disabled = running;
+  elements.powerRun.disabled = running;
+}
+
+function renderCases(): void {
+  if (!elements) return;
+  elements.cases.innerHTML = COMMISSION_CASES.map((testCase) => {
+    const report = caseReports.get(testCase.id);
+    const badge = report
+      ? `<span class="commission-badge ${report.pass ? 'pass' : 'fail'}">${report.pass ? '通过' : '失败'}</span>`
+      : '<span class="commission-badge">未执行</span>';
+    return `<article class="commission-case" data-commission-case="${escapeHtml(testCase.id)}">
+      <div class="commission-case-head"><b>${escapeHtml(testCase.name)}</b>${badge}<span>${testCase.steps.length} 步</span></div>
+      <p>${escapeHtml(testCase.description)}</p>
+      <div class="commission-case-actions"><button type="button" class="acp-btn" data-run-case="${escapeHtml(testCase.id)}" ${running ? 'disabled' : ''}>单跑</button></div>
+    </article>`;
+  }).join('');
+  elements.casesRun.disabled = running;
+}
+
+function renderCaseResults(): void {
+  if (!elements) return;
+  const rows: string[] = [];
+  for (const testCase of COMMISSION_CASES) {
+    const report = caseReports.get(testCase.id);
+    if (!report) continue;
+    for (const result of report.results) {
+      rows.push(`<tr data-case-id="${escapeHtml(testCase.id)}">
+        <td>${escapeHtml(testCase.name)}</td>
+        <td>${escapeHtml(result.name)}</td>
+        <td><span class="commission-badge ${result.pass ? 'pass' : 'fail'}">${result.pass ? 'PASS' : 'FAIL'}</span></td>
+        <td class="mono">${escapeHtml(result.expected)}</td>
+        <td class="mono">${escapeHtml(result.actual)}</td>
+        <td class="mono">${result.durationMs} ms</td>
+      </tr>`);
+    }
+  }
+  elements.caseResults.innerHTML = rows.length > 0
+    ? rows.join('')
+    : '<tr><td colspan="6" style="color:#6e777f;text-align:center;padding:12px">尚未运行用例。单跑会自动补执行上电流程。</td></tr>';
+}
+
+function makeIo(): SequenceIo {
+  const api = desktop();
+  if (!api) throw new Error('联调面板仅在桌面版可用');
+  return {
+    pollMs: 50,
+    async read(id) {
+      const result = await api.plc.read(id);
+      if (!result.ok || result.data === undefined) throw new Error(result.message ?? `读取点位「${id}」失败`);
+      return result.data;
+    },
+    async write(id, value) {
+      const result = await api.plc.write(id, value);
+      if (!result.ok) throw new Error(result.message ?? `写入点位「${id}」失败`);
+    },
+    async readAll() {
+      const result = await api.plc.readAll();
+      if (!result.ok || !result.data) throw new Error(result.message ?? '读取全部点位失败');
+      for (const [id, value] of Object.entries(result.data)) updateMonitorValue(id, value);
+      return result.data;
+    }
+  };
+}
+
+function powerPassed(): boolean {
+  return powerResults.length === POWER_UP_STEPS.length && powerResults.every((result) => result?.pass === true);
+}
+
+async function connect(): Promise<void> {
+  const api = desktop();
+  if (!api || !elements) {
+    setMessage('联调面板仅在桌面版可用。', true);
+    return;
+  }
+  let config: PlcConfig;
+  try {
+    config = currentConfig(elements.kind.value as PlcKind);
+  } catch (error) {
+    setMessage(errorMessage(error), true);
+    return;
+  }
+  running = true;
+  renderStatus({ kind: config.kind, status: 'connecting' });
+  renderCases();
+  try {
+    const result = await api.plc.connect(config);
+    running = false;
+    if (!result.ok || !result.data) {
+      renderStatus({ kind: config.kind, status: 'error', ...(result.message ? { error: result.message } : {}) });
+      setMessage(result.message ?? 'PLC 连接失败', true);
+      renderCases();
+      return;
+    }
+    renderStatus(result.data);
+    powerResults = POWER_UP_STEPS.map(() => undefined);
+    powerCursor = 0;
+    caseReports = new Map();
+    renderPowerSteps();
+    renderCases();
+    renderCaseResults();
+    const all = await api.plc.readAll();
+    if (all.ok && all.data) {
+      values = new Map();
+      for (const [id, value] of Object.entries(all.data)) updateMonitorValue(id, value);
+    }
+    setMessage(`PLC 已连接：${config.kind === 'sim' ? '内置仿真器' : `${config.host}:${config.port}`}`);
+    renderCases();
+  } catch (error) {
+    running = false;
+    renderStatus({ kind: config.kind, status: 'error', error: errorMessage(error) });
+    setMessage(`PLC 连接失败：${errorMessage(error)}`, true);
+    renderCases();
+  }
+}
+
+async function disconnect(): Promise<void> {
+  const api = desktop();
+  if (!api) return;
+  running = true;
+  renderCases();
+  try {
+    const result = await api.plc.disconnect();
+    running = false;
+    values = new Map();
+    renderMonitor();
+    if (!result.ok || !result.data) {
+      setMessage(result.message ?? '断开失败', true);
+      renderCases();
+      return;
+    }
+    renderStatus(result.data);
+    setMessage('PLC 已断开');
+    renderCases();
+  } catch (error) {
+    running = false;
+    setMessage(`断开失败：${errorMessage(error)}`, true);
+    renderCases();
+  }
+}
+
+async function runPowerUp(): Promise<boolean> {
+  if (running) return false;
+  const api = desktop();
+  if (!api || lastStatus.status !== 'connected') {
+    setMessage('请先连接 PLC，再执行上电流程。', true);
+    return false;
+  }
+  running = true;
+  powerResults = POWER_UP_STEPS.map(() => undefined);
+  powerCursor = 0;
+  renderPowerSteps();
+  renderCases();
+  try {
+    const result = await runSequence(POWER_UP_STEPS, makeIo());
+    powerResults = POWER_UP_STEPS.map((step) => result.results.find((item) => item.stepId === step.id));
+    powerCursor = result.results.filter((item) => item.pass).length;
+    renderPowerSteps();
+    setMessage(result.pass
+      ? '上电流程全部通过，设备已就绪。'
+      : result.failure?.message ?? '上电流程失败', !result.pass);
+    return result.pass;
+  } catch (error) {
+    setMessage(`上电流程异常：${errorMessage(error)}`, true);
+    return false;
+  } finally {
+    running = false;
+    renderPowerSteps();
+    renderCases();
+  }
+}
+
+async function runPowerStep(): Promise<boolean> {
+  if (running) return false;
+  const api = desktop();
+  if (!api || lastStatus.status !== 'connected') {
+    setMessage('请先连接 PLC，再执行上电流程。', true);
+    return false;
+  }
+  if (powerCursor >= POWER_UP_STEPS.length) {
+    powerResults = POWER_UP_STEPS.map(() => undefined);
+    powerCursor = 0;
+  }
+  const index = powerCursor;
+  const step = POWER_UP_STEPS[index];
+  if (!step) return powerPassed();
+  running = true;
+  renderPowerSteps();
+  renderCases();
+  try {
+    const result = await runSequence([step], makeIo());
+    const stepResult = result.results[0];
+    powerResults[index] = stepResult;
+    if (stepResult?.pass) powerCursor += 1;
+    renderPowerSteps();
+    setMessage(stepResult?.pass ? `${step.name} 通过` : stepResult?.message ?? `${step.name} 失败`, !stepResult?.pass);
+    return powerPassed();
+  } catch (error) {
+    setMessage(`${step.name} 异常：${errorMessage(error)}`, true);
+    return false;
+  } finally {
+    running = false;
+    renderPowerSteps();
+    renderCases();
+  }
+}
+
+async function ensureReady(): Promise<boolean> {
+  if (powerPassed()) return true;
+  notify('设备未就绪，先自动执行上电流程…');
+  return await runPowerUp();
+}
+
+async function runCaseById(id: string): Promise<boolean> {
+  if (running) return false;
+  if (!(await ensureReady())) return false;
+  const testCase = COMMISSION_CASES.find((entry) => entry.id === id);
+  if (!testCase) {
+    setMessage(`用例不存在：${id}`, true);
+    return false;
+  }
+  running = true;
+  renderCases();
+  renderPowerSteps();
+  try {
+    const result = await runSequence(testCase.steps, makeIo());
+    caseReports.set(id, result);
+    renderCaseResults();
+    setMessage(result.pass ? `用例「${testCase.name}」通过` : result.failure?.message ?? `用例「${testCase.name}」失败`, !result.pass);
+    return result.pass;
+  } catch (error) {
+    setMessage(`用例「${testCase.name}」异常：${errorMessage(error)}`, true);
+    return false;
+  } finally {
+    running = false;
+    renderCases();
+    renderPowerSteps();
+  }
+}
+
+async function runAllCases(): Promise<boolean> {
+  if (running) return false;
+  if (!(await ensureReady())) return false;
+  running = true;
+  caseReports = new Map();
+  renderCaseResults();
+  renderCases();
+  renderPowerSteps();
+  let allPass = true;
+  try {
+    for (const testCase of COMMISSION_CASES) {
+      const result = await runSequence(testCase.steps, makeIo());
+      caseReports.set(testCase.id, result);
+      renderCaseResults();
+      if (!result.pass) {
+        allPass = false;
+        setMessage(`用例「${testCase.name}」失败，已停止全跑：${result.failure?.message ?? '未知原因'}`, true);
+        break;
+      }
+    }
+    if (allPass) setMessage('3 条联调用例全部通过。');
+    return allPass;
+  } catch (error) {
+    setMessage(`用例全跑异常：${errorMessage(error)}`, true);
+    return false;
+  } finally {
+    running = false;
+    renderCases();
+    renderPowerSteps();
+  }
+}
+
+function snapshotPoints(): CommissionReport['points'] {
+  return points.map((point) => ({
+    id: point.id,
+    name: point.name,
+    value: values.get(point.id) ?? (point.dataType === 'bool' ? false : 0),
+    ...(point.unit ? { unit: point.unit } : {})
+  }));
+}
+
+function buildCaseReports(): CommissionCaseReport[] {
+  return COMMISSION_CASES.map((testCase) => {
+    const result = caseReports.get(testCase.id);
+    if (!result) return null;
+    return {
+      id: testCase.id,
+      name: testCase.name,
+      pass: result.pass,
+      at: result.finishedAt,
+      durationMs: result.durationMs,
+      results: result.results.map(toStepReport)
+    };
+  }).filter((entry): entry is CommissionCaseReport => entry !== null);
+}
+
+function getReport(): CommissionReport {
+  const now = new Date().toISOString();
+  const startedAt = powerResults.find((result) => result !== undefined)?.at ?? now;
+  return {
+    plcKind: lastStatus.kind,
+    plcStatus: lastStatus.status,
+    startedAt,
+    completedAt: now,
+    powerUp: {
+      pass: powerPassed(),
+      results: powerResults.filter((result): result is StepResult => result !== undefined).map(toStepReport)
+    },
+    cases: buildCaseReports(),
+    points: snapshotPoints()
+  };
+}
+
+async function exportReport(): Promise<void> {
+  if (!optionsRef) return;
+  try {
+    await optionsRef.onExportReport(getReport());
+    setMessage('联调报告已导出为 PDF。');
+  } catch (error) {
+    setMessage(`联调报告导出失败：${errorMessage(error)}`, true);
+  }
+}
+
+async function forcePoint(id: string): Promise<void> {
+  const api = desktop();
+  if (!api || !elements) return;
+  const point = points.find((entry) => entry.id === id);
+  if (!point) return;
+  const input = elements.monitorBody.querySelector<HTMLInputElement>(`[data-force-input="${cssEscape(id)}"]`);
+  const raw = input?.value.trim() ?? '';
+  let value: PlcValue;
+  if (point.dataType === 'bool') {
+    const normalized = raw.toLowerCase();
+    if (['true', '1', '是', 'on'].includes(normalized)) value = true;
+    else if (['false', '0', '否', 'off'].includes(normalized)) value = false;
+    else {
+      setMessage(`点位「${id}」需要布尔值（true/false），收到：${raw}`, true);
+      return;
+    }
+  } else {
+    value = Number(raw);
+    if (!Number.isInteger(value)) {
+      setMessage(`点位「${id}」需要整数，收到：${raw}`, true);
+      return;
+    }
+  }
+  const current = values.get(id);
+  if (!window.confirm(`确定强制写入点位「${point.name}」吗？\n\n当前值：${formatValue(current, point.unit)}\n写入值：${formatValue(value, point.unit)}`)) return;
+  try {
+    const result = await api.plc.force(id, value);
+    if (!result.ok) {
+      setMessage(result.message ?? '强制写入失败', true);
+      return;
+    }
+    updateMonitorValue(id, value);
+    setMessage(`点位「${id}」已强制写入 ${formatValue(value, point.unit)}`);
+  } catch (error) {
+    setMessage(`强制写入失败：${errorMessage(error)}`, true);
+  }
+}
+
+async function loadSavedConfig(): Promise<void> {
+  const api = desktop();
+  if (!api || !elements || loaded) return;
+  loaded = true;
+  try {
+    const result = await api.plc.getConfig();
+    if (result.ok && result.data) {
+      const config = result.data as unknown as PlcConfig;
+      if (config.points.length === COMMISSION_POINTS.length) points = config.points.map((point) => ({ ...point }));
+      if (config.kind === 'sim') simConfig = config;
+      elements.kind.value = config.kind;
+      if (config.host) elements.host.value = config.host;
+      if (config.port) elements.port.value = String(config.port);
+      if (config.unitId !== undefined) elements.unitId.value = String(config.unitId);
+    }
+  } catch (error) {
+    setMessage(`读取 PLC 配置失败：${errorMessage(error)}`, true);
+  }
+  renderPoints();
+  updateKindFields();
+  try {
+    const status = await api.plc.status();
+    if (status.ok && status.data) {
+      renderStatus(status.data);
+      if (status.data.status === 'connected') {
+        const all = await api.plc.readAll();
+        if (all.ok && all.data) for (const [id, value] of Object.entries(all.data)) updateMonitorValue(id, value);
+      }
+    }
+  } catch (error) {
+    setMessage(`读取 PLC 状态失败：${errorMessage(error)}`, true);
+  }
+}
+
+function bindEvents(): void {
+  if (!elements) return;
+  elements.kind.addEventListener('change', updateKindFields);
+  elements.connect.addEventListener('click', () => void connect());
+  elements.disconnect.addEventListener('click', () => void disconnect());
+  elements.powerRun.addEventListener('click', () => void runPowerUp());
+  elements.powerStep.addEventListener('click', () => void runPowerStep());
+  elements.casesRun.addEventListener('click', () => void runAllCases());
+  elements.export.addEventListener('click', () => void exportReport());
+  elements.pointsBody.addEventListener('change', (event) => {
+    const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-point-address]');
+    if (!input) return;
+    const id = input.dataset.pointAddress;
+    if (!id) return;
+    const point = points.find((entry) => entry.id === id);
+    const address = Number(input.value);
+    if (!point) return;
+    if (!Number.isInteger(address) || address < 0 || address > 65535) {
+      setMessage(`点位「${id}」地址必须是 0 ~ 65535 的整数`, true);
+      input.value = String(point.address);
+      return;
+    }
+    point.address = address;
+    setMessage(`点位「${id}」地址已改为 ${address}，重新连接后生效。`);
+  });
+  elements.cases.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-run-case]');
+    if (button?.dataset.runCase) void runCaseById(button.dataset.runCase);
+  });
+  elements.monitorBody.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-force-point]');
+    if (button?.dataset.forcePoint) void forcePoint(button.dataset.forcePoint);
+  });
+}
+
+function bindDesktopEvents(): void {
+  const api = desktop();
+  if (!api || listening) return;
+  listening = true;
+  api.plc.onStatus((status) => {
+    renderStatus(status);
+    if (status.status === 'error' && status.error) setMessage(status.error, true);
+  });
+  api.plc.onValues((incoming) => {
+    for (const [id, value] of Object.entries(incoming)) updateMonitorValue(id, value);
+  });
+}
+
+function buildPanel(): void {
+  ensureStyles();
+  const entry = buildEntryButton('commissionEntryButton', '联调', COMMISSION_ICON, () => {
+    drawerHandle?.open();
+    void loadSavedConfig();
+  });
+  if (!entry) return;
+  const drawer = createDrawer('commissionDrawer', '通电联调', 'PLC 仿真 / Modbus TCP · 6 步上电 · 3 条用例 · 联调报告');
+  drawerHandle = drawer;
+  drawer.root.classList.add('commission-drawer');
+  drawer.body.innerHTML = `
+    <div class="commission-panel">
+      <div class="commission-status" id="commissionStatusBar">
+        <span class="commission-lamp" id="commissionLamp" data-state="disconnected"></span>
+        <span id="commissionStatusText">PLC · 未连接</span>
+        <strong id="commissionStatusDetail">未建立通信</strong>
+      </div>
+      <div class="acp-section-title"><span>PLC 连接</span><b>28 点位</b></div>
+      <div class="acp-field">
+        <span>适配器</span>
+        <select class="acp-select" id="commissionKind">
+          <option value="sim">内置 PLC 仿真器（开箱即用）</option>
+          <option value="modbus">Modbus TCP</option>
+        </select>
+      </div>
+      <div class="commission-grid">
+        <div class="acp-field" id="commissionHostField" hidden><span>主机</span><input class="acp-input" id="commissionHost" placeholder="192.168.1.10" autocomplete="off"></div>
+        <div class="acp-field" id="commissionPortField" hidden><span>端口</span><input class="acp-input" id="commissionPort" type="number" min="1" max="65535" value="502"></div>
+        <div class="acp-field" id="commissionUnitField" hidden><span>站号 unitId</span><input class="acp-input" id="commissionUnitId" type="number" min="0" max="255" value="1"></div>
+      </div>
+      <div class="commission-actions">
+        <button type="button" class="acp-btn acp-btn-primary" id="commissionConnect">连接</button>
+        <button type="button" class="acp-btn" id="commissionDisconnect" disabled>断开</button>
+        <span class="acp-row-end" id="commissionSummary"></span>
+      </div>
+      <div class="acp-section-title"><span>点位表</span><b>地址可编辑</b></div>
+      <div class="commission-table-scroll"><table class="commission-table">
+        <thead><tr><th>ID</th><th>名称</th><th>区</th><th>地址</th><th>类型</th></tr></thead>
+        <tbody id="commissionPoints"></tbody>
+      </table></div>
+
+      <div class="acp-section-title"><span>上电流程</span><b>6 步</b></div>
+      <div id="commissionPowerSteps"></div>
+      <div class="commission-actions">
+        <button type="button" class="acp-btn acp-btn-primary" id="commissionPowerRun">一键执行</button>
+        <button type="button" class="acp-btn" id="commissionPowerStep">执行第 1 步</button>
+        <span class="acp-row-end" id="commissionPowerSummary"></span>
+      </div>
+
+      <div class="acp-section-title"><span>联调用例</span><b>3 条</b></div>
+      <div id="commissionCases"></div>
+      <div class="commission-actions"><button type="button" class="acp-btn acp-btn-primary" id="commissionCasesRun">全跑 3 条用例</button></div>
+      <div class="commission-result-wrap" style="margin-top:8px"><table class="commission-table">
+        <thead><tr><th>用例</th><th>阶段</th><th>结果</th><th>期望</th><th>实际</th><th>耗时</th></tr></thead>
+        <tbody id="commissionCaseResults"></tbody>
+      </table></div>
+
+      <div class="acp-section-title"><span>点位监视</span><b>实时 · 强制写入</b></div>
+      <div class="commission-table-scroll"><table class="commission-table">
+        <thead><tr><th>ID</th><th>名称</th><th>实时值</th><th>强制</th></tr></thead>
+        <tbody id="commissionMonitor"></tbody>
+      </table></div>
+      <div class="commission-actions"><button type="button" class="acp-btn" id="commissionExport">导出联调报告 PDF</button></div>
+      <div class="acp-note">仿真模式内置串联、自锁、500ms 定时器逻辑；Modbus TCP 使用 FC01/02/03/04/05/06，连接 5 秒超时。强制写入会二次确认，仿真强制值不会被规则覆盖。切换适配器会先断开旧连接。</div>
+    </div>`;
+  drawer.footer.innerHTML = '<span class="acp-pill">独立 PLC 模块</span><span class="acp-pill">操作超时 10 秒</span><span class="acp-pill">PDF 联调章节</span>';
+
+  const get = <T extends HTMLElement>(selector: string): T => {
+    const node = drawer.body.querySelector<T>(selector);
+    if (!node) throw new Error(`联调面板节点缺失：${selector}`);
+    return node;
+  };
+  elements = {
+    drawer: drawer.root,
+    kind: get<HTMLSelectElement>('#commissionKind'),
+    hostField: get<HTMLElement>('#commissionHostField'),
+    host: get<HTMLInputElement>('#commissionHost'),
+    portField: get<HTMLElement>('#commissionPortField'),
+    port: get<HTMLInputElement>('#commissionPort'),
+    unitField: get<HTMLElement>('#commissionUnitField'),
+    unitId: get<HTMLInputElement>('#commissionUnitId'),
+    connect: get<HTMLButtonElement>('#commissionConnect'),
+    disconnect: get<HTMLButtonElement>('#commissionDisconnect'),
+    status: get<HTMLElement>('#commissionStatusBar'),
+    lamp: get<HTMLElement>('#commissionLamp'),
+    statusText: get<HTMLElement>('#commissionStatusText'),
+    statusDetail: get<HTMLElement>('#commissionStatusDetail'),
+    pointsBody: get<HTMLElement>('#commissionPoints'),
+    powerList: get<HTMLElement>('#commissionPowerSteps'),
+    powerRun: get<HTMLButtonElement>('#commissionPowerRun'),
+    powerStep: get<HTMLButtonElement>('#commissionPowerStep'),
+    powerSummary: get<HTMLElement>('#commissionPowerSummary'),
+    cases: get<HTMLElement>('#commissionCases'),
+    casesRun: get<HTMLButtonElement>('#commissionCasesRun'),
+    caseResults: get<HTMLElement>('#commissionCaseResults'),
+    monitorBody: get<HTMLElement>('#commissionMonitor'),
+    export: get<HTMLButtonElement>('#commissionExport'),
+    summary: get<HTMLElement>('#commissionSummary')
+  };
+  bindEvents();
+  bindDesktopEvents();
+  renderPoints();
+  renderPowerSteps();
+  renderCases();
+  renderCaseResults();
+  renderStatus(lastStatus);
+  updateKindFields();
+}
+
+export function initCommissionPanel(options: PanelOptions): CommissionPanelHandle {
+  optionsRef = options;
+  buildPanel();
+  const handle: CommissionPanelHandle = {
+    open(): void {
+      drawerHandle?.open();
+      void loadSavedConfig();
+    },
+    getReport,
+    runPowerUp,
+    runCase: runCaseById,
+    runAllCases
+  };
+  window.AutomationCadCommission = handle;
+  return handle;
+}

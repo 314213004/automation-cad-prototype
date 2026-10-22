@@ -11,6 +11,8 @@
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 6 个工具 |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
+| PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
+| 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例 |
 | 端到端冒烟 | `electron . --headless-smoke` | `npm run smoke` | xvfb 下加载页面、注入扩展、解析 fixture、断言 UI 结构 |
 
 ## smoke 的断言输出
@@ -19,6 +21,10 @@
 SMOKE_CAD_OK triangles=12 meshes=1
 SMOKE_WEBGL_FALLBACK_OK meshes=1 triangles=12 bounds=300.000 × 300.000 × 300.000 mm
 SMOKE_UI_OK stations=2 tags=8 packs=1 parts=8 overlay=1
+SMOKE_PLC_OK points=28
+SMOKE_COMMISSION_OK steps=6 passed=6
+SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
+SMOKE_COMMISSION_PDF_OK path=.../report.pdf
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -44,8 +50,8 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 34 个单测全绿（含 6 条包校验、3 条 WebGL、RPC/MCP/工厂）
-- ✅ smoke 四段断言全绿
+- ✅ 77 个单测全绿（含 PLC 规则、Modbus 本地 TCP 读写、联调序列、报告章节）
+- ✅ smoke 含 PLC、6 步上电、3 用例与联调 PDF 断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 

@@ -21,14 +21,16 @@
 | 智慧工厂 demo 适配器（2 工位 8 点位） | ✅ | `desktop/src/factory/demo.ts` |
 | 智慧工厂 OPC UA / MQTT 适配器 | ✅ 已实现，未连真实设备验证 | `desktop/src/factory/` |
 | 工厂面板（实时值/连接/写入确认） | ✅ | `desktop/src/factory/ui.ts` |
-| 单元测试 | ✅ 34/34 | `desktop/test/` |
+| PLC 仿真 + Modbus TCP | ✅ 仿真实测，Modbus 未连真机 | `desktop/src/plc/` |
+| 通电联调（6 步 + 3 用例 + PDF） | ✅ | `desktop/src/commission/` |
+| 单元测试 | ✅ 77/77 | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
 | 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
 ## 验证记录（真实执行）
 
-- `npm test` → 34 pass / 0 fail
-- `npm run smoke` → `SMOKE_CAD_OK triangles=12 meshes=1` / `SMOKE_WEBGL_FALLBACK_OK` / `SMOKE_UI_OK stations=2 tags=8 packs=1 parts=8`
+- `npm test` → 77 pass / 0 fail
+- `npm run smoke` → `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK steps=6 passed=6` / `SMOKE_COMMISSION_UI_OK` / `SMOKE_OK`
 - CDP 实测：载入 cube.stp → 12 三角面 / 300×300×300 mm；工厂 demo 连接成功、browse 返回 2 工位 8 点位
 - Windows 产物：`unzip -t` 通过，含 `AutomationCAD.exe`(PE32+ x64)、`resources/app.asar`、`resources/web/index.html`、`resources/packs/builtin/smc-cn`
 

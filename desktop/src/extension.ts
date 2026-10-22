@@ -7,6 +7,7 @@ import { CadViewer } from './cad/viewer';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
+import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import type { InterferenceHit, InterferencePart } from './mech/interference';
 import { initInterferencePanel, type InterferencePanelHandle } from './mech/interference-ui';
 import { initStressPanel, type StressConclusion } from './mech/ui';
@@ -36,6 +37,7 @@ let workerSequence = 0;
 let currentFileName = '';
 let stressConclusions: StressConclusion[] = [];
 let interference: InterferencePanelHandle | null = null;
+let commission: CommissionPanelHandle | null = null;
 let mechUiReady = false;
 let stressTabObserver: MutationObserver | null = null;
 type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
@@ -252,8 +254,13 @@ function exportBaseName(): string {
 }
 
 function currentBomRows(): BomRow[] {
+  const rows = reportBomRows();
+  if (rows.length === 0) throw new Error('请先打开 CAD 文件再导出');
+  return rows;
+}
+
+function reportBomRows(): BomRow[] {
   const parts = viewer?.getModelParts() ?? [];
-  if (parts.length === 0) throw new Error('请先打开 CAD 文件再导出');
   return parts.map((part, index) => ({
     index: index + 1,
     name: part.name,
@@ -271,15 +278,18 @@ function currentDxfShapes(): DxfShape[] {
 }
 
 function buildReportHtml(): string {
+  const commissionReport = commission?.getReport();
+  const hasCommission = Boolean(commissionReport && (commissionReport.powerUp.results.length > 0 || commissionReport.cases.length > 0));
   return renderReportHtml({
     project: {
       name: currentFileName || '未命名模型',
       code: 'A3-MECH',
       author: 'AutomationCAD'
     },
-    bom: currentBomRows(),
+    bom: reportBomRows(),
     interference: interference?.getHits() ?? [],
-    stress: stressConclusions
+    stress: stressConclusions,
+    ...(hasCommission && commissionReport ? { commission: commissionReport } : {})
   });
 }
 
@@ -641,6 +651,11 @@ function init(): void {
   injectStyles();
   buildEntryButton();
   initFactoryPanel();
+  commission = initCommissionPanel({
+    onExportReport: async () => {
+      await exportPdfReport();
+    }
+  });
   initPackPanel();
   buildOverlay();
   initMechUi();

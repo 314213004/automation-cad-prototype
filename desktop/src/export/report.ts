@@ -1,6 +1,7 @@
-import { BOM_HEADERS, type BomRow } from './bom';
+import { BOM_HEADERS, type BomRow } from './bom.ts';
 import type { InterferenceHit } from '../mech/interference';
 import type { StressResult } from '../mech/stress';
+import type { CommissionReport } from '../commission/types.ts';
 
 export interface ReportStressConclusion {
   name: string;
@@ -17,6 +18,7 @@ export interface ReportData {
   bom: readonly BomRow[];
   interference: readonly InterferenceHit[];
   stress: readonly ReportStressConclusion[];
+  commission?: CommissionReport;
   note?: string;
 }
 
@@ -56,6 +58,38 @@ export function renderReportHtml(data: ReportData): string {
         <dl>${result.outputs.map((output) => `<div><dt>${escapeHtml(output.label)}</dt><dd>${escapeHtml(output.value)} ${escapeHtml(output.unit)}</dd></div>`).join('')}</dl>
       </article>`).join('')
     : '<p class="empty">尚未运行受力分析。</p>';
+  const commissionRows = data.commission
+    ? data.commission.powerUp.results.map((result) => `<tr>
+        <td>${escapeHtml(result.name)}</td><td><span class="sev ${result.pass ? 'info' : 'error'}">${result.pass ? '通过' : '失败'}</span></td>
+        <td class="mono">${escapeHtml(result.expected)}</td><td class="mono">${escapeHtml(result.actual)}</td><td class="num">${result.durationMs} ms</td>
+      </tr>`).join('')
+    : '';
+  const commissionCaseRows = data.commission && data.commission.cases.length > 0
+    ? data.commission.cases.flatMap((testCase) => testCase.results.map((result) => `<tr>
+        <td>${escapeHtml(testCase.name)}</td><td>${escapeHtml(result.name)}</td>
+        <td><span class="sev ${result.pass ? 'info' : 'error'}">${result.pass ? '通过' : '失败'}</span></td>
+        <td class="mono">${escapeHtml(result.expected)}</td><td class="mono">${escapeHtml(result.actual)}</td><td class="num">${result.durationMs} ms</td>
+      </tr>`)).join('')
+    : '<tr><td colspan="6" class="empty">尚未运行联调用例</td></tr>';
+  const commissionSection = data.commission
+    ? `<h2>通电联调</h2>
+  <section class="meta">
+    <div><span>PLC 适配器</span><b>${escapeHtml(data.commission.plcKind ?? '—')}</b></div>
+    <div><span>连接状态</span><b>${escapeHtml(data.commission.plcStatus)}</b></div>
+    <div><span>上电流程</span><b>${data.commission.powerUp.pass ? '全部通过' : '未通过 / 未执行'}</b></div>
+    <div><span>用例结果</span><b>${data.commission.cases.filter((testCase) => testCase.pass).length} / ${data.commission.cases.length || 3} 通过</b></div>
+  </section>
+  <h3 class="report-h3">上电顺序检查</h3>
+  <table>
+    <thead><tr><th>阶段</th><th>结果</th><th>期望</th><th>实际</th><th>耗时</th></tr></thead>
+    <tbody>${commissionRows || '<tr><td colspan="5" class="empty">尚未执行上电流程</td></tr>'}</tbody>
+  </table>
+  <h3 class="report-h3">联调用例明细</h3>
+  <table>
+    <thead><tr><th>用例</th><th>阶段</th><th>结果</th><th>期望</th><th>实际</th><th>耗时</th></tr></thead>
+    <tbody>${commissionCaseRows}</tbody>
+  </table>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -96,6 +130,7 @@ export function renderReportHtml(data: ReportData): string {
   .stress-card dl div { display: flex; justify-content: space-between; gap: 2mm; border-bottom: .2mm dotted #c9d1d7; }
   .stress-card dt { color: #66747e; font-size: 7.5pt; }
   .stress-card dd { margin: 0; font: 8pt Consolas, monospace; }
+  .report-h3 { margin: 5mm 0 2mm; color: #33414b; font-size: 10pt; }
   .empty { color: #71808a; text-align: center; padding: 5mm; }
   .note { margin-top: 5mm; padding: 3mm; border: .25mm solid #d6dde1; background: #f7fafb; color: #52616b; font-size: 8.5pt; }
   .foot { display: flex; justify-content: space-between; margin-top: 5mm; padding-top: 2mm; border-top: .25mm solid #aebbc3; color: #77858f; font-size: 7.5pt; }
@@ -103,8 +138,8 @@ export function renderReportHtml(data: ReportData): string {
 </head>
 <body>
 <div class="sheet">
-  <h1>${escapeHtml(project.name)} · 机械校核报告</h1>
-  <div class="sub">A3 横向 · 包围盒级干涉初筛 · 公式化受力校核 · AutomationCAD</div>
+  <h1>${escapeHtml(project.name)} · 设计与联调报告</h1>
+  <div class="sub">A3 横向 · 包围盒级干涉初筛 · 公式化受力校核 · 通电联调 · AutomationCAD</div>
   <section class="meta">
     <div><span>项目编号</span><b>${escapeHtml(project.code ?? '—')}</b></div>
     <div><span>设计</span><b>${escapeHtml(project.author ?? '—')}</b></div>
@@ -123,6 +158,7 @@ export function renderReportHtml(data: ReportData): string {
   </table>
   <h2>受力结论</h2>
   <div class="stress-grid">${stressCards}</div>
+  ${commissionSection}
   <div class="note">${escapeHtml(data.note ?? '说明：干涉结果为轴对齐包围盒初筛，相切（重叠为 0）不计入；精检需在 CAD 内核中按三角面/B-rep 复算。受力计算按线弹性、小变形与给定许用条件估算。')}</div>
   <div class="foot"><span>AutomationCAD · 非标自动化整机设计</span><span>报告自动生成 · 请与设计文件一并归档</span></div>
 </div>

@@ -65,6 +65,39 @@ interface DesktopTagValue {
   unit?: string;
 }
 
+type DesktopPlcKind = 'sim' | 'modbus';
+type DesktopPlcStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+type DesktopPlcValue = boolean | number;
+
+interface DesktopPlcPoint {
+  id: string;
+  name: string;
+  area: 'coil' | 'discrete' | 'holding' | 'input';
+  address: number;
+  dataType: 'bool' | 'int16' | 'uint16';
+  writable?: boolean;
+  unit?: string;
+}
+
+interface DesktopPlcConfig {
+  kind: DesktopPlcKind;
+  host?: string;
+  port?: number;
+  unitId?: number;
+  points: DesktopPlcPoint[];
+  pollMs?: number;
+  rules?: Array<Record<string, unknown>>;
+  initialValues?: Record<string, DesktopPlcValue>;
+}
+
+interface DesktopPlcStatusInfo {
+  kind: DesktopPlcKind | null;
+  status: DesktopPlcStatus;
+  config?: DesktopPlcConfig;
+  connectedAt?: string;
+  error?: string;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -97,6 +130,20 @@ interface Window {
       onValues(callback: (value: DesktopTagValue) => void): () => void;
       onStatus(callback: (status: DesktopFactoryStatusInfo) => void): () => void;
     };
+    plc: {
+      info(): Promise<unknown>;
+      status(): Promise<DesktopFactoryResult<DesktopPlcStatusInfo>>;
+      list(): Promise<DesktopFactoryResult<{ kind: DesktopPlcKind; label: string }[]>>;
+      getConfig(): Promise<DesktopFactoryResult<DesktopPlcConfig | null>>;
+      connect(config: DesktopPlcConfig): Promise<DesktopFactoryResult<DesktopPlcStatusInfo>>;
+      disconnect(): Promise<DesktopFactoryResult<DesktopPlcStatusInfo>>;
+      read(id: string): Promise<DesktopFactoryResult<DesktopPlcValue>>;
+      readAll(): Promise<DesktopFactoryResult<Record<string, DesktopPlcValue>>>;
+      write(id: string, value: DesktopPlcValue): Promise<DesktopFactoryResult<null>>;
+      force(id: string, value: DesktopPlcValue): Promise<DesktopFactoryResult<null>>;
+      onValues(callback: (values: Record<string, DesktopPlcValue>) => void): () => void;
+      onStatus(callback: (status: DesktopPlcStatusInfo) => void): () => void;
+    };
     onOpenCad(callback: (payload: { path: string; source: string }) => void): () => void;
     onImportPack(callback: (payload: { path: string }) => void): () => void;
     onSetDomain(callback: (domain: 'mech' | 'elec') => void): () => void;
@@ -114,6 +161,21 @@ interface Window {
     exportMesh(format: 'glb' | 'obj'): Promise<{ format: string; size: number }>;
     exportData(format: 'csv' | 'xlsx' | 'dxf' | 'glb' | 'obj' | 'pdf'): Promise<{ format: string; size: number }>;
     exportReportPdf(): Promise<{ path: string; htmlPath: string }>;
+  };
+  AutomationCadCommission?: {
+    open(): void;
+    getReport(): {
+      plcKind: DesktopPlcKind | null;
+      plcStatus: DesktopPlcStatus;
+      startedAt: string;
+      completedAt: string;
+      powerUp: { pass: boolean; results: unknown[] };
+      cases: unknown[];
+      points: unknown[];
+    };
+    runPowerUp(): Promise<boolean>;
+    runCase(id: string): Promise<boolean>;
+    runAllCases(): Promise<boolean>;
   };
 }
 
