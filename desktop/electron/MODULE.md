@@ -59,3 +59,18 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 1. 最近文件列表持久化到 `userData/recent.json`，菜单动态生成。
 2. 单实例二次启动时把文件参数转给已存在窗口（`second-instance` 目前只聚焦）。
 3. 打包体积治理：`node-opcua` 懒加载或改为可选 sidecar（当前便携包 472 MB 解压）。
+
+## parametric.ts
+
+职责：管理 build123d sidecar 的完整生命周期，是渲染层与 Python 内核之间唯一的网络代理。
+
+- `resolvePython()`：`AUTOMATIONCAD_PYTHON` → 打包资源 `resources/parametric/python[/python.exe]` → PATH 中 `python3` / `python`；找不到返回 `null`。
+- `resolveScript()`：开发态 `spike/build123d/app.py`，打包态 `resources/parametric/app.py`。
+- `start()`：在 7430–7449 随机探测空闲端口与随机 token，`detached` 启动，`/health` 每 300 ms 探测、最多 3 s。
+- `status()`：`stopped | starting | ready | unavailable | crashed`，附中文提示；不暴露端口与 token。
+- `build(doc)`：先跑 `validateFeatures` / `compileOps`，再以 Bearer 调 `POST /build`，30 s 超时；返回结构化 stats/files 或中文失败码。
+- `stop()`：POSIX 杀进程组，Windows `taskkill /T /F`；空闲 10 分钟自动停止。
+- 崩溃恢复：ready 后意外退出自动重启一次，再失败进入 `crashed`；显式 stop 不触发重启。
+- 测试注入：`AUTOMATIONCAD_PARAMETRIC_CMD` 可指向 Node 假 sidecar（smoke 用），管理器选项可缩短 `idleMs` 与端口范围。
+
+安全边界：token 只存在于主进程内存；子进程 stdout 丢弃；IPC 的 `parametric:start` 在返回前剥离 `port` / `token`；`ipc.ts` 只广播状态，构建结果由主进程代发。

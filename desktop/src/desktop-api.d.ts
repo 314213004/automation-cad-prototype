@@ -158,6 +158,27 @@ interface DesktopSyncUploadPayload {
   bom: Array<{ no: number; name: string; spec: string; qty: number; mat: string; remark?: string }>;
 }
 
+type DesktopParametricStatus = 'stopped' | 'starting' | 'ready' | 'unavailable' | 'crashed';
+
+interface DesktopParametricStatusInfo {
+  status: DesktopParametricStatus;
+  message: string;
+  version?: string;
+}
+
+interface DesktopParametricStartResult extends DesktopParametricStatusInfo {
+  ok: boolean;
+}
+
+interface DesktopParametricBuildResult {
+  ok: boolean;
+  code?: 'UNAVAILABLE' | 'TIMEOUT' | 'BUILD_FAILED';
+  message?: string;
+  stats?: Record<string, unknown>;
+  buildMs?: number;
+  files?: Record<string, unknown>;
+}
+
 interface DesktopAgentToolInfo {
   name: string;
   description: string;
@@ -275,6 +296,13 @@ interface Window {
         history(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
         clear(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
       };
+    };
+    parametric: {
+      status(): Promise<DesktopParametricStatusInfo>;
+      start(): Promise<DesktopParametricStartResult>;
+      build(doc: unknown): Promise<DesktopParametricBuildResult>;
+      stop(): Promise<DesktopParametricStatusInfo>;
+      onStatus(callback: (status: DesktopParametricStatusInfo) => void): () => void;
     };
     factory: {
       info(): Promise<unknown>;
@@ -434,6 +462,10 @@ interface Window {
       parts: unknown[];
     };
     getValidation(): { ok: boolean; errors: unknown[]; warnings: unknown[] };
+  };
+  __Parametric?: {
+    status(): Promise<DesktopParametricStatusInfo>;
+    build(doc: unknown): Promise<DesktopParametricBuildResult>;
   };
   AutomationCadCommission?: {
     open(): void;

@@ -1,0 +1,203 @@
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { after, test } from 'node:test';
+import {
+  ParametricManager,
+  resolvePython,
+  resolveScript,
+  type ParametricManagerOptions
+} from '../electron/parametric.ts';
+
+const FAKE = fileURLToPath(new URL('../scripts/fake-parametric-sidecar.mjs', import.meta.url));
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)), '..');
+const managers: ParametricManager[] = [];
+
+function manager(options: ParametricManagerOptions = {}): ParametricManager {
+  const instance = new ParametricManager({
+    command: FAKE,
+    healthTimeoutMs: 3_000,
+    healthIntervalMs: 50,
+    ...options
+  });
+  managers.push(instance);
+  return instance;
+}
+
+function childPid(instance: ParametricManager): number | null {
+  const proc = (instance as unknown as { proc?: { pid?: number } | null }).proc;
+  return proc?.pid ?? null;
+}
+
+async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+  }
+  throw new Error('等待条件超时');
+}
+
+function validDoc() {
+  return {
+    schemaVersion: 1 as const,
+    updatedAt: '2026-10-23T12:00:00+08:00',
+    features: [
+      { id: 'f1', type: 'box' as const, name: '底板', params: { length: 120, width: 80, height: 8 } },
+      {
+        id: 'f2',
+        type: 'holes' as const,
+        name: '安装孔',
+        params: { diameter: 6, positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]] }
+      }
+    ]
+  };
+}
+
+after(async () => {
+  await Promise.all(managers.map((instance) => instance.stop().catch(() => undefined)));
+});
+
+test('sidecar：解析 Python 与开发态脚本路径', () => {
+  assert.equal(resolvePython({ AUTOMATIONCAD_PYTHON: process.execPath }), process.execPath);
+  assert.match(resolveScript({ appRoot: REPO_ROOT }) ?? '', /spike\/build123d\/app\.py$/);
+});
+
+test('sidecar：启动到 ready，状态不泄露 token 与端口', async () => {
+  const instance = manager();
+  const info = await instance.start();
+  assert.equal(info.ok, true);
+  assert.equal(info.status, 'ready');
+  assert.equal(info.version, '0.0.0-fake');
+  assert.ok(info.port && info.port >= 7430 && info.port <= 7449);
+  assert.ok(info.token && info.token.length >= 20);
+  assert.equal(instance.status().status, 'ready');
+  assert.match(instance.status().message, /就绪/);
+  assert.equal('token' in instance.status(), false);
+  assert.equal('port' in instance.status(), false);
+  await instance.stop();
+  assert.equal(instance.status().status, 'stopped');
+});
+
+test('sidecar：错误 token 的 /build 返回 401', async () => {
+  const instance = manager();
+  const info = await instance.start();
+  if (!info.port || !info.token) throw new Error('sidecar 未返回端口或 token');
+  const response = await fetch(`http://127.0.0.1:${info.port}/build`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer wrong-token',
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ ops: [{ op: 'box', length: 1, width: 1, height: 1 }] })
+  });
+  assert.equal(response.status, 401);
+  await instance.stop();
+});
+
+test('sidecar：build 返回 stats、buildMs 与文件', async () => {
+  const instance = manager();
+  await instance.start();
+  const result = await instance.build(validDoc());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.buildMs, 12);
+  assert.equal(result.stats?.faces, 19);
+  assert.equal(result.stats?.volumeMm3, 71495.7);
+  assert.ok(result.files?.step);
+  assert.ok(result.files?.stl);
+  await instance.stop();
+});
+
+test('sidecar：非法特征树在本地拦截并返回中文错误', async () => {
+  const instance = manager();
+  await instance.start();
+  const result = await instance.build({
+    schemaVersion: 1,
+    updatedAt: '2026-10-23T12:00:00+08:00',
+    features: []
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'BUILD_FAILED');
+  assert.match(result.message ?? '', /特征树校验失败/);
+  await instance.stop();
+});
+
+test('sidecar：未启动时 build 返回 UNAVAILABLE', async () => {
+  const instance = manager();
+  const result = await instance.build(validDoc());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'UNAVAILABLE');
+  assert.match(result.message ?? '', /不可用/);
+});
+
+test('sidecar：显式 Python 路径不存在时 start 返回 unavailable', async () => {
+  const instance = manager({
+    command: undefined,
+    env: { ...process.env, AUTOMATIONCAD_PYTHON: '/definitely/not/python' }
+  });
+  const info = await instance.start();
+  assert.equal(info.ok, false);
+  assert.equal(info.status, 'unavailable');
+  assert.equal(instance.status().status, 'unavailable');
+  assert.match(instance.status().message, /不可用/);
+});
+
+test('sidecar：空闲超时后自动 stop', async () => {
+  const instance = manager({ idleMs: 200 });
+  await instance.start();
+  const pid = childPid(instance);
+  assert.ok(pid);
+  await waitFor(() => instance.status().status === 'stopped', 3_000);
+  assert.equal(childPid(instance), null);
+  let alive = true;
+  try {
+    process.kill(pid!, 0);
+  } catch {
+    alive = false;
+  }
+  assert.equal(alive, false);
+});
+
+test('sidecar：ready 后崩溃自动重启一次，再次崩溃置 crashed', async () => {
+  const instance = manager({ idleMs: 0 });
+  const first = await instance.start();
+  assert.equal(first.ok, true);
+  const firstPid = childPid(instance);
+  assert.ok(firstPid);
+
+  process.kill(firstPid!, 'SIGKILL');
+  await waitFor(() => instance.status().status === 'ready' && childPid(instance) !== firstPid, 6_000);
+  const secondPid = childPid(instance);
+  assert.ok(secondPid && secondPid !== firstPid);
+
+  process.kill(secondPid!, 'SIGKILL');
+  await waitFor(() => instance.status().status === 'crashed', 6_000);
+  assert.match(instance.status().message, /崩溃/);
+  assert.equal(childPid(instance), null);
+});
+
+test('sidecar：stop 杀掉进程并回到 stopped', async () => {
+  const instance = manager({ idleMs: 0 });
+  await instance.start();
+  const pid = childPid(instance);
+  assert.ok(pid);
+  await instance.stop();
+  assert.equal(instance.status().status, 'stopped');
+  let alive = true;
+  try {
+    process.kill(pid!, 0);
+  } catch {
+    alive = false;
+  }
+  assert.equal(alive, false);
+});
+
+test('sidecar：启动途中 stop 保持 stopped，不被启动结果覆盖', async () => {
+  const instance = manager({ healthTimeoutMs: 2_000 });
+  const pending = instance.start();
+  await instance.stop();
+  const result = await pending;
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 'stopped');
+  assert.equal(instance.status().status, 'stopped');
+});

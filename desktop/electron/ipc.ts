@@ -22,6 +22,8 @@ import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentSession } from '../src/agent/session.ts';
+import type { FeatureDoc } from '../src/parametric/features.ts';
+import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
 
 export interface IpcContext {
   builtinDir: string;
@@ -32,6 +34,7 @@ export interface IpcContext {
   syncConfigFile: string;
   version: string;
   getAgentInfo(): unknown;
+  getParametric(): ParametricManager | null;
 }
 
 export interface AgentChatIpcContext {
@@ -257,6 +260,37 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   });
 
   ipcMain.handle('agent:info', () => context.getAgentInfo());
+
+  const getParametric = (): ParametricManager | null => context.getParametric();
+  const unavailableStatus = { status: 'unavailable' as const, message: '参数化建模内核不可用' };
+  const publicStart = (info: ParametricStartInfo): Omit<ParametricStartInfo, 'port' | 'token'> => ({
+    ok: info.ok,
+    status: info.status,
+    message: info.message,
+    ...(info.version ? { version: info.version } : {})
+  });
+  const parametric = getParametric();
+  parametric?.onStatus((state) => broadcast('parametric:status-changed', state));
+  ipcMain.handle('parametric:status', () => getParametric()?.status() ?? unavailableStatus);
+  ipcMain.handle('parametric:start', async () => {
+    const manager = getParametric();
+    if (!manager) return { ok: false, status: 'unavailable', message: unavailableStatus.message };
+    return publicStart(await manager.start());
+  });
+  ipcMain.handle('parametric:build', async (_event, doc: unknown) => {
+    const manager = getParametric();
+    if (!manager) return { ok: false, code: 'UNAVAILABLE', message: unavailableStatus.message };
+    if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
+      return { ok: false, code: 'BUILD_FAILED', message: '特征树必须是对象' };
+    }
+    return await manager.build(doc as FeatureDoc);
+  });
+  ipcMain.handle('parametric:stop', async () => {
+    const manager = getParametric();
+    if (!manager) return unavailableStatus;
+    await manager.stop();
+    return manager.status();
+  });
 
   ipcMain.handle('factory:info', () => ({ ok: true, adapters: factory.list(), status: factory.getStatus() }));
   ipcMain.handle('factory:list', () => ({ ok: true, data: factory.list() }));

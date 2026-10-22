@@ -12,6 +12,7 @@ import { buildDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
 import { computeCost, type CostInput } from '../src/cost/engine';
 import { validatePricebook } from '../src/cost/pricebook';
+import { ParametricManager } from './parametric.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const APP_NAME = 'AutomationCAD';
@@ -39,6 +40,7 @@ let mainWindow: BrowserWindow | null = null;
 let agentServer: AgentRpcServer | null = null;
 let agentTools: AgentTools | null = null;
 let commandBus: CommandBus | null = null;
+let parametric: ParametricManager | null = null;
 let agentInfo: (AgentRpcInfo & { toolCount: number }) | { error: string } = { error: 'Agent 服务尚未启动' };
 
 function publicAgentInfo(): unknown {
@@ -78,6 +80,54 @@ function builtinPacksDir(): string {
 
 function userPacksDir(): string {
   return join(app.getPath('userData'), 'packs');
+}
+
+async function runParametricSmoke(window: BrowserWindow): Promise<void> {
+  if (!process.env.AUTOMATIONCAD_PARAMETRIC_CMD) {
+    console.log('SMOKE_PARAMETRIC_SIDECAR_SKIP');
+    return;
+  }
+  try {
+    const result = await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const api = window.__Parametric;
+        const button = document.querySelector('[data-cad-action="parametric"]');
+        if (!api || !button) return { error: '参数化入口缺失' };
+        button.click();
+        let status = await api.status();
+        const deadline = Date.now() + 6000;
+        while (status.status === 'stopped' || status.status === 'starting') {
+          if (Date.now() > deadline) break;
+          await wait(50);
+          status = await api.status();
+        }
+        const build = await api.build({
+          schemaVersion: 1,
+          updatedAt: '2026-10-23T12:00:00+08:00',
+          features: [
+            { id: 'f1', type: 'box', name: '底板', params: { length: 120, width: 80, height: 8 } },
+            { id: 'f2', type: 'holes', name: '安装孔', params: { diameter: 6, positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]] } }
+          ]
+        });
+        return { button: true, status, build };
+      })()`
+    ) as {
+      error?: string;
+      button?: boolean;
+      status?: { status: string; message: string; version?: string };
+      build?: { ok: boolean; stats?: { faces?: number }; message?: string };
+    };
+    if (result.error || !result.button || result.status?.status !== 'ready' || result.status.version !== '0.0.0-fake') {
+      throw new Error(`参数化入口状态异常：${JSON.stringify(result)}`);
+    }
+    if (!result.build?.ok || result.build.stats?.faces !== 19) {
+      throw new Error(`参数化构建异常：${JSON.stringify(result.build)}`);
+    }
+    console.log('SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1');
+  } finally {
+    if (parametric) await parametric.stop();
+  }
 }
 
 function createWindow(): BrowserWindow {
@@ -924,6 +974,13 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        await runParametricSmoke(window);
+      } catch (error) {
+        console.error('SMOKE_FAIL parametric_sidecar', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -1039,6 +1096,12 @@ async function bootstrap(): Promise<void> {
 
   await app.whenReady();
 
+  parametric = new ParametricManager({
+    appRoot: resolve(desktopRoot(), '..'),
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath
+  });
+
   const registry = registerIpcHandlers({
     builtinDir: builtinPacksDir(),
     userDir: userPacksDir(),
@@ -1047,7 +1110,8 @@ async function bootstrap(): Promise<void> {
     plcConfigFile: join(app.getPath('userData'), 'plc.json'),
     syncConfigFile: join(app.getPath('userData'), 'sync.json'),
     version: app.getVersion(),
-    getAgentInfo: publicAgentInfo
+    getAgentInfo: publicAgentInfo,
+    getParametric: () => parametric
   });
 
   mainWindow = createWindow();
@@ -1071,6 +1135,14 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+let quitAfterParametricStop = false;
+app.on('before-quit', (event) => {
   if (agentServer) void agentServer.stop();
+  if (!parametric || parametric.status().status === 'stopped') return;
+  if (quitAfterParametricStop) return;
+  event.preventDefault();
+  quitAfterParametricStop = true;
+  const manager = parametric;
+  parametric = null;
+  void manager.stop().finally(() => app.quit());
 });

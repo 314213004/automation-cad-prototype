@@ -138,3 +138,67 @@ interface FeatureDoc {
 - 换 replicad：去掉 sidecar，同进程 WASM，`compileOps` 不变，新增 TS 适配器
 
 特征树、UI、校验、导出链路都不受影响——这是把「内核」和「产品」解耦的目的。
+
+## P9-2 实现记录
+
+日期：2026-10-23。本轮完成 sidecar 的桌面端接入，不含特征树编辑 UI（留待 P9-3）。
+
+### 新增文件
+
+| 文件 | 职责 |
+|------|------|
+| `desktop/src/parametric/features.ts` | 特征树数据模型、全量校验、`compileOps`、摘要；无 DOM / child_process |
+| `desktop/electron/parametric.ts` | Python/脚本解析、随机端口与 token、spawn、健康检查、构建代理、崩溃重启与空闲退出 |
+| `desktop/scripts/fake-parametric-sidecar.mjs` | `node:http` 假 sidecar，供集成测试与 smoke 使用 |
+| `desktop/test/parametric-features.test.ts` | 纯函数单测（22 条） |
+| `desktop/test/parametric-sidecar.test.ts` | 假 sidecar 生命周期集成测试（11 条） |
+| `desktop/src/parametric/MODULE.md` | 特征树模块边界与编译契约 |
+
+### IPC 契约
+
+渲染层只拿状态与构建结果，不拿 `port` / `token`；所有 `/build` 请求由主进程代发。
+
+| 通道 | 方向 | 返回 |
+|------|------|------|
+| `parametric:status` | invoke | `{status, message, version?}` |
+| `parametric:start` | invoke | `{ok, status, message, version?}`；成功时内部启动，但**不返回端口与 token** |
+| `parametric:build` | invoke | `{ok, stats?, buildMs?, files?}` 或 `{ok:false, code:'UNAVAILABLE'|'TIMEOUT'|'BUILD_FAILED', message}` |
+| `parametric:stop` | invoke | 停止后的 `{status, message}` |
+| `parametric:status-changed` | event | 状态机每次迁移时推送同结构状态 |
+
+`preload.ts` 暴露 `window.desktop.parametric.{status,start,build,stop,onStatus}`。调试入口 `window.__Parametric.{status,build}` 仅用于 smoke，不暴露启动参数。
+
+### 状态机
+
+```
+stopped ──start──> starting ──health ok──> ready
+                       │                    │
+                       └──失败────────────> unavailable
+ready ──进程退出──> starting（自动重启一次）──> ready
+                                  └──再失败──> crashed
+ready/starting ──stop 或空闲 10 min──> stopped
+```
+
+- 端口从 7430–7449 随机探测，token 由 `crypto.randomBytes(32)` 生成。
+- `/health` 每 300 ms 重试，最多 3 s；`/build` 使用 `AbortController`，30 s 超时。
+- POSIX 以 `detached` 启动并 `kill(-pid)` 杀进程树；Windows 使用 `taskkill /T /F`。
+- 日志与 IPC 状态均不包含 token；Python stdout 直接丢弃。
+- 打包态脚本路径为 `resources/parametric/app.py`，`package.json` 已加入该资源映射。
+
+### 测试命令
+
+```bash
+cd desktop
+npx tsc --noEmit
+node --test test/parametric-features.test.ts
+node --test test/parametric-sidecar.test.ts
+npm test
+```
+
+smoke 默认跳过参数化断言；指定假 sidecar 后执行完整启动与构建：
+
+```bash
+AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
+# SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1
+# 未设置环境变量时输出 SMOKE_PARAMETRIC_SIDECAR_SKIP
+```

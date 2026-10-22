@@ -34,7 +34,8 @@ const ICONS = {
   wire: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14M4.3 6.7L8 8.1l3.7-1.4"/></svg>',
   close: '<svg viewBox="0 0 16 16"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>',
   export: '<svg viewBox="0 0 16 16"><path d="M8 2v7M5.5 6.5L8 9l2.5-2.5M3 11.5v2h10v-2"/></svg>',
-  kinematics: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5h7M11.5 4.5h2M2.5 11.5h2M6.5 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5" cy="11.5" r="1.5"/></svg>'
+  kinematics: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5h7M11.5 4.5h2M2.5 11.5h2M6.5 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5" cy="11.5" r="1.5"/></svg>',
+  parametric: '<svg viewBox="0 0 16 16"><path d="M3 13V3M3 13h10"/><path d="M4.5 10.5l2.5-3 2 1.5 3-4.5"/><circle cx="7" cy="7.5" r=".8"/><circle cx="9" cy="9" r=".8"/></svg>'
 };
 
 const CAD_ENTRY = 'cadEntryButton';
@@ -51,6 +52,7 @@ let stressConclusions: StressConclusion[] = [];
 let interference: InterferencePanelHandle | null = null;
 let commission: CommissionPanelHandle | null = null;
 let kinematics: KinematicsUiHandle | null = null;
+let parametricStarting = false;
 let mechUiReady = false;
 let stressTabObserver: MutationObserver | null = null;
 type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
@@ -102,6 +104,8 @@ function buildOverlay(): void {
         <button type="button" class="cad-btn" data-cad-action="fit">${ICONS.fit}<span>缩放到适合</span></button>
         <button type="button" class="cad-btn" data-cad-action="wire">${ICONS.wire}<span>线框</span></button>
         <button type="button" class="cad-btn" data-cad-action="kinematics" id="cadKinematicsToggle">${ICONS.kinematics}<span>运动学</span></button>
+        <button type="button" class="cad-btn" data-cad-action="parametric" id="cadParametricToggle">${ICONS.parametric}<span>参数化</span></button>
+        <span class="cad-parametric-status" id="cadParametricStatus" hidden></span>
         <div class="cad-export-wrap">
           <button type="button" class="cad-btn" data-cad-action="export-menu">${ICONS.export}<span>导出</span><span class="cad-export-caret">▾</span></button>
           <div class="cad-export-menu" id="cadExportMenu" hidden>
@@ -190,6 +194,8 @@ function buildOverlay(): void {
       const handle = ensureKinematicsUi();
       if (handle.isOpen()) handle.close();
       else handle.open();
+    } else if (action === 'parametric') {
+      void startParametric();
     } else if (action === 'export-menu') {
       toggleExportMenu();
     } else if (action === 'close') closeOverlay();
@@ -429,6 +435,58 @@ function ensureKinematicsUi(): KinematicsUiHandle {
     }
   });
   return kinematics;
+}
+
+interface ParametricStateView {
+  status: 'stopped' | 'starting' | 'ready' | 'unavailable' | 'crashed';
+  message: string;
+  version?: string;
+}
+
+function setParametricStatus(state: ParametricStateView): void {
+  const badge = document.getElementById('cadParametricStatus');
+  const button = document.getElementById('cadParametricToggle');
+  if (!badge) return;
+  const labels: Record<ParametricStateView['status'], string> = {
+    stopped: '未启动',
+    starting: '启动中',
+    ready: '就绪',
+    unavailable: '不可用',
+    crashed: '已崩溃'
+  };
+  badge.hidden = state.status === 'stopped';
+  badge.dataset.state = state.status;
+  badge.textContent = `内核 ${labels[state.status]}`;
+  badge.title = state.message;
+  button?.classList.toggle('is-active', state.status === 'ready');
+  button?.setAttribute('aria-busy', String(state.status === 'starting'));
+}
+
+async function startParametric(): Promise<void> {
+  const api = window.desktop?.parametric;
+  if (!api) {
+    setParametricStatus({ status: 'unavailable', message: '参数化建模仅桌面端可用' });
+    showNotice('参数化建模仅桌面端可用', true);
+    return;
+  }
+  if (parametricStarting) return;
+  parametricStarting = true;
+  setParametricStatus({ status: 'starting', message: '正在启动参数化建模内核…' });
+  try {
+    const result = await api.start();
+    setParametricStatus({
+      status: result.status,
+      message: result.message,
+      ...(result.version ? { version: result.version } : {})
+    });
+    showNotice(`参数化建模：${result.message}`, !result.ok);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setParametricStatus({ status: 'unavailable', message: `参数化建模启动失败：${message}` });
+    showNotice(`参数化建模启动失败：${message}`, true);
+  } finally {
+    parametricStarting = false;
+  }
 }
 
 function requiredElement(id: string): HTMLElement {
@@ -844,6 +902,9 @@ function bindWindowEvents(): void {
   window.desktop?.onSetDomain((domain) => {
     window.ElecDomain?.setDomain(domain);
   });
+  window.desktop?.parametric.onStatus((state) => {
+    setParametricStatus(state);
+  });
 }
 
 function init(): void {
@@ -901,6 +962,25 @@ function init(): void {
     exportData,
     exportReportPdf: exportPdfReport
   };
+  Object.defineProperty(window, '__Parametric', {
+    value: Object.freeze({
+      status: async (): Promise<ParametricStateView> => {
+        const api = window.desktop?.parametric;
+        if (!api) return { status: 'unavailable', message: '参数化建模仅桌面端可用' };
+        return await api.status();
+      },
+      build: async (doc: unknown) => {
+        const api = window.desktop?.parametric;
+        if (!api) {
+          return { ok: false, code: 'UNAVAILABLE' as const, message: '参数化建模仅桌面端可用' };
+        }
+        return await api.build(doc);
+      }
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
   initAgentBridge();
   window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
 }

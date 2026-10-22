@@ -32,6 +32,14 @@
 .cad-btn-primary{border-color:#1b8f82;background:#1d5c54;color:#eafffb}
 .cad-btn-primary:hover{background:#24756b}
 .cad-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.45;stroke-linecap:round;stroke-linejoin:round}
+.cad-parametric-status{
+  display:inline-flex;align-items:center;height:22px;padding:0 7px;border:1px solid #3d4a50;border-radius:10px;
+  color:#9aa6ae;background:#202529;font-size:10px;white-space:nowrap;
+}
+.cad-parametric-status[hidden]{display:none !important}
+.cad-parametric-status[data-state="starting"]{border-color:#4b5b65;color:#9fc3d8}
+.cad-parametric-status[data-state="ready"]{border-color:#276f66;color:#7fe3d5;background:#1c302d}
+.cad-parametric-status[data-state="unavailable"],.cad-parametric-status[data-state="crashed"]{border-color:#7b4540;color:#ffaaa2;background:#332321}
 .cad-spacer{flex:1}
 .cad-file-info{max-width:44vw;color:#8f9aa3;font:11px/1.4 var(--font-mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cad-main{flex:1;display:flex;min-height:0}

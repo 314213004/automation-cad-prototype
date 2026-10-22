@@ -76,6 +76,10 @@
       {
         "from": "../electrical.css",
         "to": "web/electrical.css"
+      },
+      {
+        "from": "../spike/build123d/app.py",
+        "to": "parametric/app.py"
       }
     ],
     "win": {

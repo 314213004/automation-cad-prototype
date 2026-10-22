@@ -34,6 +34,17 @@ const desktopApi = {
       clear: () => ipcRenderer.invoke('agent:chat:clear')
     }
   },
+  parametric: {
+    status: () => ipcRenderer.invoke('parametric:status'),
+    start: () => ipcRenderer.invoke('parametric:start'),
+    build: (doc: unknown) => ipcRenderer.invoke('parametric:build', doc),
+    stop: () => ipcRenderer.invoke('parametric:stop'),
+    onStatus: (callback: (status: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
+      ipcRenderer.on('parametric:status-changed', listener);
+      return () => ipcRenderer.removeListener('parametric:status-changed', listener);
+    }
+  },
   factory: {
     info: () => ipcRenderer.invoke('factory:info'),
     status: () => ipcRenderer.invoke('factory:status'),
