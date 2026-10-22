@@ -4,6 +4,7 @@
 
 - `cadquery/spike.py` — 建模 / 改参重建 / STEP+STL 导出基准
 - `cadquery/app.py` — sidecar 原型（标准库 HTTP + Bearer，`/health`、`/build`）
+- `build123d/app.py` — 选定内核的 sidecar 原型（`/health`、`/build`，端口 7412）
 - `replicad/bench.mjs` — OCCT WASM 同件基准
 
 ```bash

@@ -51,6 +51,13 @@
 - 分期：P8-1 预检+变量表+FB → P8-2 序列/报警/安全 → P8-3 UI 与导出 → P8-4 模拟器自检 → P8-5 TIA Openness（可选）
 - 验收：demo 机型 9 文件、预检 0 错、三次生成 sha256 一致、模拟器 6 步跑通
 
+### P9 参数化建模（build123d 内核）
+- 状态：🔄 已选型 build123d 0.13.0（2026-10-23 拍板），P9-1 sidecar 原型已验证
+- 实测：建模 25–50 ms、STEP 8–11 ms、回读体积/面数一致、常驻 424 MB、冷启动 2.3 s
+- 方案：[PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；对比：[PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
+- 分期：P9-1 sidecar+契约 → P9-2 主进程生命周期/IPC → P9-3 特征树 UI → P9-4 草图约束 → P9-5 装配与 BOM/成本联动
+- 验收：`SMOKE_PARAMETRIC_OK features=4 faces=19 volume=71495.7`
+
 ## 已知问题（记录，不阻塞）
 
 1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决中；STEP 不含运动学，任意装配体仍需标注层。

@@ -1,0 +1,140 @@
+# 参数化建模内核（build123d）· 决策与实现方案
+
+状态：已选型 **build123d 0.13.0**（2026-10-23 拍板），后续需要时再换内核
+前情：[PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)（CadQuery / build123d / replicad 三方案实测）
+
+## 1. 为什么选 build123d
+
+| 理由 | 数据 |
+|------|------|
+| 轻 | 无 VTK、无 casadi，依赖 1.0 GB（CadQuery 1.8 GB，其中 VTK 639 MB、casadi 263 MB） |
+| 快 | 同零件建模 25–50 ms，STEP 8–11 ms（CadQuery 79–123 ms / 10–20 ms） |
+| 许可干净 | Apache-2.0，可商用 |
+| 与 CadQuery 同源 | 都基于 OCCT，几何能力同档；后期要换 CadQuery 只改适配层 |
+| Python 生态 | 团队可读可改，便于以后接 BOM/工艺/成本 |
+
+代价：需 Python 运行时（sidecar），常驻约 424 MB，冷启动 ~2.3 s。已在方案里用「按需启动 + 预热 + 空闲退出」消化。
+
+## 2. 架构
+
+```
+Electron 主进程 (electron/parametric.ts)
+  ├─ ensureSidecar(): spawn python app.py --port 7412 --token <随机>
+  │    ├─ 首次打开建模面板时启动（3 s 健康检查，失败重试 2 次）
+  │    ├─ 空闲 10 min 自动退出，释放 400 MB
+  │    └─ 崩溃自动重启一次，再失败 → 降级为「仅查看」
+  ├─ build(featureTree) → POST /build（30 s 超时，串行队列）
+  └─ 退出时 kill 进程树
+渲染进程
+  └─ window.desktop.parametric.{health,build}（preload 白名单，不暴露任意路径）
+```
+
+安全边界：
+- 只监听 `127.0.0.1`，令牌每次启动随机生成，只经 IPC 传给渲染层，不落盘、不进日志
+- 请求体 ≤1 MB，ops ≤200，导出格式白名单 `step|stl`
+- 产物写临时目录，返回路径 + 大小；主进程负责清理与「另存为」
+- **不执行用户脚本**：前端只发声明式特征树 JSON，Python 侧只做白名单算子映射
+
+## 3. 接口契约
+
+`GET /health` → `{"ok":true,"kernel":"build123d","version":"0.13.0","pid":123}`
+
+`POST /build`（Bearer）
+
+```json
+{
+  "ops": [
+    { "op": "box", "length": 120, "width": 80, "height": 8 },
+    { "op": "holes", "diameter": 6, "positions": [[-44,-24],[44,-24],[-44,24],[44,24]] },
+    { "op": "slot", "length": 50, "width": 18 },
+    { "op": "fillet", "radius": 6, "edges": "|Z" }
+  ],
+  "exports": ["step", "stl"]
+}
+```
+
+响应：`{ok, kernel, stats:{volumeMm3,bbox,faces,edges,solids}, buildMs, files:{step:{path,bytes,ms}, stl:{...}}}`
+
+算子白名单（首期）：
+
+| op | 参数 | 说明 |
+|----|------|------|
+| `box` | length / width / height / centered | 底板、块体；默认中心在 XY 原点 |
+| `cylinder` | diameter / height / at[x,y,z] | 凸台、轴、销 |
+| `holes` | diameter / positions[[x,y]] / depth(`through` 或 mm) | 通孔 / 盲孔 |
+| `slot` | length / width | 腰形槽，贯通 |
+| `fillet` | radius / edges(`|Z` 或 `all`) | 圆角 |
+
+错误一律返回 `{ok:false,error:"中文原因"}`，HTTP 400；未授权 401。
+
+## 4. 特征树数据模型（前端）
+
+```ts
+interface FeatureNode {
+  id: string;                 // f1, f2…
+  type: 'box' | 'cylinder' | 'holes' | 'slot' | 'fillet';
+  name: string;               // 用户可改，如「底板」「M6 安装孔」
+  params: Record<string, number | number[][] | string | boolean>;
+  suppressed?: boolean;       // 抑制后跳过编译
+}
+interface FeatureDoc {
+  schemaVersion: 1;
+  sourceFile?: string;        // 关联的 STEP 文件名（若有）
+  features: FeatureNode[];
+  updatedAt: string;          // 带时区
+}
+```
+
+编译与校验拆成纯函数，便于单测：
+- `validateFeatures(doc)`：必填参数、正数、坐标在板内、fillet 半径不超过最小壁厚的一半、孔间距不小于孔径、空特征树
+- `compileOps(doc)`：按顺序输出 sidecar `ops`，跳过 `suppressed`，稳定排序（同输入同输出）
+- `summarize(doc)`：特征数、预计孔数、包围盒估算（用于未建模时显示）
+
+## 5. 界面
+
+建模面板（第 4 个 CAD 抽屉，与「运动学标注」并列，可切换）：
+1. 左侧特征树：列表 + 图标 + 名称，支持上移/下移/抑制/删除/重命名
+2. 中间视口：复用现有 three.js；建模前显示 STEP 只读，重建后载入新 STL 叠加对比（灰=旧，彩=新）
+3. 右侧参数：选中特征的参数表单（mm、整数校验），改动 300 ms 防抖后自动重建（可关「自动重建」）
+4. 底部：`重建 50 ms · 面 19 · 体积 71.5 cm³`，导出 STEP / STL / 保存特征树 JSON
+5. 状态：sidecar 未启动 / 启动中 / 就绪 / 崩溃降级，四种状态有明确中文提示
+
+## 6. 打包与部署
+
+- PyInstaller onedir（比 onefile 启动快）：`--exclude-module vtkmodules --exclude-module casadi --exclude-module llvmlite --exclude-module scipy`，预估 250–300 MB
+- 随安装包放在 `resources/parametric/`，主进程按平台决定 `python` 可执行文件路径
+- 首次启动做一次 `POST /build` 空跑预热，避免用户第一次重建等 2.3 s
+- 若目标机不允许 Python 运行时（安全策略），退化为「只查看」并在面板说明
+
+## 7. 失败与降级
+
+| 场景 | 行为 |
+|------|------|
+| sidecar 未安装 / 启动失败 | 建模面板显示「建模内核不可用，仅可查看 STEP」，不影响其他功能 |
+| 构建超时（30 s） | 终止请求，提示「模型过于复杂，建议简化特征」，保留上一次成功结果 |
+| 参数非法 | 前端拦截（中文原因）；后端二次校验，防止绕过 |
+| 进程崩溃 | 自动重启一次；再失败进入降级 |
+| 导出磁盘满 / 无权限 | 明确提示路径与原因 |
+
+## 8. 测试
+
+- 单测（纯函数）：`validateFeatures` 12 条（空树、负数、孔出界、孔间距、圆角过大、抑制、重复 id…）、`compileOps` 8 条（顺序、跳过抑制、确定性）
+- 集成（Node）：启动 sidecar → health → build → 断言 stats 与文件存在 → 401 未授权 → kill 后 health 失败
+- smoke：`SMOKE_PARAMETRIC_OK features=4 faces=19 volume=71495.7 buildMs<200`
+- 性能门槛：简单件 < 200 ms，10 特征 < 1 s
+
+## 9. 分期
+
+- **P9-1**：sidecar + 契约 + 特征树纯函数（本方案 + `spike/build123d/app.py` 已验证：建模 50 ms、STEP 11 ms、回读一致）
+- **P9-2**：主进程生命周期管理 + preload/IPC + 降级路径
+- **P9-3**：特征树 UI + 参数编辑 + 自动重建 + 导出
+- **P9-4**：草图与约束（可选，接 jsketcher 或自建 2D 约束求解）
+- **P9-5**：装配（多实体）与 BOM/成本的联动
+
+## 10. 后续换内核的代价
+
+适配层只有 `compileOps` 与 sidecar 的 `build()` 两处：
+- 换 CadQuery：`build()` 内 API 替换（约 200 行）
+- 换 replicad：去掉 sidecar，同进程 WASM，`compileOps` 不变，新增 TS 适配器
+
+特征树、UI、校验、导出链路都不受影响——这是把「内核」和「产品」解耦的目的。

@@ -258,6 +258,7 @@ smoke 覆盖并断言：
 - **OPC UA 只支持 SecurityPolicy=None**，未接真实 PLC；MQTT 未连真实 broker；Modbus 未连真机（仿真器已实测）。
 - **价格簿尚无真实报价**：内置价格簿只含明确标注「示例，需替换」的条目，引擎会自动排除示例价；真实成本需导入企业价格表后才能用于报价。
 - **运动学标注需人工指定**：STEP 不含运动学，动件 / 轴 / 行程 / 点位由人标注；未标注时联调回退到机型配置。
+- **参数化建模尚未接入产品**：内核已选定 build123d 并完成 sidecar 验证（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)），桌面端尚未接特征树 UI。
 - **PLC 程序自动生成尚未实现**：方案见 [PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)，首期输出 IEC 61131-3 ST + IO 变量表，不做厂商专有工程文件。
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
@@ -278,6 +279,8 @@ smoke 覆盖并断言：
 | [docs/desktop/PHASE2.md](docs/desktop/PHASE2.md) | 二期需求拆分（干涉/受力/PLC/联调/导出/同步） |
 | [docs/desktop/COSTING.md](docs/desktop/COSTING.md) | 硬件成本统计：价格簿格式、计算口径、验收 |
 | [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、15 个工具、安全、评估集 |
+| [docs/desktop/PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md) | 参数化建模：build123d 选型、sidecar 契约、特征树与分期 |
+| [docs/desktop/PARAMETRIC-CAD-SPIKE.md](docs/desktop/PARAMETRIC-CAD-SPIKE.md) | CadQuery / build123d / replicad 三方案实测对比 |
 | [docs/desktop/PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md) | 设计完成后自动生成 PLC 程序（ST + IO 表 + 预检） |
 | [docs/desktop/SMART-FACTORY-INTEGRATION.md](docs/desktop/SMART-FACTORY-INTEGRATION.md) | 智慧工厂接口契约与联调口径 |
 | [docs/desktop/PLUGIN-PACKS.md](docs/desktop/PLUGIN-PACKS.md) | 数据包格式与加载规则 |
