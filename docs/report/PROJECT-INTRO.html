@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AutomationCAD 智能电气设计平台 · 项目简介</title>
+<style>
+:root{
+  --navy:#0e2a45;
+  --navy-2:#17405f;
+  --navy-3:#24587c;
+  --teal:#0f8a7e;
+  --teal-l:#e6f4f2;
+  --ink:#1b2733;
+  --muted:#5d6f80;
+  --line:#d7e1ea;
+  --line-2:#eaf0f5;
+  --paper:#ffffff;
+  --wash:#f4f8fb;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:#e9edf1}
+body{
+  font-family:"Noto Sans SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  color:var(--ink);font-size:9.6pt;line-height:1.68;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  font-feature-settings:"palt" 1;
+}
+.sheet{
+  width:210mm;height:297mm;padding:14mm 15mm 12mm;background:var(--paper);
+  margin:0 auto 8mm;position:relative;overflow:hidden;
+  box-shadow:0 2px 14px rgba(14,42,69,.16);
+  page-break-after:always;break-after:page;
+}
+.sheet:last-of-type{page-break-after:auto;break-after:auto}
+.sheet-hd{
+  display:flex;align-items:baseline;justify-content:space-between;
+  border-bottom:.35mm solid var(--line);padding-bottom:1.6mm;margin-bottom:4.5mm;
+  font-size:7.6pt;color:#8296a8;
+}
+.sheet-hd b{color:var(--navy);font-weight:600;letter-spacing:.02em}
+.sheet-hd .tag{color:var(--teal);font-weight:600;letter-spacing:.14em;font-size:7pt}
+.sheet-ft{
+  position:absolute;left:15mm;right:15mm;bottom:6.5mm;display:flex;justify-content:space-between;
+  border-top:.3mm solid var(--line-2);padding-top:1.6mm;font-size:7.2pt;color:#8b9aa8;
+}
+h2{
+  font-size:16pt;line-height:1.3;margin:0 0 1.5mm;color:var(--navy);font-weight:700;letter-spacing:-.01em;
+}
+h2 .no{color:var(--teal);font-weight:700;margin-right:2.4mm;font-size:13pt;letter-spacing:.02em}
+.kicker{font-size:7.4pt;letter-spacing:.22em;color:var(--teal);font-weight:600;margin:0 0 1.6mm;text-transform:uppercase}
+h3{font-size:10.4pt;margin:0 0 1.4mm;color:var(--navy-2);font-weight:700}
+h4{font-size:9pt;margin:0 0 1mm;color:var(--navy-2);font-weight:700}
+p{margin:0 0 2.2mm;text-align:justify}
+.lead{font-size:10.2pt;line-height:1.66;color:#26384a;border-left:.9mm solid var(--teal);padding-left:3.4mm;margin-bottom:4mm}
+.lead strong{color:var(--navy);font-weight:700}
+.small{font-size:8.2pt;color:var(--muted);line-height:1.6}
+.mono{font-family:"JetBrains Mono","Consolas",monospace;font-size:8.2pt;background:#f1f5f9;padding:.2mm 1mm;border-radius:.8mm}
+td .mono{font-size:7.1pt;white-space:nowrap;letter-spacing:-.02em}
+.rule{height:.3mm;background:var(--line);margin:3.5mm 0}
+/* ---------- cover ---------- */
+.cover{padding:0;background:var(--navy);color:#fff;overflow:hidden}
+.cover .band{position:absolute;inset:0;background:
+  radial-gradient(120mm 80mm at 96% 4%,rgba(15,138,126,.38),transparent 60%),
+  linear-gradient(160deg,#0e2a45 0%,#123350 52%,#0d2438 100%);}
+.cover .grid-lines{position:absolute;inset:0;opacity:.14;
+  background-image:linear-gradient(to right,rgba(255,255,255,.5) .2mm,transparent .2mm),
+                   linear-gradient(to bottom,rgba(255,255,255,.5) .2mm,transparent .2mm);
+  background-size:14mm 14mm;}
+.cover .inner{position:absolute;inset:0;padding:22mm 20mm 16mm;display:flex;flex-direction:column}
+.cover .top{display:flex;justify-content:space-between;align-items:flex-start;font-size:8pt;letter-spacing:.18em;color:#9fc0cc}
+.cover .top .brand{border-left:.8mm solid var(--teal);padding-left:3mm;line-height:1.7}
+.cover h1{font-size:33pt;line-height:1.22;margin:44mm 0 0;font-weight:700;letter-spacing:-.01em;color:#fff}
+.cover h1 span{display:block;color:#7fe0d3}
+.cover .subtitle{font-size:14pt;color:#c8dbe6;margin-top:5mm;font-weight:400;letter-spacing:.02em}
+.cover .desc{font-size:9.6pt;color:#9db6c6;max-width:120mm;margin-top:4mm;line-height:1.75}
+.cover .kw{display:flex;gap:2.5mm;margin-top:9mm;flex-wrap:wrap}
+.cover .kw span{border:.25mm solid rgba(127,224,211,.45);color:#a9e9df;font-size:8pt;padding:1.2mm 3mm;border-radius:1mm;letter-spacing:.04em}
+.cover .chain{position:absolute;left:20mm;right:20mm;bottom:50mm;border-top:.25mm solid rgba(255,255,255,.16);padding-top:4mm;display:flex;align-items:flex-start;justify-content:space-between;gap:2mm}
+.cover .cn{flex:1}
+.cover .cn b{display:block;font-size:9pt;color:#7fe0d3;font-weight:600;letter-spacing:.06em}
+.cover .cn span{display:block;font-size:7.4pt;color:#8ba7b8;margin-top:1mm;line-height:1.5}
+.cover .chain i{color:#3f6278;font-style:normal;font-size:11pt;padding-top:1mm}
+.cover .meta{position:absolute;left:20mm;right:20mm;bottom:18mm;display:flex;justify-content:space-between;align-items:flex-end}
+.cover .meta div{font-size:8.6pt;color:#9db6c6;line-height:1.9}
+.cover .meta div b{display:block;color:#fff;font-size:10pt;font-weight:600;letter-spacing:.04em}
+.cover .foot{position:absolute;left:20mm;right:20mm;bottom:9mm;border-top:.25mm solid rgba(255,255,255,.16);padding-top:3mm;font-size:7.4pt;color:#7d97a8;display:flex;justify-content:space-between;letter-spacing:.06em}
+/* ---------- kpi ---------- */
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:2.6mm;margin:0 0 4mm}
+.kpi{border:.3mm solid var(--line);border-top:.9mm solid var(--teal);border-radius:1.2mm;padding:2.8mm 3mm;background:#fff}
+.kpi .n{font-size:20pt;font-weight:700;color:var(--navy);line-height:1.1;letter-spacing:-.02em}
+.kpi .n em{font-size:9pt;font-style:normal;font-weight:600;color:var(--teal);margin-left:1mm}
+.kpi .l{font-size:7.6pt;color:var(--muted);margin-top:1.2mm;line-height:1.45}
+.kpi.alt{border-top-color:var(--navy-3)}
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;font-size:8.4pt;line-height:1.55;margin:1mm 0 3mm}
+thead th{background:var(--navy);color:#fff;font-weight:600;text-align:left;padding:1.8mm 2.2mm;font-size:7.9pt;letter-spacing:.03em}
+tbody td{padding:1.7mm 2.2mm;border-bottom:.25mm solid var(--line);vertical-align:top}
+tbody tr:nth-child(even) td{background:#f7fafc}
+tbody tr:last-child td{border-bottom:.35mm solid var(--line)}
+td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ok{color:var(--teal);font-weight:600}
+td.no{color:#a3453a}
+.tbl-note{font-size:7.4pt;color:#8296a8;margin-top:-1.5mm;margin-bottom:3mm;line-height:1.5}
+/* ---------- cards ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:2.6mm}
+.card{border:.3mm solid var(--line);border-radius:1.2mm;padding:3mm 3.4mm;background:#fff;page-break-inside:avoid}
+.card .t{font-size:9pt;font-weight:700;color:var(--navy-2);margin-bottom:1.2mm}
+.card p{font-size:8.3pt;line-height:1.6;margin-bottom:0;color:#3a4c5e}
+.card.tint{background:var(--wash);border-color:#dfe9f1}
+.card.teal{background:var(--teal-l);border-color:#c5e5e0}
+ul.tight{margin:0 0 2mm;padding-left:4.2mm;font-size:8.5pt;line-height:1.62}
+ul.tight li{margin-bottom:1mm}
+ul.tight li::marker{color:var(--teal)}
+/* ---------- figure ---------- */
+figure{margin:0 0 2mm;page-break-inside:avoid;break-inside:avoid}
+figure img{width:100%;display:block;border:.3mm solid var(--line);border-radius:1mm}
+figcaption{font-size:7.4pt;color:#6d7f90;margin-top:1.4mm;line-height:1.5;padding-left:2.4mm;border-left:.7mm solid var(--teal)}
+figcaption b{color:var(--navy-2);font-weight:600}
+.fig-row{display:grid;grid-template-columns:1fr 1fr;gap:3mm}
+/* ---------- architecture ---------- */
+.arch{margin:1mm 0 2mm}
+.layer{border:.35mm solid #c6d5e2;border-radius:1.6mm;padding:2.6mm 3mm;background:#fff;position:relative}
+.layer .lh{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:2mm}
+.layer .lt{font-size:8.8pt;font-weight:700;color:var(--navy)}
+.layer .ls{font-size:7.2pt;color:#8296a8;letter-spacing:.06em}
+.layer.d1{border-color:#b9d2c9;background:linear-gradient(180deg,#f2faf8,#fff)}
+.layer.d2{border-color:#b9c9db;background:linear-gradient(180deg,#f0f5fa,#fff)}
+.layer.d3{border-color:#c6d5e2;background:linear-gradient(180deg,#f7fafc,#fff)}
+.layer.d4{border-style:dashed;border-color:#9fb3c4;background:#fbfcfd}
+.subs{display:grid;gap:1.8mm}
+.subs.c5{grid-template-columns:repeat(5,1fr)}
+.subs.c4{grid-template-columns:repeat(4,1fr)}
+.sub{border:.25mm solid #d5e0ea;border-radius:1mm;padding:1.8mm 1.6mm;text-align:center;background:#fff}
+.sub b{display:block;font-size:7.9pt;color:var(--navy-2);font-weight:600}
+.sub span{display:block;font-size:6.9pt;color:#7f92a3;margin-top:.6mm;line-height:1.4}
+.arrow{height:6.5mm;position:relative}
+.arrow::before{content:"";position:absolute;left:50%;top:0;bottom:2.6mm;width:.45mm;background:var(--teal);transform:translateX(-50%)}
+.arrow::after{content:"";position:absolute;left:50%;bottom:0;transform:translateX(-50%);
+  border-left:1.7mm solid transparent;border-right:1.7mm solid transparent;border-top:2.4mm solid var(--teal)}
+.arrow.dash::before{background:repeating-linear-gradient(180deg,var(--navy-3) 0 1.4mm,transparent 1.4mm 2.6mm)}
+.arrow.dash::after{border-top-color:var(--navy-3)}
+.flow-label{display:flex;justify-content:space-between;font-size:6.9pt;color:#8b9aa8;margin:.6mm 2mm 0}
+/* ---------- before / after ---------- */
+.ba{display:grid;grid-template-columns:1fr 7mm 1fr;gap:2.5mm;align-items:stretch;margin:1mm 0 3mm}
+.ba-col{border:.3mm solid var(--line);border-radius:1.4mm;padding:3mm;background:#fff}
+.ba-col.before{border-top:1mm solid #a3453a;background:#fdf8f7}
+.ba-col.after{border-top:1mm solid var(--teal);background:#f4fbf9}
+.ba-col h4{display:flex;justify-content:space-between;font-size:9.2pt}
+.ba-col h4 span{font-size:7pt;font-weight:600;color:#a3453a;letter-spacing:.1em}
+.ba-col.after h4 span{color:var(--teal)}
+.steps{list-style:none;margin:2.4mm 0 0;padding:0}
+.steps li{position:relative;padding:0 0 2.5mm 6.4mm;font-size:8.2pt;line-height:1.55}
+.steps li::before{content:attr(data-s);position:absolute;left:0;top:.2mm;width:4.4mm;height:4.4mm;border-radius:50%;
+  background:#e6ecf2;color:#5d6f80;font-size:6.6pt;font-weight:700;text-align:center;line-height:4.4mm}
+.ba-col.after .steps li::before{background:var(--teal);color:#fff}
+.ba-col.before .steps li::after{content:"";position:absolute;left:2.15mm;top:5mm;bottom:.4mm;width:.2mm;background:#e2e8ee}
+.ba-col.after .steps li::after{content:"";position:absolute;left:2.15mm;top:5mm;bottom:.4mm;width:.2mm;background:#c9e6e1}
+.steps li:last-child::after{display:none}
+.ba-mid{display:flex;align-items:center;justify-content:center;color:#b6c6d4;font-size:14pt}
+/* ---------- charts ---------- */
+.bars{margin:1mm 0 2mm}
+.bar-row{display:grid;grid-template-columns:34mm 1fr 18mm;align-items:center;gap:2mm;font-size:8pt;margin-bottom:1.6mm}
+.bar-track{height:4.2mm;background:#eef3f7;border-radius:.6mm;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--navy-3),var(--teal));border-radius:.6mm}
+.bar-fill.warn{background:linear-gradient(90deg,#b06a3a,#c99a4a)}
+.bar-row .v{text-align:right;font-variant-numeric:tabular-nums;color:var(--navy);font-weight:600}
+.stage-cost{display:grid;grid-template-columns:repeat(4,1fr);gap:3.5mm;height:30mm;margin:2mm 0 1mm}
+.stage-cost .sc{display:flex;flex-direction:column;justify-content:flex-end;border-bottom:.4mm solid #c6d5e2}
+.stage-cost .sc-bar{background:linear-gradient(180deg,#0f8a7e,#17405f);border-radius:.8mm .8mm 0 0;margin-bottom:1.3mm}
+.stage-cost .sc b{font-size:7.8pt;color:var(--navy);font-weight:600}
+.stage-cost .sc span{font-size:7pt;color:#7f92a3;line-height:1.35;margin-top:.4mm}
+/* ---------- timeline ---------- */
+.timeline{position:relative;margin:3mm 0 0;padding-top:12mm}
+.timeline::before{content:"";position:absolute;left:0;right:0;top:5.4mm;height:.5mm;background:linear-gradient(90deg,var(--teal) 0%,var(--teal) 26%,#b9c9d8 26%,#b9c9d8 100%)}
+.tl-items{display:grid;grid-template-columns:repeat(4,1fr);gap:3mm}
+.tl-item{position:relative;page-break-inside:avoid}
+.tl-item::before{content:"";position:absolute;left:0;top:-9.4mm;width:3.2mm;height:3.2mm;border-radius:50%;background:#fff;border:.7mm solid #b9c9d8}
+.tl-item.done::before{background:var(--teal);border-color:var(--teal)}
+.tl-item.doing::before{background:#fff;border-color:var(--teal);box-shadow:0 0 0 .6mm #d6efeb}
+.tl-phase{font-size:7.2pt;letter-spacing:.12em;color:#8296a8;font-weight:600}
+.tl-title{font-size:9pt;font-weight:700;color:var(--navy);margin:.8mm 0 1mm}
+.tl-desc{font-size:7.8pt;color:#4d5f70;line-height:1.55}
+.pill{display:inline-block;font-size:6.6pt;font-weight:700;letter-spacing:.06em;padding:.5mm 1.8mm;border-radius:1mm;margin-bottom:1mm}
+.pill.done{background:var(--teal);color:#fff}
+.pill.doing{background:#fff;color:var(--teal);border:.3mm solid var(--teal)}
+.pill.plan{background:#eef3f7;color:#5d6f80}
+/* ---------- callout ---------- */
+.callout{border-left:1mm solid var(--teal);background:var(--teal-l);padding:2.6mm 3.2mm;border-radius:0 1.2mm 1.2mm 0;margin:2mm 0 3mm;font-size:8.4pt;line-height:1.62}
+.callout b{color:var(--navy)}
+.callout.warn{border-left-color:#b06a3a;background:#fdf6f1}
+.callout.warn b{color:#8a4a24}
+.twocol{column-count:2;column-gap:7mm;font-size:8.5pt;line-height:1.62}
+.doclist{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;font-size:7.6pt;line-height:1.55;color:#3a4c5e}
+.doclist div{padding:.6mm 0;border-bottom:.2mm dotted #dbe4ec}
+.doclist .mono{font-size:7pt;padding:.1mm .6mm}
+.twocol p{margin-bottom:2mm}
+.metric-strip{display:grid;grid-template-columns:repeat(4,1fr);border:.3mm solid var(--line);border-radius:1.2mm;overflow:hidden;margin:2mm 0 3mm}
+.metric-strip div{padding:2.6mm 3mm;border-right:.25mm solid var(--line);background:#fff}
+.metric-strip div:last-child{border-right:0}
+.metric-strip b{display:block;font-size:13pt;color:var(--navy);line-height:1.2}
+.metric-strip span{font-size:7.4pt;color:var(--muted)}
+.chip{display:inline-block;font-size:7.2pt;padding:.4mm 1.6mm;border:.25mm solid var(--line);border-radius:.8mm;color:var(--navy-2);background:#f7fafc;margin:0 1mm 1mm 0;font-family:"JetBrains Mono",Consolas,monospace}
+@media print{
+  html,body{background:#fff}
+  .sheet{margin:0;box-shadow:none;page-break-after:always;break-after:page}
+  @page{size:A4 portrait;margin:0}
+  figure,table,.card,.kpi,.layer,.tl-item,.ba-col{page-break-inside:avoid;break-inside:avoid}
+  tr{page-break-inside:avoid}
+  h2,h3,h4{page-break-after:avoid;break-after:avoid}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 01 封面 ============ -->
+<section class="sheet cover">
+  <div class="band"></div>
+  <div class="grid-lines"></div>
+  <div class="inner">
+    <div class="top">
+      <div class="brand">AUTOMATIONCAD<br>非标自动化整机设计软件</div>
+      <div style="text-align:right;line-height:1.9">项目简介 · 内部汇报<br>CONFIDENTIAL</div>
+    </div>
+    <h1>AutomationCAD<span>智能电气设计平台</span></h1>
+    <div class="subtitle">从 CAD 设计到智慧工厂数据贯通</div>
+    <div class="desc">一个桌面软件，覆盖机械、电气、成本、PLC 与数据交付。设计完成后，图纸、BOM、3D 模型与成本一次性推送到智慧工厂系统，替代手工转录与邮件传包。</div>
+    <div class="kw"><span>Windows 11 桌面版</span><span>离线可用</span><span>301 项自动化测试</span><span>已打通设计同步接口</span></div>
+    <div class="chain">
+      <div class="cn"><b>① 设计</b><span>机械 · 电气 · 成本 · PLC<br>五域在同一工作台</span></div>
+      <i>→</i>
+      <div class="cn"><b>② 打包</b><span>manifest + BOM + 图纸<br>+ 3D + 报告 PDF</span></div>
+      <i>→</i>
+      <div class="cn"><b>③ 上传</b><span>X-Design-Key 机器鉴权<br>zip 指纹幂等去重</span></div>
+      <i>→</i>
+      <div class="cn"><b>④ 生产</b><span>绑定机台档案<br>采购 / 加工 / 装配可见</span></div>
+    </div>
+    <div class="meta">
+      <div><b>2026-10-23</b>汇报日期</div>
+      <div><b>v0.2</b>文档版本</div>
+      <div><b>v0.2.0</b>软件版本</div>
+      <div><b>设计端 → 智慧工厂</b>数据链路</div>
+    </div>
+    <div class="foot"><span>AutomationCAD 智能电气设计平台</span><span>第 1 页 / 共 18 页</span></div>
+  </div>
+</section>
+
+<!-- ============ 02 一页纸摘要 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">摘要</span></div>
+  <p class="kicker">Executive Summary</p>
+  <h2><span class="no">01</span>一页纸摘要</h2>
+  <p class="lead">项目已完成从网页原型到 Windows 桌面软件的升级，并首次打通<strong>设计端到智慧工厂的数据链路</strong>。当前状态：桌面端功能可用、自动化测试全绿、设计同步接口双方联调通过；下一阶段的增量价值集中在自然语言交互、PLC 程序自动生成与委外加工协同。</p>
+
+  <div class="kpis">
+    <div class="kpi"><div class="n">301<em>项</em></div><div class="l">自动化测试全部通过<br>npm test 301 / 301</div></div>
+    <div class="kpi"><div class="n">371<em>型号</em></div><div class="l">电气元件库，26 个分类<br>其中 219 个带原理图符号</div></div>
+    <div class="kpi"><div class="n">191<em>个</em></div><div class="l">元件的真实外形尺寸<br>可直接用于底板排布</div></div>
+    <div class="kpi alt"><div class="n">559<em>ms</em></div><div class="l">424 KB STEP 装配体解析<br>输出 5,040 个三角面</div></div>
+    <div class="kpi alt"><div class="n">30<em>项</em></div><div class="l">智慧工厂侧接口测试<br>material-flow 0.22.0</div></div>
+    <div class="kpi alt"><div class="n">186<em>MB</em></div><div class="l">Windows 便携包已发布<br>186,901,656 字节</div></div>
+  </div>
+
+  <h3>四条核心结论</h3>
+  <table>
+    <thead><tr><th style="width:6mm">#</th><th style="width:44mm">结论</th><th>依据</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>设计端已形成闭环，可直接试用</b></td><td>五个域全部落地：CAD 导入与运动学标注、电气元件库与底板布置、电气合规校验与功率统计、机械干涉与受力、成本自动统计、PLC 联调与故障诊断。工程导出一套产物（A3 PDF / DXF / GLB / BOM / 成本）。</td></tr>
+      <tr><td>2</td><td><b>设计到生产的数据链路已打通</b></td><td>设计包经 <span class="mono">/api/v1/design-sync/*</span> 直传智慧工厂：机器鉴权 <span class="mono">X-Design-Key</span>、zip SHA-256 幂等去重、版本 diff 与绑定。对方 0.22.0 已实现，30 项后端测试通过。</td></tr>
+      <tr><td>3</td><td><b>选型、校验、成本从事后前移到设计时</b></td><td>元件带真实尺寸，布置时 1 mm 吸附与重叠标红；线号与载流量在设计阶段即校验；BOM 直接乘阶梯价出成本，缺价项单列待询价，不再等报价回来才发现超预算。</td></tr>
+      <tr><td>4</td><td><b>下一步价值在自动化与外部协同</b></td><td>P7 自然语言 Agent（15 工具、写操作确认、审计）、P8 PLC 程序自动生成（ST 代码 + IO 变量表 + 预检）、P9 委外加工数据智能系统联动，三项均在规划中，已有设计与工具集基础。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>一句话结论：</b>这个项目不是"再做一个画图工具"，而是把非标设备的<b>设计数据变成可交付、可追溯、可计算的结构化数据</b>，并把它接到生产系统上。图纸仍然是图纸，但图纸背后的 BOM、成本、点位、版本从此不再靠人抄。
+  </div>
+
+  <div class="metric-strip">
+    <div><b>5 个域</b><span>机械 / 电气 / 成本 / PLC / 数据</span></div>
+    <div><b>18 个零件</b><span>STEP 实测装配体规模</span></div>
+    <div><b>7 条规则</b><span>PLC 故障诊断 + 兜底</span></div>
+    <div><b>6 个接口</b><span>设计同步 endpoint</span></div>
+  </div>
+  <div class="sheet-ft"><span>一页纸摘要</span><span>第 2 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 03 业务痛点 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">业务痛点</span></div>
+  <p class="kicker">Why · Problem</p>
+  <h2><span class="no">02</span>设计与生产之间，仍然是人在搬数据</h2>
+  <p class="lead">非标自动化的交付节奏是"一单一设计"，每个项目都要重画一遍、重算一遍、重编一遍。工具链却是割裂的：CAD 出图、Excel 记 BOM、经验选型、事后核价、PLC 手工编程。<strong>割裂的成本不在软件采购，而在每一次人工转录与每一次返工。</strong></p>
+
+  <table>
+    <thead><tr><th style="width:34mm">痛点</th><th style="width:52mm">现状做法</th><th>造成的后果</th></tr></thead>
+    <tbody>
+      <tr><td><b>设计与生产脱节</b></td><td>CAD 出图 → 打印 → 人工把零件、规格、数量敲进 Excel → 再录入 ERP / 生产系统</td><td>同一份 BOM 存在 2–3 个版本；漏项、错规格在装配阶段才暴露；图纸改了 BOM 没跟着改，采购按旧版下单。</td></tr>
+      <tr><td><b>选型靠经验</b></td><td>气缸、导轨、断路器按老师傅经验或上一台机器照抄，参数不复核</td><td>选大了浪费成本，选小了现场改；新人无法复用判断，方案质量随人波动。</td></tr>
+      <tr><td><b>成本事后才算</b></td><td>设计完成后把 BOM 发给采购询价，几天后拿到报价再决定改不改</td><td>报价周期长，方案在最后一刻被成本推翻，返工集中在最贵的阶段；同类项目之间没有成本可比性。</td></tr>
+      <tr><td><b>PLC 程序重复劳动</b></td><td>每个项目的点位表、变量命名、气缸动作逻辑从零写或复制粘贴改</td><td>命名不一致、注释缺失；调试期靠现场试错，问题定位依赖个人记忆。</td></tr>
+      <tr><td><b>外协件状态不可见</b></td><td>委外加工的工序进度、质检结果靠电话与微信群确认</td><td>交期不可预测，装配等件；出现质量问题时无法追溯到具体批次与工序。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>痛点的共同结构</h3>
+  <p>五个痛点看似分散，本质是同一件事：<b>设计阶段产生的信息只有"图形"，没有"数据"</b>。图形给人看，数据才能给系统用。只要设计成果无法被机器读取，下游的采购、加工、装配、调试就必须由人再解释一遍，解释就会失真，失真就要返工。</p>
+  <p>因此本项目的技术选择是：不去替换 CAD 的建模能力，而是<b>在设计端把数据补齐并结构化</b>——元件带尺寸与价格、点位带地址与类型、装配带运动学约束、设计包带清单与指纹——再用一份明确的数据契约交给生产系统。这样既不动设计师已有的工作习惯，又能让下游系统直接消费。</p>
+
+  <h3>代价随发现阶段上升</h3>
+  <div class="stage-cost">
+    <div class="sc"><div class="sc-bar" style="height:26%"></div><b>设计阶段</b><span>改一张图、动一个零件</span></div>
+    <div class="sc"><div class="sc-bar" style="height:48%"></div><b>装配阶段</b><span>拆机、换件、等料</span></div>
+    <div class="sc"><div class="sc-bar" style="height:74%"></div><b>调试阶段</b><span>改程序、改接线、重测</span></div>
+    <div class="sc"><div class="sc-bar" style="height:100%"></div><b>客户现场</b><span>停机、差旅、信誉损失</span></div>
+  </div>
+  <p class="tbl-note">柱高为定性示意，表示同一问题在不同阶段被发现的处置代价量级差异，非统计数据；这也是把校验前移到设计阶段的直接理由。</p>
+
+  <div class="grid3" style="margin-top:3mm">
+    <div class="card tint"><div class="t">图形 → 数据</div><p>STEP 不只是预览：解析出网格树、包围盒与零件清单，成为 BOM 与干涉检测的输入。</p></div>
+    <div class="card tint"><div class="t">经验 → 规则</div><p>选型、线号、载流量、干涉、受力全部固化为可执行校验，结果可复核、可导出。</p></div>
+    <div class="card tint"><div class="t">事后 → 事前</div><p>成本随 BOM 实时计算，缺价项在提交前就暴露，而不是在报价之后。</p></div>
+  </div>
+  <div class="sheet-ft"><span>业务痛点</span><span>第 3 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 04 总体方案 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">总体方案</span></div>
+  <p class="kicker">Architecture</p>
+  <h2><span class="no">03</span>总体方案：四层结构，一份数据契约</h2>
+  <p class="lead">设计端负责"把设计做对"，契约层负责"把设计说清楚"，智慧工厂负责"把设计变成生产"，委外系统负责"把外协过程收回来"。<strong>层与层之间只通过一份 manifest 契约耦合</strong>，任一层升级不影响其他层。</p>
+
+  <div class="arch">
+    <div class="layer d1">
+      <div class="lh"><span class="lt">① 设计端 · AutomationCAD 桌面软件</span><span class="ls">WINDOWS 11 · 离线可用 · 五域协同</span></div>
+      <div class="subs c5">
+        <div class="sub"><b>CAD / 3D</b><span>STEP·IGES·BREP<br>STL·OBJ·GLTF</span></div>
+        <div class="sub"><b>电气设计</b><span>原理图·IO 规划<br>底板布置</span></div>
+        <div class="sub"><b>机械校核</b><span>干涉·受力<br>运动学标注</span></div>
+        <div class="sub"><b>成本</b><span>阶梯价·BOM<br>人工·税运</span></div>
+        <div class="sub"><b>PLC</b><span>Modbus TCP<br>联调·诊断</span></div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="flow-label"><span>导出：A3 PDF · DXF · GLB / OBJ · BOM CSV / XLSX · 成本 CSV</span><span>打包为设计包 ZIP</span></div>
+
+    <div class="layer d2">
+      <div class="lh"><span class="lt">② 数据契约层 · design-sync manifest</span><span class="ls">SCHEMA V1 · 机器鉴权 · 指纹幂等</span></div>
+      <div class="subs c4">
+        <div class="sub"><b>身份</b><span>X-Design-Key<br>deviceId = 机台编号</span></div>
+        <div class="sub"><b>清单</b><span>bom[] 正整数<br>files[] 逐项 SHA-256</span></div>
+        <div class="sub"><b>时间</b><span>createdAt 强制带时区<br>ISO 8601</span></div>
+        <div class="sub"><b>完整性</b><span>zip_sha256 唯一<br>200 MB 上限</span></div>
+      </div>
+    </div>
+    <div class="arrow"></div>
+    <div class="flow-label"><span>HTTPS · multipart：deviceId + manifest + zip</span><span>幂等去重 · 版本号自增</span></div>
+
+    <div class="layer d3">
+      <div class="lh"><span class="lt">③ 智慧工厂 · material-flow-system 0.22.0</span><span class="ls">生产环境 221.231.106.194:5556</span></div>
+      <div class="subs c4">
+        <div class="sub"><b>机台档案</b><span>device_no 绑定<br>图纸可查</span></div>
+        <div class="sub"><b>物料流转</b><span>BOM → 采购<br>→ 加工 → 装配</span></div>
+        <div class="sub"><b>版本管理</b><span>设计包版本<br>diff 与绑定</span></div>
+        <div class="sub"><b>看板</b><span>进度与状态<br>App 端可见</span></div>
+      </div>
+    </div>
+    <div class="arrow dash"></div>
+    <div class="flow-label"><span>按件派工 · 工序与质检回传（规划中）</span><span>P9</span></div>
+
+    <div class="layer d4">
+      <div class="lh"><span class="lt">④ 委外加工数据智能系统 · 规划中</span><span class="ls">OUTSOURCING · P9 ROADMAP</span></div>
+      <div class="subs c4">
+        <div class="sub"><b>工序进度</b><span>外协件逐序跟踪</span></div>
+        <div class="sub"><b>质检数据</b><span>结果与批次归档</span></div>
+        <div class="sub"><b>交期</b><span>承诺 vs 实际</span></div>
+        <div class="sub"><b>成本回收</b><span>实际 vs 估算</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>三个设计取舍</h3>
+  <ul class="tight">
+    <li><b>不重写 CAD 内核。</b>几何解析交给成熟的 occt-import-js（WASM）与 three.js，本项目只做数据提取与业务校验，降低维护风险。</li>
+    <li><b>契约先于接口。</b>先定 manifest 的字段与校验规则（数量必须正整数、时间必须带时区、文件必须带指纹），再谈传输；字段错了，接口再稳也没用。</li>
+    <li><b>幂等先于并发。</b>同一个 zip 上传两次只入库一次，用内容指纹而不是文件名去重，避免"设计包 v2 最终版 真的最终.zip"这类混乱。</li>
+  </ul>
+  <div class="sheet-ft"><span>总体方案</span><span>第 4 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 05 CAD ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 1 / 6</span></div>
+  <p class="kicker">Capability · CAD</p>
+  <h2><span class="no">04</span>CAD 导入与运动学标注</h2>
+  <p class="lead">装配体可以直接拖进来：STEP / IGES / BREP 走 occt-import-js 解析，STL / OBJ / GLTF 走 three.js 加载。<strong>实测 424 KB 装配体（18 个零件）解析 559 ms，输出 5,040 个三角面</strong>，在普通办公机上打开即用，不需要工作站。</p>
+
+  <figure style="width:96%;margin:0 auto 2mm">
+    <img src="assets/02-cad-assembly.png" alt="CAD 查看：STEP 装配体">
+    <figcaption><b>证据：</b>真实 STEP 装配体在桌面端打开，左侧为零件树，中间为 three.js 视口，底部为解析统计（零件数 / 三角面数 / 耗时）。这张图说明几何导入不是示意图，而是可交互的真实模型。</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="t">导入之后拿到的不是一张图</div>
+      <p>解析结果保留零件层级、每个网格的包围盒与三角面索引，因此可以直接支撑：零件树点选定位、包围盒尺寸读取、线框模式、鼠标拾取、干涉检测的初筛候选。</p>
+    </div>
+    <div class="card">
+      <div class="t">运动学标注：让装配体"会动"</div>
+      <p>对任意装配体标注动件 → 运动轴 → 行程 → 方向 → 缩回位 → 绑定点位，即可用滑块拖动预览 3D 姿态。中文校验覆盖动件不在 STEP 中、行程非正、点位冲突等情形；未标注时回退机型配置驱动，保证演示与实机都能跑。</p>
+    </div>
+  </div>
+
+  <h3>这一层解决的现实问题</h3>
+  <p>非标项目里，供应商给的 STEP 常常只有几何，没有装配约束。想知道"滑块走 80 mm 会不会撞到护罩"，传统做法是在 CAD 里手动拖、凭眼睛看。本项目把行程参数化：行程可被校验、被成本计算、被 PLC 点位引用，而不只是视觉动作。</p>
+  <table>
+    <thead><tr><th style="width:40mm">能力</th><th style="width:46mm">输入</th><th>输出 / 用途</th></tr></thead>
+    <tbody>
+      <tr><td>多格式几何导入</td><td>STEP / IGES / BREP / STL / OBJ / GLTF</td><td>三角面网格 + 零件树 + 包围盒，供预览、干涉、BOM 使用</td></tr>
+      <tr><td>运动学标注</td><td>动件、轴、行程、方向、缩回位、绑定点位</td><td>滑块拖动预览姿态；行程参与干涉与节拍评估</td></tr>
+      <tr><td>降级路径</td><td>无 WebGL 环境</td><td>退化为解析统计，功能不中断</td></tr>
+    </tbody>
+  </table>
+  <div class="sheet-ft"><span>核心能力 · CAD 导入与运动学标注</span><span>第 5 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 06 电气库 + 底板 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 2 / 6</span></div>
+  <p class="kicker">Capability · Electrical Library</p>
+  <h2><span class="no">05</span>电气元件库与底板布置</h2>
+  <p class="lead">元件库不是一张型号清单，而是<strong>371 个型号、26 个分类，其中 219 个带可直接插入原理图的符号、191 个带真实外形尺寸</strong>。有尺寸才能排版，有符号才能出图，两者齐备才叫"库"。</p>
+
+  <div class="fig-row">
+    <figure>
+      <img src="assets/08-elec-library.png" alt="电气元件库">
+      <figcaption><b>证据：</b>元件库按分类检索，卡片标注位号与符号状态，可"放入图纸"直接插入原理图——库与图纸是连通的，不是两份数据。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/07-packs.png" alt="数据包管理">
+      <figcaption><b>证据：</b>元件以数据包形式加载与启停；用户可导入第三方 ZIP 包，导入时校验清单并拦截路径穿越。</figcaption>
+    </figure>
+  </div>
+
+  <h3>底板布置画布（示意）</h3>
+  <p>电箱底板按<b>毫米坐标</b>绘制：1 mm 吸附、两条 35 mm 导轨自动吸附、元件重叠即标红、实时统计底板利用率，结果导出 JSON 供下游复用。下图为本页排版用的结构示意，说明画布的坐标与吸附逻辑，非界面截图。</p>
+
+  <div style="border:.3mm solid var(--line);border-radius:1.2mm;padding:2.5mm 3mm;background:#fbfdfe;margin-bottom:3mm">
+  <svg viewBox="0 0 360 128" width="100%" height="60mm" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="底板布置示意">
+    <defs>
+      <pattern id="mm" width="6" height="6" patternUnits="userSpaceOnUse">
+        <path d="M6 0 L0 0 0 6" fill="none" stroke="#e8eff5" stroke-width="0.4"/>
+      </pattern>
+    </defs>
+    <rect x="6" y="8" width="348" height="112" fill="url(#mm)" stroke="#24587c" stroke-width="1"/>
+    <text x="10" y="18" font-size="5.4" fill="#7f92a3">底板坐标系（mm，1 mm 吸附）</text>
+    <!-- rail 1 -->
+    <rect x="16" y="30" width="328" height="8" fill="#dbe6ef" stroke="#8ba7bd" stroke-width="0.6"/>
+    <text x="16" y="27" font-size="5" fill="#5d6f80">导轨 1 · 35 mm</text>
+    <!-- rail 2 -->
+    <rect x="16" y="76" width="328" height="8" fill="#dbe6ef" stroke="#8ba7bd" stroke-width="0.6"/>
+    <text x="16" y="73" font-size="5" fill="#5d6f80">导轨 2 · 35 mm</text>
+    <!-- devices on rail 1 -->
+    <rect x="22" y="22" width="30" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="37" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">QF1</text>
+    <rect x="58" y="22" width="24" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="70" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">KM1</text>
+    <rect x="88" y="22" width="24" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="100" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">KM2</text>
+    <rect x="118" y="22" width="38" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="137" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">FR1</text>
+    <rect x="162" y="22" width="26" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="175" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">PS1</text>
+    <!-- overlap pair (red) -->
+    <rect x="196" y="22" width="34" height="16" fill="#fdecea" stroke="#c0392b" stroke-width="0.9" stroke-dasharray="2 1"/>
+    <rect x="220" y="22" width="34" height="16" fill="#fdecea" stroke="#c0392b" stroke-width="0.9" stroke-dasharray="2 1"/>
+    <text x="225" y="17" font-size="4.6" fill="#c0392b">重叠 18 mm · 标红</text>
+    <rect x="262" y="22" width="28" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="276" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">KA1</text>
+    <rect x="296" y="22" width="28" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="310" y="32" font-size="4.6" text-anchor="middle" fill="#0e2a45">XT1</text>
+    <!-- devices on rail 2 -->
+    <rect x="22" y="60" width="40" height="16" fill="#fff" stroke="#0f8a7e" stroke-width="0.7"/>
+    <text x="42" y="70" font-size="4.6" text-anchor="middle" fill="#0e2a45">伺服驱动器</text>
+    <rect x="68" y="60" width="32" height="16" fill="#fff" stroke="#0f8a7e" stroke-width="0.7"/>
+    <text x="84" y="70" font-size="4.6" text-anchor="middle" fill="#0e2a45">变频器</text>
+    <rect x="106" y="60" width="26" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="119" y="70" font-size="4.6" text-anchor="middle" fill="#0e2a45">24V</text>
+    <rect x="138" y="60" width="44" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="160" y="70" font-size="4.6" text-anchor="middle" fill="#0e2a45">端子排</text>
+    <rect x="188" y="60" width="60" height="16" fill="#fff" stroke="#24587c" stroke-width="0.7"/>
+    <text x="218" y="70" font-size="4.6" text-anchor="middle" fill="#0e2a45">继电器组</text>
+    <!-- stats -->
+    <text x="256" y="62" font-size="5" fill="#5d6f80">利用率</text>
+    <text x="256" y="72" font-size="9" fill="#0f8a7e" font-weight="bold">68.4%</text>
+    <text x="16" y="100" font-size="4.8" fill="#7f92a3">导轨 1 安装：断路器 ×1 / 接触器 ×2 / 热继电器 ×1 / 电源 ×1 / 继电器 ×1 / 端子 ×1</text>
+    <text x="16" y="109" font-size="4.8" fill="#7f92a3">导轨 2 安装：伺服驱动器 / 变频器 / 24 V 电源 / 端子排 / 继电器组</text>
+    <text x="16" y="117" font-size="4.8" fill="#c0392b">红色虚线框为重叠判定（同层几何相交即标红并计入冲突数）</text>
+  </svg>
+  </div>
+
+  <div class="grid2">
+    <div class="card teal"><div class="t">为什么 191 个真实尺寸很关键</div><p>没有尺寸的库只能用来"选型填表"，有尺寸的库才能"排布并校验"。导轨长度、模数宽、散热间距都依赖外形数据，否则底板图只能等供应商图纸回来再画。</p></div>
+    <div class="card teal"><div class="t">插件化：库是长出来的</div><p>第三方元件包以 ZIP 导入，按清单校验、拦截路径穿越，启停即时影响检索与插入。新增品牌不需要改代码，也不需要重新发版。</p></div>
+  </div>
+  <div class="sheet-ft"><span>核心能力 · 电气元件库与底板布置</span><span>第 6 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 07 合规校验 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 3 / 6</span></div>
+  <p class="kicker">Capability · Compliance</p>
+  <h2><span class="no">06</span>电气合规校验与功率统计</h2>
+  <p class="lead">把电气工程师脑子里的检查项写成规则：线号、载流量、相平衡、主断路器与进线截面、24 V 余量。<strong>设计阶段跑一遍，问题在图纸上改，而不是在配电柜前改。</strong></p>
+
+  <h3>校验项清单</h3>
+  <table>
+    <thead><tr><th style="width:30mm">类别</th><th>规则</th><th style="width:44mm">判定结果</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2"><b>线号合规</b></td><td>缺号、格式不符、同一网络内重复、跨网络重号、相线电位与线色不符、跳号</td><td>逐条定位到导线，给出原值与建议值</td></tr>
+      <tr><td>线号与 IO 点位表交叉核对</td><td>未分配点位的导线单列</td></tr>
+      <tr><td rowspan="2"><b>功率统计</b></td><td>总有功 kW、视在 kVA、分相电流 L1/L2/L3、相间不平衡度</td><td>超阈值即预警，附计算过程</td></tr>
+      <tr><td>主断路器选型、进线截面建议、24 V 电源余量</td><td>给出建议值与依据（载流量表）</td></tr>
+      <tr><td><b>载流量</b></td><td>导线截面 vs 实际电流 vs 敷设方式</td><td>不足项标红，给出应选截面</td></tr>
+    </tbody>
+  </table>
+
+  <h3>分相电流分布（示意工况）</h3>
+  <div class="bars">
+    <div class="bar-row"><span>L1 相</span><div class="bar-track"><div class="bar-fill" style="width:82%"></div></div><span class="v">18.4 A</span></div>
+    <div class="bar-row"><span>L2 相</span><div class="bar-track"><div class="bar-fill" style="width:76%"></div></div><span class="v">17.1 A</span></div>
+    <div class="bar-row"><span>L3 相</span><div class="bar-track"><div class="bar-fill warn" style="width:100%"></div></div><span class="v">22.4 A</span></div>
+  </div>
+  <p class="tbl-note">上图为排版示意（示例负荷，非实测项目数据），用于说明校验结果如何呈现：三相不平衡度按 (最大−最小)/平均 计算并对照阈值，超限相以暖色标示。</p>
+
+  <h3>线号校验示例</h3>
+  <table>
+    <thead><tr><th style="width:26mm">导线</th><th style="width:54mm">现象</th><th style="width:38mm">命中规则</th><th>处理建议</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1L1 / L1-2</td><td>同一网络内出现两种编号写法</td><td>同网不一致</td><td>统一为一种写法，保留图纸首次出现的编号</td></tr>
+      <tr><td class="mono">L1-03</td><td>前序为 L1-01，L1-02 缺失</td><td>跳号</td><td>补齐或整体重排，避免现场按号找不到线</td></tr>
+      <tr><td class="mono">L2-07</td><td>该编号已在 L1 网络使用</td><td>跨网重号</td><td>加相别前缀区分，防止接线串相</td></tr>
+      <tr><td class="mono">PE-05</td><td>线色标注为黑色</td><td>电位与线色不符</td><td>改为黄绿，或在属性中修正电位</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="t">输出：可交付的校验报告</div>
+      <p>校验结果连同功率统计一并导出 A3 PDF，作为设计评审附件归档。报告里既有结论（通过 / 预警 / 不合规），也有依据（公式、载流量表取值、阈值），便于第三方复核。</p>
+    </div>
+    <div class="card">
+      <div class="t">价值：把"老师傅的检查"变成资产</div>
+      <p>规则一旦写下就不再依赖具体的人。新人按提示改图即可达到基线水准；老工程师不必重复做机械核对，时间花在方案上。规则可增补，历史项目可回溯。</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>边界说明：</b>当前校验基于元件库参数与项目内数据，属于"设计自检"，不替代第三方认证机构的合规检测；输出报告用于内部评审与交付附件，不作为认证文件。
+  </div>
+  <div class="sheet-ft"><span>核心能力 · 电气合规校验与功率统计</span><span>第 7 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 08 机械 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 4 / 6</span></div>
+  <p class="kicker">Capability · Mechanical</p>
+  <h2><span class="no">07</span>机械干涉与受力校核</h2>
+  <p class="lead">干涉检测用 AABB 初筛，一次跑出候选并按严重度分级；受力校核把气缸推力、悬臂梁挠度、螺栓预紧的公式直接摆在界面上。<strong>校核结果带公式与安全系数，不黑箱。</strong></p>
+
+  <div class="fig-row">
+    <figure>
+      <img src="assets/03-interference.png" alt="干涉检测">
+      <figcaption><b>证据：</b>AABB 初筛一次给出 28 处候选，按 error / warning 分组，附重叠尺寸与体积；点结果可在 3D 中定位，误报可加入忽略白名单。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/04-stress.png" alt="受力分析">
+      <figcaption><b>证据：</b>气缸推力按 F = p·πD²/4·η 计算并给出拉力（0.85 系数）、余量与安全系数；悬臂梁与螺栓预紧同页，超限项标红并给改法。</figcaption>
+    </figure>
+  </div>
+
+  <table>
+    <thead><tr><th style="width:34mm">校核项</th><th style="width:52mm">计算口径</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td><b>干涉检测</b></td><td>轴对齐包围盒（AABB）两两求交，重叠体积与三向重叠尺寸</td><td>error / warning 分级；忽略对白名单；结果可导出</td></tr>
+      <tr><td><b>气缸推力</b></td><td>F = p · πD²/4 · η；拉力按 0.85 系数折算</td><td>推力、拉力、余量、安全系数</td></tr>
+      <tr><td><b>悬臂梁挠度</b></td><td>σ = F·L / W，对照材料许用应力</td><td>应力、安全系数、超限提示与截面建议</td></tr>
+      <tr><td><b>螺栓预紧</b></td><td>F0 = 0.7 · σy · As</td><td>预紧力、拧紧力矩参考</td></tr>
+    </tbody>
+  </table>
+
+  <h3>为什么用 AABB 而不是精确布尔运算</h3>
+  <p>精确干涉需要 B-rep 布尔运算，在 WASM 环境下对 5000 面级装配体耗时长、失败率高，且对非标设计的意义有限——绝大多数碰撞是"装不下"而不是"差 0.2 mm"。AABB 初筛在毫秒级给出候选，工程师按重叠量排序逐个确认，配合忽略白名单，实际使用中误报成本远低于精确运算的时间成本。这是一个明确的工程取舍，不是能力缺失。</p>
+
+  <div class="grid2" style="margin-top:2.5mm">
+    <div class="card"><div class="t">按重叠量排序复核</div><p>结果按三向重叠尺寸与体积排序：先看"装不进去"的大重叠，再看贴面级别的告警。28 处候选中通常只有少数需要改结构，其余确认后进白名单。</p></div>
+    <div class="card"><div class="t">忽略对是项目决策，不是隐藏</div><p>确认无问题的零件对写入白名单，下次校核不再报；白名单随项目保存，可复查、可撤销，避免"报错了就把检测关掉"。</p></div>
+  </div>
+
+  <div class="callout warn">
+    <b>使用边界：</b>AABB 结果偏保守（包围盒大于实体），可能存在误报；对薄壁、斜面配合等精细场合，仍需在三维 CAD 中复核。系统将其定位为"早期发现明显碰撞"，不替代详细设计验证。
+  </div>
+  <div class="sheet-ft"><span>核心能力 · 机械干涉与受力校核</span><span>第 8 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 09 成本 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 5 / 6</span></div>
+  <p class="kicker">Capability · Costing</p>
+  <h2><span class="no">08</span>成本自动统计</h2>
+  <p class="lead">成本不是一张手工汇总表，而是一条可重算的链路：<strong>BOM × 阶梯价 → 底板推算线缆/端子/导轨/线槽 → 人工 → 税/加成/运费</strong>。任何一项设计变更，成本立刻跟着变；没有价格的物料单列"待询价"，不猜数。</p>
+
+  <h3>计算链路</h3>
+  <table>
+    <thead><tr><th style="width:8mm">#</th><th style="width:40mm">环节</th><th>口径</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><b>价格簿</b></td><td>数据包形式维护：型号、阶梯价区间、价格来源、更新日期；示例价自动排除，避免把演示数据算进报价</td></tr>
+      <tr><td>2</td><td><b>物料成本</b></td><td>BOM 数量 × 对应阶梯区间的单价，按型号聚合</td></tr>
+      <tr><td>3</td><td><b>底板推算</b></td><td>由底板布置推算线缆长度、端子数量、导轨长度、线槽长度，按单位价计入</td></tr>
+      <tr><td>4</td><td><b>人工</b></td><td>按工时定额 × 工时单价，区分装配与接线</td></tr>
+      <tr><td>5</td><td><b>税费与加成</b></td><td>税率、管理加成、运费分别可配，逐项列出而非合并成一个系数</td></tr>
+      <tr><td>6</td><td><b>缺价处理</b></td><td>无价格的物料不参与合计，单独成表标记"待询价"，并计入覆盖率统计</td></tr>
+    </tbody>
+  </table>
+
+  <h3>成本构成（结构示意）</h3>
+  <div style="display:flex;height:9mm;border-radius:.8mm;overflow:hidden;border:.25mm solid var(--line);margin-bottom:1.5mm">
+    <div style="width:46%;background:#17405f;color:#fff;font-size:7.4pt;display:flex;align-items:center;justify-content:center">物料 46%</div>
+    <div style="width:18%;background:#24587c;color:#fff;font-size:7.4pt;display:flex;align-items:center;justify-content:center">底板推算 18%</div>
+    <div style="width:20%;background:#0f8a7e;color:#fff;font-size:7.4pt;display:flex;align-items:center;justify-content:center">人工 20%</div>
+    <div style="width:8%;background:#7fb8ae;color:#fff;font-size:6.6pt;display:flex;align-items:center;justify-content:center">税 8%</div>
+    <div style="width:8%;background:#b9c9d8;color:#0e2a45;font-size:6.6pt;display:flex;align-items:center;justify-content:center">运 8%</div>
+  </div>
+  <p class="tbl-note">占比为结构示意，用于说明成本的分项口径；实际比例随项目物料构成变化，由引擎按价格簿实时计算。</p>
+
+  <h3>价格簿字段</h3>
+  <table>
+    <thead><tr><th style="width:34mm">字段</th><th style="width:56mm">说明</th><th>为什么必要</th></tr></thead>
+    <tbody>
+      <tr><td><b>型号 / 厂商</b></td><td>与元件库型号对齐的键</td><td>BOM 行要能唯一匹配到价格，不能靠名称模糊匹配</td></tr>
+      <tr><td><b>阶梯区间</b></td><td>按数量分段，段内单价唯一</td><td>同型号不同批量的真实采购价不同</td></tr>
+      <tr><td><b>价格来源</b></td><td>供应商报价 / 历史采购 / 目录价</td><td>报价被质疑时能回答依据</td></tr>
+      <tr><td><b>更新日期</b></td><td>该价格的生效时间</td><td>过期价格在界面上可见，避免用旧价报新单</td></tr>
+      <tr><td><b>是否示例价</b></td><td>演示用数据标记</td><td>自动排除，防止演示数据进入正式报价</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <div class="card"><div class="t">阶梯价为什么要进引擎</div><p>同一型号买 1 个和买 50 个价格不同。若用单一单价，小批量项目会被低估、批量项目会被高估。阶梯价内置后，改数量即改单价，报价与采购口径一致。</p></div>
+    <div class="card"><div class="t">价格可追溯</div><p>每条价格带来源与更新日期，报价单可以回答"这个价什么时候、从哪来的"。价格过期在界面上可见，避免用两年前的价报今天的单。</p></div>
+  </div>
+
+  <div class="callout">
+    <b>当前状态：</b>成本引擎（纯函数、可单测）与价格簿数据包已完成，成本面板的完整交互（P6）在进行中；成本 CSV 导出在进行中。已完成的引擎部分不依赖界面，可被其他模块直接调用。
+  </div>
+  <div class="sheet-ft"><span>核心能力 · 成本自动统计</span><span>第 9 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 10 PLC ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 6 / 6</span></div>
+  <p class="kicker">Capability · PLC</p>
+  <h2><span class="no">09</span>PLC 联调与故障诊断</h2>
+  <p class="lead">设计软件里直接连 PLC：Modbus TCP 客户端 + 内置仿真器，点位表与 3D 模型联动，联调序列可跑通 demo 场景（4 工位 / 12 执行机构 / 16 传感器），<strong>异常按 7 条规则给出中文诊断</strong>。</p>
+
+  <figure style="width:80%;margin:0 auto 2mm">
+    <img src="assets/06-commission.png" alt="通电联调">
+    <figcaption><b>证据：</b>通电联调按步骤执行并记录每步结果与耗时，失败步骤给出原因；结论可作为交付文档一节导出。</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card"><div class="t">两种连接方式</div><p>真实设备走 Modbus TCP；无设备时用内置仿真器（表达式、自锁、定时器），读写统一在主进程超时控制。</p></div>
+    <div class="card"><div class="t">设计与调试同源</div><p>点位来自设计端的 IO 规划，不是另建一份表。3D 随点位联动，减少"程序没问题、机械没到位"的扯皮。</p></div>
+  </div>
+
+  <h3>诊断规则（7 条 + 兜底）</h3>
+  <table>
+    <thead><tr><th style="width:44mm">现象</th><th>判定依据</th><th style="width:40mm">给出建议</th></tr></thead>
+    <tbody>
+      <tr><td>点位读不到值</td><td>连接正常但读取超时 / 返回异常码</td><td>检查站号、寄存器偏移、从站使能</td></tr>
+      <tr><td>输出无动作</td><td>输出位已置位但反馈位未变化</td><td>查电磁阀供电、气源压力、接线</td></tr>
+      <tr><td>动作超时</td><td>超出设定行程时间仍未到位</td><td>查节流阀、负载、传感器位置</td></tr>
+      <tr><td>传感器抖动</td><td>单位时间内状态翻转次数超阈值</td><td>查安装松动、干扰、滤波时间</td></tr>
+      <tr><td>互锁冲突</td><td>互斥输出同时为真</td><td>查逻辑分支与手动干预</td></tr>
+      <tr><td>回原点失败</td><td>回零序列未在限定步数内完成</td><td>查原点开关、寻零方向、速度</td></tr>
+      <tr><td>通讯闪断</td><td>连接在统计窗口内多次重建</td><td>查网线、交换机、IP 冲突</td></tr>
+      <tr><td><b>兜底</b></td><td>以上规则均不命中</td><td>输出原始点位快照与时间线，供人工判断</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">诊断规则面向常见非标场景，输出为中文提示与排查顺序建议，不替代电气工程师判断。</p>
+  <div class="sheet-ft"><span>核心能力 · PLC 联调与故障诊断</span><span>第 10 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 11 联动 前/后 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
+  <p class="kicker">Integration · Before / After</p>
+  <h2><span class="no">10</span>设计交付：从"传文件"到"传数据包"</h2>
+  <p class="lead">这是本项目与普通 CAD 工具的分水岭。联动之前，设计成果以文件和口头说明的形式流向生产；联动之后，<strong>一个带指纹、带清单、带版本的设计包直接落进智慧工厂的机台档案</strong>。</p>
+
+  <div class="ba">
+    <div class="ba-col before">
+      <h4>联动前<span>人工链路</span></h4>
+      <ul class="steps">
+        <li data-s="1">设计完成，导出图纸 PDF 与 BOM Excel，存放在共享盘或个人电脑</li>
+        <li data-s="2">打印图纸交装配，Excel 由计划员手工录入生产系统</li>
+        <li data-s="3">图纸变更后重新发文件，靠文件名区分版本（v2 / 最终版 / 真的最终版）</li>
+        <li data-s="4">生产端不清楚哪份是最新，需电话确认；BOM 与图纸不一致时以谁为准靠问</li>
+        <li data-s="5">外协件进度靠微信询问，交期与质检结果留在个人聊天记录里</li>
+      </ul>
+      <div class="tbl-note" style="margin-top:1mm">人工转录环节 3 处 · 版本判定靠文件名 · 变更影响面不可计算</div>
+    </div>
+    <div class="ba-mid">›</div>
+    <div class="ba-col after">
+      <h4>联动后<span>数据链路</span></h4>
+      <ul class="steps">
+        <li data-s="1">设计端一键打包：manifest + BOM CSV + 报告 PDF + 模型 GLB + 图纸 DXF</li>
+        <li data-s="2">经 X-Design-Key 机器鉴权上传，服务端按 zip SHA-256 幂等入库并分配版本号</li>
+        <li data-s="3">绑定到机台（deviceId = 机台编号 device_no），生产端在机台档案里直接看到最新版</li>
+        <li data-s="4">改版后上传新包，diff 自动列出 BOM 增/删/改与文件变更，旧版本可回滚下载</li>
+        <li data-s="5">后续（规划中）外协件工序与质检结果回传，看板可见"某机台某外协件"的状态</li>
+      </ul>
+      <div class="tbl-note" style="margin-top:1mm">人工转录环节 0 处 · 版本由服务端分配 · 变更影响面可 diff</div>
+    </div>
+  </div>
+
+  <div class="grid3">
+    <div class="card teal"><div class="t">可追溯</div><p>每个包有唯一指纹、上传时间、上传者与版本号；谁在什么时候传了什么，服务端有记录。</p></div>
+    <div class="card teal"><div class="t">可回滚</div><p>旧包原样保留，可下载。改错了不是"找不回来"，而是"退一个版本"。</p></div>
+    <div class="card teal"><div class="t">可核对</div><p>BOM 与文件各带 SHA-256，传输损坏或内容被改动都能被发现。</p></div>
+  </div>
+
+  <figure style="margin-top:2mm;width:88%;margin-left:auto;margin-right:auto">
+    <img src="assets/05-factory.png" alt="智慧工厂数据面板">
+    <figcaption><b>证据：</b>智慧工厂侧数据在桌面端可见：工位、点位、实时值统一呈现，写点位需二次确认。设计与生产不是两套界面，而是同一条链路的两端。</figcaption>
+  </figure>
+  <div class="sheet-ft"><span>智慧工厂联动 · 流程对比</span><span>第 11 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 12 接口 + 契约 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
+  <p class="kicker">Integration · API</p>
+  <h2><span class="no">11</span>接口清单与数据契约</h2>
+  <p class="lead">六个 endpoint 覆盖"传上去、查得到、比得出、绑得上、拿得回"。<strong>契约先定死，接口才稳</strong>——以下五条是联调中最容易出错、也最容易被忽略的地方。</p>
+
+  <table>
+    <thead><tr><th style="width:11mm">方法</th><th style="width:84mm">路径</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td>POST</td><td class="mono nowrap">/api/v1/design-sync/packages</td><td>上传设计包（multipart：deviceId + manifest + zip），指纹重复返回 <span class="mono">duplicated:true</span></td></tr>
+      <tr><td>GET</td><td class="mono nowrap">/api/v1/design-sync/packages</td><td>按 deviceId / projectId 列出历史包与版本号</td></tr>
+      <tr><td>GET</td><td class="mono nowrap">/api/v1/design-sync/packages/{id}</td><td>单包元数据与文件清单（含逐项 SHA-256、大小、类型）</td></tr>
+      <tr><td>GET</td><td class="mono nowrap">/api/v1/design-sync/packages/{id}/diff</td><td>与指定版本比对：BOM 增/删/改、文件增/删/改</td></tr>
+      <tr><td>GET</td><td class="mono nowrap">/api/v1/design-sync/packages/{id}/download</td><td>下载原始 zip，用于回滚或离线复核</td></tr>
+      <tr><td>POST</td><td class="mono nowrap">/api/v1/design-sync/bind</td><td>绑定到机台或物料（DEVICE / MATERIAL），绑定后原图纸接口即可见</td></tr>
+    </tbody>
+  </table>
+
+  <h3>契约要点：五个"必须"</h3>
+  <table>
+    <thead><tr><th style="width:32mm">要点</th><th style="width:52mm">规则</th><th>为什么必须</th></tr></thead>
+    <tbody>
+      <tr><td><b>身份</b></td><td><span class="mono">X-Design-Key</span> 机器鉴权；<span class="mono">deviceId</span> = 机台编号 <span class="mono">device_no</span></td><td>桌面端不能持有用户会话；机台编号是生产侧唯一能对上的键，用项目名会撞车</td></tr>
+      <tr><td><b>时间</b></td><td><span class="mono">createdAt</span> 必须带时区（ISO 8601 偏移）</td><td>无时区的时间在跨系统比对时会漂 8 小时，版本先后直接判错</td></tr>
+      <tr><td><b>数量</b></td><td><span class="mono">bom[].qty</span> 必须是正整数，字符串与小数一律拒绝</td><td>下游要按数量算采购与成本；"1.5 个"在数据库里是灾难</td></tr>
+      <tr><td><b>完整性</b></td><td><span class="mono">files[]</span> 逐项 <span class="mono">sha256</span> + <span class="mono">size</span> + <span class="mono">kind</span></td><td>能定位到"哪个文件坏了"，而不是只知道"包坏了"</td></tr>
+      <tr><td><b>幂等</b></td><td><span class="mono">zip_sha256</span> 唯一索引 + <span class="mono">Idempotency-Key</span> 双保险</td><td>网络重试、误点两次不会产生两个版本；重传同一包不该变成 v2</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <b>联调结论：</b>对方 material-flow-system 0.22.0 已实现 <span class="mono">/api/v1/design-sync/*</span>，<b>30 项后端测试通过</b>；本项目客户端在 301 项测试中包含同步用例——manifest 固定路径与 SHA-256、zip 只含约定产物、createdAt 无时区时拒绝打包、BOM 数量 1.5 与字符串 "1" 被拒绝、合法正整数原样写入。
+  </div>
+
+  <h3>安全与边界</h3>
+  <ul class="tight">
+    <li>鉴权用机器密钥，服务端只存哈希、可吊销、可限定 deviceId 范围，与用户 Bearer 分离。</li>
+    <li>单包上限 200 MB，manifest 上限 1 MB，文件数上限 500；解压前校验条目路径与总解压体积，防路径穿越与 zip bomb。</li>
+    <li>写入审计日志（谁、何时、哪个机台、包指纹），与管理台审计同表。</li>
+  </ul>
+  <div class="sheet-ft"><span>智慧工厂联动 · 接口与契约</span><span>第 12 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 13 diff / 实测 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
+  <p class="kicker">Integration · Versioning</p>
+  <h2><span class="no">12</span>版本 diff、回滚与联调实测</h2>
+  <p class="lead">设计变更在生产端最怕两件事：不知道改了什么，以及改错了退不回去。<strong>diff 回答第一个问题，zip 原样留存回答第二个。</strong></p>
+
+  <h3>版本 diff 的四个维度</h3>
+  <table>
+    <thead><tr><th style="width:26mm">维度</th><th>输出</th><th style="width:52mm">生产端怎么用</th></tr></thead>
+    <tbody>
+      <tr><td><b>BOM 新增</b></td><td>新增行的编号、名称、规格、数量</td><td>触发新增采购申请，不必重下整单</td></tr>
+      <tr><td><b>BOM 删除</b></td><td>被移除行及原因定位</td><td>核查是否已下单，避免多采</td></tr>
+      <tr><td><b>BOM 变更</b></td><td>逐字段 from → to（规格、数量、材质）</td><td>只处理差异项，减少重复劳动</td></tr>
+      <tr><td><b>文件变更</b></td><td>新增 / 修改 / 删除的文件与 SHA-256</td><td>判断图纸是否需重新下发到工位</td></tr>
+    </tbody>
+  </table>
+
+  <h3>回滚路径</h3>
+  <p>服务端保留每个版本的原始 zip 与文件清单，<span class="mono">/packages/{id}/download</span> 可取回任意历史包。回滚不是"撤销操作"，而是"把某个历史版本重新绑定"——因为历史版本本身没有被修改，所以回滚一定是确定性的。这一点在评审中很关键：<b>可回滚的前提是不可变</b>。</p>
+
+  <h3>联调实测</h3>
+  <div class="metric-strip">
+    <div><b>30 项</b><span>智慧工厂后端测试通过</span></div>
+    <div><b>301 项</b><span>本项目管理端测试通过</span></div>
+    <div><b>0.22.0</b><span>对方已发布版本</span></div>
+    <div><b>6 个</b><span>已实现 endpoint</span></div>
+  </div>
+  <table>
+    <thead><tr><th style="width:52mm">验证项</th><th style="width:34mm">预期</th><th>实测结果</th></tr></thead>
+    <tbody>
+      <tr><td>错误或已吊销的 key 上传</td><td>401</td><td class="ok">拒绝，返回鉴权失败</td></tr>
+      <tr><td>同一 zip 上传两次</td><td>第二次 duplicated:true</td><td class="ok">命中幂等，库中仅一条</td></tr>
+      <tr><td>manifest 含 <span class="mono">../evil</span></td><td>400 且磁盘无写入</td><td class="ok">拦截，未落盘</td></tr>
+      <tr><td>超限包体 / 解压超量</td><td>413 / 400</td><td class="ok">按上限拒绝</td></tr>
+      <tr><td>绑定 DEVICE 后查图纸</td><td>可见新 PDF</td><td class="ok">原图纸接口直接返回</td></tr>
+      <tr><td>diff 对 BOM 增/删/改</td><td>各返回一条正确记录</td><td class="ok">字段级 from → to 正确</td></tr>
+      <tr><td>createdAt 无时区</td><td>拒绝打包</td><td class="ok">客户端即拦截，不发请求</td></tr>
+      <tr><td>BOM 数量 1.5 / "1"</td><td>拒绝</td><td class="ok">仅正整数通过并原样写入</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">上表为双方联调与自动化测试覆盖的验收项；其中客户端侧用例计入 301 项测试，服务端侧计入对方 30 项测试。</p>
+
+  <div class="callout">
+    <b>当前边界：</b>同步为<b>手动触发</b>（设置页"测试连接 / 立即同步"），没有后台自动上传——这是刻意设计，避免设计过程中的半成品被推到生产。双向回传（生产状态回设计端）在 P9 范围内，尚未实现。
+  </div>
+  <div class="sheet-ft"><span>智慧工厂联动 · 版本与实测</span><span>第 13 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 14 对比表 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">项目优点</span></div>
+  <p class="kicker">Comparison</p>
+  <h2><span class="no">13</span>与传统"CAD + Excel + 手工编程"的对比</h2>
+  <p class="lead">不比"功能多少"，只比<strong>同一件事的做法与可验证依据</strong>。下表中"本平台"一列的每条陈述都能在软件里点出来，或由测试用例覆盖。</p>
+
+  <table>
+    <thead><tr><th style="width:22mm">维度</th><th style="width:44mm">传统方式</th><th style="width:52mm">本平台</th><th>可验证依据</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>效率</b></td>
+        <td>图纸、BOM、成本、点位表分别在 CAD / Excel / 邮件里维护，重复录入</td>
+        <td>一次设计产出全部交付物，BOM 与成本随设计变更自动重算</td>
+        <td>一套导出：A3 PDF / DXF / GLB / OBJ / BOM CSV / XLSX；成本引擎为纯函数，可单测</td>
+      </tr>
+      <tr>
+        <td><b>准确性</b></td>
+        <td>BOM 手工转录，错行、错规格、错数量在装配阶段才暴露</td>
+        <td>BOM 由结构与元件库派生，数量做正整数校验，传输做 SHA-256 校验</td>
+        <td>测试覆盖"数量 1.5 / 字符串 1 被拒绝"；文件逐项指纹在 manifest 中</td>
+      </tr>
+      <tr>
+        <td><b>可追溯</b></td>
+        <td>版本靠文件名与共享盘目录，谁改的、改了什么无记录</td>
+        <td>服务端分配版本号，diff 到字段级，审计日志记录上传者与时间</td>
+        <td>6 个 design-sync endpoint；30 项后端测试；diff 返回 from → to</td>
+      </tr>
+      <tr>
+        <td><b>可扩展</b></td>
+        <td>新增品牌元件要改模板、改表格，靠人记</td>
+        <td>元件以数据包加载，ZIP 导入即生效，不改代码不发版</td>
+        <td>371 型号 / 26 分类库按包加载；导入校验清单并拦截路径穿越</td>
+      </tr>
+      <tr>
+        <td><b>成本可见</b></td>
+        <td>设计完再询价，报价回来才知道超预算</td>
+        <td>设计过程中按阶梯价实时算物料 + 底板推算 + 人工 + 税费；缺价单列</td>
+        <td>价格簿带来源与更新日期；示例价自动排除；缺价项不计入合计</td>
+      </tr>
+      <tr>
+        <td><b>部署方式</b></td>
+        <td>CAD 授权按席位，插件版本难统一</td>
+        <td>Windows 便携包免安装，单机离线可用；安装包可由 CI 构建</td>
+        <td>便携包 186,901,656 字节已发布；NSIS 安装包由 GitHub Actions 手动触发</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>三点需要说清楚的前提</h3>
+  <ul class="tight">
+    <li><b>不替代三维 CAD。</b>本平台做的是"设计数据的组织与校验"，精细建模仍在专业 CAD 中完成；STEP 是两者的接口。</li>
+    <li><b>不做通用 EPLAN。</b>面向非标整机的固定套路（导轨、模数、IO 点位、机台交付），因此可以把规则写死、把校验做深；通用电气设计软件不会为某一个厂的机台编号规范改契约。</li>
+    <li><b>规则来自现场。</b>线号规则、诊断规则、成本口径都按现有项目习惯固化，后续可按项目增补；这意味着它越用越贴合，而不是越用越别扭。</li>
+  </ul>
+
+  <h3>适用与不适用</h3>
+  <div class="grid2">
+    <div class="card teal">
+      <div class="t">适用</div>
+      <p>非标整机的方案设计与交付：需要快速出清单与报价、需要与生产系统对接、需要沉淀元件与规则的项目。尤其是同类机型反复设计、批量交付的场景，复用收益最明显。</p>
+    </div>
+    <div class="card">
+      <div class="t">暂不适用</div>
+      <p>需要精细曲面建模与模具设计、需要满足特定行业认证（如医疗器械注册）的场合；以及流程尚未标准化的项目——规则还没定，写进软件反而增加负担。</p>
+    </div>
+  </div>
+
+  <div class="callout"><b>与"再买一套软件"的区别：</b>采购软件解决的是"画得更快"，本项目解决的是"数据流得通"。前者按席位计价、按版本升级；后者把交付物变成结构化的、可被下游系统消费的资产，收益随项目数量累积。
+  </div>
+  <div class="sheet-ft"><span>项目优点 · 对比</span><span>第 14 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 15 工程质量 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">工程质量</span></div>
+  <p class="kicker">Quality &amp; Delivery</p>
+  <h2><span class="no">14</span>工程质量与交付状态</h2>
+  <p class="lead">软件能不能用，取决于出问题时能不能快速定位。<strong>301 项自动化测试全绿、多条冒烟断言、便携包已发布</strong>——这三件事分别回答"逻辑对不对""整体跑不跑得起来""用户拿不拿得到"。</p>
+
+  <figure style="width:86%;margin:0 auto 2mm">
+    <img src="assets/01-home.png" alt="主界面">
+    <figcaption><b>证据：</b>主界面沿用原型的结构树 / 选型 / 标准件库布局，顶栏新增桌面入口（CAD、工厂、联调、数据包、电气元件、智慧工厂、智能体）。</figcaption>
+  </figure>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="t">测试：301 / 301 通过</div>
+      <p>覆盖 CAD 解析、机械校核、电气库、成本引擎、价格簿、导出、PLC、联调、同步、数据包十个模块，用 <span class="mono">node --test</span> 直接跑，无需浏览器。同步模块的用例专门盯契约细节：时区、数量类型、文件指纹、zip 内容白名单。</p>
+    </div>
+    <div class="card">
+      <div class="t">冒烟：整体可运行</div>
+      <p><span class="mono">npm run smoke</span> 在无头 Electron 中启动应用并断言关键路径（窗口创建、模块加载、主要 IPC 通道），防止"单测全绿但应用起不来"这类集成问题。</p>
+    </div>
+    <div class="card">
+      <div class="t">交付：Windows 便携包</div>
+      <p>v0.1.0 便携包 186,901,656 字节已发布，解压即用、免管理员权限，适合先在产线机器上试。NSIS 安装包由 GitHub Actions 工作流手动触发构建，按需出正式安装版。</p>
+    </div>
+    <div class="card">
+      <div class="t">扩展：插件化元件包</div>
+      <p>第三方元件包以 ZIP 导入，按清单校验、拦截路径穿越、可启停。新增品牌与型号不需要研发介入，也不需要重新发版——这是库能持续长大的前提。</p>
+    </div>
+  </div>
+
+  <h3>可维护性设计</h3>
+  <table>
+    <thead><tr><th style="width:38mm">做法</th><th>说明</th><th style="width:40mm">收益</th></tr></thead>
+    <tbody>
+      <tr><td>渲染层零改动</td><td>桌面能力通过注入扩展叠加在网页原型之上，原型文件保持原样</td><td>原型仍可双击打开，降低回归风险</td></tr>
+      <tr><td>能力按域分包</td><td>CAD / 电气 / 机械 / 成本 / PLC / 同步各自独立模块，接口收敛</td><td>单模块改动不影响其他域</td></tr>
+      <tr><td>纯函数优先</td><td>成本、校验、契约校验尽量写成纯函数，输入输出确定</td><td>可直接单测，便于复核</td></tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">另有降级设计：无 WebGL 时退化为解析统计面板，无 PLC 时用内置仿真器，环境缺失不中断使用。</p>
+  <div class="sheet-ft"><span>工程质量与交付</span><span>第 15 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 16 路线图 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">路线图</span></div>
+  <p class="kicker">Roadmap</p>
+  <h2><span class="no">15</span>路线图：已完成的能力与下一步</h2>
+  <p class="lead">P1–P5 已完成并可用（CAD、电气、机械、成本引擎、PLC 与同步）。<strong>后续四项按"先省人力、再通外部"的顺序推进</strong>：成本面板让报价闭环，Agent 降低操作门槛，PLC 代码生成直接省编程工时，委外联动打通最后一环。</p>
+
+  <div class="timeline">
+    <div class="tl-items">
+      <div class="tl-item doing">
+        <div class="tl-phase">P6 · 进行中</div>
+        <span class="pill doing">进行中</span>
+        <div class="tl-title">成本面板</div>
+        <div class="tl-desc">把已完成的成本引擎接到界面：阶梯价浏览、成本分解视图、缺价待询价清单、成本 CSV 导出。引擎与价格簿已完成，剩余为交互与导出。</div>
+      </div>
+      <div class="tl-item plan">
+        <div class="tl-phase">P7 · 规划中</div>
+        <span class="pill plan">规划中</span>
+        <div class="tl-title">自然语言 Agent</div>
+        <div class="tl-desc">15 个工具、写操作二次确认、操作审计。现有 7 工具（JSON-RPC 127.0.0.1:7420 / MCP）已落地，P7 在此之上扩展工具面与安全边界。</div>
+      </div>
+      <div class="tl-item plan">
+        <div class="tl-phase">P8 · 规划中</div>
+        <span class="pill plan">规划中</span>
+        <div class="tl-title">PLC 程序自动生成</div>
+        <div class="tl-desc">由点位表与动作序列生成 ST 代码、IO 变量表，生成前做预检（地址冲突、类型不符、互锁缺失），同一输入确定性输出同一代码。</div>
+      </div>
+      <div class="tl-item plan">
+        <div class="tl-phase">P9 · 规划中</div>
+        <span class="pill plan">规划中</span>
+        <div class="tl-title">委外加工联动</div>
+        <div class="tl-desc">BOM 与图纸输出后按件派工，回传工序进度、质检结果、交期与实际成本，在设计端与智慧工厂看板可见外协件状态。</div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:6mm">已完成基线（P1–P5）</h3>
+  <table>
+    <thead><tr><th style="width:20mm">阶段</th><th style="width:48mm">内容</th><th>状态与依据</th></tr></thead>
+    <tbody>
+      <tr><td>P1</td><td>桌面化与 CAD 查看</td><td class="ok">已完成 · 424 KB / 559 ms / 5,040 面实测</td></tr>
+      <tr><td>P2</td><td>电气元件库、数据包、智能体骨架、同步客户端</td><td class="ok">已完成 · 371 型号库、ZIP 导入、7 工具、manifest 打包</td></tr>
+      <tr><td>P3</td><td>机械校核（干涉 / 受力）与运动学标注</td><td class="ok">已完成 · AABB 分级、三类受力公式、中文校验</td></tr>
+      <tr><td>P4</td><td>电气合规校验、功率统计、底板布置</td><td class="ok">已完成 · 六类线号规则、分相电流、A3 PDF</td></tr>
+      <tr><td>P5</td><td>PLC 联调、诊断、设计同步联调</td><td class="ok">已完成 · 7 条诊断 + 兜底；后端 30 项测试通过</td></tr>
+    </tbody>
+  </table>
+
+  <h3>P7 的现有基础与推进理由</h3>
+  <div style="display:grid;grid-template-columns:45% 1fr;gap:4mm;align-items:start">
+    <figure style="margin:0">
+      <img src="assets/09-agent.png" alt="智能体面板">
+      <figcaption><b>证据：</b>智能体面板已可用：对话与工具调用、模型设置（密钥仅回显掩码）、本机 RPC 端口与工具数。P7 是扩面与加固，不是从零开始。</figcaption>
+    </figure>
+    <div style="font-size:8.3pt;line-height:1.6;color:#3a4c5e">
+      <p><b>P6 先做</b>：成本引擎已完成，只差界面——投入最小、见效最快，直接支撑报价。</p>
+      <p><b>P7 次之</b>：工具集与 RPC 通道已存在，边际成本低，能把"会用软件"的门槛降下来。</p>
+      <p><b>P8 再次</b>：PLC 代码生成需要点位模型与联调数据做校验闭环，下层稳定后才可靠。</p>
+      <p><b>P9 最后</b>：依赖委外方的排产与质检数据结构，需双方对齐口径，不是单方面能定的。</p>
+    </div>
+  </div>
+  <div class="sheet-ft"><span>路线图</span><span>第 16 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 17 收益 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">预期收益</span></div>
+  <p class="kicker">Expected Value</p>
+  <h2><span class="no">16</span>预期收益：口径先定，数值待试点</h2>
+  <p class="lead">收益必须能被测量，否则只是说法。下表给出<strong>可量化的口径与验证方式</strong>；目标值为工程判断，<b>尚未经试点验证，不作对外承诺</b>。</p>
+
+  <table>
+    <thead><tr><th style="width:30mm">指标</th><th style="width:44mm">测量口径</th><th style="width:40mm">目标值（待验证）</th><th>验证方式</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>设计返工</b></td>
+        <td>单个项目因干涉、选型错误、线号错误导致的改图次数</td>
+        <td>较基线下降（目标 −50%）</td>
+        <td>试点项目前后各统计 3 个项目的改图记录</td>
+      </tr>
+      <tr>
+        <td><b>BOM 转录错误</b></td>
+        <td>BOM 与图纸不一致导致的采购错单 / 缺料次数</td>
+        <td>0 次（消除人工转录环节）</td>
+        <td>对比同期项目的采购变更单数量</td>
+      </tr>
+      <tr>
+        <td><b>选型与校验前置</b></td>
+        <td>问题首次被发现的设计阶段（设计 / 装配 / 调试）</td>
+        <td>80% 以上问题在设计阶段发现</td>
+        <td>统计问题台账的"发现阶段"字段分布</td>
+      </tr>
+      <tr>
+        <td><b>报价周期</b></td>
+        <td>从设计完成到给出可报价格的日历时间</td>
+        <td>≤1 个工作日（基线待测）</td>
+        <td>试点期逐单记录起始与完成时间</td>
+      </tr>
+      <tr>
+        <td><b>PLC 编程工时</b></td>
+        <td>单机台编写点位表、变量与动作逻辑的人时</td>
+        <td>P8 落地后目标 −40%（当前为规划）</td>
+        <td>P8 完成后对比同类机台编程工时</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="tbl-note">说明：上表目标值基于现有功能可消除的环节推算（如人工转录归零为结构性结论），不是实测统计；基线需在试点产线采集后回填，届时以实测替换。</p>
+
+  <h3>收益从哪里来</h3>
+  <div class="grid2">
+    <div class="card"><div class="t">省的是"解释成本"</div><p>同一份 BOM 不再被三个人分别录入三次。每次转录都是一次解释，每次解释都可能失真；消除转录环节，错误率不是"降低"，而是"没有这个入口"。</p></div>
+    <div class="card"><div class="t">省的是"返工时点"</div><p>干涉与选型问题在设计阶段发现，改动是移动一个零件；在装配阶段发现，改动是拆机重装。同样的错误，越晚发现越贵——这是前置校验的主要价值。</p></div>
+    <div class="card"><div class="t">省的是"等待"</div><p>报价不再等采购逐项询价，成本随设计出来；外协进度不再打电话问。等待时间不体现在工时里，但体现在交期上。</p></div>
+    <div class="card"><div class="t">沉淀的是"资产"</div><p>元件库、规则、价格簿、诊断经验都留在系统里。人员流动带走的是人，不是判断标准。</p></div>
+  </div>
+
+  <h3>建议的试点方式</h3>
+  <div class="grid3">
+    <div class="card tint"><div class="t">① 选 1–2 个真实项目</div><p>选结构相近、交付期不紧的项目，避免拿最复杂的首台机做验证，也避免拿最熟的机型——那样看不出差异。</p></div>
+    <div class="card tint"><div class="t">② 先采集基线</div><p>记录改图次数、BOM 变更单数量、报价耗时。没有基线的收益无法证明，也无法说服下一批使用者。</p></div>
+    <div class="card tint"><div class="t">③ 回填后决策</div><p>用实测替换本页目标值，再决定是否推广。若指标不达预期，也应如实记录原因，而不是继续扩大范围。</p></div>
+  </div>
+
+  <div class="callout warn"><b>诚实边界：</b>本页所有数值为目标值，未经试点验证。建议先在 1–2 个真实项目上试用，采集基线后回填本表，再据此决定推广范围。软件当前为 v0.2.0，适合试点，不建议直接全面替换现有流程。
+  </div>
+  <div class="sheet-ft"><span>预期收益</span><span>第 17 页 / 共 18 页</span></div>
+</section>
+
+<!-- ============ 18 附录 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">附录</span></div>
+  <p class="kicker">Appendix</p>
+  <h2><span class="no">17</span>附录：技术栈、仓库与文档索引</h2>
+
+  <h3>技术栈</h3>
+  <table>
+    <thead><tr><th style="width:34mm">层</th><th style="width:60mm">选型</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>桌面壳</td><td>Electron 45 · TypeScript · Vite · 原生 HTML/CSS</td><td>Windows 11 x64；主进程管文件与网络，渲染进程管界面；原型零改动</td></tr>
+      <tr><td>三维渲染</td><td>three.js</td><td>STL / OBJ / GLTF / GLB 加载、轨道控制、线框、拾取、包围盒</td></tr>
+      <tr><td>几何解析</td><td>occt-import-js（WASM）</td><td>STEP / IGES / BREP 解析，输出三角面与零件层级</td></tr>
+      <tr><td>图纸与导出</td><td>SVG（毫米坐标）· PDF · DXF · XLSX</td><td>A3 报告、底板画布、BOM 表、成本表</td></tr>
+      <tr><td>工业通讯</td><td>Modbus TCP（FC01–06）· OPC UA · MQTT</td><td>统一适配器接口；无设备时用内置仿真器</td></tr>
+      <tr><td>智能体</td><td>JSON-RPC 127.0.0.1:7420 · MCP stdio</td><td>同一工具注册表；仅监听本机，Bearer token</td></tr>
+      <tr><td>数据契约</td><td>design-sync manifest schemaVersion=1</td><td>multipart 上传、zip SHA-256 幂等、版本 diff</td></tr>
+      <tr><td>质量</td><td>node --test · headless smoke</td><td>301 项测试；无头 Electron 冒烟</td></tr>
+    </tbody>
+  </table>
+
+  <h3>仓库与产物</h3>
+  <table>
+    <thead><tr><th style="width:36mm">项</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr><td>代码仓库</td><td><span class="mono">github.com/owlco001/automation-cad-prototype</span>（Gitee 同名镜像）</td></tr>
+      <tr><td>工程结构</td><td><span class="mono">desktop/</span>（Electron 主进程、渲染注入、测试与构建）；<span class="mono">index.html</span> / <span class="mono">app.js</span> / <span class="mono">electrical.*</span> 为网页原型（零依赖，双击即开）</td></tr>
+      <tr><td>发布物</td><td>Windows 便携包 v0.1.0（186,901,656 字节）；NSIS 安装包由 CI 手动触发</td></tr>
+      <tr><td>关联系统</td><td>material-flow-system 0.22.0，生产环境 <span class="mono">http://221.231.106.194:5556</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>文档索引（docs/desktop）</h3>
+  <div class="doclist">
+    <div><span class="mono">ARCHITECTURE.md</span>分层结构、进程职责、注入机制</div>
+    <div><span class="mono">STATUS.md</span>模块状态与已知边界</div>
+    <div><span class="mono">REQUIREMENTS.md</span>需求清单与验收口径</div>
+    <div><span class="mono">MODULES.md</span>模块清单与依赖关系</div>
+    <div><span class="mono">COSTING.md</span>成本口径：阶梯价、推算、税费</div>
+    <div><span class="mono">SMART-FACTORY-INTEGRATION.md</span>同步接口与 manifest 契约</div>
+    <div><span class="mono">PLUGIN-PACKS.md</span>元件包格式与导入校验</div>
+    <div><span class="mono">PROTOTYPE.md</span>原型视图与交互说明</div>
+    <div><span class="mono">NL-AGENT.md</span>自然语言 Agent 工具与安全（P7）</div>
+    <div><span class="mono">PHASE2.md</span>第二阶段范围与交付计划</div>
+    <div><span class="mono">PLC-CODEGEN.md</span>PLC 生成规则与预检项（P8）</div>
+    <div><span class="mono">CI.md</span>构建与发布流程（windows.yml）</div>
+    <div><span class="mono">BACKLOG.md</span>待办与已知限制</div>
+    <div><span class="mono">screenshots/</span>桌面端实跑截图（1440×873）</div>
+  </div>
+
+  <div class="rule"></div>
+  <p class="small" style="margin-bottom:1mm"><b>版本说明：</b>本文档对应软件版本 v0.2.0，编写日期 2026-10-23。文中"已完成"指代码实现并有测试覆盖；"进行中"指部分实现；"规划中"指仅有设计与范围，尚未交付。性能数字为本机实测，产线环境可能不同。</p>
+  <p class="small"><b>致谢：</b>智慧工厂侧 design-sync 接口由 material-flow-system 团队实现并完成 30 项后端测试，本文的联调结论基于双方共同验证。</p>
+  <div class="sheet-ft"><span>附录</span><span>第 18 页 / 共 18 页</span></div>
+</section>
+
+</body>
+</html>
