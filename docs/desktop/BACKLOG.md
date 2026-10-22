@@ -32,6 +32,17 @@
 - 状态：⏸ 需老王确认是否动 material-flow 仓库
 - 内容：按 `docs/desktop/SMART-FACTORY-INTEGRATION.md` 实现 `/api/v1/design-sync/*`
 
+### P6 机台硬件成本自动统计
+- 状态：🔄 设计完成（`docs/desktop/COSTING.md`），引擎实现中
+- 分期：P6-1 价格簿+引擎 → P6-2 面板/导出 → P6-3 Agent 工具 → P6-4 与智慧工厂采购价对接
+- 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
+
+### P7 自然语言交互 Agent
+- 状态：🔄 设计完成（`docs/desktop/NL-AGENT.md`）
+- 范围：15 个工具、上下文注入、意图路由、写操作确认、审计、40 条中文评估集
+- 分期：A 只读问答 → B 单步写 → C 多步规划 → D 联调/同步/语音
+- 验收：`SMOKE_AGENT_NL_OK intents=7 tools=15 audit=3`，误写率 0
+
 ## 已知问题（记录，不阻塞）
 
 1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决中；STEP 不含运动学，任意装配体仍需标注层。
