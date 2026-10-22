@@ -2,6 +2,15 @@ import { existsSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
+import {
+  runElectricalCheck,
+  type CircuitCheck,
+  type ElecDocument,
+  type Load,
+  type Phase,
+  type PowerOptions,
+  type Wire
+} from '../elec/check.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -407,10 +416,142 @@ function registerReadCommands(bus: CommandBus): void {
   });
 }
 
+function optionalArray(args: Record<string, unknown>, key: string, label: string): unknown[] {
+  const value = args[key];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new CommandFailure('INVALID_ARGUMENT', `${label} 必须是数组`);
+  }
+  return value;
+}
+
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function numberOf(value: unknown, label: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new CommandFailure('INVALID_ARGUMENT', `${label} 必须是数字`);
+  }
+  return parsed;
+}
+
+const PHASES: readonly Phase[] = ['3P', 'L1', 'L2', 'L3', 'DC24'];
+
+function parseElecDocument(args: Record<string, unknown>): ElecDocument {
+  const wires: Wire[] = optionalArray(args, 'wires', 'wires').map((item, index) => {
+    if (!isRecord(item)) throw new CommandFailure('INVALID_ARGUMENT', `wires[${index}] 必须是对象`);
+    const section = numberOf(item.sectionMm2, `wires[${index}].sectionMm2`);
+    const current = numberOf(item.currentA, `wires[${index}].currentA`);
+    return {
+      no: textOf(item.no),
+      net: textOf(item.net),
+      potential: textOf(item.potential),
+      from: textOf(item.from),
+      to: textOf(item.to),
+      ...(section !== undefined ? { sectionMm2: section } : {}),
+      ...(current !== undefined ? { currentA: current } : {})
+    };
+  });
+
+  const loads: Load[] = optionalArray(args, 'loads', 'loads').map((item, index) => {
+    if (!isRecord(item)) throw new CommandFailure('INVALID_ARGUMENT', `loads[${index}] 必须是对象`);
+    const tag = textOf(item.tag) || `#${index + 1}`;
+    const powerKw = numberOf(item.powerKw, `loads[${index}].powerKw`);
+    if (powerKw === undefined) {
+      throw new CommandFailure('INVALID_ARGUMENT', `loads[${index}] 缺少额定功率 powerKw`);
+    }
+    const phase = textOf(item.phase) || '3P';
+    if (!PHASES.includes(phase as Phase)) {
+      throw new CommandFailure('INVALID_ARGUMENT', `loads[${index}].phase 只能是 ${PHASES.join(' / ')}`);
+    }
+    const cosPhi = numberOf(item.cosPhi, `loads[${index}].cosPhi`);
+    const efficiency = numberOf(item.efficiency, `loads[${index}].efficiency`);
+    const quantity = numberOf(item.quantity, `loads[${index}].quantity`);
+    return {
+      tag,
+      powerKw,
+      phase: phase as Phase,
+      ...(cosPhi !== undefined ? { cosPhi } : {}),
+      ...(efficiency !== undefined ? { efficiency } : {}),
+      ...(quantity !== undefined ? { quantity } : {})
+    };
+  });
+
+  const circuits: CircuitCheck[] = optionalArray(args, 'circuits', 'circuits').map((item, index) => {
+    if (!isRecord(item)) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 必须是对象`);
+    const wireNo = textOf(item.wireNo);
+    const currentA = numberOf(item.currentA, `circuits[${index}].currentA`);
+    if (!wireNo) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 缺少线号 wireNo`);
+    if (currentA === undefined) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 缺少工作电流 currentA`);
+    const sectionMm2 = numberOf(item.sectionMm2, `circuits[${index}].sectionMm2`);
+    const breakerA = numberOf(item.breakerA, `circuits[${index}].breakerA`);
+    return {
+      wireNo,
+      currentA,
+      ...(sectionMm2 !== undefined ? { sectionMm2 } : {}),
+      ...(breakerA !== undefined ? { breakerA } : {})
+    };
+  });
+
+  const rawOptions = args.options;
+  let options: PowerOptions | undefined;
+  if (isRecord(rawOptions)) {
+    const voltage3P = numberOf(rawOptions.voltage3P, 'options.voltage3P');
+    const voltage1P = numberOf(rawOptions.voltage1P, 'options.voltage1P');
+    const voltageDc = numberOf(rawOptions.voltageDc, 'options.voltageDc');
+    const demandFactor = numberOf(rawOptions.demandFactor, 'options.demandFactor');
+    const psuRatedA = numberOf(rawOptions.psuRatedA, 'options.psuRatedA');
+    options = {
+      ...(voltage3P !== undefined ? { voltage3P } : {}),
+      ...(voltage1P !== undefined ? { voltage1P } : {}),
+      ...(voltageDc !== undefined ? { voltageDc } : {}),
+      ...(demandFactor !== undefined ? { demandFactor } : {}),
+      ...(psuRatedA !== undefined ? { psuRatedA } : {})
+    };
+  } else if (rawOptions !== undefined && rawOptions !== null) {
+    throw new CommandFailure('INVALID_ARGUMENT', 'options 必须是对象');
+  }
+
+  return {
+    wires,
+    loads,
+    circuits,
+    ...(options !== undefined ? { options } : {})
+  };
+}
+
+function registerElectricalCheckCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'run_electrical_check',
+    async run(args) {
+      const doc = parseElecDocument(args);
+      if (doc.wires?.length === 0 && doc.loads?.length === 0 && doc.circuits?.length === 0) {
+        throw new CommandFailure(
+          'INVALID_ARGUMENT',
+          '电气校验需要至少一条 wires / loads / circuits 数据'
+        );
+      }
+      const result = runElectricalCheck(doc);
+      return {
+        ok: true,
+        data: {
+          counts: result.counts,
+          summary: result.summary,
+          findings: result.findings
+        }
+      };
+    }
+  });
+}
+
 export function createAgentCommandBus(registry: PackRegistry, bridge: Bridge): CommandBus {
   const bus = new CommandBus({ registry, bridge });
   registerInsertCommand(bus);
   registerImportCommand(bus);
   registerReadCommands(bus);
+  registerElectricalCheckCommand(bus);
   return bus;
 }

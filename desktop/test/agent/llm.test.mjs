@@ -45,7 +45,7 @@ function jsonResponse(response, status, payload, statusText = '') {
   response.end(JSON.stringify(payload));
 }
 
-test('LLM 客户端发送 7 个工具并解析 tool_calls', async () => {
+test('LLM 客户端发送工具表并解析 tool_calls', async () => {
   const server = await startServer((_captured, response) => {
     jsonResponse(response, 200, {
       choices: [{
@@ -72,7 +72,7 @@ test('LLM 客户端发送 7 个工具并解析 tool_calls', async () => {
     assert.equal(result.toolCalls[0].function.name, 'list_components');
     assert.equal(result.toolCalls[0].function.arguments, '{"category":"气缸"}');
     assert.equal(server.captured.authorization, 'Bearer sk-local-secret-1234');
-    assert.equal(server.captured.body.tools.length, 7);
+    assert.equal(server.captured.body.tools.length, tools.length);
     assert.equal(server.captured.body.tool_choice, 'auto');
   } finally {
     await server.close();

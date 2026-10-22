@@ -60,6 +60,70 @@ function commandSuccess(result: CommandResult): Record<string, unknown> {
   };
 }
 
+const ELEC_CHECK_SCHEMA = {
+  type: 'object',
+  properties: {
+    wires: {
+      type: 'array',
+      description: '导线清单：no 线号、net 网络、potential 电位、from/to 端点，可选 sectionMm2/currentA',
+      items: {
+        type: 'object',
+        properties: {
+          no: { type: 'string' },
+          net: { type: 'string' },
+          potential: { type: 'string' },
+          from: { type: 'string' },
+          to: { type: 'string' },
+          sectionMm2: { type: 'number' },
+          currentA: { type: 'number' }
+        }
+      }
+    },
+    loads: {
+      type: 'array',
+      description: '负载清单：tag 编号、powerKw 额定功率、phase 取 3P/L1/L2/L3/DC24，可选 cosPhi/efficiency/quantity',
+      items: {
+        type: 'object',
+        properties: {
+          tag: { type: 'string' },
+          powerKw: { type: 'number' },
+          phase: { type: 'string', enum: ['3P', 'L1', 'L2', 'L3', 'DC24'] },
+          cosPhi: { type: 'number' },
+          efficiency: { type: 'number' },
+          quantity: { type: 'number' }
+        },
+        required: ['powerKw']
+      }
+    },
+    circuits: {
+      type: 'array',
+      description: '回路清单：wireNo 线号、currentA 工作电流，可选 sectionMm2 截面、breakerA 断路器',
+      items: {
+        type: 'object',
+        properties: {
+          wireNo: { type: 'string' },
+          currentA: { type: 'number' },
+          sectionMm2: { type: 'number' },
+          breakerA: { type: 'number' }
+        },
+        required: ['wireNo', 'currentA']
+      }
+    },
+    options: {
+      type: 'object',
+      description: '可选电气参数：voltage3P/voltage1P/voltageDc/demandFactor/psuRatedA',
+      properties: {
+        voltage3P: { type: 'number' },
+        voltage1P: { type: 'number' },
+        voltageDc: { type: 'number' },
+        demandFactor: { type: 'number' },
+        psuRatedA: { type: 'number' }
+      }
+    }
+  },
+  additionalProperties: false
+};
+
 export class AgentTools {
   private readonly registry: PackRegistry;
   private readonly commands: AgentCommandExecutor | undefined;
@@ -207,6 +271,31 @@ export class AgentTools {
         const name = getString(args.name);
         const result = await this.execute('insert_component', { partId, ...(name ? { name } : {}) });
         return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'run_electrical_check',
+      description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。',
+      inputSchema: ELEC_CHECK_SCHEMA,
+      handler: async (args) => {
+        const result = await this.execute('run_electrical_check', args);
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        const data = isRecord(result.data) ? result.data : {};
+        const findings = Array.isArray(data.findings) ? data.findings : [];
+        const counts = isRecord(data.counts) ? data.counts : {};
+        return {
+          ok: true,
+          counts: {
+            error: Number(counts.error ?? 0),
+            warning: Number(counts.warning ?? 0),
+            info: Number(counts.info ?? 0)
+          },
+          summary: isRecord(data.summary) ? data.summary : {},
+          findings: findings.slice(0, 50),
+          truncated: findings.length > 50
+        };
       }
     });
 

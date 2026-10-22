@@ -21,25 +21,26 @@
 | 数据包注册表 + 导入/启停/删除 | ✅ | `desktop/src/packs/registry.ts` |
 | 数据包 UI | ✅ | `desktop/src/packs/ui.ts` |
 | 电气元件库（iec-cn，44 型号 / 12 分类 / 34 个带符号） | ✅ 按需加载、分类检索、放入原理图 | `packs/builtin/iec-cn/`、`desktop/src/packs/elec-ui.ts` |
+| 电气校验（线号合规 / 功率统计 / 导线截面与断路器 / 面板 + PDF 报告 + Agent 工具） | ✅ | `desktop/src/elec/`、`src/agent/{commands,tools}.ts` |
 | PLC 仿真（表达式/自锁/定时器）+ Modbus TCP（FC01–06） | ✅ 仿真实测，Modbus 未连真机 | `desktop/src/plc/` |
 | 通电联调（6 步上电 + 3 用例 + PDF 章节） | ✅ | `desktop/src/commission/` |
 | 智慧工厂 demo 适配器（2 工位 / 8 点位） | ✅ | `desktop/src/factory/demo.ts` |
 | 智慧工厂 OPC UA / MQTT 适配器 | ✅ 已实现，未连真实设备验证 | `desktop/src/factory/` |
 | 工厂面板（实时值 / 连接 / 写入确认） | ✅ | `desktop/src/factory/ui.ts` |
 | 智慧工厂设计同步（ZIP/manifest/指纹幂等/设置页） | ✅ 本地 mock 验证，真实后端未实现 | `desktop/src/sync/` |
-| Agent JSON-RPC（token + 7 工具 + 命令总线） | ✅ | `desktop/src/agent/{rpc,tools,commands}.ts` |
+| Agent JSON-RPC（token + 8 工具 + 命令总线） | ✅ | `desktop/src/agent/{rpc,tools,commands}.ts` |
 | Agent MCP stdio | ✅ | `desktop/src/agent/mcp.ts` |
 | MCP 写工具代理（stdio → 桌面 RPC） | ✅ 本地假服务验证 | `desktop/src/agent/mcp-proxy.ts` |
 | 应用内智能体对话（LLM 工具调用 + 模型设置 + 写操作确认） | ✅ 本地假 LLM 验证 | `desktop/src/agent/{llm,llm-config,session,ui}.ts` |
-| 单元测试 | ✅ 146/146 | `desktop/test/` |
+| 单元测试 | ✅ 221/221 | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
 | Windows 安装包 CI | ✅ `windows-latest` 手动触发（`workflow_dispatch`） | `.github/workflows/windows.yml` |
 | 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
 ## 验证记录（真实执行）
 
-- `npm test` → 146 pass / 0 fail
-- `npm run smoke` → `SMOKE_UI_OK` / `SMOKE_SYNC_UI_OK fields=8` / `SMOKE_SYNC_PACKAGE_OK files=4 sha=1` / `SMOKE_PLC_OK points=28` / `SMOKE_COMMISSION_OK` / `SMOKE_AGENT_TOOLS_OK tools=7 implemented=7` / `SMOKE_AGENT_BRIDGE_OK scene=1 bom=1` / `SMOKE_AGENT_CHAT_UI_OK fields=6 log=1` / `SMOKE_OK`
+- `npm test` → 221 pass / 0 fail
+- `npm run smoke` → `SMOKE_UI_OK` / `SMOKE_ELEC_CHECK_OK findings=4 errors=3` / `SMOKE_ELEC_CHECK_UI_OK rows=4 cards=9 pdf=true` / `SMOKE_SYNC_UI_OK fields=8` / `SMOKE_AGENT_TOOLS_OK tools=8 implemented=8` / `SMOKE_AGENT_BRIDGE_OK scene=1 bom=1` / `SMOKE_OK`
 - CDP 实测：载入 `cube.stp` → 12 三角面 / 300×300×300 mm；载入 424 KB 真实装配 → 18 零件 / 5,040 三角面 / 559 ms；工厂 demo 连接成功、browse 返回 2 工位 8 点位
 - 界面截图：10 张 Electron 实跑截图（1440×873）已入库 `docs/desktop/screenshots/`，见 `MODULES.md` 的截图索引
 

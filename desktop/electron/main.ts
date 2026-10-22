@@ -431,6 +431,63 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        // 电气校验面板：入口打开 → 运行样例 → 渲染问题表 → 导出 PDF。
+        const elecUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const api = window.__ElecCheckPanel;
+            const entry = document.getElementById('elecCheckEntryButton');
+            if (!api || !entry) return { error: '电气校验面板缺失' };
+            entry.click();
+            const drawer = document.getElementById('elecCheckDrawer');
+            const opened = Boolean(drawer && !drawer.hidden);
+            const result = await api.run({
+              wires: [
+                { no: '101', net: 'n1', potential: 'L1', from: 'QF1:2', to: 'KM1:1' },
+                { no: '101', net: 'n2', potential: 'L1', from: 'KM1:2', to: 'M1:U' },
+                { no: '', net: 'n3', potential: 'L2', from: 'QF2:2', to: 'KM1:3' }
+              ],
+              loads: [{ tag: 'M1', powerKw: 7.5, phase: '3P', cosPhi: 0.85, efficiency: 0.9 }],
+              circuits: [{ wireNo: '101', currentA: 40, sectionMm2: 4 }],
+              options: { demandFactor: 0.8 }
+            });
+            if (!result) return { error: '校验未返回结果' };
+            const rows = document.querySelectorAll('#elecCheckTable tbody tr').length;
+            const cards = document.querySelectorAll('#elecCheckSummary .acp-check-card').length;
+            const status = document.getElementById('elecCheckStatus')?.textContent || '';
+            const html = api.html();
+            const pdf = await api.exportPdf();
+            api.close();
+            return {
+              opened,
+              rows,
+              cards,
+              status,
+              findings: result.findings.length,
+              errors: result.counts.error,
+              pdfPath: pdf.path,
+              htmlSize: html.length,
+              hasReport: html.includes('电气校验报告') && html.includes('校验问题明细')
+            };
+          })()`
+        ) as {
+          error?: string; opened: boolean; rows: number; cards: number; status: string;
+          findings: number; errors: number; pdfPath: string; htmlSize: number; hasReport: boolean;
+        };
+        if (elecUi.error || !elecUi.opened || elecUi.cards !== 9 || elecUi.errors < 1 ||
+            elecUi.rows !== elecUi.findings || !elecUi.status.includes('电气校验：错误') ||
+            !elecUi.hasReport || !(elecUi.htmlSize > 1000) ||
+            !elecUi.pdfPath || !elecUi.pdfPath.endsWith('report.pdf')) {
+          console.error('SMOKE_FAIL elec_check_ui', JSON.stringify(elecUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ELEC_CHECK_UI_OK rows=${elecUi.rows} cards=${elecUi.cards} pdf=${elecUi.pdfPath.endsWith('report.pdf')}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL elec_check_ui_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const syncUi = await window.webContents.executeJavaScript(
           `(async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -626,7 +683,7 @@ function createWindow(): BrowserWindow {
       }
       try {
         const summaries = agentTools?.summaries() ?? [];
-        if (summaries.length !== 7) {
+        if (summaries.length !== 8 || !summaries.some((tool) => tool.name === 'run_electrical_check')) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);
           return;

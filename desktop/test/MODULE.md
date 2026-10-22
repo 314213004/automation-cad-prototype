@@ -10,8 +10,9 @@
 | CAD 解析 | `test/cad/step.test.mjs` | 同上 | 用 `test/fixtures/cube.stp`，断言 12 面 / 300³ mm |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
-| 工具表 | `test/agent/tools.test.mjs` | 同上 | 7 工具、BOM 空数组、干涉截断、插入与撤销 |
-| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 7 个工具 |
+| 工具表 | `test/agent/tools.test.mjs` | 同上 | 8 工具、BOM 空数组、干涉截断、插入与撤销 |
+| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 8 个工具 |
+| 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
 | MCP 代理 | `test/agent/mcp-proxy.test.mjs` | 同上 | 写工具转发、无桌面时只读回退/写工具降级、超时不泄露 token |
 | 模型配置 | `test/agent/llm-config.test.mjs` | 同上 | 默认值、apiKey 掩码、600 权限、掩码保存保留原密钥 |
 | LLM 客户端 | `test/agent/llm.test.mjs` | 同上 | 本地假 HTTP：tool_calls、最终文本、401 中文错误、超时、ping max_tokens=8 |

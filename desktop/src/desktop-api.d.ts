@@ -369,6 +369,18 @@ interface Window {
     clear(): void;
   };
   __AUTOMATION_CAD_EXTENSION_READY__?: boolean;
+  /** 电气校验数据源：由原理图侧注入，返回 null 表示暂无数据。 */
+  __ElecDocProvider?: () => import('./elec/check').ElecDocument | null;
+  /** 电气校验面板：脚本化运行与 PDF 导出（冒烟与 Agent 共用）。 */
+  __ElecCheckPanel?: {
+    open(): void;
+    close(): void;
+    run(doc: import('./elec/check').ElecDocument): Promise<import('./elec/check').ElecCheckResult | null>;
+    result(): import('./elec/check').ElecCheckResult | null;
+    html(): string;
+    exportPdf(): Promise<{ path: string; htmlPath: string }>;
+    status(): string;
+  };
   AutomationCadViewer?: {
     open(): void;
     close(): void;
