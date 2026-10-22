@@ -33,7 +33,7 @@
 - 内容：按 `docs/desktop/SMART-FACTORY-INTEGRATION.md` 实现 `/api/v1/design-sync/*`
 
 ### P6 机台硬件成本自动统计
-- 状态：🔄 设计完成（`docs/desktop/COSTING.md`），引擎实现中
+- 状态：🔄 P6-1 ✅ 引擎完成（`a8c1e5f`）：价格簿校验 + 计算引擎，43 条成本用例，301/301，`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`；示例价条目自动排除。下一步 P6-2 面板/导出
 - 分期：P6-1 价格簿+引擎 → P6-2 面板/导出 → P6-3 Agent 工具 → P6-4 与智慧工厂采购价对接
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
@@ -42,6 +42,12 @@
 - 范围：15 个工具、上下文注入、意图路由、写操作确认、审计、40 条中文评估集
 - 分期：A 只读问答 → B 单步写 → C 多步规划 → D 联调/同步/语音
 - 验收：`SMOKE_AGENT_NL_OK intents=7 tools=15 audit=3`，误写率 0
+
+### P8 设计完成后自动生成 PLC 程序
+- 状态：🔄 设计完成（`docs/desktop/PLC-CODEGEN.md`）
+- 范围：预检（地址重复/越界/双线圈/安全缺失）→ IO 变量表 + ST 程序块（OB1/气缸 FB/夹爪/轴/自动状态机/报警/安全）→ 导出 zip 与映射表
+- 分期：P8-1 预检+变量表+FB → P8-2 序列/报警/安全 → P8-3 UI 与导出 → P8-4 模拟器自检 → P8-5 TIA Openness（可选）
+- 验收：demo 机型 9 文件、预检 0 错、三次生成 sha256 一致、模拟器 6 步跑通
 
 ## 已知问题（记录，不阻塞）
 
