@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>滑台气缸装配体 · 自动化设计工作台</title>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="electrical.css">
 </head>
 <body>
 
@@ -28,6 +29,7 @@
       <button type="button" class="mode" data-mode="check" role="tab" aria-selected="false">校核</button>
       <button type="button" class="mode" data-mode="drafting" role="tab" aria-selected="false">出图</button>
     </nav>
+    <nav class="modes" id="modesElec" role="tablist" aria-label="电气工作模式" hidden></nav>
 
     <div class="tb-right">
       <button type="button" class="tbtn" data-act="measure">
@@ -39,6 +41,10 @@
       <button type="button" class="tbtn" data-act="help">
         <svg viewBox="0 0 16 16" class="ico"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.2A1.8 1.8 0 118.9 8c-.6.3-.9.7-.9 1.3"/><circle cx="8" cy="11.6" r=".7" fill="currentColor" stroke="none"/></svg>帮助
       </button>
+      <div class="domsw" id="domsw" role="group" aria-label="设计域切换">
+        <button type="button" class="domsw-btn is-active" data-domain="mech" title="机械域（Ctrl+Alt+1）">机械</button>
+        <button type="button" class="domsw-btn" data-domain="elec" title="电气域（Ctrl+Alt+2）">电气</button>
+      </div>
     </div>
   </header>
 
@@ -212,11 +218,52 @@
       </div>
       <aside class="panel panel-right" data-panel="right" data-for="drafting"></aside>
     </section>
+
+    <!-- ============ 电气域（扩展容器） ============ -->
+    <!-- 6. 电气原理图 -->
+    <section class="view" data-view="schematic" data-domain="elec" hidden>
+      <aside class="panel panel-left" id="elLeft" data-for="schematic"></aside>
+      <div class="stage el-desk" data-stage="schematic" id="elStageSchematic">
+        <div class="el-paper" id="elPaper">
+          <svg id="elSheet" viewBox="0 0 420 297" preserveAspectRatio="xMidYMid meet"
+               role="img" aria-label="电气原理图 A3 横向"></svg>
+        </div>
+      </div>
+      <aside class="panel panel-right" id="elRight" data-for="schematic"></aside>
+    </section>
+
+    <!-- 7. IO 规划 -->
+    <section class="view" data-view="io" data-domain="elec" hidden>
+      <aside class="panel panel-left" id="elLeftIo" data-for="io"></aside>
+      <div class="stage" data-stage="io" id="elStageIo"></div>
+      <aside class="panel panel-right" id="elRightIo" data-for="io"></aside>
+    </section>
+
+    <!-- 8. 柜体布置 -->
+    <section class="view" data-view="enclosure" data-domain="elec" hidden>
+      <aside class="panel panel-left" id="elLeftEn" data-for="enclosure"></aside>
+      <div class="stage en-desk" data-stage="enclosure" id="elStageEn">
+        <svg id="enSvg" class="en-svg" viewBox="0 0 1290 1360" preserveAspectRatio="xMidYMid meet"
+             role="img" aria-label="柜体正视图"></svg>
+        <div class="en-tip" id="enTip" hidden></div>
+      </div>
+      <aside class="panel panel-right" id="elRightEn" data-for="enclosure"></aside>
+    </section>
   </main>
 
   <!-- ============ 状态栏 26px ============ -->
   <footer class="statusbar">
     <span class="st-hier" id="stHier">当前层级：装配 &gt; 滑台 &gt; 气缸</span>
+    <span class="st-elec" id="stElec" hidden>
+      <span class="mono" id="stElView">电气 · 原理图</span>
+      <span class="ssep"></span>
+      <span class="mono" id="stElA">—</span>
+      <span class="ssep"></span>
+      <span class="mono" id="stElB">—</span>
+      <span class="st-el-msg mono" id="stElMsg" hidden></span>
+      <span class="st-el-flex"></span>
+      <span class="st-el-badge" id="stElBadge" hidden></span>
+    </span>
     <span class="ssep"></span>
     <span class="st-unit">单位 <b>mm</b></span>
     <span class="ssep"></span>
@@ -252,5 +299,6 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>
+<script src="electrical.js"></script>
 </body>
 </html>
