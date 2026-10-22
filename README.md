@@ -21,7 +21,7 @@
 | `02-cad-assembly.png` | CAD 查看 · STEP 装配体 |
 | `03-interference.png` | 干涉检测 |
 | `04-stress.png` | 受力分析 |
-| `05-factory.png` | 联调前的点位表校验（异常路径） |
+| `05-factory.png` | 智慧工厂 · demo 产线实时值 |
 | `06-commission.png` | 通电联调 · 6 步全通过 |
 | `07-packs.png` | 数据包管理 |
 | `08-elec-library.png` | 电气元件库 |
@@ -46,11 +46,13 @@
 
 *受力分析：气缸推力按 `F = p·πD²/4·η` 计算，同时给出拉力（0.85 系数）、余量与安全系数；悬臂梁与螺栓预紧同页，超限项直接标红并给出改法建议。*
 
-### 通电联调：先校验点位表，再上电
+### 智慧工厂：demo 产线实时值
 
-![联调：点位表为空时拒绝上电](docs/desktop/screenshots/05-factory.png)
+![智慧工厂：demo 适配器连接后 2 工位 8 点位实时刷新](docs/desktop/screenshots/05-factory.png)
 
-*联调异常路径：点位表为空时连接直接报「PLC 点位表不能为空」，不允许带着空表跑上电流程——这是实跑截图，不是示意。*
+*智慧工厂：内置 demo 适配器连接后自动列出 2 个工位 × 4 个点位（运行 / 节拍 / 良品数 / 报警），每秒刷新；可写点位会弹出确认，OPC UA 与 MQTT 共用同一适配器接口。*
+
+### 通电联调：6 步上电与 3 条用例
 
 ![通电联调：6 步上电全部通过](docs/desktop/screenshots/06-commission.png)
 
