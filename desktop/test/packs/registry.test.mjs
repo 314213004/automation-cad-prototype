@@ -247,7 +247,9 @@ test('仓库内置 iec-cn 包含 44 个电气元件、12 个分类', () => {
   const categories = new Set(parts.map((part) => part.category));
   assert.equal(categories.size, 12);
   const withSymbol = parts.filter((part) => typeof part.symbol === 'string' && part.symbol !== '');
-  assert.equal(withSymbol.length, 10, `带原理图符号的元件数量不符：${withSymbol.length}`);
+  assert.ok(withSymbol.length >= 30, `带原理图符号的元件过少：${withSymbol.length}`);
+  const symbolKeys = new Set(withSymbol.map((part) => part.symbol));
+  assert.deepEqual([...symbolKeys].sort(), ['a1', 'fr1', 'ka1', 'km1', 'm1', 'qf1', 'sb1', 'x1']);
 });
 
 
