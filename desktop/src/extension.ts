@@ -7,6 +7,7 @@ import { CadViewer } from './cad/viewer';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
+import { initElecLibraryPanel } from './packs/elec-ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import { initSyncPanel } from './sync/ui';
 import type { SyncUploadPayload } from './sync/types';
@@ -686,6 +687,7 @@ function init(): void {
     }
   });
   initPackPanel();
+  initElecLibraryPanel();
   initSyncPanel({ buildPayload: buildSyncPayload });
   buildOverlay();
   initMechUi();

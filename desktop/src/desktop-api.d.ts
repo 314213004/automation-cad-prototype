@@ -215,6 +215,7 @@ interface Window {
   };
   ElecDomain?: {
     setDomain(domain: 'mech' | 'elec'): void;
+    insertSymbol(key: string, opts?: { x?: number; y?: number }): { ok: boolean; tag?: string; id?: string; message?: string };
   };
   __AUTOMATION_CAD_EXTENSION_READY__?: boolean;
   AutomationCadViewer?: {

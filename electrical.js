@@ -2277,10 +2277,95 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
+  /* ---- 元器件包符号 → 内置符号库映射（按需放置 API） ---- */
+  const PACK_SYMBOL_ALIASES = { fu1: 'fuse', es1: 'estop' };
+  const PACK_SYMBOL_LIB = {
+    qf1: 'breaker', km1: 'coil', km1c: 'contactor', fr1: 'thermal',
+    ka1: 'coil', sb1: 'button', a1: 'plc', m1: 'motor',
+    yv1: 'valve', yv2: 'valve', x1: 'terminal', hl1: 'lamp'
+  };
+
+  function resolvePackLibKey(key) {
+    if (typeof key !== 'string' || !key) return null;
+    const direct = LIB_SYM.filter(x => x.key === key)[0];
+    if (direct) return direct.key;
+    const mapped = Object.prototype.hasOwnProperty.call(PACK_SYMBOL_LIB, key)
+      ? PACK_SYMBOL_LIB[key]
+      : Object.prototype.hasOwnProperty.call(PACK_SYMBOL_ALIASES, key) ? PACK_SYMBOL_ALIASES[key] : null;
+    if (!mapped) return null;
+    return LIB_SYM.filter(x => x.key === mapped)[0] ? mapped : null;
+  }
+
+  function symbolAreaTaken(x, y, w, h) {
+    const boxes = [
+      { x: 288, y: 237, w: 122, h: 50 },
+      { x: 14, y: 238, w: 166, h: 50 }
+    ];
+    const svg = $('#elSheet');
+    if (svg) {
+      $$('.esym', svg).forEach(g => {
+        const r = g.querySelector('rect.ehit');
+        if (!r) return;
+        const bx = Number(r.getAttribute('x'));
+        const by = Number(r.getAttribute('y'));
+        const bw = Number(r.getAttribute('width'));
+        const bh = Number(r.getAttribute('height'));
+        if ([bx, by, bw, bh].every(Number.isFinite)) boxes.push({ x: bx, y: by, w: bw, h: bh });
+      });
+    }
+    const pad = 1;
+    return boxes.some(b => x < b.x + b.w + pad && x + w > b.x - pad && y < b.y + b.h + pad && y + h > b.y - pad);
+  }
+
+  function findFreeSymbolSpot(w, h) {
+    let gx = 24, gy = 18, tries = 0;
+    while (tries < 60) {
+      const px = clamp(gx - w / 2, 12, 396);
+      const py = clamp(gy - h / 2, 12, 282);
+      if (!symbolAreaTaken(px, py, w, h)) return { x: px + w / 2, y: py + h / 2 };
+      gx += 24;
+      if (gx > 396) { gx = 24; gy += 18; }
+      tries += 1;
+    }
+    return { x: 24, y: 18 };
+  }
+
+  function insertSymbol(key, opts) {
+    try {
+      const libKey = resolvePackLibKey(key);
+      if (!libKey) return { ok: false, message: '原理图符号不存在：' + String(key) };
+      if (ES.domain !== 'elec') setDomain('elec');
+      if (ES.view !== 'schematic') showElecView('schematic');
+      if (!$('#elPlaceLayer')) return { ok: false, message: '放置失败：原理图尚未渲染' };
+      armPlace(libKey);
+      if (!ES.place) return { ok: false, message: '放置失败：图纸尚未就绪' };
+      const box = libBox();
+      const hasX = Boolean(opts && typeof opts.x === 'number' && Number.isFinite(opts.x));
+      const hasY = Boolean(opts && typeof opts.y === 'number' && Number.isFinite(opts.y));
+      let x = hasX ? opts.x : null;
+      let y = hasY ? opts.y : null;
+      if (x === null || y === null) {
+        const spot = findFreeSymbolSpot(box.w, box.h);
+        if (x === null) x = spot.x;
+        if (y === null) y = spot.y;
+      }
+      placeSymbol(x, y);
+      const id = ES.sym;
+      const def = id ? ES.defs[id] : null;
+      if (!id || !def) return { ok: false, message: '放置失败：图纸尚未就绪' };
+      return { ok: true, tag: def.tag, id: id };
+    } catch (error) {
+      return { ok: false, message: error && error.message ? error.message : String(error) };
+    } finally {
+      disarmPlace();
+    }
+  }
+
   /* 供调试/外部调用 */
   window.ElecDomain = {
     setDomain: setDomain,
     show: showElecView,
+    insertSymbol: insertSymbol,
     state: ES
   };
 })();

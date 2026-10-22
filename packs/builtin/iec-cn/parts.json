@@ -34,7 +34,7 @@
     "model": "NXB-63 3P C32",
     "category": "断路器",
     "vendor": "正泰",
-    "symbol": "qf1",
+    "symbol": "",
     "specs": {
       "极数": "3P",
       "额定电流": "32 A",
@@ -49,7 +49,7 @@
     "model": "CDM3-100S/3300 100A",
     "category": "断路器",
     "vendor": "德力西",
-    "symbol": "qf1",
+    "symbol": "",
     "specs": {
       "极数": "3P",
       "壳架电流": "100 A",
@@ -64,7 +64,7 @@
     "model": "5SY63 3P C16",
     "category": "断路器",
     "vendor": "西门子",
-    "symbol": "qf1",
+    "symbol": "",
     "specs": {
       "极数": "3P",
       "额定电流": "16 A",
@@ -93,7 +93,7 @@
     "model": "LC1D25M7C",
     "category": "接触器",
     "vendor": "施耐德",
-    "symbol": "km1",
+    "symbol": "",
     "specs": {
       "额定电流": "25 A（AC-3）",
       "控制功率": "11 kW @ 400 V",
@@ -107,7 +107,7 @@
     "model": "CJX2-1810",
     "category": "接触器",
     "vendor": "正泰",
-    "symbol": "km1",
+    "symbol": "",
     "specs": {
       "额定电流": "18 A（AC-3）",
       "控制功率": "7.5 kW @ 380 V",
@@ -121,7 +121,7 @@
     "model": "CJX2-2510",
     "category": "接触器",
     "vendor": "正泰",
-    "symbol": "km1",
+    "symbol": "",
     "specs": {
       "额定电流": "25 A（AC-3）",
       "控制功率": "11 kW @ 380 V",
@@ -135,7 +135,7 @@
     "model": "3RT2026-1BB40",
     "category": "接触器",
     "vendor": "西门子",
-    "symbol": "km1",
+    "symbol": "",
     "specs": {
       "额定电流": "25 A（AC-3）",
       "控制功率": "11 kW @ 400 V",
@@ -162,7 +162,7 @@
     "model": "LRD32C",
     "category": "热继电器",
     "vendor": "施耐德",
-    "symbol": "fr1",
+    "symbol": "",
     "specs": {
       "整定范围": "23–32 A",
       "脱扣等级": "10A",
@@ -175,7 +175,7 @@
     "model": "NR2-25/Z",
     "category": "热继电器",
     "vendor": "正泰",
-    "symbol": "fr1",
+    "symbol": "",
     "specs": {
       "整定范围": "0.63–25 A（按热元件）",
       "脱扣等级": "10A",
@@ -188,7 +188,7 @@
     "model": "3RU2126-4BB0",
     "category": "热继电器",
     "vendor": "西门子",
-    "symbol": "fr1",
+    "symbol": "",
     "specs": {
       "整定范围": "14–20 A",
       "脱扣等级": "10",
@@ -214,7 +214,7 @@
     "model": "MY4NJ DC24",
     "category": "中间继电器",
     "vendor": "欧姆龙",
-    "symbol": "ka1",
+    "symbol": "",
     "specs": {
       "触点形式": "4CO",
       "触点容量": "3 A / 250 V AC",
@@ -227,7 +227,7 @@
     "model": "RXM2AB2BD",
     "category": "中间继电器",
     "vendor": "施耐德",
-    "symbol": "ka1",
+    "symbol": "",
     "specs": {
       "触点形式": "2CO",
       "触点容量": "12 A / 250 V AC",
@@ -240,7 +240,7 @@
     "model": "JZX-22F(D)/2Z",
     "category": "中间继电器",
     "vendor": "正泰",
-    "symbol": "ka1",
+    "symbol": "",
     "specs": {
       "触点形式": "2CO",
       "触点容量": "5 A / 250 V AC",
@@ -267,7 +267,7 @@
     "model": "XB2-BA42",
     "category": "按钮",
     "vendor": "施耐德",
-    "symbol": "sb1",
+    "symbol": "",
     "specs": {
       "触点": "1NC",
       "颜色": "红色",
@@ -281,7 +281,7 @@
     "model": "XB2-BS542C",
     "category": "按钮",
     "vendor": "施耐德",
-    "symbol": "sb1",
+    "symbol": "",
     "specs": {
       "触点": "2NC",
       "颜色": "红色",
@@ -295,7 +295,7 @@
     "model": "NP2-BA31",
     "category": "按钮",
     "vendor": "正泰",
-    "symbol": "sb1",
+    "symbol": "",
     "specs": {
       "触点": "1NO",
       "颜色": "绿色",
@@ -362,7 +362,7 @@
     "model": "UK-5N",
     "category": "端子",
     "vendor": "菲尼克斯",
-    "symbol": "x1",
+    "symbol": "",
     "specs": {
       "接线面积": "4 mm²",
       "额定电流": "32 A",
@@ -376,7 +376,7 @@
     "model": "WDU 2.5",
     "category": "端子",
     "vendor": "魏德米勒",
-    "symbol": "x1",
+    "symbol": "",
     "specs": {
       "接线面积": "2.5 mm²",
       "额定电流": "24 A",
@@ -447,7 +447,7 @@
     "model": "S7-1200 CPU 1211C DC/DC/DC",
     "category": "PLC",
     "vendor": "西门子",
-    "symbol": "a1",
+    "symbol": "",
     "specs": {
       "数字输入": "6 DI",
       "数字输出": "4 DO（晶体管）",
@@ -462,7 +462,7 @@
     "model": "FX3U-32MT/ES-A",
     "category": "PLC",
     "vendor": "三菱",
-    "symbol": "a1",
+    "symbol": "",
     "specs": {
       "数字输入": "16 DI",
       "数字输出": "16 DO（晶体管 漏型）",
@@ -476,7 +476,7 @@
     "model": "CP1E-N30DR-A",
     "category": "PLC",
     "vendor": "欧姆龙",
-    "symbol": "a1",
+    "symbol": "",
     "specs": {
       "数字输入": "18 DI",
       "数字输出": "12 DO（继电器）",
@@ -490,7 +490,7 @@
     "model": "H5U-1614MTD",
     "category": "PLC",
     "vendor": "汇川",
-    "symbol": "a1",
+    "symbol": "",
     "specs": {
       "数字输入": "16 DI",
       "数字输出": "14 DO（晶体管）",
@@ -573,7 +573,7 @@
     "model": "VFD-M 0.75 kW",
     "category": "变频器",
     "vendor": "台达",
-    "symbol": "m1",
+    "symbol": "",
     "specs": {
       "功率": "0.75 kW",
       "输入": "三相 380 V",
@@ -601,7 +601,7 @@
     "model": "ASDA-B2 400 W",
     "category": "伺服驱动器",
     "vendor": "台达",
-    "symbol": "m1",
+    "symbol": "",
     "specs": {
       "功率": "400 W",
       "输入": "三相 220 V",

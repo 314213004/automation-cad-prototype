@@ -91,4 +91,4 @@
 2. 写 `manifest.json`（`id: "my-pack"`）
 3. 写 `parts.json`（数组，至少 1 项）
 4. 重启应用 → 「数据包」面板应显示该包与条目数
-5. `npx tsx scripts/gen-reference.mjs`（可选）生成 `docs/reference/` 下的人读表格
+5. `node desktop/scripts/gen-reference.mjs`（可选）生成 `docs/reference/` 下的人读表格

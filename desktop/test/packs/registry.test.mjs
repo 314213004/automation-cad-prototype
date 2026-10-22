@@ -137,6 +137,38 @@ test('合法数据包通过校验并可列出条目', async () => {
   assert.equal(registry().listParts({ category: '气缸' }).length, 1);
 });
 
+test('symbol 合法值透传到元器件条目', async () => {
+  writePack(join(builtinDir, 'symbol-pack'), manifest('symbol-pack'), [
+    { id: 'KM-1', model: 'LC1D18M7C', category: '接触器', vendor: '施耐德', symbol: 'km1', specs: { 线圈电压: '220 V AC' } }
+  ]);
+  const parts = registry().listParts({ packId: 'symbol-pack' });
+  assert.equal(parts.length, 1);
+  assert.equal(parts[0].symbol, 'km1');
+});
+
+test('非法 symbol 会让数据包进入 error 且不加载条目', async () => {
+  for (const symbol of ['KM1', 'km-1', 'a'.repeat(9), 42, null]) {
+    const dir = join(builtinDir, 'bad-symbol');
+    writePack(dir, manifest('bad-symbol'), [
+      { id: 'BAD-1', model: 'BAD-1', category: '接触器', symbol, specs: {} }
+    ]);
+    const packs = await registry().scan();
+    assert.equal(packs[0].error !== undefined, true, `symbol=${String(symbol)} 应被拒绝`);
+    assert.match(packs[0].error, /symbol/);
+    assert.equal(registry().listParts().length, 0);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('空字符串 symbol 视为无符号且不写入条目', async () => {
+  writePack(join(builtinDir, 'empty-symbol'), manifest('empty-symbol'), [
+    { id: 'EMPTY-1', model: 'EMPTY-1', category: '按钮', symbol: '', specs: {} }
+  ]);
+  const [part] = registry().listParts({ packId: 'empty-symbol' });
+  assert.ok(part);
+  assert.equal(Object.hasOwn(part, 'symbol'), false);
+});
+
 test('manifest 缺 id 时拒绝该包', async () => {
   const bad = manifest();
   delete bad.id;
@@ -215,7 +247,7 @@ test('仓库内置 iec-cn 包含 44 个电气元件、12 个分类', () => {
   const categories = new Set(parts.map((part) => part.category));
   assert.equal(categories.size, 12);
   const withSymbol = parts.filter((part) => typeof part.symbol === 'string' && part.symbol !== '');
-  assert.ok(withSymbol.length >= 30, `带原理图符号的元件过少：${withSymbol.length}`);
+  assert.equal(withSymbol.length, 10, `带原理图符号的元件数量不符：${withSymbol.length}`);
 });
 
 

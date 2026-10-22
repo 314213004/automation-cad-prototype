@@ -4,7 +4,7 @@
 
 | 目录/文件 | 用途 |
 |-----------|------|
-| `electrical-components.md` | 常用电气元器件型号与关键参数（由 `iec-cn` 数据包生成） |
+| `electrical-components.md` | 内置元器件型号与关键参数（由 `desktop/scripts/gen-reference.mjs` 汇总生成） |
 | `packs/builtin/iec-cn/` | 电气元件数据包（插件，程序按需加载） |
 | `packs/builtin/smc-cn/` | 气动元件数据包（气缸/电磁阀/磁性开关等） |
 
@@ -17,7 +17,7 @@
 ## 更新流程
 
 1. 修改 `packs/builtin/<id>/parts.json`（程序读的就是它）；
-2. 跑 `node scripts/gen-reference.mjs` 重新生成 `electrical-components.md`（可选，保持人读版同步）；
+2. 跑 `node desktop/scripts/gen-reference.mjs` 重新生成 `electrical-components.md`（可选，保持人读版同步）；
 3. `npm test`（会校验 manifest、id、字段合法性与 id 唯一性）。
 
 ## 新增一个数据包（插件）

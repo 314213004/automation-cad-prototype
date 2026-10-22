@@ -312,6 +312,55 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        const elecLib = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const entry = document.getElementById('elecLibEntryButton');
+            if (!entry) return { error: '电气元件入口按钮缺失' };
+            entry.click();
+            let ready = false;
+            for (let attempt = 0; attempt < 50; attempt += 1) {
+              await wait(100);
+              const state = document.getElementById('elecLibResults')?.dataset.ready;
+              if (state === '1') { ready = true; break; }
+              if (state === 'error') break;
+            }
+            const results = document.getElementById('elecLibResults');
+            if (!ready || !results) {
+              return { error: document.getElementById('elecLibStatus')?.textContent || '电气元件面板加载超时' };
+            }
+            const parts = Number(results.dataset.parts || 0);
+            const categories = Number(results.dataset.categories || 0);
+            const symbols = Number(results.dataset.symbols || 0);
+            const rows = document.querySelectorAll('#elecLibResults [data-elec-part]').length;
+            const contactor = Array.from(document.querySelectorAll('#elecLibCategories [data-elec-category]'))
+              .find((button) => (button.textContent || '').startsWith('接触器'));
+            contactor?.click();
+            await wait(60);
+            const contactorRows = document.querySelectorAll('#elecLibResults [data-elec-part]').length;
+            const beforePlaced = document.querySelectorAll('#elPlaceLayer .esym').length;
+            document.querySelector('#elecLibResults [data-elec-insert]:not([disabled])')?.click();
+            await wait(120);
+            const placedLayer = document.querySelectorAll('#elPlaceLayer .esym');
+            const placedTag = placedLayer[placedLayer.length - 1]?.dataset.tag || '';
+            const placed = placedLayer.length - beforePlaced;
+            window.ElecDomain?.setDomain('mech');
+            await wait(60);
+            return { parts, categories, symbols, rows, contactorRows, placed, placedTag };
+          })()`
+        ) as { error?: string; parts: number; categories: number; symbols: number; rows: number; contactorRows: number; placed: number; placedTag: string };
+        if (elecLib.error || elecLib.parts !== 44 || elecLib.categories !== 12 || elecLib.rows !== 44 || elecLib.contactorRows !== 5 || elecLib.placed !== 1 || !elecLib.placedTag) {
+          console.error('SMOKE_FAIL elec_lib', JSON.stringify(elecLib));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ELEC_LIB_OK parts=${elecLib.parts} categories=${elecLib.categories} symbols=${elecLib.symbols}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL elec_lib_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const syncUi = await window.webContents.executeJavaScript(
           `(async () => {
             const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
