@@ -598,6 +598,79 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        const proto = await window.webContents.executeJavaScript(
+          `(() => {
+            const api = window.ProtoApi;
+            if (!api || api.version !== 1) return { error: 'ProtoApi 缺失或版本不符' };
+            const countParts = (nodes, inStd = false) => nodes.reduce((total, node) => {
+              const std = inStd || node.id === 'g-std';
+              const legacyStd = std && node.kind === 'part' && !String(node.id).startsWith('ins');
+              const isModelPart = node.kind === 'part' || Boolean(node.part);
+              return total + (!legacyStd && isModelPart ? 1 : 0) + countParts(node.children || [], std);
+            }, 0);
+            const hasNode = (nodes, id) => nodes.some((node) => node.id === id || hasNode(node.children || [], id));
+            const beforeTree = api.getTree();
+            const beforeParts = countParts(beforeTree);
+            const beforeDof = api.getDofTotal();
+            const inserted = api.insertPart('MXQ20-32-50');
+            const afterTree = api.getTree();
+            const afterParts = countParts(afterTree);
+            const afterDof = api.getDofTotal();
+            const nodeAdded = Boolean(inserted && inserted.id && hasNode(afterTree, inserted.id));
+            const undo = api.undo();
+            const undoTree = api.getTree();
+            const undoParts = countParts(undoTree);
+            const undoDof = api.getDofTotal();
+            const redo = api.redo();
+            const redoTree = api.getTree();
+            const redoParts = countParts(redoTree);
+            const redoDof = api.getDofTotal();
+            return {
+              inserted, nodeAdded, undo, redo,
+              beforeParts, afterParts, undoParts, redoParts,
+              beforeDof, afterDof, undoDof, redoDof
+            };
+          })()`
+        ) as {
+          error?: string;
+          inserted: { ok: boolean; id?: string; label?: string; message?: string };
+          nodeAdded: boolean;
+          undo: { ok: boolean; label?: string; message?: string };
+          redo: { ok: boolean; label?: string; message?: string };
+          beforeParts: number;
+          afterParts: number;
+          undoParts: number;
+          redoParts: number;
+          beforeDof: number;
+          afterDof: number;
+          undoDof: number;
+          redoDof: number;
+        };
+        if (proto.error || !proto.inserted?.ok || !proto.inserted.id || !proto.nodeAdded ||
+            proto.afterParts - proto.beforeParts !== 1 || proto.afterDof - proto.beforeDof !== 2) {
+          console.error('SMOKE_FAIL proto_insert', JSON.stringify(proto));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PROTO_INSERT_OK parts=${proto.beforeParts}→${proto.afterParts} dof=+${proto.afterDof - proto.beforeDof}`);
+        if (!proto.undo?.ok || proto.undoParts !== proto.beforeParts || proto.undoDof !== proto.beforeDof) {
+          console.error('SMOKE_FAIL proto_undo', JSON.stringify(proto));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PROTO_UNDO_OK parts=${proto.afterParts}→${proto.undoParts}`);
+        if (!proto.redo?.ok || proto.redoParts !== proto.afterParts || proto.redoDof !== proto.afterDof) {
+          console.error('SMOKE_FAIL proto_redo', JSON.stringify(proto));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PROTO_REDO_OK parts=${proto.undoParts}→${proto.redoParts}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL proto_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }

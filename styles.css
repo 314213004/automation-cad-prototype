@@ -613,3 +613,32 @@ kbd{display:inline-flex; align-items:center; justify-content:center; min-width:1
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important; transition-duration:.01ms !important}
 }
+
+/* ============================ 原型闭环：拖拽与约束建议 ============================ */
+.stage.is-dragover::after{content:"松开以插入标准件"; position:absolute; inset:8px; z-index:7;
+  display:flex; align-items:center; justify-content:center; border-radius:var(--r);
+  border:1px dashed rgba(20,184,166,.65); background:rgba(20,184,166,.08);
+  color:var(--accent); font-size:12px; pointer-events:none}
+
+.constraint-card{margin:8px 10px 0; border:1px solid rgba(20,184,166,.28); border-left:2px solid var(--accent);
+  border-radius:var(--r); background:rgba(20,184,166,.045); overflow:hidden; flex:0 0 auto}
+.cc-head{display:flex; align-items:center; gap:8px; height:28px; padding:0 9px;
+  border-bottom:1px solid var(--divider); color:var(--text-1); font-size:11px}
+.cc-head .cc-count{margin-left:auto; color:var(--accent); font-family:var(--font-mono); font-size:10px}
+.cc-list{display:flex; flex-direction:column}
+.cc-item{display:flex; align-items:center; gap:8px; padding:7px 9px; border-top:1px solid var(--divider)}
+.cc-item:first-child{border-top:0}
+.cc-main{min-width:0; display:flex; flex-direction:column; gap:1px}
+.cc-name{font-size:11px; color:var(--text-1)}
+.cc-detail{font-size:10px; color:var(--text-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.cc-actions{margin-left:auto; display:flex; gap:4px; flex:0 0 auto}
+.cc-btn{height:21px; padding:0 6px; border:1px solid var(--stroke); border-radius:2px;
+  color:var(--text-2); font-size:10px; background:var(--bg-input)}
+.cc-btn:hover:not(:disabled){border-color:rgba(20,184,166,.45); color:var(--accent-hover)}
+.cc-accept{color:var(--accent); border-color:rgba(20,184,166,.35)}
+.cc-item.is-adopted{background:rgba(61,139,253,.10)}
+.cc-item.is-adopted .cc-name{color:var(--select)}
+.cc-item.is-adopted .cc-accept{border-color:rgba(61,139,253,.40); color:var(--select)}
+.cc-item.is-ignored{opacity:.48; background:transparent}
+.cc-item.is-ignored .cc-name,.cc-item.is-ignored .cc-detail{color:var(--text-3)}
+.cc-btn:disabled{cursor:default; opacity:.72}

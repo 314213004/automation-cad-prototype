@@ -48,7 +48,14 @@ const state = {
   issueIdx: 0,
   treeOpen: {},
   values: {},
-  undo: null,
+  undoStack: [],
+  redoStack: [],
+  lastEdit: null,
+  insertedParts: [],
+  constraints: [],
+  ignoredConstraints: [],
+  constraintSuggestions: {},
+  insertSeq: 0,
 };
 
 const VIEW_MODE = { assembly: 'assembly', sizing: 'model', library: 'assembly', check: 'check', drafting: 'drafting' };
@@ -97,6 +104,17 @@ const COORDS = {
   base: [105, 36, 4], rail: [105, 36, 15], carriage: [92, 36, 33],
   cyl: [92, 36, 76], rod: [92, 36, 122], sensor: [93, 51, 68],
 };
+
+/* 场景占位体的粗略包围盒：用于为新插入件搜索空闲位置 */
+const SCENE_OCCUPANCY = [
+  [0, 0, 0, 210, 72, 8],
+  [12, 24, 8, 198, 48, 22],
+  [62, 20, 22, 122, 52, 44],
+  [72, 16, 44, 112, 56, 51],
+  [77.8, 21.8, 51, 106.2, 50.2, 107],
+  [86.8, 30.8, 113, 97.2, 41.2, 122],
+  [88, 50, 70, 98, 60, 82],
+];
 
 /* ---------------------------------------------------------------- 零件属性 */
 const PARTS = {
@@ -378,6 +396,12 @@ function buildScene(cfg) {
   s = box(cyx - 4, cyy + r - 3, 70, cyx + 6, cyy + r + 4, 82, 'dark');
   parts.push(part('sensor', s, boxSil(cyx - 4, cyy + r - 3, 70, cyx + 6, cyy + r + 4, 82)));
 
+  /* 从标准件库插入的占位体 */
+  (state.insertedParts || []).forEach(p => {
+    s = box(p.x, p.y, p.z, p.x + p.w, p.y + p.d, p.z + p.h, p.tone || 'steel');
+    parts.push(part(p.id, s, boxSil(p.x, p.y, p.z, p.x + p.w, p.y + p.d, p.z + p.h)));
+  });
+
   let planeBack = '', planeFront = '';
   if (section) {
     const px = 92;
@@ -456,6 +480,37 @@ function treeHTML() {
   return `<div class="tree" role="tree">${rows.join('')}</div>`;
 }
 
+function getDofTotal() {
+  let total = 0;
+  (function walk(list) {
+    list.forEach(n => {
+      total += Math.max(0, Number(n.dof) || 0);
+      if (n.children) walk(n.children);
+    });
+  })(TREE);
+  return total;
+}
+
+function countAssemblyParts() {
+  let count = 0;
+  (function walk(list, inStd) {
+    list.forEach(n => {
+      const std = inStd || n.id === 'g-std';
+      const legacyStd = std && n.kind === 'part' && !String(n.id).startsWith('ins');
+      if (n.kind === 'part' && !legacyStd) count += 1;
+      if (n.children) walk(n.children, std);
+    });
+  })(TREE, false);
+  return count;
+}
+
+function updateAssemblyCounters() {
+  const parts = $('#assemblyPartCount');
+  if (parts) parts.textContent = `${countAssemblyParts()} 零件 · 3 子装配`;
+  const dof = $('#dofTotal');
+  if (dof) dof.textContent = getDofTotal();
+}
+
 /* ---- 属性字段 ---- */
 function fieldHTML(pid, f) {
   if (f.type === 'select') {
@@ -494,7 +549,7 @@ function leftHTML(view) {
     return tabsHTML('assembly') + `
       <div class="panel-head">
         <span class="ph-title">结构树</span>
-        <span class="ph-count">6 零件 · 3 子装配</span>
+        <span class="ph-count" id="assemblyPartCount">${countAssemblyParts()} 零件 · 3 子装配</span>
         <div class="ph-actions">
           <button class="iconbtn" type="button" title="全部展开" data-tree-open>${ICON.layers}</button>
           <button class="iconbtn" type="button" title="更多">${ICON.more}</button>
@@ -502,7 +557,7 @@ function leftHTML(view) {
       </div>
       <div class="panel-body">${treeHTML()}</div>
       <div class="panel-foot" style="display:flex;align-items:center;gap:6px">
-        <span class="mono" style="font-size:10px;color:var(--text-3)">DOF 合计 4</span>
+        <span class="mono" style="font-size:10px;color:var(--text-3)">DOF 合计 <b id="dofTotal">${getDofTotal()}</b></span>
         <span style="flex:1"></span>
         <button class="btn" type="button" data-act="fit" style="height:24px">${ICON.fit}缩放到适合</button>
       </div>`;
@@ -596,6 +651,7 @@ function rightHTML(view) {
         <span class="ph-count">${state.multi.length ? state.multi.length + ' 个对象' : '1 个对象'}</span>
         <div class="ph-actions"><button class="iconbtn" type="button" title="更多">${ICON.more}</button></div>
       </div>
+      ${constraintCardHTML(pid)}
       ${def ? `<div class="props-head">
         <div class="ph-row"><span class="name">${def.name}</span><span class="chip">已选中</span></div>
         <div class="sub">${def.code} · ${def.tag}</div>
@@ -921,7 +977,8 @@ function renderLibrary() {
             ${th('bore', '缸径', 'num')}${th('stroke', '行程', 'num')}${th('port', '接口')}${th('price', '单价 / ¥', 'num')}
           </tr></thead>
           <tbody>${rows.map((r, i) => `
-            <tr class="${r.model === state.libSel.model ? 'is-sel' : ''}" data-lib="${r.model}">
+            <tr class="${r.model === state.libSel.model ? 'is-sel' : ''}" data-lib="${r.model}"
+                draggable="true" title="拖动到装配视口，或双击插入">
               <td class="mono">${r.model}</td><td>${r.brand}</td><td class="dim">${r.cat}</td>
               <td class="num">${r.bore || '—'}</td><td class="num">${r.stroke || '—'}</td>
               <td class="mono dim">${r.port}</td><td class="num">${r.price.toFixed(2)}</td>
@@ -1164,6 +1221,7 @@ function selectPart(partId, nodeId) {
   const right = $('[data-panel="right"][data-for="assembly"]');
   if (right) right.innerHTML = rightHTML('assembly');
   applySceneState();
+  updateAssemblyCounters();
   updateStatus();
 }
 
@@ -1196,6 +1254,99 @@ function toast(msg, tone) {
   toastTimer = setTimeout(() => t.classList.remove('is-on'), 2200);
 }
 
+/* ---------------------------------------------------------------- 多步历史 */
+const HISTORY_LIMIT = 50;
+
+function refreshHistoryUI() {
+  const undo = $('#stUndo');
+  const redo = $('#stRedo');
+  if (!undo) return;
+  undo.disabled = state.undoStack.length === 0;
+  if (redo) redo.disabled = state.redoStack.length === 0;
+  const undoText = $('#stUndoText');
+  const redoText = $('#stRedoText');
+  if (undoText) undoText.textContent = `撤销 ${state.undoStack.length}`;
+  if (redoText) redoText.textContent = `重做 ${state.redoStack.length}`;
+  undo.title = state.undoStack.length
+    ? `撤销：${state.undoStack[state.undoStack.length - 1].label}（Ctrl+Z）`
+    : '没有可撤销的操作';
+  if (redo) {
+    redo.title = state.redoStack.length
+      ? `重做：${state.redoStack[state.redoStack.length - 1].label}（Ctrl+Shift+Z）`
+      : '没有可重做的操作';
+  }
+}
+
+function setupHistoryControls() {
+  const undo = $('#stUndo');
+  if (!undo) return;
+  undo.hidden = false;
+  let redo = $('#stRedo');
+  if (!redo) {
+    redo = document.createElement('button');
+    redo.type = 'button';
+    redo.id = 'stRedo';
+    redo.className = 'st-undo';
+    redo.innerHTML = `<svg viewBox="0 0 16 16" class="ico"><path d="M12 5.5v3.2H8.8"/><path d="M12 8.7a5 5 0 10-8.6-3.4"/></svg><span id="stRedoText">重做 0</span>`;
+    undo.insertAdjacentElement('afterend', redo);
+  }
+  if (undo.dataset.historyBound !== '1') {
+    undo.dataset.historyBound = '1';
+    undo.addEventListener('click', () => undoAction());
+  }
+  if (redo.dataset.historyBound !== '1') {
+    redo.dataset.historyBound = '1';
+    redo.addEventListener('click', () => redoAction());
+  }
+  refreshHistoryUI();
+}
+
+function pushHistory(entry) {
+  if (!entry) return;
+  state.undoStack.push(entry);
+  if (state.undoStack.length > HISTORY_LIMIT) state.undoStack.shift();
+  state.redoStack.length = 0;
+  state.lastEdit = null;
+  refreshHistoryUI();
+}
+
+function undoAction() {
+  if (!state.undoStack.length) return { ok: false, message: '没有可撤销的操作' };
+  const item = state.undoStack.pop();
+  try {
+    item.undo();
+  } catch (error) {
+    state.undoStack.push(item);
+    refreshHistoryUI();
+    return { ok: false, message: `撤销失败：${error && error.message ? error.message : error}` };
+  }
+  state.redoStack.push(item);
+  state.lastEdit = null;
+  refreshHistoryUI();
+  statusMsg(`已撤销：${item.label}`);
+  toast(`已撤销：${item.label}`);
+  return { ok: true, label: item.label };
+}
+
+function redoAction() {
+  if (!state.redoStack.length) return { ok: false, message: '没有可重做的操作' };
+  const item = state.redoStack.pop();
+  try {
+    item.redo();
+  } catch (error) {
+    state.redoStack.push(item);
+    refreshHistoryUI();
+    return { ok: false, message: `重做失败：${error && error.message ? error.message : error}` };
+  }
+  state.undoStack.push(item);
+  if (state.undoStack.length > HISTORY_LIMIT) state.undoStack.shift();
+  state.lastEdit = null;
+  refreshHistoryUI();
+  statusMsg(`已重做：${item.label}`);
+  toast(`已重做：${item.label}`);
+  return { ok: true, label: item.label };
+}
+
 /* ---------------------------------------------------------------- 属性编辑 */
 function flashField(el) {
   el.classList.remove('is-flash');
@@ -1213,27 +1364,300 @@ function computedFields(pid) {
   const m = $('#pv-mass'); if (m) m.innerHTML = mass.toFixed(2) + ' <i class="ro-unit">kg</i>';
 }
 
-const commitField = debounce(function (pid, key, val, prev, el) {
+const FIELD_LABELS = { bore: '缸径', stroke: '行程', mount: '安装距', model: '型号', material: '材料', finish: '表面处理', fit: '配合' };
+
+function applyFieldValue(pid, key, val, shouldFlash) {
+  if (!state.values[pid]) state.values[pid] = {};
   state.values[pid][key] = val;
+  $$(`[data-field="${key}"][data-part="${pid}"]`).forEach(input => {
+    input.value = val;
+    if (shouldFlash) flashField(input);
+  });
   if (pid === 'cyl') {
-    state.values.cyl[key] = val;
     const cfg = { bore: Number(state.values.cyl.bore), stroke: Number(state.values.cyl.stroke) };
     mountScene('#scene3d', cfg);
     mountScene('#sceneCheck', Object.assign({ section: true }, cfg));
     applySceneState();
     computedFields('cyl');
-    if (key === 'bore' || key === 'stroke') {
-      renderSizing();
-    }
+    if (key === 'bore' || key === 'stroke') renderSizing();
   }
-  const labelMap = { bore: '缸径', stroke: '行程', mount: '安装距', model: '型号', material: '材料', finish: '表面处理', fit: '配合' };
-  const label = labelMap[key] || key;
-  state.undo = { pid, key, prev };
-  const chip = $('#stUndo');
-  chip.hidden = false;
-  $('#stUndoText').textContent = `撤销上一步：${label} ${prev}→${val}`;
+}
+
+function pushEdit(pid, key, prev, val, label) {
+  const now = Date.now();
+  const editKey = `${pid}::${key}`;
+  const top = state.undoStack[state.undoStack.length - 1];
+  if (state.lastEdit && state.lastEdit.key === editKey && top === state.lastEdit.entry &&
+      now - state.lastEdit.at <= 800) {
+    state.lastEdit.entry.label = `${label} ${state.lastEdit.start}→${val}`;
+    state.lastEdit.entry.redo = () => applyFieldValue(pid, key, val, true);
+    state.lastEdit.at = now;
+    refreshHistoryUI();
+    return;
+  }
+  const entry = {
+    label: `${label} ${prev}→${val}`,
+    undo: () => applyFieldValue(pid, key, prev, true),
+    redo: () => applyFieldValue(pid, key, val, true),
+  };
+  pushHistory(entry);
+  state.lastEdit = { key: editKey, at: now, entry, start: prev };
+}
+
+const commitField = debounce(function (pid, key, val, prev, el) {
+  applyFieldValue(pid, key, val, false);
+  const label = FIELD_LABELS[key] || key;
+  pushEdit(pid, key, prev, val, label);
   statusMsg(`${label} 已更新`);
 }, 150);
+
+/* ---------------------------------------------------------------- 插入与约束 */
+function findConstraintSuggestion(id) {
+  for (const list of Object.values(state.constraintSuggestions)) {
+    const found = list.find(item => item.id === id);
+    if (found) return found;
+  }
+  return null;
+}
+
+function makeConstraintSuggestions(partId, lib) {
+  const rows = lib.cat === '气缸'
+    ? [['concentric', '同心配合', '轴线与安装孔同轴'], ['coincident', '端面贴合', '法兰面贴合法兰面'], ['parallel', '轴线平行', '轴线平行于导轨']]
+    : lib.cat === '导轨'
+      ? [['coincident', '端面贴合', '基准面贴合安装面'], ['parallel', '轴线平行', '轴线平行于滑台']]
+      : [['coincident', '端面贴合', '贴合当前安装面']];
+  return rows.map(([type, label, detail], index) => ({
+    id: `${partId}-c${index + 1}`,
+    part: partId,
+    model: lib.model,
+    cat: lib.cat,
+    type,
+    label,
+    detail,
+  }));
+}
+
+function constraintCardHTML(pid) {
+  const list = state.constraintSuggestions[pid] || [];
+  if (!list.length) return '';
+  const adopted = list.filter(item => state.constraints.some(c => c.id === item.id)).length;
+  return `<section class="constraint-card" aria-label="约束建议">
+    <div class="cc-head"><span>约束建议</span><span class="cc-count">${adopted}/${list.length} 已采用</span></div>
+    <div class="cc-list">${list.map(item => {
+      const isAdopted = state.constraints.some(c => c.id === item.id);
+      const isIgnored = state.ignoredConstraints.includes(item.id);
+      const cls = isAdopted ? 'is-adopted' : isIgnored ? 'is-ignored' : '';
+      return `<div class="cc-item ${cls}">
+        <div class="cc-main"><span class="cc-name">${item.label}</span><span class="cc-detail">${item.detail}</span></div>
+        <div class="cc-actions">
+          <button class="cc-btn cc-accept" type="button" data-constraint-accept="${item.id}" ${isAdopted || isIgnored ? 'disabled' : ''}>${isAdopted ? '已采用' : '采用'}</button>
+          <button class="cc-btn" type="button" data-constraint-ignore="${item.id}" ${isAdopted || isIgnored ? 'disabled' : ''}>${isIgnored ? '已忽略' : '忽略'}</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
+  </section>`;
+}
+
+function refreshConstraintUI(pid) {
+  const left = $('[data-panel="left"][data-for="assembly"]');
+  if (left) {
+    const body = $('.panel-body', left);
+    if (body) body.innerHTML = treeHTML();
+  }
+  updateAssemblyCounters();
+  if (state.view === 'assembly') {
+    const right = $('[data-panel="right"][data-for="assembly"]');
+    if (right) right.innerHTML = rightHTML('assembly');
+  }
+  applySceneState();
+  updateStatus();
+}
+
+function adoptConstraint(id) {
+  const suggestion = findConstraintSuggestion(id);
+  if (!suggestion) return { ok: false, message: `约束不存在：${id}` };
+  if (state.constraints.some(c => c.id === id)) return { ok: true };
+  if (state.ignoredConstraints.includes(id)) return { ok: false, message: `约束已忽略：${id}` };
+  const node = findNode(suggestion.part);
+  if (!node) return { ok: false, message: `零件不存在：${suggestion.part}` };
+  const prevDof = Math.max(0, Number(node.dof) || 0);
+  const nextDof = Math.max(0, prevDof - 1);
+  const record = {
+    id: suggestion.id,
+    part: suggestion.part,
+    model: suggestion.model,
+    type: suggestion.type,
+    label: suggestion.label,
+  };
+  const apply = () => {
+    if (!state.constraints.some(c => c.id === id)) state.constraints.push({ ...record });
+    const current = findNode(suggestion.part);
+    if (current) current.dof = String(nextDof);
+  };
+  const remove = () => {
+    state.constraints = state.constraints.filter(c => c.id !== id);
+    const current = findNode(suggestion.part);
+    if (current) current.dof = String(prevDof);
+  };
+  apply();
+  pushHistory({
+    label: `采用约束 ${suggestion.label}`,
+    undo: () => { remove(); refreshConstraintUI(suggestion.part); },
+    redo: () => { apply(); refreshConstraintUI(suggestion.part); },
+  });
+  refreshConstraintUI(suggestion.part);
+  statusMsg(`已采用约束：${suggestion.label}`);
+  toast(`已采用约束：${suggestion.label}`);
+  return { ok: true };
+}
+
+function ignoreConstraint(id) {
+  const suggestion = findConstraintSuggestion(id);
+  if (!suggestion) return { ok: false, message: `约束不存在：${id}` };
+  if (state.constraints.some(c => c.id === id)) return { ok: false, message: '约束已采用，无法忽略' };
+  if (state.ignoredConstraints.includes(id)) return { ok: true };
+  const apply = () => { if (!state.ignoredConstraints.includes(id)) state.ignoredConstraints.push(id); };
+  const remove = () => { state.ignoredConstraints = state.ignoredConstraints.filter(item => item !== id); };
+  apply();
+  pushHistory({
+    label: `忽略约束 ${suggestion.label}`,
+    undo: () => { remove(); refreshConstraintUI(suggestion.part); },
+    redo: () => { apply(); refreshConstraintUI(suggestion.part); },
+  });
+  refreshConstraintUI(suggestion.part);
+  statusMsg(`已忽略约束：${suggestion.label}`);
+  return { ok: true };
+}
+
+function nextInsertedId() {
+  let id;
+  do {
+    state.insertSeq += 1;
+    id = `ins${state.insertSeq}`;
+  } while (findNode(id) || PARTS[id]);
+  return id;
+}
+
+function overlapsAabb(a, b) {
+  return a[0] < b[3] && a[3] > b[0] && a[1] < b[4] && a[4] > b[1] && a[2] < b[5] && a[5] > b[2];
+}
+
+function findFreePlacement() {
+  const w = 20, d = 20, h = 20;
+  const occupied = SCENE_OCCUPANCY.slice();
+  state.insertedParts.forEach(p => occupied.push([p.x, p.y, p.z, p.x + p.w, p.y + p.d, p.z + p.h]));
+  for (let row = 0; row < 5; row += 1) {
+    for (let col = 0; col < 5; col += 1) {
+      const candidate = { x: 4 + col * 40, y: 2 + row * 14, z: 8, w, d, h };
+      const bounds = [candidate.x, candidate.y, candidate.z, candidate.x + w, candidate.y + d, candidate.z + h];
+      if (!occupied.some(item => overlapsAabb(bounds, item))) return candidate;
+    }
+  }
+  const index = state.insertedParts.length;
+  return { x: 4 + (index % 5) * 40, y: 2 + (Math.floor(index / 5) % 5) * 14, z: 8 + Math.floor(index / 25) * h, w, d, h };
+}
+
+function genericPartDefinition(lib) {
+  return {
+    name: lib.model,
+    code: lib.model,
+    tag: '标准件',
+    groups: [
+      { title: '基本', fields: [
+        { k: '型号', v: lib.model, mono: true, ro: true },
+        { k: '品牌', v: lib.brand, ro: true },
+        { k: '类别', v: lib.cat, ro: true },
+        { k: '数量', v: '1', mono: true, ro: true },
+      ] },
+      { title: '材料与工艺', fields: [
+        { k: '材料', v: '—', ro: true },
+      ] },
+      { title: '装配关系', fields: [
+        { k: '自由度', v: '2', mono: true, ro: true },
+      ] },
+    ],
+  };
+}
+
+function addInsertedPartRecord(lib, id, placement) {
+  const group = findNode('g-std');
+  if (!group) throw new Error('标准件组不存在');
+  if (findNode(id) || PARTS[id]) return;
+  const node = { id, label: lib.model, kind: 'part', part: id, meta: lib.brand, dof: '2' };
+  group.children = group.children || [];
+  group.children.push(node);
+  group.meta = String((Number(group.meta) || 0) + 1);
+  PARTS[id] = genericPartDefinition(lib);
+  state.values[id] = {};
+  const tone = lib.cat === '气缸' ? 'steel' : lib.cat === '导轨' ? 'rail' : 'car';
+  state.insertedParts.push({ id, model: lib.model, ...placement, tone });
+  state.constraintSuggestions[id] = makeConstraintSuggestions(id, lib);
+  NODE_PATH[id] = ['装配', '标准件'];
+  COORDS[id] = [placement.x + placement.w / 2, placement.y + placement.d / 2, placement.z + placement.h / 2];
+}
+
+function removeInsertedPartRecord(id) {
+  const group = findNode('g-std');
+  if (group && group.children) {
+    const before = group.children.length;
+    group.children = group.children.filter(node => node.id !== id);
+    if (group.children.length !== before) group.meta = String(Math.max(0, (Number(group.meta) || 0) - 1));
+  }
+  delete PARTS[id];
+  delete state.values[id];
+  delete NODE_PATH[id];
+  delete COORDS[id];
+  delete state.constraintSuggestions[id];
+  state.insertedParts = state.insertedParts.filter(part => part.id !== id);
+  state.constraints = state.constraints.filter(item => item.part !== id);
+  state.ignoredConstraints = state.ignoredConstraints.filter(item => !String(item).startsWith(`${id}-`));
+}
+
+function insertLibPart(model) {
+  const lib = LIB.find(item => item.model === model);
+  if (!lib) return { ok: false, message: `型号不存在：${model}` };
+  try {
+    const id = nextInsertedId();
+    const placement = findFreePlacement();
+    const previous = {
+      part: state.selectedPart,
+      node: state.selNode,
+      stdOpen: Object.prototype.hasOwnProperty.call(state.treeOpen, 'g-std') ? state.treeOpen['g-std'] : undefined,
+    };
+    addInsertedPartRecord(lib, id, placement);
+    state.treeOpen['g-std'] = true;
+    setView('assembly');
+    mountScenes();
+    selectPart(id, id);
+    updateAssemblyCounters();
+    pushHistory({
+      label: `插入 ${lib.model}`,
+      undo: () => {
+        removeInsertedPartRecord(id);
+        if (previous.stdOpen === undefined) delete state.treeOpen['g-std'];
+        else state.treeOpen['g-std'] = previous.stdOpen;
+        const fallbackPart = findNode(previous.part) ? previous.part : 'cyl';
+        const fallbackNode = findNode(previous.node) ? previous.node : fallbackPart;
+        mountScenes();
+        selectPart(fallbackPart, fallbackNode);
+        updateAssemblyCounters();
+      },
+      redo: () => {
+        addInsertedPartRecord(lib, id, placement);
+        state.treeOpen['g-std'] = true;
+        setView('assembly');
+        mountScenes();
+        selectPart(id, id);
+        updateAssemblyCounters();
+      },
+    });
+    toast(`已插入 ${lib.model}`);
+    statusMsg(`已插入 ${lib.model}，等待约束确认`);
+    return { ok: true, id, label: lib.model };
+  } catch (error) {
+    return { ok: false, message: `插入失败：${error && error.message ? error.message : error}` };
+  }
+}
 
 /* ---------------------------------------------------------------- 3D 挂载 */
 function mountScene(target, cfg) {
@@ -1460,11 +1884,22 @@ function bind() {
       return;
     }
 
+    /* 约束建议 */
+    const acceptConstraintBtn = t.closest('[data-constraint-accept]');
+    if (acceptConstraintBtn) { adoptConstraint(acceptConstraintBtn.dataset.constraintAccept); return; }
+    const ignoreConstraintBtn = t.closest('[data-constraint-ignore]');
+    if (ignoreConstraintBtn) { ignoreConstraint(ignoreConstraintBtn.dataset.constraintIgnore); return; }
+
     /* 标准件库行 */
     const libRow = t.closest('[data-lib]');
     if (libRow) {
       const m = LIB.find(x => x.model === libRow.dataset.lib);
-      if (m) { state.libSel = m; renderLibrary(); $('[data-panel="right"][data-for="library"]').innerHTML = rightHTML('library'); }
+      if (m) {
+        state.libSel = m;
+        $$('[data-lib]').forEach(row => row.classList.toggle('is-sel', row.dataset.lib === m.model));
+        const right = $('[data-panel="right"][data-for="library"]');
+        if (right) right.innerHTML = rightHTML('library');
+      }
       return;
     }
     /* 排序 */
@@ -1584,37 +2019,36 @@ function bind() {
   $('#hint').addEventListener('click', closeHint);
   $('#hintClose').addEventListener('click', e => { e.stopPropagation(); closeHint(); });
 
-  /* 拖放插入（浏览器内演示，不读取文件） */
+  /* 标准件库拖放 */
+  document.addEventListener('dragstart', e => {
+    const row = e.target.closest('[data-lib]');
+    if (!row || !e.dataTransfer) return;
+    e.dataTransfer.setData('application/x-lib-model', row.dataset.lib);
+    e.dataTransfer.setData('text/plain', row.dataset.lib);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  document.addEventListener('dblclick', e => {
+    const row = e.target.closest('[data-lib]');
+    if (row) insertLibPart(row.dataset.lib);
+  });
   ['#stageAssembly', '#stageCheck'].forEach(sel => {
     const st = $(sel);
     if (!st) return;
-    st.addEventListener('dragover', e => { e.preventDefault(); st.classList.add('is-dropping'); });
-    st.addEventListener('dragleave', () => st.classList.remove('is-dropping'));
+    st.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+      st.classList.add('is-dragover');
+    });
+    st.addEventListener('dragleave', e => {
+      if (!st.contains(e.relatedTarget)) st.classList.remove('is-dragover');
+    });
     st.addEventListener('drop', e => {
       e.preventDefault();
-      st.classList.remove('is-dropping');
-      toast('已插入 1 个零件：气缸 MXQ20-50');
-      statusMsg('插入完成：气缸已装配到滑台');
+      st.classList.remove('is-dragover');
+      const model = e.dataTransfer ? e.dataTransfer.getData('application/x-lib-model') : '';
+      if (model) insertLibPart(model);
+      else statusMsg('未识别拖入的零件型号');
     });
-  });
-
-  /* 撤销 */
-  $('#stUndo').addEventListener('click', () => {
-    if (!state.undo) return;
-    const { pid, key, prev } = state.undo;
-    const map = { bore: '缸径', stroke: '行程' };
-    state.values[pid][key] = prev;
-    $$(`[data-field="${key}"][data-part="${pid}"]`).forEach(i => { i.value = prev; flashField(i); });
-    const cfg = { bore: Number(state.values.cyl.bore), stroke: Number(state.values.cyl.stroke) };
-    mountScene('#scene3d', cfg);
-    mountScene('#sceneCheck', Object.assign({ section: true }, cfg));
-    applySceneState();
-    computedFields('cyl');
-    renderSizing();
-    $('#stUndo').hidden = true;
-    state.undo = null;
-    statusMsg(`已撤销：${map[key] || key} 恢复为 ${prev}`);
-    toast(`已撤销：${map[key] || key} → ${prev}`);
   });
 
   /* 3D 零件点击 */
@@ -1665,6 +2099,20 @@ function bind() {
       e.preventDefault();
       palOpen ? closePalette() : openPalette();
       return;
+    }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const shortcut = e.key.toLowerCase();
+      if (shortcut === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoAction();
+        else undoAction();
+        return;
+      }
+      if (shortcut === 'y') {
+        e.preventDefault();
+        redoAction();
+        return;
+      }
     }
     if (palOpen) {
       if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
@@ -1741,8 +2189,7 @@ function handleAct(a) {
     }
     case 'report': toast('计算书已生成：SIZING-032.pdf'); break;
     case 'insert':
-      toast('已插入：' + state.libSel.model);
-      statusMsg('插入完成，已匹配安装孔位');
+      insertLibPart(state.libSel.model);
       break;
     case 'sync': toast('品牌索引已更新（1,284 条）'); break;
     case 'export': toast('已导出：ASM-001-BOM.csv'); statusMsg('导出完成'); break;
@@ -1777,6 +2224,7 @@ function init() {
   renderLibrary();
   renderSheet();
   mountScenes();
+  setupHistoryControls();
   bind();
   updateStatus();
   setView('assembly');
@@ -1787,3 +2235,36 @@ function init() {
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
+
+/* ---------------------------------------------------------------- 公共 API */
+window.ProtoApi = {
+  version: 1,
+  getTree: () => {
+    try { return JSON.parse(JSON.stringify(TREE)); }
+    catch (_) { return []; }
+  },
+  getDofTotal: () => {
+    try { return getDofTotal(); }
+    catch (_) { return 0; }
+  },
+  insertPart: (model) => {
+    try { return insertLibPart(model); }
+    catch (error) { return { ok: false, message: `插入失败：${error && error.message ? error.message : error}` }; }
+  },
+  undo: () => {
+    try { return undoAction(); }
+    catch (error) { return { ok: false, message: `撤销失败：${error && error.message ? error.message : error}` }; }
+  },
+  redo: () => {
+    try { return redoAction(); }
+    catch (error) { return { ok: false, message: `重做失败：${error && error.message ? error.message : error}` }; }
+  },
+  listConstraints: () => {
+    try { return state.constraints.map(item => ({ ...item })); }
+    catch (_) { return []; }
+  },
+  acceptConstraint: (id) => {
+    try { return adoptConstraint(id); }
+    catch (error) { return { ok: false, message: `采用约束失败：${error && error.message ? error.message : error}` }; }
+  },
+};
