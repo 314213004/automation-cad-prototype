@@ -1,10 +1,17 @@
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { extname } from 'node:path';
+import { join } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
 import type { AgentRpcInfo } from '../src/agent/rpc';
 import { FactoryManager } from '../src/factory/manager.ts';
 import type { TagValue } from '../src/factory/types.ts';
+import {
+  EXPORT_EXTENSIONS,
+  assertAllowedTargetPath,
+  ensureExportExtension,
+  validateExportFileName
+} from '../src/export/file';
 
 export interface IpcContext {
   builtinDir: string;
@@ -16,6 +23,58 @@ export interface IpcContext {
 }
 
 export const CAD_EXTENSIONS = ['.step', '.stp', '.iges', '.igs', '.brep', '.stl', '.obj', '.gltf', '.glb'];
+
+function exportPayload(data: unknown): string | Uint8Array {
+  if (typeof data === 'string') return data;
+  if (data instanceof Uint8Array) return data;
+  if (data instanceof ArrayBuffer) return new Uint8Array(data);
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  throw new Error('导出数据必须是字符串或字节数组');
+}
+
+async function exportReport(payload: unknown): Promise<{ path: string; htmlPath: string }> {
+  const source = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+  const html = source?.html;
+  if (typeof html !== 'string' || !html.trim()) throw new Error('报告 HTML 不能为空');
+  if (html.length > 20 * 1024 * 1024) throw new Error('报告 HTML 超过 20MB，已拒绝导出');
+  if (!html.includes('<html') || !html.includes('</html>')) throw new Error('报告 HTML 结构不完整');
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const directory = join(app.getPath('userData'), 'exports', timestamp);
+  mkdirSync(directory, { recursive: true });
+  const htmlPath = join(directory, 'report.html');
+  const pdfPath = join(directory, 'report.pdf');
+  writeFileSync(htmlPath, html, 'utf8');
+
+  const reportWindow = new BrowserWindow({
+    show: false,
+    backgroundColor: '#ffffff',
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  try {
+    reportWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+    await reportWindow.loadFile(htmlPath);
+    const pdf = await reportWindow.webContents.printToPDF({
+      landscape: true,
+      pageSize: 'A3',
+      printBackground: true,
+      margins: { top: 0, bottom: 0, left: 0, right: 0 }
+    });
+    if (pdf.byteLength === 0) throw new Error('PDF 打印结果为空');
+    writeFileSync(pdfPath, pdf);
+  } catch (error) {
+    throw new Error(`PDF 报告导出失败：${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (!reportWindow.isDestroyed()) reportWindow.destroy();
+  }
+  return { path: pdfPath, htmlPath };
+}
 
 export function createPackRegistry(context: Pick<IpcContext, 'builtinDir' | 'userDir' | 'stateFile'>): PackRegistry {
   return new PackRegistry({
@@ -43,6 +102,30 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     node: process.versions.node,
     platform: process.platform
   }));
+
+  ipcMain.handle('export:saveFile', async (_event, name: unknown, data: unknown) => {
+    const validated = validateExportFileName(name);
+    const content = exportPayload(data);
+    const window = BrowserWindow.getFocusedWindow();
+    const options = {
+      title: '导出文件',
+      defaultPath: validated.name,
+      filters: [
+        { name: '导出文件', extensions: EXPORT_EXTENSIONS.map((extension) => extension.slice(1)) },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    };
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return { canceled: true, path: null };
+    const target = ensureExportExtension(result.filePath, validated.extension);
+    assertAllowedTargetPath(target);
+    writeFileSync(target, content);
+    return { canceled: false, path: target };
+  });
+
+  ipcMain.handle('export:report', async (_event, payload: unknown) => await exportReport(payload));
 
   ipcMain.handle('cad:open-dialog', async () => {
     const window = BrowserWindow.getFocusedWindow();

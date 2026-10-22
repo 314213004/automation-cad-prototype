@@ -13,6 +13,8 @@ const desktopApi = {
   openCadDialog: () => ipcRenderer.invoke('cad:open-dialog'),
   readFileBuffer: (filePath: string) => ipcRenderer.invoke('cad:read-file', filePath),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  exportFile: (name: string, data: Uint8Array | string) => ipcRenderer.invoke('export:saveFile', name, data),
+  exportReport: (payload: { html: string; projectName?: string }) => ipcRenderer.invoke('export:report', payload),
   packs: {
     list: () => ipcRenderer.invoke('packs:list'),
     chooseZip: () => ipcRenderer.invoke('packs:choose-zip'),

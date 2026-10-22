@@ -162,6 +162,92 @@ function createWindow(): BrowserWindow {
           return;
         }
       }
+      if (existsSync(fixture)) {
+        try {
+          const mech = await window.webContents.executeJavaScript(
+            `(() => {
+              const hits = window.AutomationCadViewer.runInterference([
+                { name: 'Fixture-A', bbox: { min: [0, 0, 0], max: [100, 100, 100] } },
+                { name: 'Fixture-B', bbox: { min: [90, 90, 90], max: [190, 190, 190] } }
+              ]);
+              return { hits: hits.length, overlap: hits[0]?.overlap || null, severity: hits[0]?.severity || null };
+            })()`
+          ) as { hits: number; overlap: [number, number, number] | null; severity: string | null };
+          if (mech.hits < 1 || !mech.overlap || mech.overlap.some((value) => Math.abs(value - 10) > 0.01)) {
+            console.error('SMOKE_FAIL mech', JSON.stringify(mech));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_MECH_OK hits=${mech.hits}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL mech_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        try {
+          const exported = await window.webContents.executeJavaScript(
+            `(async () => {
+              const csv = await window.AutomationCadViewer.exportData('csv');
+              const dxf = await window.AutomationCadViewer.exportData('dxf');
+              const xlsx = await window.AutomationCadViewer.exportData('xlsx');
+              const glb = await window.AutomationCadViewer.exportMesh('glb');
+              const obj = await window.AutomationCadViewer.exportMesh('obj');
+              return { csv: csv.size, dxf: dxf.size, xlsx: xlsx.size, glb: glb.size, obj: obj.size };
+            })()`
+          ) as { csv: number; dxf: number; xlsx: number; glb: number; obj: number };
+          if (!(exported.csv > 0) || !(exported.dxf > 0) || !(exported.xlsx > 0) ||
+              !(exported.glb > 0) || !(exported.obj > 0)) {
+            console.error('SMOKE_FAIL export', JSON.stringify(exported));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log('SMOKE_EXPORT_OK csv=1 dxf=1');
+          console.log(`SMOKE_EXPORT_ASSETS_OK xlsx=${exported.xlsx} glb=${exported.glb} obj=${exported.obj}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL export_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        try {
+          const pdf = await window.webContents.executeJavaScript(
+            `window.AutomationCadViewer.exportReportPdf()`
+          ) as { path: string; htmlPath: string };
+          if (!pdf || !existsSync(pdf.path) || !pdf.path.endsWith('report.pdf')) {
+            console.error('SMOKE_FAIL pdf', JSON.stringify(pdf));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_PDF_OK path=${pdf.path}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL pdf_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        try {
+          const mechUi = await window.webContents.executeJavaScript(
+            `(() => {
+              const rootTab = document.getElementById('cadStressRootTab');
+              window.AutomationCadViewer.open();
+              document.querySelector('[data-cad-side="stress"]')?.click();
+              const calculators = document.querySelectorAll('#cadStressPane .cad-calc').length;
+              const results = document.querySelectorAll('#cadStressPane .cad-calc-result').length;
+              const inspector = Boolean(document.getElementById('cadInterferencePanel'));
+              window.AutomationCadViewer.close();
+              return { rootTab: Boolean(rootTab), calculators, results, inspector };
+            })()`
+          ) as { rootTab: boolean; calculators: number; results: number; inspector: boolean };
+          if (!mechUi.rootTab || mechUi.calculators !== 3 || mechUi.results !== 3 || !mechUi.inspector) {
+            console.error('SMOKE_FAIL mech_ui', JSON.stringify(mechUi));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log('SMOKE_MECH_UI_OK rootTab=1 calculators=3 inspector=1');
+        } catch (error) {
+          console.error('SMOKE_FAIL mech_ui_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+      }
       try {
         const ui = await window.webContents.executeJavaScript(
           `(async () => {

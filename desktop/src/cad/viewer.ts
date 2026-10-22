@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CadImportResult, CadMeshData } from '../shared/types';
+import { boundsFromPositions, type InterferencePart } from '../mech/interference';
 import { probeWebGL } from './webgl';
 
 export interface CadSelectionInfo {
@@ -43,6 +44,8 @@ export class CadViewer {
   private selectionHelper: THREE.Box3Helper | null = null;
   private grid: THREE.GridHelper | null = null;
   private parts: LoadedPart[] = [];
+  private modelParts: InterferencePart[] = [];
+  private importedResult: CadImportResult | null = null;
   private selected: number | null = null;
   private pointerDown = { x: 0, y: 0 };
   private wireframe = false;
@@ -135,11 +138,16 @@ export class CadViewer {
   }
 
   load(result: CadImportResult, fileName: string): void {
+    this.clearModel();
+    this.importedResult = result;
+    this.modelParts = result.meshes.map((mesh) => ({
+      name: mesh.name,
+      bbox: boundsFromPositions(mesh.positions)
+    }));
     if (this.degraded) {
       this.loadDegraded(result, fileName);
       return;
     }
-    this.clearModel();
     const materialCache = new Map<string, THREE.MeshStandardMaterial>();
     result.meshes.forEach((data, index) => {
       const geometry = new THREE.BufferGeometry();
@@ -217,6 +225,79 @@ export class CadViewer {
       material.needsUpdate = true;
     }
     return this.wireframe;
+  }
+
+  getModelParts(): InterferencePart[] {
+    return this.modelParts.map((part) => ({
+      name: part.name,
+      bbox: {
+        min: [...part.bbox.min],
+        max: [...part.bbox.max]
+      }
+    }));
+  }
+
+  getExportRoot(): THREE.Object3D {
+    if (this.parts.length > 0) return this.group;
+    if (!this.importedResult) throw new Error('请先打开 CAD 文件再导出 3D 模型');
+    const group = new THREE.Group();
+    group.name = 'AutomationCAD-Model';
+    this.importedResult.meshes.forEach((data, index) => {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(data.positions.slice(), 3));
+      if (data.normals) geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals.slice(), 3));
+      if (data.indices) geometry.setIndex(new THREE.BufferAttribute(data.indices.slice(), 1));
+      if (!data.normals) geometry.computeVertexNormals();
+      const mesh = new THREE.Mesh(
+        geometry,
+        new THREE.MeshStandardMaterial({ color: DEFAULT_COLORS[index % DEFAULT_COLORS.length] ?? 0x7f8b96 })
+      );
+      mesh.name = data.name;
+      group.add(mesh);
+    });
+    return group;
+  }
+
+  highlightNames(names: readonly string[], focus = false): boolean {
+    if (this.degraded || !this.selectionHelper) return false;
+    const wanted = new Set(names);
+    const indices: number[] = [];
+    this.parts.forEach((part, index) => {
+      if (wanted.has(part.data.name)) indices.push(index);
+    });
+    if (indices.length === 0) return false;
+
+    const selection = new THREE.Box3();
+    for (const index of indices) {
+      const part = this.parts[index];
+      if (!part) continue;
+      part.mesh.geometry.computeBoundingBox();
+      const box = part.mesh.geometry.boundingBox?.clone().applyMatrix4(part.mesh.matrixWorld);
+      if (box) selection.union(box);
+    }
+    if (selection.isEmpty()) return false;
+
+    this.selected = indices[0] ?? null;
+    this.selectionBox.copy(selection);
+    this.selectionHelper.box.copy(selection);
+    this.selectionHelper.visible = true;
+    this.partsElement.querySelectorAll('.cad-part-row').forEach((row) => {
+      const index = Number((row as HTMLElement).dataset.partIndex);
+      row.classList.toggle('is-selected', indices.includes(index));
+    });
+    const first = indices[0];
+    if (first !== undefined) {
+      const part = this.parts[first];
+      if (part) this.renderDetail(this.selectionInfo(part, first));
+    }
+    if (focus && this.controls) {
+      const center = selection.getCenter(new THREE.Vector3());
+      const offset = this.camera.position.clone().sub(this.controls.target);
+      this.controls.target.copy(center);
+      this.camera.position.copy(center).add(offset);
+      this.controls.update();
+    }
+    return true;
   }
 
   selectPart(index: number | null, focus = false): void {
@@ -394,6 +475,8 @@ export class CadViewer {
 
   private clearModel(): void {
     this.selected = null;
+    this.modelParts = [];
+    this.importedResult = null;
     if (this.selectionHelper) this.selectionHelper.visible = false;
     for (const part of this.parts) {
       part.mesh.geometry.dispose();

@@ -7,13 +7,21 @@ import { CadViewer } from './cad/viewer';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
+import type { InterferenceHit, InterferencePart } from './mech/interference';
+import { initInterferencePanel, type InterferencePanelHandle } from './mech/interference-ui';
+import { initStressPanel, type StressConclusion } from './mech/ui';
+import { toCsv, toXlsx, type BomRow } from './export/bom';
+import { toDxf, type DxfShape } from './export/dxf';
+import { toMeshBlob } from './export/mesh';
+import { renderReportHtml } from './export/report';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
   open: '<svg viewBox="0 0 16 16"><path d="M2 4.2h4l1.4 1.8H14v6.6H2z"/><path d="M9.2 9.1h3.6M11 7.3l1.8 1.8-1.8 1.8"/></svg>',
   fit: '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h3.2M2.5 2.5v3.2M13.5 2.5h-3.2M13.5 2.5v3.2M2.5 13.5h3.2M2.5 13.5v-3.2M13.5 13.5h-3.2M13.5 13.5v-3.2"/></svg>',
   wire: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14M4.3 6.7L8 8.1l3.7-1.4"/></svg>',
-  close: '<svg viewBox="0 0 16 16"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>'
+  close: '<svg viewBox="0 0 16 16"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>',
+  export: '<svg viewBox="0 0 16 16"><path d="M8 2v7M5.5 6.5L8 9l2.5-2.5M3 11.5v2h10v-2"/></svg>'
 };
 
 const CAD_ENTRY = 'cadEntryButton';
@@ -25,6 +33,12 @@ let dragDepth = 0;
 let noticeTimer = 0;
 let worker: Worker | null = null;
 let workerSequence = 0;
+let currentFileName = '';
+let stressConclusions: StressConclusion[] = [];
+let interference: InterferencePanelHandle | null = null;
+let mechUiReady = false;
+let stressTabObserver: MutationObserver | null = null;
+type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
 const pendingWorker = new Map<number, { resolve(result: CadImportResult): void; reject(error: Error): void }>();
 
 function injectStyles(): void {
@@ -72,6 +86,18 @@ function buildOverlay(): void {
         <button type="button" class="cad-btn cad-btn-primary" data-cad-action="open">${ICONS.open}<span>打开文件</span></button>
         <button type="button" class="cad-btn" data-cad-action="fit">${ICONS.fit}<span>缩放到适合</span></button>
         <button type="button" class="cad-btn" data-cad-action="wire">${ICONS.wire}<span>线框</span></button>
+        <div class="cad-export-wrap">
+          <button type="button" class="cad-btn" data-cad-action="export-menu">${ICONS.export}<span>导出</span><span class="cad-export-caret">▾</span></button>
+          <div class="cad-export-menu" id="cadExportMenu" hidden>
+            <button type="button" data-export="pdf"><span>PDF 报告</span><em>A3 横向</em></button>
+            <button type="button" data-export="dxf"><span>DXF 图纸</span><em>三视图</em></button>
+            <button type="button" data-export="glb"><span>GLB 模型</span><em>二进制</em></button>
+            <button type="button" data-export="obj"><span>OBJ 模型</span><em>文本</em></button>
+            <span class="cad-export-sep"></span>
+            <button type="button" data-export="csv"><span>BOM (CSV)</span><em>表格</em></button>
+            <button type="button" data-export="xlsx"><span>BOM (XLSX)</span><em>Excel</em></button>
+          </div>
+        </div>
         <button type="button" class="cad-btn" data-cad-action="close">${ICONS.close}<span>关闭</span></button>
       </div>
       <div class="cad-spacer"></div>
@@ -79,13 +105,20 @@ function buildOverlay(): void {
     </header>
     <main class="cad-main">
       <aside class="cad-sidebar">
-        <div class="cad-side-head"><span>零件列表</span><b id="cadPartCount">0</b></div>
-        <div class="cad-parts" id="cadParts">
-          <div class="cad-parts-empty">打开或拖入 STEP / IGES / BREP / STL / OBJ / GLTF / GLB 文件</div>
+        <div class="cad-side-tabs" role="tablist" aria-label="CAD 侧栏">
+          <button type="button" class="cad-side-tab is-active" data-cad-side="parts" role="tab" aria-selected="true">零件</button>
+          <button type="button" class="cad-side-tab" data-cad-side="stress" role="tab" aria-selected="false">受力</button>
         </div>
-        <div class="cad-detail" id="cadDetail">
-          <div class="cad-detail-empty">单击零件查看包围盒与尺寸</div>
+        <div class="cad-side-pane" id="cadPartsPane">
+          <div class="cad-side-head"><span>零件列表</span><b id="cadPartCount">0</b></div>
+          <div class="cad-parts" id="cadParts">
+            <div class="cad-parts-empty">打开或拖入 STEP / IGES / BREP / STL / OBJ / GLTF / GLB 文件</div>
+          </div>
+          <div class="cad-detail" id="cadDetail">
+            <div class="cad-detail-empty">单击零件查看包围盒与尺寸</div>
+          </div>
         </div>
+        <div class="cad-side-pane" id="cadStressPane" hidden></div>
       </aside>
       <section class="cad-viewport">
         <div class="cad-host" id="cadHost"></div>
@@ -100,6 +133,10 @@ function buildOverlay(): void {
           <div id="cadLoadingText">正在解析 CAD 文件…</div>
         </div>
       </section>
+      <aside class="cad-inspector">
+        <div class="cad-side-head"><span>干涉检查</span><b id="cadInterferenceCount">0</b></div>
+        <div class="cad-inspector-body" id="cadInterferencePanel"></div>
+      </aside>
     </main>
     <footer class="cad-footer">
       <span id="cadStats">就绪 · <strong>0</strong> 个零件</span>
@@ -110,6 +147,19 @@ function buildOverlay(): void {
 
   root.addEventListener('click', (event) => {
     event.stopPropagation();
+    const sideTab = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-side]');
+    if (sideTab) {
+      const pane = sideTab.dataset.cadSide === 'stress' ? 'stress' : 'parts';
+      activateSidePane(pane);
+      return;
+    }
+    const exportItem = (event.target as HTMLElement).closest<HTMLElement>('[data-export]');
+    if (exportItem) {
+      toggleExportMenu(false);
+      const format = exportItem.dataset.export as ExportFormat | undefined;
+      if (format) void exportAs(format);
+      return;
+    }
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-action]');
     if (!target) return;
     const action = target.dataset.cadAction;
@@ -119,10 +169,175 @@ function buildOverlay(): void {
       const on = viewer?.toggleWireframe() ?? false;
       target.classList.toggle('is-active', on);
       showNotice(on ? '已切换为线框显示' : '已切换为实体显示');
+    } else if (action === 'export-menu') {
+      toggleExportMenu();
     } else if (action === 'close') closeOverlay();
   });
   root.addEventListener('pointerdown', (event) => event.stopPropagation());
   root.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+}
+
+function activateSidePane(pane: 'parts' | 'stress'): void {
+  const partsPane = document.getElementById('cadPartsPane');
+  const stressPane = document.getElementById('cadStressPane');
+  if (partsPane) partsPane.hidden = pane !== 'parts';
+  if (stressPane) stressPane.hidden = pane !== 'stress';
+  root?.querySelectorAll<HTMLElement>('[data-cad-side]').forEach((button) => {
+    const active = button.dataset.cadSide === pane;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+}
+
+function toggleExportMenu(force?: boolean): void {
+  const menu = document.getElementById('cadExportMenu');
+  if (!menu) return;
+  menu.hidden = force === undefined ? !menu.hidden : !force;
+}
+
+function initMechUi(): void {
+  if (mechUiReady) return;
+  initStressPanel(requiredElement('cadStressPane'), (results) => {
+    stressConclusions = results;
+  });
+  interference = initInterferencePanel({
+    container: requiredElement('cadInterferencePanel'),
+    getParts: () => viewer?.getModelParts() ?? [],
+    highlight: (names) => viewer?.highlightNames(names, true) ?? false,
+    clearHighlight: () => viewer?.selectPart(null),
+    notify: showNotice,
+    onCount: (count) => {
+      const badge = document.getElementById('cadInterferenceCount');
+      if (badge) badge.textContent = String(count);
+    }
+  });
+  mechUiReady = true;
+}
+
+function openStressView(): void {
+  openOverlay();
+  activateSidePane('stress');
+}
+
+function injectStressTab(): void {
+  const panel = document.querySelector<HTMLElement>('[data-panel="left"][data-for="assembly"]');
+  if (!panel) return;
+  const ensure = (): void => {
+    const tabs = panel.querySelector<HTMLElement>('.tabs');
+    if (!tabs || tabs.querySelector('[data-cad-stress-tab]')) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'cadStressRootTab';
+    button.className = 'tab cad-stress-root-tab';
+    button.dataset.cadStressTab = '1';
+    button.textContent = '受力';
+    button.title = '打开机械受力校核';
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openStressView();
+    });
+    tabs.appendChild(button);
+  };
+  ensure();
+  if (!stressTabObserver) {
+    stressTabObserver = new MutationObserver(ensure);
+    stressTabObserver.observe(panel, { childList: true, subtree: true });
+  }
+}
+
+function exportBaseName(): string {
+  const raw = currentFileName.replace(/\.[^.]+$/, '').trim() || 'AutomationCAD';
+  return raw.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').slice(0, 80) || 'AutomationCAD';
+}
+
+function currentBomRows(): BomRow[] {
+  const parts = viewer?.getModelParts() ?? [];
+  if (parts.length === 0) throw new Error('请先打开 CAD 文件再导出');
+  return parts.map((part, index) => ({
+    index: index + 1,
+    name: part.name,
+    model: part.name,
+    quantity: 1,
+    material: '—',
+    note: '来自当前 CAD 模型'
+  }));
+}
+
+function currentDxfShapes(): DxfShape[] {
+  const parts = viewer?.getModelParts() ?? [];
+  if (parts.length === 0) throw new Error('请先打开 CAD 文件再导出 DXF');
+  return parts.map((part) => ({ name: part.name, bbox: part.bbox }));
+}
+
+function buildReportHtml(): string {
+  return renderReportHtml({
+    project: {
+      name: currentFileName || '未命名模型',
+      code: 'A3-MECH',
+      author: 'AutomationCAD'
+    },
+    bom: currentBomRows(),
+    interference: interference?.getHits() ?? [],
+    stress: stressConclusions
+  });
+}
+
+async function buildExport(format: ExportFormat): Promise<{ name: string; data: string | Uint8Array; size: number }> {
+  if (!viewer) throw new Error('请先打开 CAD 文件');
+  const base = exportBaseName();
+  if (format === 'csv') {
+    const text = toCsv(currentBomRows());
+    return { name: `${base}-BOM.csv`, data: text, size: new TextEncoder().encode(text).byteLength };
+  }
+  if (format === 'xlsx') {
+    const data = toXlsx(currentBomRows());
+    return { name: `${base}-BOM.xlsx`, data, size: data.byteLength };
+  }
+  if (format === 'dxf') {
+    const text = toDxf(currentDxfShapes());
+    return { name: `${base}.dxf`, data: text, size: new TextEncoder().encode(text).byteLength };
+  }
+  if (format === 'glb' || format === 'obj') {
+    const blob = await toMeshBlob(viewer.getExportRoot(), format);
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    return { name: `${base}.${format}`, data: bytes, size: bytes.byteLength };
+  }
+  if (format === 'pdf') {
+    const html = buildReportHtml();
+    return { name: `${base}-report.pdf`, data: html, size: new TextEncoder().encode(html).byteLength };
+  }
+  throw new Error(`不支持的导出格式：${String(format)}`);
+}
+
+async function exportData(format: ExportFormat): Promise<{ format: string; size: number }> {
+  const built = await buildExport(format);
+  return { format, size: built.size };
+}
+
+async function exportPdfReport(): Promise<{ path: string; htmlPath: string }> {
+  if (!window.desktop) throw new Error('导出功能仅在桌面版可用');
+  const html = buildReportHtml();
+  return await window.desktop.exportReport({ html, projectName: currentFileName });
+}
+
+async function exportAs(format: ExportFormat): Promise<void> {
+  try {
+    if (!window.desktop) throw new Error('导出功能仅在桌面版可用');
+    if (format === 'pdf') {
+      const result = await exportPdfReport();
+      showNotice(`PDF 报告已保存：${result.path}`);
+      return;
+    }
+    const built = await buildExport(format);
+    const result = await window.desktop.exportFile(built.name, built.data);
+    if (result.canceled) showNotice('导出已取消');
+    else showNotice(`已保存：${result.path}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showNotice(`导出失败：${message}`, true);
+    console.error('[export] 失败', error);
+  }
 }
 
 function ensureViewer(): CadViewer {
@@ -153,6 +368,7 @@ function openOverlay(): void {
   if (!root) return;
   overlayOpen = true;
   root.hidden = false;
+  initMechUi();
   ensureViewer().setActive(true);
   document.getElementById(CAD_ENTRY)?.classList.add('is-active');
 }
@@ -160,8 +376,10 @@ function openOverlay(): void {
 function closeOverlay(): void {
   overlayOpen = false;
   if (root) root.hidden = true;
+  toggleExportMenu(false);
   viewer?.setActive(false);
   document.getElementById(CAD_ENTRY)?.classList.remove('is-active');
+  document.getElementById('cadStressRootTab')?.classList.remove('is-active');
   (document.getElementById(CAD_ENTRY) as HTMLButtonElement | null)?.focus();
 }
 
@@ -277,7 +495,9 @@ async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
   setEmptyVisible(false);
   try {
     const result = await parseBuffer(buffer, name);
+    currentFileName = name;
     ensureViewer().load(result, name);
+    interference?.run([]);
     displayFileInfo(name);
     const partCount = document.getElementById('cadPartCount');
     if (partCount) partCount.textContent = String(result.stats.meshCount);
@@ -388,12 +608,23 @@ function bindWindowEvents(): void {
   }, true);
 
   window.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'e') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!overlayOpen) openOverlay();
+      toggleExportMenu(true);
+      return;
+    }
     if (event.key === 'Escape' && overlayOpen) {
       event.preventDefault();
       event.stopPropagation();
       closeOverlay();
     }
   }, true);
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target as HTMLElement).closest('.cad-export-wrap')) toggleExportMenu(false);
+  });
 
   window.desktop?.onOpenCad((payload) => {
     void importPath(payload.path);
@@ -412,12 +643,24 @@ function init(): void {
   initFactoryPanel();
   initPackPanel();
   buildOverlay();
+  initMechUi();
+  injectStressTab();
   bindWindowEvents();
   window.AutomationCadViewer = {
     open: openOverlay,
     close: closeOverlay,
     importPath,
-    inspectPath
+    inspectPath,
+    runInterference: (parts?: InterferencePart[]): InterferenceHit[] => {
+      initMechUi();
+      return interference?.run(parts) ?? [];
+    },
+    exportMesh: async (format: 'glb' | 'obj') => {
+      if (format !== 'glb' && format !== 'obj') throw new Error(`不支持的网格格式：${String(format)}`);
+      return await exportData(format);
+    },
+    exportData,
+    exportReportPdf: exportPdfReport
   };
   window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
 }

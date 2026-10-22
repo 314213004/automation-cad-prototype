@@ -72,6 +72,8 @@ interface Window {
     openCadDialog(): Promise<{ canceled: boolean; filePaths: string[] }>;
     readFileBuffer(path: string): Promise<Uint8Array>;
     getPathForFile(file: File): string;
+    exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
+    exportReport(payload: { html: string; projectName?: string }): Promise<{ path: string; htmlPath: string }>;
     packs: {
       list(): Promise<DesktopPackInfo[]>;
       chooseZip(): Promise<{ canceled: boolean; filePaths: string[] }>;
@@ -108,6 +110,10 @@ interface Window {
     close(): void;
     importPath(path: string): Promise<void>;
     inspectPath(path: string): Promise<{ meshCount: number; triangleCount: number; elapsedMs: number; format: string }>;
+    runInterference(parts?: { name: string; bbox: { min: [number, number, number]; max: [number, number, number] } }[]): { a: string; b: string; overlap: [number, number, number]; volumeApprox: number; center: [number, number, number]; severity: 'error' | 'warning' }[];
+    exportMesh(format: 'glb' | 'obj'): Promise<{ format: string; size: number }>;
+    exportData(format: 'csv' | 'xlsx' | 'dxf' | 'glb' | 'obj' | 'pdf'): Promise<{ format: string; size: number }>;
+    exportReportPdf(): Promise<{ path: string; htmlPath: string }>;
   };
 }
 
