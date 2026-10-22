@@ -23,6 +23,7 @@
 | 工厂面板（实时值/连接/写入确认） | ✅ | `desktop/src/factory/ui.ts` |
 | 单元测试 | ✅ 34/34 | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
+| 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
 ## 验证记录（真实执行）
 
