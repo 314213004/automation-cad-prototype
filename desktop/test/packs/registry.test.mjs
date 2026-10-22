@@ -197,13 +197,25 @@ test('仓库内置 smc-cn 包含 8 个真实型号', () => {
     userDir,
     stateFile
   });
-  const packs = actual.listParts();
+  const packs = actual.listParts({ packId: 'smc-cn' });
   assert.equal(packs.length, 8);
   const ids = new Set(packs.map((part) => part.id));
   for (const id of ['MXQ20-50', 'MGP32-200', 'CDQ2B32-50DZ', 'MHZ2-20D', 'SY5120-5LZD', 'D-M9B', 'KQ2H06-01AS', 'AW30-03']) {
     assert.equal(ids.has(id), true, `缺少型号 ${id}`);
   }
-  assert.equal(actual.listParts({ q: 'SMC' }).length, 8);
+  assert.equal(actual.listParts({ q: 'SMC', packId: 'smc-cn' }).length, 8);
+});
+
+test('仓库内置 iec-cn 包含 44 个电气元件、12 个分类', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const actualBuiltin = resolve(here, '../../../packs/builtin');
+  const actual = new PackRegistry({ builtinDir: actualBuiltin, userDir, stateFile });
+  const parts = actual.listParts({ packId: 'iec-cn' });
+  assert.equal(parts.length, 44);
+  const categories = new Set(parts.map((part) => part.category));
+  assert.equal(categories.size, 12);
+  const withSymbol = parts.filter((part) => typeof part.symbol === 'string' && part.symbol !== '');
+  assert.ok(withSymbol.length >= 30, `带原理图符号的元件过少：${withSymbol.length}`);
 });
 
 

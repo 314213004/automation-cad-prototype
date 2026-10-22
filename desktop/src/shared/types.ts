@@ -31,6 +31,8 @@ export interface ComponentPart {
   model: string;
   category: string;
   vendor?: string;
+  /** 原理图符号键（如 qf1/km1/a1），缺省表示暂无符号 */
+  symbol?: string;
   specs: Record<string, string | number>;
   asset?: string;
   thumbnail?: string;

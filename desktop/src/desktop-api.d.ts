@@ -18,6 +18,7 @@ interface DesktopPackInfo {
 }
 
 interface DesktopComponentPart {
+  symbol?: string;
   id: string;
   model: string;
   category: string;

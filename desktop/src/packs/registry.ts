@@ -30,6 +30,7 @@ interface PackState {
 
 const MANIFEST_REQUIRED = ['schemaVersion', 'id', 'name', 'vendor', 'version'] as const;
 const PACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
+const SYMBOL_PATTERN = /^[a-z][a-z0-9]{0,7}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -109,6 +110,12 @@ function validateParts(value: unknown, packId: string, packName: string): Compon
       packName
     };
     if (typeof item.vendor === 'string') part.vendor = item.vendor;
+    if (item.symbol !== undefined) {
+      if (typeof item.symbol !== 'string' || (item.symbol !== '' && !SYMBOL_PATTERN.test(item.symbol))) {
+        throw new Error(`parts[${index}].symbol 必须是 1-8 位小写字母开头的键`);
+      }
+      if (item.symbol !== '') part.symbol = item.symbol;
+    }
     if (typeof item.asset === 'string') part.asset = item.asset;
     if (typeof item.thumbnail === 'string') part.thumbnail = item.thumbnail;
     if (typeof item.price === 'number') part.price = item.price;
