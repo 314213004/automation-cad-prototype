@@ -3,6 +3,15 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CadImportResult, CadMeshData } from '../shared/types';
 import { boundsFromPositions, type InterferencePart } from '../mech/interference';
 import { probeWebGL } from './webgl';
+import { buildPartMeta, planFrame, type FrustumPlane, type LodLevel, type PartMeta } from './render-plan.ts';
+import {
+  boxProxyGeometry,
+  buildRenderOps,
+  centerGeometry,
+  decimateMesh,
+  describeRenderOps,
+  type RenderOps
+} from './render-batch.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -68,6 +77,17 @@ export class CadViewer {
   private readonly pointer = new THREE.Vector2();
   private resizeObserver: ResizeObserver | null = null;
   private readonly group = new THREE.Group();
+  /** 实例化与 LOD 代理的渲染对象放这里；原始 mesh 仍保留，负责拾取、导出与运动学 */
+  private readonly batchGroup = new THREE.Group();
+  private metas: PartMeta[] = [];
+  private metaByIndex = new Map<number, PartMeta>();
+  private renderOps: RenderOps | null = null;
+  private originalGeometries = new Map<number, THREE.BufferGeometry>();
+  private lodGeometries = new Map<string, THREE.BufferGeometry>();
+  private instanceGeometries = new Map<string, THREE.BufferGeometry>();
+  private planDirty = false;
+  private lastPlanMs = 0;
+  private planCount = 0;
   private readonly selectionBox = new THREE.Box3();
   private selectionHelper: THREE.Box3Helper | null = null;
   private grid: THREE.GridHelper | null = null;
@@ -92,6 +112,7 @@ export class CadViewer {
     this.onSelect = options.onSelect;
     this.scene.background = new THREE.Color(0x2a2d31);
     this.scene.add(this.group);
+    this.scene.add(this.batchGroup);
     this.scene.add(new THREE.HemisphereLight(0xf1f5f9, 0x2a2d31, 1.35));
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(1, -1.4, 2);
@@ -133,6 +154,9 @@ export class CadViewer {
       RIGHT: THREE.MOUSE.PAN
     };
     this.controls = controls;
+    controls.addEventListener('change', () => {
+      this.planDirty = true;
+    });
 
     const selectionHelper = new THREE.Box3Helper(this.selectionBox, 0x14b8a6);
     selectionHelper.visible = false;
@@ -210,6 +234,7 @@ export class CadViewer {
     });
     this.renderPartList();
     this.fit();
+    this.rebuildPlanState();
     const bounds = this.totalBounds();
     const size = bounds.getSize(new THREE.Vector3());
     this.onStats?.(
@@ -244,6 +269,254 @@ export class CadViewer {
     this.controls.target.copy(sphere.center);
     this.controls.update();
     this.updateGrid(sphere.center, radius * 2.4);
+  }
+
+  /** 当前帧渲染计划的中文概要（Agent / 调试面板用） */
+  getRenderPlanText(): string | null {
+    return this.renderOps ? describeRenderOps(this.renderOps) : null;
+  }
+
+  /** 立即重算一次渲染计划（插入/删除零件后调用） */
+  refreshRenderPlan(): void {
+    this.planDirty = false;
+    this.replan();
+  }
+
+  private rebuildPlanState(): void {
+    this.metas = [];
+    this.metaByIndex.clear();
+    this.parts.forEach((part, index) => {
+      const positions = part.data.positions;
+      if (!positions || positions.length < 9) return; // 占位件 / 空几何不参与规划
+      const meta = buildPartMeta(
+        {
+          name: part.data.name,
+          positions,
+          indices: part.data.indices ?? null,
+          ...(part.data.color ? { color: part.data.color } : {})
+        },
+        index
+      );
+      if (meta.triangleCount <= 0) return;
+      this.metas.push(meta);
+      this.metaByIndex.set(index, meta);
+    });
+    this.replan();
+  }
+
+  private replan(): void {
+    if (this.degraded || !this.renderer) return;
+    this.planDirty = false;
+    this.lastPlanMs = Date.now();
+    if (this.metas.length === 0) {
+      this.renderOps = null;
+      this.clearBatches();
+      return;
+    }
+    this.planCount += 1;
+    this.camera.updateMatrixWorld();
+    const plan = planFrame(this.metas, {
+      position: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z },
+      fovDeg: this.camera.fov,
+      planes: this.frustumPlanes()
+    });
+    const ops = buildRenderOps(plan, this.metas);
+    this.renderOps = ops;
+    this.applyRenderOps(ops);
+    this.refreshInstanceMatrices();
+  }
+
+  /** 从相机投影矩阵提取 6 个视锥平面（Gribb–Hartmann），避免引入额外依赖 */
+  private frustumPlanes(): FrustumPlane[] {
+    this.camera.updateMatrixWorld();
+    const matrix = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    const e = matrix.elements;
+    const rows: number[][] = [
+      [e[0] ?? 0, e[4] ?? 0, e[8] ?? 0, e[12] ?? 0],
+      [e[1] ?? 0, e[5] ?? 0, e[9] ?? 0, e[13] ?? 0],
+      [e[2] ?? 0, e[6] ?? 0, e[10] ?? 0, e[14] ?? 0],
+      [e[3] ?? 0, e[7] ?? 0, e[11] ?? 0, e[15] ?? 0]
+    ];
+    const planeAt = (row: number[] | undefined, sign: number): FrustumPlane => {
+      const r = row ?? [0, 0, 1, 0];
+      const nx = (r[0] ?? 0) * sign;
+      const ny = (r[1] ?? 0) * sign;
+      const nz = (r[2] ?? 0) * sign;
+      const length = Math.hypot(nx, ny, nz) || 1;
+      return {
+        normal: { x: nx / length, y: ny / length, z: nz / length },
+        constant: ((r[3] ?? 0) * sign) / length
+      };
+    };
+    return [
+      planeAt(rows[3], 1), // 近
+      planeAt(rows[3], -1), // 远
+      planeAt(rows[0], 1), // 左
+      planeAt(rows[0], -1), // 右
+      planeAt(rows[1], 1), // 下
+      planeAt(rows[1], -1) // 上
+    ];
+  }
+
+  private applyRenderOps(ops: RenderOps): void {
+    const hidden = new Set(ops.hidden);
+    for (const part of this.parts) part.mesh.visible = true;
+    for (const index of hidden) {
+      const part = this.parts[index];
+      if (part) part.mesh.visible = false;
+    }
+
+    this.clearBatches();
+
+    const instancedParts = new Set<number>();
+    for (const op of ops.ops) {
+      if (op.kind === 'instance') {
+        const firstIndex = op.partIndices[0];
+        const firstPart = firstIndex === undefined ? undefined : this.parts[firstIndex];
+        if (!firstPart) continue;
+        const geometry = this.instanceGeometryFor(op.signature, op.partIndices, op.centers);
+        if (!geometry) continue;
+        const material = firstPart.mesh.material as THREE.Material;
+        const instanced = new THREE.InstancedMesh(geometry, material, op.partIndices.length);
+        instanced.name = `实例:${op.signature.slice(0, 8)}`;
+        instanced.userData.partIndices = [...op.partIndices];
+        instanced.userData.centers = op.centers.map((center) => new THREE.Vector3(center.x, center.y, center.z));
+        instanced.userData.instanced = true;
+        this.batchGroup.add(instanced);
+        for (const index of op.partIndices) instancedParts.add(index);
+      } else {
+        const part = this.parts[op.partIndex];
+        if (!part) continue;
+        part.mesh.geometry = this.geometryForLod(op.partIndex, op.lod);
+      }
+    }
+    // 上了实例化的零件隐藏原始 mesh，避免重复绘制（几何仍保留给拾取/导出）
+    for (const index of instancedParts) {
+      const part = this.parts[index];
+      if (part) part.mesh.visible = false;
+    }
+  }
+
+  private geometryForLod(partIndex: number, lod: LodLevel): THREE.BufferGeometry {
+    const part = this.parts[partIndex];
+    if (!part) return new THREE.BufferGeometry();
+    if (lod === 0) return this.originalGeometryOf(partIndex, part.mesh.geometry);
+    const meta = this.metaByIndex.get(partIndex);
+    const key = `${partIndex}:${lod}`;
+    const cached = this.lodGeometries.get(key);
+    if (cached) return cached;
+    if (lod === 2 && meta) {
+      const buffer = boxProxyGeometry(meta);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(buffer.positions, 3));
+      geometry.setAttribute('normal', new THREE.BufferAttribute(buffer.normals, 3));
+      geometry.computeBoundingBox();
+      this.lodGeometries.set(key, geometry);
+      return geometry;
+    }
+    const simplified = decimateMesh(
+      { positions: part.data.positions, normals: part.data.normals, indices: part.data.indices },
+      0.35
+    );
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(simplified.positions, 3));
+    if (simplified.normals) geometry.setAttribute('normal', new THREE.BufferAttribute(simplified.normals, 3));
+    else geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    this.lodGeometries.set(key, geometry);
+    return geometry;
+  }
+
+  private instanceGeometryFor(signature: string, partIndices: readonly number[], centers: readonly { x: number; y: number; z: number }[]): THREE.BufferGeometry | null {
+    const cached = this.instanceGeometries.get(signature);
+    if (cached) return cached;
+    const firstIndex = partIndices[0];
+    const center = centers[0];
+    if (firstIndex === undefined || !center) return null;
+    const source = this.parts[firstIndex];
+    const meta = this.metaByIndex.get(firstIndex);
+    if (!source || !meta) return null;
+    const centered = centerGeometry(
+      { positions: source.data.positions, normals: source.data.normals, indices: source.data.indices },
+      meta.center
+    );
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(centered.positions, 3));
+    if (centered.normals) geometry.setAttribute('normal', new THREE.BufferAttribute(centered.normals, 3));
+    else geometry.computeVertexNormals();
+    if (centered.indices) geometry.setIndex(new THREE.BufferAttribute(centered.indices, 1));
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    this.instanceGeometries.set(signature, geometry);
+    return geometry;
+  }
+
+  /** 按零件当前变换刷新实例矩阵：几何已归零，因此 实例矩阵 = 零件矩阵 × 平移(中心) */
+  private refreshInstanceMatrices(): void {
+    const translation = new THREE.Matrix4();
+    const target = new THREE.Matrix4();
+    for (const child of this.batchGroup.children) {
+      const instanced = child as THREE.InstancedMesh;
+      if (!instanced.isInstancedMesh) continue;
+      const centers = instanced.userData.centers as THREE.Vector3[] | undefined;
+      const partIndices = instanced.userData.partIndices as number[] | undefined;
+      if (!centers || !partIndices) continue;
+      let count = 0;
+      for (let instance = 0; instance < partIndices.length; instance += 1) {
+        const part = this.parts[partIndices[instance] ?? -1];
+        const center = centers[instance];
+        if (!part || !center) continue;
+        part.mesh.updateMatrix();
+        translation.makeTranslation(center.x, center.y, center.z);
+        target.multiplyMatrices(part.mesh.matrix, translation);
+        instanced.setMatrixAt(count, target);
+        count += 1;
+      }
+      instanced.count = count;
+      instanced.instanceMatrix.needsUpdate = true;
+      instanced.computeBoundingSphere();
+    }
+  }
+
+  private originalGeometryOf(partIndex: number, current: THREE.BufferGeometry): THREE.BufferGeometry {
+    const existing = this.originalGeometries.get(partIndex);
+    if (existing) return existing;
+    this.originalGeometries.set(partIndex, current);
+    return current;
+  }
+
+  /** 把 LOD 替换掉的几何还原成原始几何；零件下标即将变化时必须先调用 */
+  private restoreOriginalGeometries(): void {
+    this.parts.forEach((part, index) => {
+      const original = this.originalGeometries.get(index);
+      if (original && original !== part.mesh.geometry) {
+        part.mesh.geometry.dispose();
+        part.mesh.geometry = original;
+      }
+    });
+    this.originalGeometries.clear();
+    for (const geometry of this.lodGeometries.values()) geometry.dispose();
+    this.lodGeometries.clear();
+  }
+
+  private clearBatches(): void {
+    for (const child of [...this.batchGroup.children]) {
+      this.batchGroup.remove(child);
+      const instanced = child as THREE.InstancedMesh;
+      if (instanced.isInstancedMesh) instanced.dispose();
+    }
+  }
+
+  private disposePlanCaches(): void {
+    this.clearBatches();
+    for (const geometry of this.lodGeometries.values()) geometry.dispose();
+    this.lodGeometries.clear();
+    for (const geometry of this.instanceGeometries.values()) geometry.dispose();
+    this.instanceGeometries.clear();
+    this.originalGeometries.clear();
+    this.metas = [];
+    this.metaByIndex.clear();
+    this.renderOps = null;
   }
 
   toggleWireframe(): boolean {
@@ -364,6 +637,7 @@ export class CadViewer {
       mesh.quaternion.copy(rotation.clone().multiply(baseQuaternion));
       mesh.updateMatrixWorld(true);
     }
+    this.refreshInstanceMatrices();
   }
 
   resetKinematics(meshIds: readonly number[]): void {
@@ -379,6 +653,7 @@ export class CadViewer {
       mesh.quaternion.copy(baseQuaternion);
       mesh.updateMatrixWorld(true);
     }
+    this.refreshInstanceMatrices();
   }
 
   addPlaceholderPart(name: string): number {
@@ -433,6 +708,7 @@ export class CadViewer {
     });
     this.renderPartList();
     this.syncPartCount();
+    this.rebuildPlanState();
     this.selectPart(index);
     return index;
   }
@@ -442,6 +718,7 @@ export class CadViewer {
     const part = this.parts[index];
     if (!part) return false;
 
+    this.restoreOriginalGeometries();
     this.group.remove(part.mesh);
     part.mesh.traverse((object) => {
       const renderable = object as THREE.Mesh;
@@ -466,6 +743,7 @@ export class CadViewer {
     this.renderPartList();
     this.renderDetail(null);
     this.syncPartCount();
+    this.rebuildPlanState();
     return true;
   }
 
@@ -584,6 +862,7 @@ export class CadViewer {
   private readonly renderFrame = (): void => {
     if (!this.active || !this.renderer || !this.controls) return;
     this.controls.update();
+    if (this.planDirty && Date.now() - this.lastPlanMs > 150) this.replan();
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -706,12 +985,21 @@ export class CadViewer {
     this.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObjects(this.group.children, false)[0];
+    const targets: THREE.Object3D[] = [
+      ...this.group.children.filter((child) => child.visible),
+      ...this.batchGroup.children
+    ];
+    const hit = this.raycaster.intersectObjects(targets, true)[0];
     if (!hit) {
       this.selectPart(null);
       return;
     }
-    const index = Number(hit.object.userData.partIndex);
+    const object = hit.object as THREE.Object3D & { isInstancedMesh?: boolean };
+    const instanceIndices = object.userData.partIndices as number[] | undefined;
+    let index = Number(object.userData.partIndex);
+    if (!Number.isInteger(index) && object.isInstancedMesh && hit.instanceId !== undefined && instanceIndices) {
+      index = instanceIndices[hit.instanceId] ?? NaN;
+    }
     if (Number.isInteger(index)) this.selectPart(index);
   };
 
@@ -720,13 +1008,19 @@ export class CadViewer {
     this.modelParts = [];
     this.importedResult = null;
     if (this.selectionHelper) this.selectionHelper.visible = false;
-    for (const part of this.parts) {
+    this.parts.forEach((part, index) => {
+      const original = this.originalGeometries.get(index);
+      if (original && original !== part.mesh.geometry) {
+        part.mesh.geometry.dispose();
+        part.mesh.geometry = original;
+      }
       part.mesh.geometry.dispose();
       const material = part.mesh.material as THREE.Material;
       material.dispose();
       this.group.remove(part.mesh);
-    }
+    });
     this.parts = [];
+    this.disposePlanCaches();
     this.partsElement.innerHTML = '';
     this.renderDetail(null);
   }

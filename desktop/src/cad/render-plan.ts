@@ -31,6 +31,8 @@ export interface PartMeta {
   center: Vec3;
   radius: number;
   diagonal: number;
+  /** 轴对齐包围盒，供 LOD2 代理盒使用 */
+  bbox: { min: Vec3; max: Vec3 };
 }
 
 export type LodLevel = 0 | 1 | 2;
@@ -224,7 +226,10 @@ export function buildPartMeta(mesh: PartGeometryInput, index: number): PartMeta 
     colorKey: colorKeyOf(mesh.color),
     center,
     radius: diagonal / 2,
-    diagonal
+    diagonal,
+    bbox: empty
+      ? { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } }
+      : { min: { x: minX, y: minY, z: minZ }, max: { x: maxX, y: maxY, z: maxZ } }
   };
 }
 
