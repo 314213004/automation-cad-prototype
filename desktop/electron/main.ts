@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,6 +10,8 @@ import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
+import { computeCost, type CostInput } from '../src/cost/engine';
+import { validatePricebook } from '../src/cost/pricebook';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const APP_NAME = 'AutomationCAD';
@@ -889,6 +891,36 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_PROTO_REDO_OK parts=${proto.undoParts}→${proto.redoParts}`);
       } catch (error) {
         console.error('SMOKE_FAIL proto_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
+        const pricebook = validatePricebook(
+          JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown
+        );
+        const costCase = JSON.parse(
+          readFileSync(join(fixtureDir, 'cost-case.json'), 'utf8')
+        ) as Pick<CostInput, 'bom' | 'placements' | 'plate' | 'options' | 'wireSection'>;
+        const report = computeCost({
+          ...costCase,
+          pricebook,
+          now: '2026-10-23T12:00:00+08:00'
+        });
+        if (report.lines.length !== 6 || report.missing.length !== 1 || report.totals.grand !== 1398.64) {
+          console.error('SMOKE_FAIL cost', JSON.stringify({
+            lines: report.lines.length,
+            missing: report.missing.length,
+            grand: report.totals.grand
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(
+          `SMOKE_COST_OK lines=${report.lines.length} missing=${report.missing.length} grand=${report.totals.grand.toFixed(2)}`
+        );
+      } catch (error) {
+        console.error('SMOKE_FAIL cost_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

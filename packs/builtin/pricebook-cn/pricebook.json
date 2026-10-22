@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "currency": "CNY",
+  "updatedAt": "2026-10-23T00:00:00+08:00",
+  "source": "items 中的 4 条均为示例，需替换为可公开核实的目录价；labor 与 accessories 为工程默认值，非官方报价。",
+  "items": {
+    "EXAMPLE-QF-16A": {
+      "model": "示例断路器 16A",
+      "category": "断路器",
+      "list": 78,
+      "tiers": [
+        { "minQty": 1, "price": 78 },
+        { "minQty": 10, "price": 68 }
+      ],
+      "source": "示例，需替换",
+      "updatedAt": "2026-09-01T00:00:00+08:00",
+      "example": true
+    },
+    "EXAMPLE-KM-9A": {
+      "model": "示例接触器 9A",
+      "category": "接触器",
+      "list": 120,
+      "tiers": [
+        { "minQty": 1, "price": 120 },
+        { "minQty": 5, "price": 110 }
+      ],
+      "source": "示例，需替换",
+      "updatedAt": "2026-09-01T00:00:00+08:00",
+      "example": true
+    },
+    "EXAMPLE-PSU-24V-60W": {
+      "model": "示例开关电源 24V 60W",
+      "category": "电源",
+      "list": 150,
+      "source": "示例，需替换",
+      "updatedAt": "2026-09-01T00:00:00+08:00",
+      "example": true
+    },
+    "EXAMPLE-TB-2.5": {
+      "model": "示例端子 2.5mm²",
+      "category": "端子",
+      "list": 6.5,
+      "source": "示例，需替换",
+      "updatedAt": "2026-09-01T00:00:00+08:00",
+      "example": true
+    }
+  },
+  "labor": {
+    "panelWiringPerPoint": 12,
+    "terminalPerWire": 1.5,
+    "assemblyHourly": 120,
+    "source": "工程默认值，非官方报价"
+  },
+  "accessories": {
+    "dinRail35PerMeter": 18,
+    "wireDuctPerMeter": 22,
+    "wirePerMeter": {
+      "1.5": 3.2,
+      "2.5": 4.8,
+      "4": 7.5
+    },
+    "source": "工程默认值，非官方报价"
+  }
+}

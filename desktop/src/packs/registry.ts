@@ -44,6 +44,11 @@ function readJson(path: string): unknown {
   return JSON.parse(readFileSync(path, 'utf8')) as unknown;
 }
 
+/** 价格簿是独立数据包，不进入元器件包的扫描与列表。 */
+function isPricebookOnlyPack(dir: string): boolean {
+  return existsSync(join(dir, 'pricebook.json')) && !existsSync(join(dir, 'parts.json'));
+}
+
 function validateManifest(value: unknown): PackManifest {
   if (!isRecord(value)) throw new Error('manifest.json 必须是对象');
   for (const key of MANIFEST_REQUIRED) {
@@ -182,6 +187,7 @@ export class PackRegistry {
       if (!existsSync(root)) continue;
       for (const entry of readdirSync(root, { withFileTypes: true })) {
         if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        if (isPricebookOnlyPack(join(root, entry.name))) continue;
         const loaded = this.loadPackDirectory(join(root, entry.name), entry.name, builtin, disabled);
         if (!byId.has(loaded.info.id)) byId.set(loaded.info.id, loaded);
       }
@@ -201,6 +207,7 @@ export class PackRegistry {
       if (!existsSync(root)) continue;
       for (const entry of readdirSync(root, { withFileTypes: true })) {
         if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        if (isPricebookOnlyPack(join(root, entry.name))) continue;
         const loaded = this.loadPackDirectory(join(root, entry.name), entry.name, builtin, disabled);
         if (!loaded.manifest || loaded.info.error || !loaded.info.enabled) continue;
         if (filter.packId && loaded.info.id !== filter.packId) continue;

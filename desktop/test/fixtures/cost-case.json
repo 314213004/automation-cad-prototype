@@ -1,0 +1,26 @@
+{
+  "bom": [
+    { "partId": "PART-QF", "name": "断路器", "qty": 2, "spec": "C16", "specs": { "接线点数": 2 } },
+    { "partId": "PART-KM", "name": "接触器", "qty": 1, "specs": { "接线点数": 6 } },
+    { "partId": "PART-PSU", "name": "开关电源", "qty": 1, "specs": { "接线点数": 4 } },
+    { "partId": "PART-TB", "name": "端子", "qty": 3, "specs": { "接线点数": 2 } },
+    { "partId": "PART-SENSOR", "name": "传感器", "qty": 2, "specs": { "接线点数": 3 } },
+    { "partId": "PART-BTN", "name": "按钮", "qty": 1, "specs": { "接线点数": 2 } },
+    { "partId": "PART-UNKNOWN", "name": "待询价件", "qty": 1, "specs": { "接线点数": 2 } }
+  ],
+  "placements": [
+    { "id": "p1", "partId": "PART-QF", "model": "QF-16", "x": 100, "y": 100, "w": 100, "h": 80 },
+    { "id": "p2", "partId": "PART-KM", "model": "KM-9", "x": 300, "y": 100, "w": 100, "h": 80 },
+    { "id": "p3", "partId": "PART-SENSOR", "model": "SENSOR-M8", "x": 300, "y": 400, "w": 100, "h": 80 }
+  ],
+  "plate": {
+    "width": 600,
+    "height": 800,
+    "rails": [
+      { "id": "rail-1", "y": 160, "height": 35, "label": "导轨 1" },
+      { "id": "rail-2", "y": 500, "height": 35, "label": "导轨 2" }
+    ]
+  },
+  "options": { "markupRate": 0.08, "taxRate": 0.13, "freight": 50 },
+  "wireSection": "2.5"
+}

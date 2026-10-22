@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "pricebook-cn",
+  "name": "人民币价格簿（中国）",
+  "vendor": "AutomationCAD",
+  "version": "0.1.0",
+  "license": "items 中的示例条目仅用于展示格式，不得作为报价依据；人工与辅材为工程默认值，非官方报价。",
+  "description": "机台硬件成本计算用价格簿。当前仅含 4 条明确标记的示例条目，真实目录价需由用户或企业价格簿替换。"
+}

@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "currency": "CNY",
+  "updatedAt": "2026-09-15T00:00:00+08:00",
+  "source": "测试夹具，仅用于成本引擎单测与冒烟，不代表真实报价",
+  "items": {
+    "PART-QF": {
+      "model": "QF-16",
+      "category": "断路器",
+      "list": 78,
+      "tiers": [
+        { "minQty": 1, "price": 78 },
+        { "minQty": 10, "price": 68 },
+        { "minQty": 50, "price": 60 }
+      ],
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    },
+    "PART-KM": {
+      "model": "KM-9",
+      "category": "接触器",
+      "list": 120,
+      "tiers": [
+        { "minQty": 1, "price": 120 },
+        { "minQty": 5, "price": 110 }
+      ],
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    },
+    "PART-PSU": {
+      "model": "PSU-24V-60W",
+      "category": "电源",
+      "list": 150,
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    },
+    "PART-TB": {
+      "model": "TB-2.5",
+      "category": "端子",
+      "list": 6.5,
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    },
+    "PART-SENSOR": {
+      "model": "SENSOR-M8",
+      "category": "传感器",
+      "list": 45,
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    },
+    "PART-BTN": {
+      "model": "BTN-22",
+      "category": "按钮",
+      "list": 12,
+      "source": "测试夹具价",
+      "updatedAt": "2026-09-01T00:00:00+08:00"
+    }
+  },
+  "labor": {
+    "panelWiringPerPoint": 12,
+    "terminalPerWire": 1.5,
+    "assemblyHourly": 120,
+    "source": "测试夹具人工费率"
+  },
+  "accessories": {
+    "dinRail35PerMeter": 18,
+    "wireDuctPerMeter": 22,
+    "wirePerMeter": {
+      "1.5": 3.2,
+      "2.5": 4.8,
+      "4": 7.5
+    },
+    "source": "测试夹具辅材费率"
+  }
+}
