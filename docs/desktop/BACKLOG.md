@@ -15,7 +15,7 @@
 - 验收：`npm test` 新增≥10；smoke `SMOKE_ELEC_CHECK_OK findings>=1`
 
 ### P2 电箱底板画布（真实尺寸布局）
-- 状态：⏳ 等尺寸数据合并（子智能体收集中）
+- 状态：✅ 已完成（`df8f1a2`）：185 测试、`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`；尺寸覆盖 191/371
 - 内容：mm 坐标 2D 画布，底板尺寸可设，元件按 `dims{w,h,d}` 真实尺寸绘制，拖放/吸附导轨/碰撞标红/利用率统计
 - 验收：`SMOKE_ENCLOSURE_CANVAS_OK placed>=1 overlap=0`
 
