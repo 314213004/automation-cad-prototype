@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "非标自动化整机设计软件 · Windows 11 桌面版",
+  "author": "owlco",
   "type": "module",
   "main": "dist-electron/main.cjs",
   "scripts": {
     "build:ext": "tsc --noEmit && vite build && node scripts/build-electron.mjs",
     "start": "electron .",
-    "test": "node --test test/**/*.test.mjs",
+    "test": "node --test",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
     "dist:win": "electron-builder --win nsis --x64"
   },
