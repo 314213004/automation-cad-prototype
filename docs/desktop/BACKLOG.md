@@ -6,7 +6,7 @@
 ## 待办（按优先级）
 
 ### P1 电气智能辅助（线号合规 + 功率统计）
-- 状态：🚧 进行中（`desktop/src/elec/check.ts` 规则引擎 + 22 条单测已完成；smoke `SMOKE_ELEC_CHECK_OK findings=4 errors=3`）
+- 状态：🚧 进行中（`desktop/src/elec/check.ts` 规则引擎 + 22 条单测已完成，`5352832`；smoke `SMOKE_ELEC_CHECK_OK findings=4 errors=3`）
 - 已完成：线号合规（缺号/格式/同网重复/跨网络重号/相线电位不符/数字跳号）、功率统计（kW/kVA、需要系数、分相电流、不平衡度、主断路器+进线截面建议、24V 电源余量）、导线截面 vs 载流量与断路器配合校验；`runElectricalCheck` 汇总按级别排序
 - 未完成（下一轮）：电气域「电气校验」面板（级别/位置/建议列表 + PDF 导出）、Agent 工具 `run_electrical_check`
 - 内容：`desktop/src/elec/` 规则引擎：
