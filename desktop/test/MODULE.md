@@ -29,6 +29,7 @@
 ```
 SMOKE_CAD_OK triangles=12 meshes=1
 SMOKE_WEBGL_FALLBACK_OK meshes=1 triangles=12 bounds=300.000 × 300.000 × 300.000 mm
+SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25
 SMOKE_UI_OK stations=2 tags=8 packs=2 parts=9 overlay=1
 SMOKE_ELEC_LIB_OK parts=44 categories=12 symbols=34
 SMOKE_SYNC_UI_OK fields=8 apiKey=password enabled=checkbox

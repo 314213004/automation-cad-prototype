@@ -4,6 +4,11 @@ import wasmAssetUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
 import { occtFormatForFile, parseOcctBuffer } from './cad/step';
 import { parseStandardCadBuffer } from './cad/loaders';
 import { CadViewer } from './cad/viewer';
+import {
+  initKinematicsUi,
+  pointOptionsFromMachineConfig,
+  type KinematicsUiHandle
+} from './cad/kinematics-ui';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
@@ -28,7 +33,8 @@ const ICONS = {
   fit: '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h3.2M2.5 2.5v3.2M13.5 2.5h-3.2M13.5 2.5v3.2M2.5 13.5h3.2M2.5 13.5v-3.2M13.5 13.5h-3.2M13.5 13.5v-3.2"/></svg>',
   wire: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14M4.3 6.7L8 8.1l3.7-1.4"/></svg>',
   close: '<svg viewBox="0 0 16 16"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>',
-  export: '<svg viewBox="0 0 16 16"><path d="M8 2v7M5.5 6.5L8 9l2.5-2.5M3 11.5v2h10v-2"/></svg>'
+  export: '<svg viewBox="0 0 16 16"><path d="M8 2v7M5.5 6.5L8 9l2.5-2.5M3 11.5v2h10v-2"/></svg>',
+  kinematics: '<svg viewBox="0 0 16 16"><path d="M2.5 4.5h7M11.5 4.5h2M2.5 11.5h2M6.5 11.5h7"/><circle cx="10" cy="4.5" r="1.5"/><circle cx="5" cy="11.5" r="1.5"/></svg>'
 };
 
 const CAD_ENTRY = 'cadEntryButton';
@@ -44,6 +50,7 @@ let currentFileName = '';
 let stressConclusions: StressConclusion[] = [];
 let interference: InterferencePanelHandle | null = null;
 let commission: CommissionPanelHandle | null = null;
+let kinematics: KinematicsUiHandle | null = null;
 let mechUiReady = false;
 let stressTabObserver: MutationObserver | null = null;
 type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
@@ -94,6 +101,7 @@ function buildOverlay(): void {
         <button type="button" class="cad-btn cad-btn-primary" data-cad-action="open">${ICONS.open}<span>打开文件</span></button>
         <button type="button" class="cad-btn" data-cad-action="fit">${ICONS.fit}<span>缩放到适合</span></button>
         <button type="button" class="cad-btn" data-cad-action="wire">${ICONS.wire}<span>线框</span></button>
+        <button type="button" class="cad-btn" data-cad-action="kinematics" id="cadKinematicsToggle">${ICONS.kinematics}<span>运动学</span></button>
         <div class="cad-export-wrap">
           <button type="button" class="cad-btn" data-cad-action="export-menu">${ICONS.export}<span>导出</span><span class="cad-export-caret">▾</span></button>
           <div class="cad-export-menu" id="cadExportMenu" hidden>
@@ -145,6 +153,7 @@ function buildOverlay(): void {
         <div class="cad-side-head"><span>干涉检查</span><b id="cadInterferenceCount">0</b></div>
         <div class="cad-inspector-body" id="cadInterferencePanel"></div>
       </aside>
+      <aside class="cad-kinematics-drawer" id="cadKinematicsDrawer" hidden></aside>
     </main>
     <footer class="cad-footer">
       <span id="cadStats">就绪 · <strong>0</strong> 个零件</span>
@@ -177,6 +186,10 @@ function buildOverlay(): void {
       const on = viewer?.toggleWireframe() ?? false;
       target.classList.toggle('is-active', on);
       showNotice(on ? '已切换为线框显示' : '已切换为实体显示');
+    } else if (action === 'kinematics') {
+      const handle = ensureKinematicsUi();
+      if (handle.isOpen()) handle.close();
+      else handle.open();
     } else if (action === 'export-menu') {
       toggleExportMenu();
     } else if (action === 'close') closeOverlay();
@@ -400,6 +413,24 @@ function ensureViewer(): CadViewer {
   return viewer;
 }
 
+function ensureKinematicsUi(): KinematicsUiHandle {
+  if (kinematics) return kinematics;
+  const container = requiredElement('cadKinematicsDrawer');
+  kinematics = initKinematicsUi({
+    container,
+    viewer: ensureViewer(),
+    getPointOptions: () => pointOptionsFromMachineConfig(commission?.getMachineConfig() ?? null),
+    notify: showNotice,
+    onOpenChange: (open) => {
+      document.getElementById('cadKinematicsToggle')?.classList.toggle('is-active', open);
+    },
+    onChange: (annotation) => {
+      commission?.setKinematics(annotation);
+    }
+  });
+  return kinematics;
+}
+
 function requiredElement(id: string): HTMLElement {
   const element = document.getElementById(id);
   if (!element) throw new Error(`缺少 CAD UI 节点：${id}`);
@@ -414,6 +445,7 @@ function openOverlay(): void {
   root.hidden = false;
   initMechUi();
   ensureViewer().setActive(true);
+  ensureKinematicsUi().open();
   document.getElementById(CAD_ENTRY)?.classList.add('is-active');
 }
 
@@ -540,6 +572,7 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     const result = await parseBuffer(buffer, name);
     currentFileName = name;
     ensureViewer().load(result, name);
+    ensureKinematicsUi().setSource(name, ensureViewer().getKinematicsMeshes());
     interference?.run([]);
     displayFileInfo(name);
     const partCount = document.getElementById('cadPartCount');
@@ -832,6 +865,26 @@ function init(): void {
   initMechUi();
   injectStressTab();
   bindWindowEvents();
+  Object.defineProperty(window, 'AutomationCadKinematics', {
+    value: Object.freeze({
+      open: (): void => {
+        if (!overlayOpen) openOverlay();
+        ensureKinematicsUi().open();
+      },
+      close: (): void => ensureKinematicsUi().close(),
+      state: () => ensureKinematicsUi().state(),
+      addMovingPart: (meshIds: readonly number[], name?: string): string => ensureKinematicsUi().addMovingPart(meshIds, name),
+      updatePart: (id: string, patch: Parameters<KinematicsUiHandle['updatePart']>[1]): void =>
+        ensureKinematicsUi().updatePart(id, patch),
+      slide: (id: string, percent: number) => ensureKinematicsUi().slide(id, percent),
+      save: (): boolean => ensureKinematicsUi().save(),
+      getAnnotation: () => ensureKinematicsUi().getAnnotation(),
+      getValidation: () => ensureKinematicsUi().getValidation()
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
   window.AutomationCadViewer = {
     open: openOverlay,
     close: closeOverlay,

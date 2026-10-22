@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { demoMachineConfig } from '../../src/commission/machine-config.ts';
+import { draftFromMesh } from '../../src/cad/kinematics-ui.ts';
 import { MachineMotion, createScene3D } from '../../src/commission/scene3d.ts';
 
 const config = demoMachineConfig();
@@ -68,4 +69,43 @@ test('3D 场景：stats 部件数等于 4 个基座 + 12 个执行机构', () =>
   assert.equal(scene.motionState(cylinder.id)?.target, 1);
   assert.equal(scene.sensorOn('X0'), true);
   assert.equal(scene.stats().ticks, 1);
+});
+
+
+test('3D 场景：完整运动学标注优先切换为标注驱动', () => {
+  const scene = createScene3D({}, config, () => 0);
+  const part = {
+    ...draftFromMesh({ id: 0, name: 'cube', triangles: 12, center: [0, 0, 0], size: [10, 10, 10] }),
+    kind: 'linear',
+    axis: 'y',
+    travelMm: 40,
+    retractedMm: 0,
+    point: 'Y0',
+    role: 'extend'
+  };
+  scene.setKinematics({ version: 1, sourceFile: 'cube.stp', parts: [part] });
+  const mode = scene.kinematicsMode();
+  assert.equal(mode.mode, 'annotation');
+  assert.equal(mode.parts, 1);
+  assert.equal(mode.sourceFile, 'cube.stp');
+  assert.equal(scene.stats().parts, 16);
+});
+
+test('3D 场景：标注缺行程或点位时回退配置驱动并给出中文原因', () => {
+  const scene = createScene3D({}, config, () => 0);
+  const base = draftFromMesh({ id: 0, name: 'cube', triangles: 12, center: [0, 0, 0], size: [10, 10, 10] });
+  scene.setKinematics({
+    version: 1,
+    sourceFile: 'cube.stp',
+    parts: [{ ...base, kind: 'linear', axis: 'y', travelMm: 0, retractedMm: 0, point: 'Y0', role: 'extend' }]
+  });
+  assert.equal(scene.kinematicsMode().mode, 'config');
+  assert.match(scene.kinematicsMode().reason, /行程为 0/);
+
+  scene.setKinematics({
+    version: 1,
+    sourceFile: 'cube.stp',
+    parts: [{ ...base, kind: 'linear', axis: 'y', travelMm: 40, retractedMm: 0, point: '', role: '' }]
+  });
+  assert.match(scene.kinematicsMode().reason, /未绑定点位/);
 });

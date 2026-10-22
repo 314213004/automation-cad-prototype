@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { probeWebGL } from '../cad/webgl.ts';
+import { axisPose } from '../cad/kinematics.ts';
+import {
+  partToAxis,
+  type KinematicsAnnotation,
+  type MovingPart
+} from '../cad/kinematics-ui.ts';
 import { type ActuatorConfig, type MachineConfig, validateMachineConfig } from './machine-config.ts';
 
 // 诚实边界：这里的“联动”来自 machine-config.ts 中的点位/执行机构配置。
@@ -18,6 +24,19 @@ export interface Commission3DStats {
   webgl: boolean;
   enabled: boolean;
   active: boolean;
+}
+
+export interface CommissionKinematicsMode {
+  mode: 'annotation' | 'config';
+  reason: string;
+  parts: number;
+  sourceFile: string;
+}
+
+interface AnnotationVisual {
+  part: MovingPart;
+  mesh: THREE.Mesh;
+  basePosition: THREE.Vector3;
 }
 
 export interface ActuatorMotionSnapshot {
@@ -183,6 +202,16 @@ export class CommissionScene3D {
   private readonly actuatorVisuals = new Map<string, ActuatorVisual>();
   private readonly sensorVisuals = new Map<string, SensorVisual>();
   private readonly targets = new Map<string, THREE.Object3D[]>();
+  private annotation: KinematicsAnnotation | null = null;
+  private annotationVisuals: AnnotationVisual[] = [];
+  private annotationGroup: THREE.Group | null = null;
+  private annotationScale = 1;
+  private kinematics: CommissionKinematicsMode = {
+    mode: 'config',
+    reason: '尚未加载运动学标注',
+    parts: 0,
+    sourceFile: ''
+  };
 
   constructor(container: HTMLElement, config: MachineConfig, clock: () => number = defaultNow) {
     this.container = container;
@@ -260,6 +289,21 @@ export class CommissionScene3D {
     this.highlightedPoint = null;
   }
 
+  /**
+   * 标注驱动优先：只要标注完整（网格、行程、点位都有效），就隐藏配置生成的执行机构；
+   * 否则保留配置驱动，并通过 kinematicsMode() 暴露黄色提示原因。
+   */
+  setKinematics(annotation: KinematicsAnnotation | null): void {
+    this.annotation = annotation;
+    this.kinematics = this.evaluateKinematics(annotation);
+    this.rebuildAnnotationVisuals();
+    this.applyTransforms();
+  }
+
+  kinematicsMode(): CommissionKinematicsMode {
+    return { ...this.kinematics };
+  }
+
   stats(): Commission3DStats {
     return {
       frames: this.frames,
@@ -291,6 +335,115 @@ export class CommissionScene3D {
     this.renderer?.dispose();
     if (this.renderer?.domElement.parentElement === this.container) this.container.removeChild(this.renderer.domElement);
     this.renderer = null;
+  }
+
+  private evaluateKinematics(annotation: KinematicsAnnotation | null): CommissionKinematicsMode {
+    if (!annotation || annotation.parts.length === 0) {
+      return { mode: 'config', reason: '尚未加载运动学标注', parts: 0, sourceFile: '' };
+    }
+    const points = new Set<string>();
+    for (const actuator of this.config.actuators) {
+      for (const point of [actuator.extendPoint, actuator.retractPoint, actuator.gripPoint, actuator.point]) {
+        if (point) points.add(point.trim().toUpperCase());
+      }
+    }
+    for (const part of annotation.parts) {
+      if (part.meshIds.length === 0) {
+        return { mode: 'config', reason: `动件「${part.name}」未关联网格`, parts: annotation.parts.length, sourceFile: annotation.sourceFile };
+      }
+      if (part.kind === 'linear' && !(part.travelMm > 0)) {
+        return { mode: 'config', reason: `动件「${part.name}」行程为 0`, parts: annotation.parts.length, sourceFile: annotation.sourceFile };
+      }
+      if (part.kind === 'rotary' && part.rangeDeg === 0) {
+        return { mode: 'config', reason: `动件「${part.name}」角度为 0`, parts: annotation.parts.length, sourceFile: annotation.sourceFile };
+      }
+      if (!part.point.trim()) {
+        return { mode: 'config', reason: `动件「${part.name}」未绑定点位`, parts: annotation.parts.length, sourceFile: annotation.sourceFile };
+      }
+      if (!points.has(part.point.trim().toUpperCase())) {
+        return { mode: 'config', reason: `动件「${part.name}」点位不在机型配置中`, parts: annotation.parts.length, sourceFile: annotation.sourceFile };
+      }
+    }
+    return {
+      mode: 'annotation',
+      reason: '',
+      parts: annotation.parts.length,
+      sourceFile: annotation.sourceFile
+    };
+  }
+
+  private rebuildAnnotationVisuals(): void {
+    if (this.annotationGroup) {
+      this.controlsRoot.remove(this.annotationGroup);
+      this.annotationGroup.traverse((node) => {
+        if (node instanceof THREE.Mesh) {
+          node.geometry.dispose();
+          const materials = Array.isArray(node.material) ? node.material : [node.material];
+          for (const material of materials) material.dispose();
+        }
+      });
+      this.annotationGroup = null;
+    }
+    this.annotationVisuals = [];
+    for (const visual of this.actuatorVisuals.values()) visual.group.visible = this.kinematics.mode === 'config';
+    if (!this.annotation || this.kinematics.mode !== 'annotation') {
+      this.scene.updateMatrixWorld(true);
+      return;
+    }
+    const group = new THREE.Group();
+    group.name = 'kinematics-annotation';
+    const parts = this.annotation.parts;
+    const overall = new THREE.Box3();
+    for (const part of parts) {
+      const center = new THREE.Vector3(part.center[0], part.center[1], part.center[2]);
+      const half = new THREE.Vector3(Math.max(part.size[0], 0.1), Math.max(part.size[1], 0.1), Math.max(part.size[2], 0.1)).multiplyScalar(0.5);
+      overall.expandByPoint(center.clone().sub(half));
+      overall.expandByPoint(center.clone().add(half));
+    }
+    const origin = overall.getCenter(new THREE.Vector3());
+    const span = overall.getSize(new THREE.Vector3());
+    this.annotationScale = 3.6 / Math.max(span.x, span.y, span.z, 1);
+    const colors = [0x2dd4bf, 0x60a5fa, 0xf59e0b, 0xa78bfa, 0xf472b6, 0x84cc16];
+    parts.forEach((part, index) => {
+      const size = new THREE.Vector3(Math.max(part.size[0], 0.1), Math.max(part.size[1], 0.1), Math.max(part.size[2], 0.1)).multiplyScalar(this.annotationScale);
+      const material = new THREE.MeshStandardMaterial({
+        color: colors[index % colors.length] ?? 0x2dd4bf,
+        metalness: 0.12,
+        roughness: 0.52
+      });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
+      const basePosition = new THREE.Vector3(
+        (part.center[0] - origin.x) * this.annotationScale,
+        0.65 + (part.center[2] - origin.z) * this.annotationScale,
+        -(part.center[1] - origin.y) * this.annotationScale
+      );
+      mesh.position.copy(basePosition);
+      group.add(mesh);
+      this.annotationVisuals.push({ part, mesh, basePosition });
+    });
+    this.controlsRoot.add(group);
+    this.annotationGroup = group;
+    this.applyAnnotationTransforms();
+  }
+
+  private applyAnnotationTransforms(): void {
+    for (const visual of this.annotationVisuals) {
+      const part = visual.part;
+      const axis = partToAxis(part);
+      const point = part.point.trim();
+      const pose = axisPose(axis, point ? { [point]: true } : {});
+      const offset = new THREE.Vector3(
+        pose.offset[0] * this.annotationScale,
+        pose.offset[2] * this.annotationScale,
+        -pose.offset[1] * this.annotationScale
+      );
+      const sign = (part.rangeDeg < 0 ? -1 : 1) * (part.direction === -1 ? -1 : 1);
+      const rotationRad = part.kind === 'rotary' ? pose.rotationRad * sign : 0;
+      const axisVector =
+        part.axis === 'x' ? new THREE.Vector3(1, 0, 0) : part.axis === 'y' ? new THREE.Vector3(0, 0, -1) : new THREE.Vector3(0, 1, 0);
+      visual.mesh.quaternion.setFromAxisAngle(axisVector, rotationRad);
+      visual.mesh.position.copy(visual.basePosition).add(offset);
+    }
   }
 
   private sync(): void {
@@ -388,6 +541,10 @@ export class CommissionScene3D {
   };
 
   private applyTransforms(): void {
+    if (this.kinematics.mode === 'annotation') {
+      this.applyAnnotationTransforms();
+      return;
+    }
     for (const visual of this.actuatorVisuals.values()) {
       const state = this.motion.getActuator(visual.config.id);
       if (!state) continue;

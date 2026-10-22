@@ -201,3 +201,62 @@
 .cad-hit-ignore:hover{border-color:#6d3c3c;color:#ffc9c4;background:#332323}
 .cad-stress-root-tab{position:relative}
 .cad-stress-root-tab::after{content:"";position:absolute;right:7px;top:7px;width:4px;height:4px;border-radius:50%;background:#14b8a6}
+
+/* 运动学标注抽屉 */
+.cad-kinematics-drawer{
+  width:342px;flex:0 0 342px;display:flex;flex-direction:column;min-height:0;
+  background:#1b1e21;border-left:1px solid #33383d;color:#d6dde2;
+}
+.cad-kinematics-drawer[hidden]{display:none !important}
+.cad-kin-head{flex:0 0 auto;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:11px 12px;border-bottom:1px solid #33383d;background:linear-gradient(180deg,#272b2f,#202327)}
+.cad-kin-title{min-width:0}
+.cad-kin-title b{display:block;font-size:12px;font-weight:600;color:#eef2f4}
+.cad-kin-title span{display:block;margin-top:3px;color:#7f8a92;font:9px/1.4 var(--font-mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-kin-icon{width:24px;height:24px;flex:0 0 auto;border:1px solid #414850;border-radius:3px;background:#202428;color:#aeb7be;font-size:15px;line-height:1}
+.cad-kin-icon:hover{background:#30353a;color:#fff}
+.cad-kin-body{flex:1;min-height:0;overflow:auto;padding:9px 10px 14px}
+.cad-kin-foot{flex:0 0 auto;display:flex;gap:5px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid #33383d;background:#191c1f}
+.cad-kin-foot .cad-btn{height:27px;font-size:10px;padding:0 8px}
+.cad-kin-alert{margin-bottom:8px;padding:7px 9px;border:1px solid #6d3c3c;border-radius:3px;background:#332323;color:#ffc9c4;font-size:10px;line-height:1.5}
+.cad-kin-alert[data-state="warn"]{border-color:#6b5a33;background:#302a1e;color:#e8d49b}
+.cad-kin-alert[hidden]{display:none !important}
+.cad-kin-section{margin-bottom:11px}
+.cad-kin-section-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 5px;color:#86919a;font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+.cad-kin-section-head b{font:9px/1 var(--font-mono,monospace);color:#6f7b84;background:#17191c;border:1px solid #343a40;border-radius:9px;padding:2px 6px}
+.cad-kin-meshes{max-height:172px;overflow:auto;border:1px solid #343a40;border-radius:4px;background:#1e2225}
+.cad-kin-mesh{display:grid;grid-template-columns:16px minmax(0,1fr) auto;align-items:center;gap:6px;min-height:27px;padding:3px 7px;border-bottom:1px solid #2b3035;cursor:pointer}
+.cad-kin-mesh:last-child{border-bottom:0}
+.cad-kin-mesh:hover{background:#252a2e}
+.cad-kin-mesh input{accent-color:#14b8a6;margin:0}
+.cad-kin-mesh-name{font-size:10px;color:#c5cdd3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-kin-mesh-tris{font:8px/1 var(--font-mono,monospace);color:#6f7b84;white-space:nowrap}
+.cad-kin-actions{display:flex;gap:5px;margin-top:6px}
+.cad-kin-actions .cad-btn{height:26px;font-size:10px;padding:0 8px}
+.cad-kin-empty{padding:14px 10px;text-align:center;color:#66717a;font-size:10px;line-height:1.65;border:1px dashed #343a40;border-radius:4px}
+.cad-kin-card{border:1px solid #343a40;border-radius:4px;background:#23272b;margin-bottom:7px;overflow:hidden}
+.cad-kin-card-head{display:flex;align-items:center;gap:6px;padding:7px 8px;border-bottom:1px solid #30353a;background:#1e2225}
+.cad-kin-name{flex:1;min-width:0;height:25px;padding:3px 6px;border:1px solid #3c434a;border-radius:2px;background:#16181b;color:#e2e7ea;font-size:11px}
+.cad-kin-name:focus{border-color:#2b8f84;outline:none}
+.cad-kin-del{height:24px;padding:0 6px;border:1px solid #5a3535;border-radius:2px;background:#2d2020;color:#e2a09a;font-size:9px}
+.cad-kin-del:hover{border-color:#8a4a46;color:#ffc9c4}
+.cad-kin-meta{padding:5px 8px 0;color:#6f7b84;font:8px/1.5 var(--font-mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-kin-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 6px;padding:7px 8px 4px}
+.cad-kin-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.cad-kin-field-wide{grid-column:1 / -1}
+.cad-kin-field>span{color:#7f8a92;font-size:8px}
+.cad-kin-field input,.cad-kin-field select{width:100%;min-width:0;height:25px;padding:2px 5px;border:1px solid #3c434a;border-radius:2px;background:#16181b;color:#d6dde2;font:9px/1 var(--font-mono,monospace)}
+.cad-kin-field input:focus,.cad-kin-field select:focus{border-color:#2b8f84;outline:none}
+.cad-kin-hint{padding:0 8px 5px;color:#c5a86b;font-size:8px;line-height:1.5}
+.cad-kin-slide{display:flex;align-items:center;gap:6px;padding:6px 8px 8px}
+.cad-kin-slide input[type="range"]{flex:1;min-width:0;accent-color:#14b8a6}
+.cad-kin-slide output{flex:0 0 32px;color:#8ee0d4;font:9px/1 var(--font-mono,monospace);text-align:right}
+.cad-kin-reset{height:22px;padding:0 6px;border:1px solid #414850;border-radius:2px;background:#2a2f34;color:#b8c0c7;font-size:8px}
+.cad-kin-reset:hover{background:#343a40;color:#fff}
+.cad-kin-issues{display:flex;flex-direction:column;gap:4px}
+.cad-kin-issue{display:grid;grid-template-columns:32px minmax(0,1fr);gap:5px;padding:5px 7px;border:1px solid #5d3838;border-left:2px solid #f04438;border-radius:3px;background:#2d2020;font-size:9px;line-height:1.5}
+.cad-kin-issue[data-level="warning"]{border-color:#5c4c2d;border-left-color:#e8b84a;background:#292720}
+.cad-kin-issue b{color:#ffc9c4;font-weight:600}
+.cad-kin-issue[data-level="warning"] b{color:#e8d49b}
+.cad-kin-issue span{color:#c9b8b6;word-break:break-word}
+.cad-kin-issue[data-level="warning"] span{color:#bdb29a}
+@media (max-width: 1280px){.cad-kinematics-drawer{width:304px;flex-basis:304px}}

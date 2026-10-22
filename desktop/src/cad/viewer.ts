@@ -26,6 +26,20 @@ export interface CadBomRow {
   mat: string;
 }
 
+export interface CadKinematicsMesh {
+  id: number;
+  name: string;
+  triangles: number;
+  center: [number, number, number];
+  size: [number, number, number];
+}
+
+export interface CadKinematicsPose {
+  offset: [number, number, number];
+  rotationRad: number;
+  axis: 'x' | 'y' | 'z';
+}
+
 export interface CadViewerOptions {
   container: HTMLElement;
   partsElement: HTMLElement;
@@ -186,6 +200,8 @@ export class CadViewer {
       const mesh = new THREE.Mesh(geometry, material);
       mesh.name = data.name;
       mesh.userData.partIndex = index;
+      mesh.userData.kinematicsBasePosition = mesh.position.clone();
+      mesh.userData.kinematicsBaseQuaternion = mesh.quaternion.clone();
       this.group.add(mesh);
       const triangleCount = data.indices
         ? Math.floor(data.indices.length / 3)
@@ -286,6 +302,85 @@ export class CadViewer {
     }));
   }
 
+  /** 运动学标注网格树的数据源；id 使用 parts 索引。 */
+  getKinematicsMeshes(): CadKinematicsMesh[] {
+    if (this.parts.length === 0 && this.importedResult) {
+      return this.importedResult.meshes.map((mesh, index) => {
+        const bbox = boundsFromPositions(mesh.positions);
+        const center: [number, number, number] = [
+          (bbox.min[0] + bbox.max[0]) / 2,
+          (bbox.min[1] + bbox.max[1]) / 2,
+          (bbox.min[2] + bbox.max[2]) / 2
+        ];
+        const size: [number, number, number] = [
+          bbox.max[0] - bbox.min[0],
+          bbox.max[1] - bbox.min[1],
+          bbox.max[2] - bbox.min[2]
+        ];
+        return {
+          id: index,
+          name: mesh.name,
+          triangles: mesh.indices ? Math.floor(mesh.indices.length / 3) : Math.floor(mesh.positions.length / 9),
+          center,
+          size
+        };
+      });
+    }
+    return this.parts.map((part, index) => {
+      const box = this.partBounds(part);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      return {
+        id: index,
+        name: part.data.name,
+        triangles: part.triangleCount,
+        center: [center.x, center.y, center.z],
+        size: [size.x, size.y, size.z]
+      };
+    });
+  }
+
+  /** 按动件姿态移动/旋转网格；pivot 为合并包围盒中心。 */
+  setKinematicsPose(
+    meshIds: readonly number[],
+    pose: CadKinematicsPose,
+    pivot: [number, number, number]
+  ): void {
+    if (this.degraded) return;
+    const pivotVector = new THREE.Vector3(pivot[0], pivot[1], pivot[2]);
+    const offset = new THREE.Vector3(pose.offset[0], pose.offset[1], pose.offset[2]);
+    const axisVector =
+      pose.axis === 'x' ? new THREE.Vector3(1, 0, 0) : pose.axis === 'y' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+    const rotation = new THREE.Quaternion().setFromAxisAngle(axisVector, pose.rotationRad);
+    for (const id of meshIds) {
+      const part = this.parts[id];
+      if (!part) continue;
+      const mesh = part.mesh;
+      const basePosition = (mesh.userData.kinematicsBasePosition as THREE.Vector3 | undefined) ?? mesh.position.clone();
+      const baseQuaternion =
+        (mesh.userData.kinematicsBaseQuaternion as THREE.Quaternion | undefined) ?? mesh.quaternion.clone();
+      const relative = basePosition.clone().sub(pivotVector).applyQuaternion(rotation);
+      mesh.position.copy(relative.add(pivotVector).add(offset));
+      mesh.quaternion.copy(rotation.clone().multiply(baseQuaternion));
+      mesh.updateMatrixWorld(true);
+    }
+  }
+
+  resetKinematics(meshIds: readonly number[]): void {
+    if (this.degraded) return;
+    for (const id of meshIds) {
+      const part = this.parts[id];
+      if (!part) continue;
+      const mesh = part.mesh;
+      const basePosition = (mesh.userData.kinematicsBasePosition as THREE.Vector3 | undefined) ?? mesh.position.clone();
+      const baseQuaternion =
+        (mesh.userData.kinematicsBaseQuaternion as THREE.Quaternion | undefined) ?? mesh.quaternion.clone();
+      mesh.position.copy(basePosition);
+      mesh.quaternion.copy(baseQuaternion);
+      mesh.updateMatrixWorld(true);
+    }
+  }
+
   addPlaceholderPart(name: string): number {
     if (this.degraded || !this.renderer) {
       throw new Error('当前环境不支持 WebGL，无法插入占位件');
@@ -307,6 +402,8 @@ export class CadViewer {
     mesh.name = displayName;
     mesh.position.set(centerX, 0, 10);
     mesh.userData.placeholder = true;
+    mesh.userData.kinematicsBasePosition = mesh.position.clone();
+    mesh.userData.kinematicsBaseQuaternion = mesh.quaternion.clone();
 
     const edges = new THREE.LineSegments(
       new THREE.EdgesGeometry(geometry),

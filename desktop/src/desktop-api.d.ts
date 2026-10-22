@@ -331,6 +331,12 @@ interface Window {
     };
     update(values: Record<string, boolean | number>): void;
     highlight(pointId: string, on: boolean): void;
+    kinematicsMode(): {
+      mode: 'annotation' | 'config';
+      reason: string;
+      parts: number;
+      sourceFile: string;
+    };
     lastDiagnosis(): {
       code: string;
       title: string;
@@ -390,6 +396,44 @@ interface Window {
     exportMesh(format: 'glb' | 'obj'): Promise<{ format: string; size: number }>;
     exportData(format: 'csv' | 'xlsx' | 'dxf' | 'glb' | 'obj' | 'pdf'): Promise<{ format: string; size: number }>;
     exportReportPdf(): Promise<{ path: string; htmlPath: string }>;
+  };
+  AutomationCadKinematics?: {
+    open(): void;
+    close(): void;
+    state(): {
+      sourceFile: string;
+      meshes: { id: number; name: string; triangles: number; center: [number, number, number]; size: [number, number, number] }[];
+      parts: {
+        id: string;
+        name: string;
+        meshIds: number[];
+        meshNames: string[];
+        center: [number, number, number];
+        size: [number, number, number];
+        kind: 'linear' | 'rotary';
+        axis: 'x' | 'y' | 'z';
+        direction: 1 | -1;
+        travelMm: number;
+        retractedMm: number;
+        rangeDeg: number;
+        retractedDeg: number;
+        point: string;
+        role: 'extend' | 'retract' | 'rotate' | '';
+      }[];
+      errors: number;
+      warnings: number;
+      ok: boolean;
+    };
+    addMovingPart(meshIds: readonly number[], name?: string): string;
+    updatePart(id: string, patch: Record<string, unknown>): void;
+    slide(id: string, percent: number): { percent: number; amount: number; unit: 'mm' | 'deg'; offset: [number, number, number]; rotationRad: number; source: string } | null;
+    save(): boolean;
+    getAnnotation(): {
+      version: 1;
+      sourceFile: string;
+      parts: unknown[];
+    };
+    getValidation(): { ok: boolean; errors: unknown[]; warnings: unknown[] };
   };
   AutomationCadCommission?: {
     open(): void;

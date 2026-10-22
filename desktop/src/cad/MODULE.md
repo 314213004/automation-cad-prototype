@@ -12,6 +12,7 @@
 | `viewer.ts` | three 场景、OrbitControls、fit、线框、拾取、包围盒尺寸、零件列表 |
 | `webgl.ts` | `probeWebGL(canvasFactory)` 纯函数，判定能否创建 WebGL 上下文 |
 | `kinematics.ts` | 运动学标注层：动件 → 轴/行程/方向/点位绑定，校验 + 姿态解算 + 机型配置交叉核对 |
+| `kinematics-ui.ts` | 标注面板：网格多选合并动件、轴/行程/点位编辑、实时校验、滑块预览、按文件名本地保存/导入导出 |
 | `cad.css` | 覆盖层样式（复用原型 token，不新增 UI 主色） |
 
 ## 数据结构
@@ -75,6 +76,11 @@ interface KinematicsAxis {
   `removeBinding`、`removeAxis` 都是不可变编辑，供下一轮标注面板复用。
 - 数据来源诚实性：`partNames` 必须来自真实导入结果（`CadImportResult.meshes[].name`），
   `knownPoints` 必须来自真实 IO 表；两者缺省时不做存在性校验，但也不会伪造零件或点位。
+- `kinematics-ui.ts` 的纯函数（`draftFromMesh` / `applySlide` / `validateDraft` /
+  `serializeAnnotation` / `deserializeAnnotation` / `createKinematicsStore`）不依赖 DOM，可直接单测。
+  `MovingPart` 记录 `meshIds` 与合并包围盒中心；滑块 0% 为缩回位，100% 为行程终点。
+- 本地保存键固定为 `automationcad.kinematics.v1`，内部按 `sourceFile` 分桶；导出 JSON 含
+  `version`、`sourceFile`、`parts`。有错误时保存按钮禁用，顶部显示「N 项未通过，无法保存」。
 
 ## 坑点
 
@@ -93,6 +99,7 @@ interface KinematicsAxis {
 - ✅ WebGL 降级（3 条单测）
 - ✅ 智能体占位件（20×20×20 mm 实体 + 线框）、按索引移除与重排、场景/选择/BOM 快照
 - ✅ 运动学标注数据层（动件 → 轴/行程/方向/点位，校验 + 姿态解算 + 机型交叉核对，23 条单测）
+- ✅ 运动学标注 UI（网格多选合并、实时中文校验、滑块预览、localStorage 分桶、JSON 导入导出，12 条单测）
 - ⏳ DXF 二维图纸（`dxf-parser`，未接）
 - ⏳ 剖切面、爆炸视图、装配树层级（当前是平铺 mesh 列表）
 

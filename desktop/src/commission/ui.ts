@@ -10,8 +10,9 @@ import {
 import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
 import { runSequence, type SequenceIo, type SequenceResult, type Step, type StepResult } from './sequence.ts';
 import { diagnose, type Diagnosis } from './diagnose.ts';
-import { demoMachineConfig } from './machine-config.ts';
-import { createScene3D, type Commission3DStats, type CommissionScene3D } from './scene3d.ts';
+import { demoMachineConfig, type MachineConfig } from './machine-config.ts';
+import { createScene3D, type Commission3DStats, type CommissionKinematicsMode, type CommissionScene3D } from './scene3d.ts';
+import type { KinematicsAnnotation } from '../cad/kinematics-ui.ts';
 import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
 import commissionStyles from './commission.css?inline';
 
@@ -55,6 +56,7 @@ interface Elements {
   caseResults: HTMLElement;
   monitorBody: HTMLElement;
   scene3dHost: HTMLElement;
+  scene3dMode: HTMLElement;
   scene3dToggle: HTMLInputElement;
   diagnosis: HTMLElement;
   diagnosisSummary: HTMLElement;
@@ -65,6 +67,8 @@ interface Elements {
 export interface CommissionPanelHandle {
   open(): void;
   getReport(): CommissionReport;
+  getMachineConfig(): MachineConfig;
+  setKinematics(annotation: KinematicsAnnotation | null): void;
   runPowerUp(): Promise<boolean>;
   runCase(id: string): Promise<boolean>;
   runAllCases(): Promise<boolean>;
@@ -314,6 +318,26 @@ function renderCaseResults(): void {
   elements.caseResults.innerHTML = rows.length > 0
     ? rows.join('')
     : '<tr><td colspan="6" style="color:#6e777f;text-align:center;padding:12px">尚未运行用例。单跑会自动补执行上电流程。</td></tr>';
+}
+
+function renderSceneMode(): void {
+  if (!elements) return;
+  const mode: CommissionKinematicsMode = scene3d?.kinematicsMode() ?? {
+    mode: 'config',
+    reason: '3D 场景尚未就绪',
+    parts: 0,
+    sourceFile: ''
+  };
+  elements.scene3dMode.dataset.mode = mode.mode;
+  elements.scene3dMode.textContent =
+    mode.mode === 'annotation'
+      ? `标注驱动 · ${mode.sourceFile || '未命名文件'} · ${mode.parts} 个动件`
+      : `配置驱动 · ${mode.reason}`;
+}
+
+function setKinematics(annotation: KinematicsAnnotation | null): void {
+  scene3d?.setKinematics(annotation);
+  renderSceneMode();
 }
 
 function renderDiagnosis(diagnoses: Diagnosis[]): void {
@@ -775,6 +799,7 @@ function buildPanel(): void {
       </div>
       <div class="acp-section-title"><span>3D 联动</span><label class="acp-switch"><input type="checkbox" id="commission3dToggle" checked>启用</label></div>
       <div class="acp-note" id="commission3dMachine">${MACHINE_SUMMARY}</div>
+      <div class="commission-3d-mode" id="commission3dMode" data-mode="config">配置驱动 · 尚未加载运动学标注</div>
       <div class="commission-3d" id="commission3dHost"></div>
       <div class="acp-section-title"><span>PLC 连接</span><b>28 点位</b></div>
       <div class="acp-field">
@@ -859,6 +884,7 @@ function buildPanel(): void {
     caseResults: get<HTMLElement>('#commissionCaseResults'),
     monitorBody: get<HTMLElement>('#commissionMonitor'),
     scene3dHost: get<HTMLElement>('#commission3dHost'),
+    scene3dMode: get<HTMLElement>('#commission3dMode'),
     scene3dToggle: get<HTMLInputElement>('#commission3dToggle'),
     diagnosis: get<HTMLElement>('#commissionDiagnosis'),
     diagnosisSummary: get<HTMLElement>('#commissionDiagnosisSummary'),
@@ -868,6 +894,7 @@ function buildPanel(): void {
   scene3d = createScene3D(elements.scene3dHost, MACHINE_CONFIG);
   scene3d.setEnabled(elements.scene3dToggle.checked);
   scene3d.setActive(drawer.isOpen());
+  renderSceneMode();
   scene3dObserver?.disconnect();
   scene3dObserver = new MutationObserver(() => scene3d?.setActive(drawer.isOpen()));
   scene3dObserver.observe(drawer.root, { attributes: true, attributeFilter: ['hidden', 'class'] });
@@ -892,6 +919,8 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
       void loadSavedConfig();
     },
     getReport,
+    getMachineConfig: (): MachineConfig => MACHINE_CONFIG,
+    setKinematics,
     runPowerUp,
     runCase: runCaseById,
     runAllCases
@@ -911,6 +940,12 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
       },
       update: (incoming: Record<string, boolean | number>): void => scene3d?.update(incoming),
       highlight: (pointId: string, on: boolean): void => scene3d?.highlight(pointId, on),
+      kinematicsMode: (): CommissionKinematicsMode => scene3d?.kinematicsMode() ?? {
+        mode: 'config',
+        reason: '3D 场景尚未就绪',
+        parts: 0,
+        sourceFile: ''
+      },
       lastDiagnosis: (): Diagnosis[] => lastDiagnoses.map((diagnosis) => ({
         ...diagnosis,
         evidence: [...diagnosis.evidence],

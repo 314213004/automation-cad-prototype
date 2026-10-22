@@ -180,6 +180,68 @@ function createWindow(): BrowserWindow {
       }
       if (existsSync(fixture)) {
         try {
+          const kin = await window.webContents.executeJavaScript(
+            `(async () => {
+              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const handle = window.AutomationCadKinematics;
+              if (!handle) return { error: '运动学标注入口缺失' };
+              handle.open();
+              await wait(40);
+              const initial = handle.state();
+              const meshId = initial.meshes[0]?.id;
+              if (meshId === undefined) return { error: '未枚举到 STEP 网格', meshes: initial.meshes.length };
+              const first = handle.addMovingPart([meshId], '立方体-A');
+              handle.updatePart(first, { kind: 'linear', axis: 'z', direction: 1, travelMm: 50, retractedMm: 0, point: 'Y0' });
+              const second = handle.addMovingPart([meshId], '立方体-B');
+              handle.updatePart(second, { kind: 'linear', axis: 'x', direction: 1, travelMm: 30, retractedMm: 0, point: '', role: '' });
+              const state = handle.state();
+              const pose = handle.slide(first, 25);
+              await wait(30);
+              const cards = document.querySelectorAll('[data-kin-part]').length;
+              const alert = document.querySelector('[data-kin-alert]')?.textContent || '';
+              const slider = document.querySelector('[data-kin-part="' + first + '"] [data-kin-slide]');
+              const distance = pose ? Math.hypot(...pose.offset) : 0;
+              const mode = window.__Commission3D?.kinematicsMode?.() ?? null;
+              return {
+                parts: state.parts.length,
+                errors: state.errors,
+                warnings: state.warnings,
+                cards,
+                alert,
+                slider: Number(slider?.value ?? -1),
+                distance,
+                mode: mode?.mode || '',
+                modeBar: document.getElementById('commission3dMode')?.textContent || ''
+              };
+            })()`
+          ) as {
+            error?: string;
+            parts: number;
+            errors: number;
+            warnings: number;
+            cards: number;
+            alert: string;
+            slider: number;
+            distance: number;
+            mode: string;
+            modeBar: string;
+          };
+          if (kin.error || kin.parts !== 2 || kin.errors !== 1 || kin.cards !== 2 ||
+              !kin.alert.includes('1 项未通过') || kin.slider !== 25 || !(kin.distance > 0) ||
+              kin.mode !== 'config' || !kin.modeBar.includes('配置驱动')) {
+            console.error('SMOKE_FAIL kinematics_ui', JSON.stringify(kin));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_KINEMATICS_UI_OK parts=${kin.parts} errors=${kin.errors} slide=${kin.slider}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL kinematics_ui_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+      }
+      if (existsSync(fixture)) {
+        try {
           const mech = await window.webContents.executeJavaScript(
             `(() => {
               const hits = window.AutomationCadViewer.runInterference([

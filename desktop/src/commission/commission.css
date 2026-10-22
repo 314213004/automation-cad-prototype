@@ -58,3 +58,5 @@
 .commission-diagnosis-actions>span{color:#d2b3b0;font-size:9px;letter-spacing:.04em}
 .commission-diagnosis-actions ol{margin:4px 0 0;padding-left:16px}
 @media (max-width: 1180px){.commission-drawer{width:470px}}
+.commission-3d-mode{margin:0 0 5px;padding:5px 7px;border:1px solid #6b5a33;border-radius:3px;background:#302a1e;color:#e8d49b;font-size:9px;line-height:1.45}
+.commission-3d-mode[data-mode="annotation"]{border-color:#2a5b55;background:#1c2b29;color:#8ee0d4}
