@@ -1,0 +1,458 @@
+[
+  {
+    "id": "6ES7214-1AG40",
+    "w": 110,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7211-1AE40",
+    "w": 90,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7215-1AG40-0XB0",
+    "w": 130,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7212-1AG40-0XB0",
+    "w": 90,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7211-1BE40-0XB0",
+    "w": 90,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7511-1AK02-0AB0",
+    "w": 35,
+    "h": 147,
+    "d": 129,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7513-1AL02-0AB0",
+    "w": 35,
+    "h": 147,
+    "d": 129,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7223-1PL32-0XB0",
+    "w": 70,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7223-1BH32-0XB0",
+    "w": 45,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7221-1BF32-0XB0",
+    "w": 45,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7231-4HD32-0XB0",
+    "w": 45,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7232-4HD32-0XB0",
+    "w": 45,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7234-4HE32-0XB0",
+    "w": 45,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6ES7241-1CH32-0XB0",
+    "w": 30,
+    "h": 100,
+    "d": 75,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6AV2123-2DB03-0AX0",
+    "w": 140,
+    "h": 116,
+    "d": 34.9,
+    "railMount": false,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6AV2123-2GB03-0AX0",
+    "w": 214,
+    "h": 158,
+    "d": 39,
+    "railMount": false,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6AV2123-2MB03-0AX0",
+    "w": 330,
+    "h": 245,
+    "d": 60,
+    "railMount": false,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6SL3210-1KE21-3UF1",
+    "w": 100,
+    "h": 196,
+    "d": 203,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "6SL3210-5FB10-8UF0",
+    "w": 80,
+    "h": 170,
+    "d": 195,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "3RW4036-1BB14",
+    "w": 55,
+    "h": 160,
+    "d": 170,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "3RW4026-1BB14",
+    "w": 45,
+    "h": 125,
+    "d": 155,
+    "railMount": true,
+    "source": "siemens.com"
+  },
+  {
+    "id": "FX3U-32MT-ES-A",
+    "w": 150,
+    "h": 90,
+    "d": 86,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FX3U-32MR-ES-A",
+    "w": 150,
+    "h": 90,
+    "d": 86,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FX3U-48MT-ES-A",
+    "w": 182,
+    "h": 90,
+    "d": 86,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FX5U-32MT-ES",
+    "w": 150,
+    "h": 90,
+    "d": 83,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FX5U-64MT-ES",
+    "w": 220,
+    "h": 90,
+    "d": 83,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FR-D720S-0.75K",
+    "w": 68,
+    "h": 128,
+    "d": 162.5,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FR-D720S-1.5K-CHT",
+    "w": 108,
+    "h": 128,
+    "d": 155.5,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "FR-D740-2.2K-CHT",
+    "w": 108,
+    "h": 128,
+    "d": 155.5,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "MR-J4-40A",
+    "w": 40,
+    "h": 168,
+    "d": 170,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "MR-J4-70A",
+    "w": 60,
+    "h": 168,
+    "d": 185,
+    "railMount": true,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "HG-KR43",
+    "w": 60,
+    "h": 77.1,
+    "d": 128.3,
+    "railMount": false,
+    "source": "mitsubishielectric.com"
+  },
+  {
+    "id": "CP1E-N30DR-A",
+    "w": 130,
+    "h": 90,
+    "d": 85,
+    "railMount": true,
+    "source": "omron.com"
+  },
+  {
+    "id": "CP1E-N40DR-A",
+    "w": 150,
+    "h": 90,
+    "d": 85,
+    "railMount": true,
+    "source": "omron.com"
+  },
+  {
+    "id": "CP2E-N30DR-A",
+    "w": 130,
+    "h": 90,
+    "d": 80,
+    "railMount": true,
+    "source": "omron.com"
+  },
+  {
+    "id": "CP2E-N40DT-D",
+    "w": 150,
+    "h": 90,
+    "d": 80,
+    "railMount": true,
+    "source": "omron.com"
+  },
+  {
+    "id": "CP1W-20EDR1",
+    "w": 86,
+    "h": 90,
+    "d": 50,
+    "railMount": true,
+    "source": "omron.com"
+  },
+  {
+    "id": "E6B2-CWZ6C-1000",
+    "w": 40,
+    "h": 40,
+    "d": 39,
+    "railMount": false,
+    "source": "omron.com"
+  },
+  {
+    "id": "E6B2-CWZ1X-1000",
+    "w": 40,
+    "h": 40,
+    "d": 39,
+    "railMount": false,
+    "source": "omron.com"
+  },
+  {
+    "id": "E6C3-AG5C-360",
+    "w": 50,
+    "h": 50,
+    "d": 38,
+    "railMount": false,
+    "source": "omron.com"
+  },
+  {
+    "id": "VFD007M43B",
+    "w": 100,
+    "h": 151,
+    "d": 116.5,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "VFD015M43B",
+    "w": 100,
+    "h": 151,
+    "d": 116.5,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "VFD022M43B",
+    "w": 100,
+    "h": 151,
+    "d": 116.5,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "ASD-B2-0421-B",
+    "w": 60.2,
+    "h": 162,
+    "d": 155.9,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "ASD-B2-0721-B",
+    "w": 79.5,
+    "h": 162,
+    "d": 163.4,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "ASD-A2-0421-L",
+    "w": 45,
+    "h": 173,
+    "d": 170,
+    "railMount": true,
+    "source": "deltaww.com"
+  },
+  {
+    "id": "MEDLT83SF",
+    "w": 85,
+    "h": 168,
+    "d": 193,
+    "railMount": true,
+    "source": "panasonic.com"
+  },
+  {
+    "id": "ATV320U22N4B",
+    "w": 60,
+    "h": 325,
+    "d": 245,
+    "railMount": true,
+    "source": "schneider-electric.com"
+  },
+  {
+    "id": "ATV12H075M2",
+    "w": 72,
+    "h": 143,
+    "d": 131.2,
+    "railMount": true,
+    "source": "schneider-electric.com"
+  },
+  {
+    "id": "ACS580-01-09A5-4",
+    "w": 125,
+    "h": 373,
+    "d": 223,
+    "railMount": true,
+    "source": "abb.com"
+  },
+  {
+    "id": "PSTX30-600-70",
+    "w": 150,
+    "h": 314,
+    "d": 197.5,
+    "railMount": true,
+    "source": "abb.com"
+  },
+  {
+    "id": "TK6071iP",
+    "w": 200.4,
+    "h": 146.5,
+    "d": 34,
+    "railMount": false,
+    "source": "weintek.com"
+  },
+  {
+    "id": "MT8071iE",
+    "w": 200.3,
+    "h": 146.3,
+    "d": 34,
+    "railMount": false,
+    "source": "weintek.com"
+  },
+  {
+    "id": "DM542",
+    "w": 118,
+    "h": 75.5,
+    "d": 25.5,
+    "railMount": true,
+    "source": "leadshine.com"
+  },
+  {
+    "id": "H5U-1614MTD",
+    "w": 95,
+    "h": 90,
+    "d": 83,
+    "railMount": true,
+    "source": "inovance.com"
+  },
+  {
+    "id": "H5U-1614MTD-A16",
+    "w": 95,
+    "h": 90,
+    "d": 83,
+    "railMount": true,
+    "source": "inovance.com"
+  },
+  {
+    "id": "IT6070E",
+    "w": 200,
+    "h": 146,
+    "d": 42,
+    "railMount": false,
+    "source": "inovance.com"
+  }
+]
