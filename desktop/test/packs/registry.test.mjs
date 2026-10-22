@@ -238,20 +238,19 @@ test('仓库内置 smc-cn 包含 8 个真实型号', () => {
   assert.equal(actual.listParts({ q: 'SMC', packId: 'smc-cn' }).length, 8);
 });
 
-test('仓库内置 iec-cn 包含 44 个电气元件、12 个分类', () => {
+test('仓库内置 iec-cn 规模与符号映射符合预期', () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const actualBuiltin = resolve(here, '../../../packs/builtin');
   const actual = new PackRegistry({ builtinDir: actualBuiltin, userDir, stateFile });
   const parts = actual.listParts({ packId: 'iec-cn' });
-  assert.equal(parts.length, 44);
+  assert.ok(parts.length >= 350, `条目过少：${parts.length}`);
   const categories = new Set(parts.map((part) => part.category));
-  assert.equal(categories.size, 12);
+  assert.ok(categories.size >= 20, `分类过少：${categories.size}`);
   const withSymbol = parts.filter((part) => typeof part.symbol === 'string' && part.symbol !== '');
-  assert.ok(withSymbol.length >= 30, `带原理图符号的元件过少：${withSymbol.length}`);
-  const symbolKeys = new Set(withSymbol.map((part) => part.symbol));
-  assert.deepEqual([...symbolKeys].sort(), ['a1', 'fr1', 'ka1', 'km1', 'm1', 'qf1', 'sb1', 'x1']);
+  assert.ok(withSymbol.length >= 150, `带符号元件过少：${withSymbol.length}`);
+  const allowed = new Set(['a1', 'fr1', 'ka1', 'km1', 'm1', 'qf1', 'sb1', 'x1']);
+  for (const part of withSymbol) assert.ok(allowed.has(part.symbol), `非法符号 ${part.id}:${part.symbol}`);
 });
-
 
 test('导入缺少 manifest 必填字段的 ZIP 返回具体原因', async () => {
   const bad = manifest('missing-vendor');

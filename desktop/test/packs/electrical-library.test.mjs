@@ -13,8 +13,8 @@ const PARTS_FILE = join(BUILTIN_DIR, 'iec-cn', 'parts.json');
 const ELECTRICAL_JS = join(REPO_ROOT, 'electrical.js');
 
 const EXPECTED_CATEGORIES = [
-  '断路器', '接触器', '热继电器', '中间继电器', '按钮', '指示灯',
-  '端子', '开关电源', 'PLC', '传感器', '变频器', '伺服驱动器'
+  '断路器', '接触器', '热继电器', '中间继电器', '按钮与开关', '指示与信号',
+  '端子与辅材', '开关电源', 'PLC', '传感器', '变频器', '伺服'
 ];
 
 const EXPECTED_SYMBOLS = ['qf1', 'km1', 'km1c', 'fr1', 'ka1', 'sb1', 'a1', 'm1', 'yv1', 'yv2', 'x1', 'hl1'];
@@ -23,12 +23,14 @@ function readParts() {
   return JSON.parse(readFileSync(PARTS_FILE, 'utf8'));
 }
 
-test('iec-cn 数据包为 44 条 / 12 分类并包含 LC1D18M7C 接触器', () => {
+test('iec-cn 数据包规模达标并包含核心分类与 LC1D18M7C', () => {
   const parts = readParts();
-  assert.equal(parts.length, 44);
+  assert.ok(parts.length >= 350, `条目过少：${parts.length}`);
   const categories = [...new Set(parts.map((part) => part.category))];
-  assert.equal(categories.length, 12);
-  assert.deepEqual(categories.sort(), [...EXPECTED_CATEGORIES].sort());
+  assert.ok(categories.length >= 20, `分类过少：${categories.length}`);
+  for (const expected of EXPECTED_CATEGORIES) {
+    assert.ok(categories.includes(expected), `缺少分类：${expected}`);
+  }
   const contactor = parts.find((part) => part.model === 'LC1D18M7C');
   assert.ok(contactor);
   assert.equal(contactor.category, '接触器');
@@ -38,14 +40,14 @@ test('gen-reference 输出包含 LC1D18M7C 与接触器表', () => {
   const markdown = buildReferenceMarkdown({ builtinDir: BUILTIN_DIR });
   assert.match(markdown, /## 接触器/);
   assert.match(markdown, /LC1D18M7C/);
-  assert.match(markdown, /\| 型号 \| 厂商 \| 额定电流 \|/);
+  assert.match(markdown, /\| 型号 \| 厂商 \|/);
 
   const sandbox = mkdtempSync(join(tmpdir(), 'cad-gen-reference-'));
   try {
     const outFile = join(sandbox, 'electrical-components.md');
     const result = generateReference({ builtinDir: BUILTIN_DIR, outFile });
     assert.equal(result.packCount, 2);
-    assert.equal(result.partCount, 52);
+    assert.ok(result.partCount >= 350, `参考表条目过少：${result.partCount}`);
     assert.equal(existsSync(outFile), true);
     assert.match(readFileSync(outFile, 'utf8'), /LC1D18M7C/);
   } finally {

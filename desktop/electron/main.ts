@@ -363,7 +363,7 @@ function createWindow(): BrowserWindow {
             return { parts, categories, symbols, rows, contactorRows, placed, placedTag };
           })()`
         ) as { error?: string; parts: number; categories: number; symbols: number; rows: number; contactorRows: number; placed: number; placedTag: string };
-        if (elecLib.error || elecLib.parts !== 44 || elecLib.categories !== 12 || elecLib.rows !== 44 || elecLib.contactorRows !== 5 || elecLib.placed !== 1 || !elecLib.placedTag) {
+        if (elecLib.error || elecLib.parts < 350 || elecLib.categories < 20 || elecLib.rows !== elecLib.parts || elecLib.contactorRows < 10 || elecLib.placed !== 1 || !elecLib.placedTag) {
           console.error('SMOKE_FAIL elec_lib', JSON.stringify(elecLib));
           setTimeout(() => app.exit(1), 100);
           return;

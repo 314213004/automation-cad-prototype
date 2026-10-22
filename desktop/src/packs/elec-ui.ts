@@ -11,21 +11,14 @@ import {
 const ELEC_ICON = '<svg viewBox="0 0 16 16"><path d="M10.8 1.8L4.4 8.6h3.2l-1.4 5.6 6.4-7.5H9.3z"/></svg>';
 const CACHE_TTL_MS = 30_000;
 const ALL_CATEGORY = '全部';
-const ELECTRICAL_CATEGORIES = [
-  '断路器',
-  '接触器',
-  '热继电器',
-  '中间继电器',
-  '按钮',
-  '指示灯',
-  '端子',
-  '开关电源',
-  'PLC',
-  '传感器',
-  '变频器',
-  '伺服驱动器'
-];
-const ELECTRICAL_SET = new Set(ELECTRICAL_CATEGORIES);
+const ELECTRICAL_PACK_PATTERN = /(^|[-_])(iec|elec|electric|电气)([-_]|$)/i;
+function isElectricalPack(parts: DesktopComponentPart[]): boolean {
+  if (parts.length === 0) return false;
+  const id = parts[0]?.packId ?? '';
+  if (ELECTRICAL_PACK_PATTERN.test(id)) return true;
+  const withSymbol = parts.filter((part) => typeof part.symbol === 'string' && part.symbol !== '').length;
+  return withSymbol * 2 >= parts.length;
+}
 
 interface PartsCache {
   at: number;
@@ -63,20 +56,19 @@ function partKey(part: DesktopComponentPart): string {
 }
 
 function electricalParts(parts: DesktopComponentPart[]): DesktopComponentPart[] {
-  const byPack = new Map<string, { total: number; electrical: number }>();
+  const byPack = new Map<string, DesktopComponentPart[]>();
   for (const part of parts) {
     const id = part.packId ?? '';
-    const stats = byPack.get(id) ?? { total: 0, electrical: 0 };
-    stats.total += 1;
-    if (ELECTRICAL_SET.has(part.category)) stats.electrical += 1;
-    byPack.set(id, stats);
+    const list = byPack.get(id) ?? [];
+    list.push(part);
+    byPack.set(id, list);
   }
-  return parts.filter((part) => {
-    if (!ELECTRICAL_SET.has(part.category)) return false;
-    const stats = byPack.get(part.packId ?? '');
-    if (!stats) return true;
-    return stats.electrical * 2 >= stats.total;
-  });
+  const electricalPacks = new Set(
+    [...byPack.entries()]
+      .filter(([, list]) => isElectricalPack(list))
+      .map(([id]) => id)
+  );
+  return parts.filter((part) => electricalPacks.has(part.packId ?? ''));
 }
 
 function matchesQuery(part: DesktopComponentPart, text: string): boolean {
@@ -120,14 +112,15 @@ async function ensureParts(): Promise<DesktopComponentPart[]> {
 }
 
 function visibleCategories(): Array<{ name: string; count: number }> {
-  const parts = cache?.parts ?? [];
-  const total = parts.length;
-  const result = [{ name: ALL_CATEGORY, count: total }];
-  for (const category of ELECTRICAL_CATEGORIES) {
-    const count = parts.filter((part) => part.category === category).length;
-    if (count > 0) result.push({ name: category, count });
-  }
-  return result;
+  const parts = filteredParts();
+  const counts = new Map<string, number>();
+  for (const part of parts) counts.set(part.category, (counts.get(part.category) ?? 0) + 1);
+  return [
+    { name: ALL_CATEGORY, count: parts.length },
+    ...[...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
+      .map(([name, count]) => ({ name, count }))
+  ];
 }
 
 function filteredParts(): DesktopComponentPart[] {
