@@ -78,3 +78,21 @@ test('runSequence 读取异常不吞掉，失败信息包含底层错误', async
   assert.equal(result.pass, false);
   assert.match(result.failure.message, /读取失败：PLC 通信断开/);
 });
+
+test('runSequence 每步结束回调一次并携带步骤定义', async () => {
+  const { io, values } = fakeIo({ X0: false });
+  const seen = [];
+  io.onStep = (result, step) => {
+    seen.push({ stepId: step.id, resultId: result.stepId, pass: result.pass, actual: result.actual });
+  };
+  const result = await runSequence([
+    { id: 's1', name: '写入', action: 'set', point: 'X0', value: true },
+    { id: 's2', name: '确认', action: 'wait', point: 'X0', expect: true }
+  ], io);
+  assert.equal(result.pass, true);
+  assert.deepEqual(seen, [
+    { stepId: 's1', resultId: 's1', pass: true, actual: 'X0 = true' },
+    { stepId: 's2', resultId: 's2', pass: true, actual: 'X0 = true' }
+  ]);
+  assert.equal(values.X0, true);
+});

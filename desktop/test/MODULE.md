@@ -18,7 +18,7 @@
 | 会话循环 | `test/agent/session.test.mjs` | 同上 | 0/1/2 次工具调用、超轮、失败回灌、确认拒绝、20 条历史上限 |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
-| 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例 |
+| 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例；10 条诊断规则/排序/兜底 |
 | 设计同步 | `test/sync/*.test.mjs` | 同上 | manifest/SHA、ZIP 路径、缺文件、配置脱敏、401/404/超时、幂等、diff |
 | 数据包 | `test/packs/*.test.mjs` | 同上 | 包校验/导入、symbol 字段、iec-cn 数据契约、参考表生成、符号映射扫描 |
 | 端到端冒烟 | `electron . --headless-smoke` | `npm run smoke` | xvfb 下加载页面、注入扩展、解析 fixture、断言 UI 结构 |
@@ -36,6 +36,8 @@ SMOKE_PLC_OK points=28
 SMOKE_COMMISSION_OK steps=6 passed=6
 SMOKE_COMMISSION_UI_OK cases=3 monitor=28 results=18
 SMOKE_COMMISSION_PDF_OK path=.../report.pdf
+SMOKE_COMMISSION_3D_OK ticks=... parts=5
+SMOKE_DIAGNOSE_OK codes=1
 SMOKE_AGENT_TOOLS_OK tools=7 implemented=7
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
@@ -64,8 +66,8 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 146 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包与同步）
-- ✅ smoke 含智能体 7 工具/场景/BOM/对话面板、电气元件面板、PLC、6 步上电、3 用例与联调 PDF 断言
+- ✅ 157 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包、同步与联调诊断）
+- ✅ smoke 含智能体 7 工具/场景/BOM/对话面板、电气元件面板、PLC、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 

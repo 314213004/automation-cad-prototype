@@ -317,6 +317,19 @@ interface Window {
     onSetDomain(callback: (domain: 'mech' | 'elec') => void): () => void;
   };
   __AgentBridge?: AgentBridgeApi;
+  __Commission3D?: {
+    stats(): { frames: number; ticks: number; parts: number; webgl: boolean; enabled: boolean; active: boolean };
+    update(values: Record<string, boolean | number>): void;
+    highlight(pointId: string, on: boolean): void;
+    lastDiagnosis(): {
+      code: string;
+      title: string;
+      severity: 'error' | 'warning';
+      evidence: string[];
+      actions: string[];
+      confidence: number;
+    }[];
+  };
   ElecDomain?: {
     setDomain(domain: 'mech' | 'elec'): void;
     insertSymbol(key: string, opts?: { x?: number; y?: number }): { ok: boolean; tag?: string; id?: string; message?: string };

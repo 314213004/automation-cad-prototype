@@ -8,7 +8,9 @@ import {
   notify
 } from '../ui/panels';
 import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
-import { runSequence, type SequenceIo, type SequenceResult, type StepResult } from './sequence.ts';
+import { runSequence, type SequenceIo, type SequenceResult, type Step, type StepResult } from './sequence.ts';
+import { diagnose, type Diagnosis } from './diagnose.ts';
+import { CommissionScene3D, type Commission3DStats } from './scene3d.ts';
 import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
 import commissionStyles from './commission.css?inline';
 
@@ -49,6 +51,10 @@ interface Elements {
   casesRun: HTMLButtonElement;
   caseResults: HTMLElement;
   monitorBody: HTMLElement;
+  scene3dHost: HTMLElement;
+  scene3dToggle: HTMLInputElement;
+  diagnosis: HTMLElement;
+  diagnosisSummary: HTMLElement;
   export: HTMLButtonElement;
   summary: HTMLElement;
 }
@@ -77,6 +83,9 @@ let caseReports = new Map<string, SequenceResult>();
 let running = false;
 let listening = false;
 let loaded = false;
+let scene3d: CommissionScene3D | null = null;
+let scene3dObserver: MutationObserver | null = null;
+let lastDiagnoses: Diagnosis[] = [];
 
 function desktop() {
   return window.desktop;
@@ -102,6 +111,54 @@ function formatValue(value: PlcValue | undefined, unit?: string): string {
   if (value === undefined) return '—';
   const text = typeof value === 'boolean' ? (value ? 'true' : 'false') : String(value);
   return unit ? `${text} ${unit}` : text;
+}
+
+function livePointValues(): Record<string, boolean | number> {
+  const snapshot: Record<string, boolean | number> = {};
+  for (const point of points) {
+    const value = values.get(point.id);
+    if (typeof value === 'boolean' || typeof value === 'number') snapshot[point.id] = value;
+  }
+  return snapshot;
+}
+
+function expectedForStep(step: Step, result: StepResult): { point: string; value: PlcValue } | undefined {
+  if (!step.point) return undefined;
+  if (step.action === 'wait' && step.expect !== undefined) return { point: step.point, value: step.expect };
+  if (step.action === 'set' && step.value !== undefined && result.expected.includes('=')) return { point: step.point, value: step.value };
+  return undefined;
+}
+
+function faultPoint(diagnoses: Diagnosis[], step: Step, snapshot: Record<string, boolean | number>): string | undefined {
+  const diagnosis = diagnoses[0];
+  if (!diagnosis) return step.point;
+  if (diagnosis.code === 'SAFETY_LOOP_OPEN') {
+    if (snapshot.X8 === false) return 'X8';
+    if (snapshot.X9 === true) return 'X9';
+    if (snapshot.X14 === true) return 'X14';
+    return 'X8';
+  }
+  if (diagnosis.code === 'AIR_PRESSURE_LOW') return 'X3';
+  if (diagnosis.code === 'DUAL_SENSOR') return snapshot.X6 === true ? 'X6' : 'X7';
+  return step.point;
+}
+
+function handleStepResult(result: StepResult, step: Step): void {
+  const snapshot = livePointValues();
+  scene3d?.update(snapshot);
+  if (result.pass) return;
+  const expected = expectedForStep(step, result);
+  const diagnoses = diagnose({
+    step: result,
+    points: snapshot,
+    ...(expected ? { expected } : {}),
+    ...(step.timeoutMs !== undefined ? { timeoutMs: step.timeoutMs } : {}),
+    commOk: lastStatus.status === 'connected'
+  });
+  lastDiagnoses = diagnoses;
+  renderDiagnosis(diagnoses);
+  const point = faultPoint(diagnoses, step, snapshot);
+  if (point) scene3d?.highlight(point, true);
 }
 
 function currentConfig(kind: PlcKind): PlcConfig {
@@ -256,6 +313,32 @@ function renderCaseResults(): void {
     : '<tr><td colspan="6" style="color:#6e777f;text-align:center;padding:12px">尚未运行用例。单跑会自动补执行上电流程。</td></tr>';
 }
 
+function renderDiagnosis(diagnoses: Diagnosis[]): void {
+  if (!elements) return;
+  elements.diagnosisSummary.textContent = diagnoses.length > 0 ? `${diagnoses.length} 项结论` : '待运行';
+  if (diagnoses.length === 0) {
+    elements.diagnosis.innerHTML = '<div class="commission-diagnosis-empty">执行失败后显示可执行的故障排查结论。</div>';
+    return;
+  }
+  elements.diagnosis.innerHTML = diagnoses.map((diagnosis) => {
+    const confidence = Math.round(diagnosis.confidence * 100);
+    return `<article class="commission-diagnosis-card" data-diagnosis-code="${escapeHtml(diagnosis.code)}" data-severity="${diagnosis.severity}">
+      <div class="commission-diagnosis-head">
+        <b>${escapeHtml(diagnosis.title)}</b>
+        <span>置信度 ${confidence}%</span>
+      </div>
+      <ul class="commission-diagnosis-evidence">${diagnosis.evidence.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      <div class="commission-diagnosis-actions"><span>排查步骤</span><ol>${diagnosis.actions.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ol></div>
+    </article>`;
+  }).join('');
+}
+
+function resetDiagnosis(): void {
+  lastDiagnoses = [];
+  scene3d?.clearHighlight();
+  renderDiagnosis([]);
+}
+
 function makeIo(): SequenceIo {
   const api = desktop();
   if (!api) throw new Error('联调面板仅在桌面版可用');
@@ -264,6 +347,7 @@ function makeIo(): SequenceIo {
     async read(id) {
       const result = await api.plc.read(id);
       if (!result.ok || result.data === undefined) throw new Error(result.message ?? `读取点位「${id}」失败`);
+      updateMonitorValue(id, result.data);
       return result.data;
     },
     async write(id, value) {
@@ -275,7 +359,8 @@ function makeIo(): SequenceIo {
       if (!result.ok || !result.data) throw new Error(result.message ?? '读取全部点位失败');
       for (const [id, value] of Object.entries(result.data)) updateMonitorValue(id, value);
       return result.data;
-    }
+    },
+    onStep: handleStepResult
   };
 }
 
@@ -312,6 +397,7 @@ async function connect(): Promise<void> {
     powerResults = POWER_UP_STEPS.map(() => undefined);
     powerCursor = 0;
     caseReports = new Map();
+    resetDiagnosis();
     renderPowerSteps();
     renderCases();
     renderCaseResults();
@@ -319,6 +405,7 @@ async function connect(): Promise<void> {
     if (all.ok && all.data) {
       values = new Map();
       for (const [id, value] of Object.entries(all.data)) updateMonitorValue(id, value);
+      scene3d?.update(livePointValues());
     }
     setMessage(`PLC 已连接：${config.kind === 'sim' ? '内置仿真器' : `${config.host}:${config.port}`}`);
     renderCases();
@@ -363,6 +450,7 @@ async function runPowerUp(): Promise<boolean> {
     return false;
   }
   running = true;
+  resetDiagnosis();
   powerResults = POWER_UP_STEPS.map(() => undefined);
   powerCursor = 0;
   renderPowerSteps();
@@ -401,6 +489,7 @@ async function runPowerStep(): Promise<boolean> {
   const step = POWER_UP_STEPS[index];
   if (!step) return powerPassed();
   running = true;
+  resetDiagnosis();
   renderPowerSteps();
   renderCases();
   try {
@@ -436,6 +525,7 @@ async function runCaseById(id: string): Promise<boolean> {
     return false;
   }
   running = true;
+  resetDiagnosis();
   renderCases();
   renderPowerSteps();
   try {
@@ -458,6 +548,7 @@ async function runAllCases(): Promise<boolean> {
   if (running) return false;
   if (!(await ensureReady())) return false;
   running = true;
+  resetDiagnosis();
   caseReports = new Map();
   renderCaseResults();
   renderCases();
@@ -617,6 +708,9 @@ function bindEvents(): void {
   elements.powerRun.addEventListener('click', () => void runPowerUp());
   elements.powerStep.addEventListener('click', () => void runPowerStep());
   elements.casesRun.addEventListener('click', () => void runAllCases());
+  elements.scene3dToggle.addEventListener('change', () => {
+    scene3d?.setEnabled(elements?.scene3dToggle.checked ?? true);
+  });
   elements.export.addEventListener('click', () => void exportReport());
   elements.pointsBody.addEventListener('change', (event) => {
     const input = (event.target as HTMLElement).closest<HTMLInputElement>('[data-point-address]');
@@ -654,6 +748,7 @@ function bindDesktopEvents(): void {
   });
   api.plc.onValues((incoming) => {
     for (const [id, value] of Object.entries(incoming)) updateMonitorValue(id, value);
+    scene3d?.update(livePointValues());
   });
 }
 
@@ -661,6 +756,7 @@ function buildPanel(): void {
   ensureStyles();
   const entry = buildEntryButton('commissionEntryButton', '联调', COMMISSION_ICON, () => {
     drawerHandle?.open();
+    scene3d?.setActive(true);
     void loadSavedConfig();
   });
   if (!entry) return;
@@ -674,6 +770,8 @@ function buildPanel(): void {
         <span id="commissionStatusText">PLC · 未连接</span>
         <strong id="commissionStatusDetail">未建立通信</strong>
       </div>
+      <div class="acp-section-title"><span>3D 联动</span><label class="acp-switch"><input type="checkbox" id="commission3dToggle" checked>启用</label></div>
+      <div class="commission-3d" id="commission3dHost"></div>
       <div class="acp-section-title"><span>PLC 连接</span><b>28 点位</b></div>
       <div class="acp-field">
         <span>适配器</span>
@@ -714,6 +812,9 @@ function buildPanel(): void {
         <tbody id="commissionCaseResults"></tbody>
       </table></div>
 
+      <div class="acp-section-title"><span>故障诊断</span><b id="commissionDiagnosisSummary">待运行</b></div>
+      <div class="commission-diagnosis" id="commissionDiagnosis"></div>
+
       <div class="acp-section-title"><span>点位监视</span><b>实时 · 强制写入</b></div>
       <div class="commission-table-scroll"><table class="commission-table">
         <thead><tr><th>ID</th><th>名称</th><th>实时值</th><th>强制</th></tr></thead>
@@ -753,15 +854,26 @@ function buildPanel(): void {
     casesRun: get<HTMLButtonElement>('#commissionCasesRun'),
     caseResults: get<HTMLElement>('#commissionCaseResults'),
     monitorBody: get<HTMLElement>('#commissionMonitor'),
+    scene3dHost: get<HTMLElement>('#commission3dHost'),
+    scene3dToggle: get<HTMLInputElement>('#commission3dToggle'),
+    diagnosis: get<HTMLElement>('#commissionDiagnosis'),
+    diagnosisSummary: get<HTMLElement>('#commissionDiagnosisSummary'),
     export: get<HTMLButtonElement>('#commissionExport'),
     summary: get<HTMLElement>('#commissionSummary')
   };
+  scene3d = new CommissionScene3D(elements.scene3dHost);
+  scene3d.setEnabled(elements.scene3dToggle.checked);
+  scene3d.setActive(drawer.isOpen());
+  scene3dObserver?.disconnect();
+  scene3dObserver = new MutationObserver(() => scene3d?.setActive(drawer.isOpen()));
+  scene3dObserver.observe(drawer.root, { attributes: true, attributeFilter: ['hidden', 'class'] });
   bindEvents();
   bindDesktopEvents();
   renderPoints();
   renderPowerSteps();
   renderCases();
   renderCaseResults();
+  renderDiagnosis([]);
   renderStatus(lastStatus);
   updateKindFields();
 }
@@ -772,6 +884,7 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
   const handle: CommissionPanelHandle = {
     open(): void {
       drawerHandle?.open();
+      scene3d?.setActive(true);
       void loadSavedConfig();
     },
     getReport,
@@ -779,6 +892,21 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
     runCase: runCaseById,
     runAllCases
   };
+  Object.defineProperty(window, '__Commission3D', {
+    value: Object.freeze({
+      stats: (): Commission3DStats => scene3d?.stats() ?? { frames: 0, ticks: 0, parts: 0, webgl: false, enabled: false, active: false },
+      update: (incoming: Record<string, boolean | number>): void => scene3d?.update(incoming),
+      highlight: (pointId: string, on: boolean): void => scene3d?.highlight(pointId, on),
+      lastDiagnosis: (): Diagnosis[] => lastDiagnoses.map((diagnosis) => ({
+        ...diagnosis,
+        evidence: [...diagnosis.evidence],
+        actions: [...diagnosis.actions]
+      }))
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
   window.AutomationCadCommission = handle;
   return handle;
 }

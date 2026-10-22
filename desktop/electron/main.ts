@@ -478,9 +478,15 @@ function createWindow(): BrowserWindow {
             } catch (error) {
               return { error: '联调报告 PDF 导出失败：' + String(error) };
             }
+            const stats3d = window.__Commission3D?.stats?.() ?? null;
+            await window.desktop.plc.force('X6', false);
+            const failedCase = await window.AutomationCadCommission.runCase('jog');
+            await wait(150);
+            const diagCodes = window.__Commission3D?.lastDiagnosis?.().length ?? 0;
+            const diagCards = document.querySelectorAll('#commissionDiagnosis .commission-diagnosis-card').length;
             document.getElementById('commissionDisconnect').click();
             await wait(120);
-            return { pointRows, monitorRows, powerText, casePass, caseRows, failRows, exportButton, pdfPath };
+            return { pointRows, monitorRows, powerText, casePass, caseRows, failRows, exportButton, pdfPath, stats3d, failedCase, diagCodes, diagCards };
           })()`
         ) as {
           error?: string;
@@ -492,6 +498,10 @@ function createWindow(): BrowserWindow {
           failRows: number;
           exportButton: boolean;
           pdfPath: string;
+          stats3d: { frames: number; ticks: number; parts: number } | null;
+          failedCase: boolean;
+          diagCodes: number;
+          diagCards: number;
         };
         if (plcUi.error || plcUi.pointRows !== 28 || plcUi.monitorRows !== 28) {
           console.error('SMOKE_FAIL plc', JSON.stringify(plcUi));
@@ -517,6 +527,18 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_COMMISSION_PDF_OK path=${plcUi.pdfPath}`);
+        if (!plcUi.stats3d || plcUi.stats3d.frames < 3 || plcUi.stats3d.ticks < 3 || plcUi.stats3d.parts !== 5) {
+          console.error('SMOKE_FAIL commission_3d', JSON.stringify(plcUi.stats3d));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COMMISSION_3D_OK ticks=${plcUi.stats3d.ticks} parts=${plcUi.stats3d.parts}`);
+        if (plcUi.failedCase !== false || plcUi.diagCodes < 1 || plcUi.diagCards < 1) {
+          console.error('SMOKE_FAIL diagnose', JSON.stringify({ failedCase: plcUi.failedCase, diagCodes: plcUi.diagCodes, diagCards: plcUi.diagCards }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_DIAGNOSE_OK codes=${plcUi.diagCodes}`);
       } catch (error) {
         console.error('SMOKE_FAIL commission_exception', error);
         setTimeout(() => app.exit(1), 100);

@@ -37,6 +37,7 @@ export interface SequenceIo {
   read(id: string): Promise<PlcValue>;
   write(id: string, value: PlcValue): Promise<void>;
   readAll?(): Promise<Record<string, PlcValue>>;
+  onStep?(result: StepResult, step: Step): void;
   now?(): number;
   sleep?(ms: number): Promise<void>;
   pollMs?: number;
@@ -174,6 +175,7 @@ export async function runSequence(
       ...(message ? { message } : {})
     };
     results.push(result);
+    io.onStep?.(result, step);
     if (!result.pass) return finish(false, result);
   }
 
