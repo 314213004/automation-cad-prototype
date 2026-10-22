@@ -1,0 +1,59 @@
+# 模块：Electron 主进程（electron/）
+
+职责：窗口生命周期、菜单、文件对话框、IPC 路由、Agent 服务启动、打包后的路径解析。渲染层不直接碰 Node。
+
+## 入口关系
+
+```
+main.ts  ──创建→ BrowserWindow（加载仓库根 index.html）
+   │            └─ did-finish-load 后注入 dist/extension.js
+   ├─ registerIpcHandlers() → ipc.ts（PackRegistry / FactoryManager / Agent 信息）
+   └─ startAgent() → ../src/agent/rpc.ts（127.0.0.1:7420）
+preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻辑）
+```
+
+## 关键数据结构
+
+`ipc.ts` 的 `IpcContext`：
+
+| 字段 | 含义 |
+|------|------|
+| `builtinDir` | 内置包目录。开发态 `../packs/builtin`，打包后 `process.resourcesPath/packs/builtin` |
+| `userDir` | `%APPDATA%/AutomationCAD/packs` |
+| `stateFile` | `%APPDATA%/AutomationCAD/packs-state.json` |
+| `version` | `app.getVersion()`，供 `/health` 与「关于」使用 |
+| `getAgentInfo` | 返回 `{url,port,toolCount}` 或 `{error}`，不抛异常 |
+
+`preload.ts` 暴露的命名空间：`desktop.version / openCadDialog / readFileBuffer / packs.* / agent.info / factory.* / onOpenCad / onImportPack / onSetDomain`。
+
+## 路径解析（打包 vs 开发）
+
+| 资源 | 开发态 | 打包后 |
+|------|--------|--------|
+| 页面 | `<repo>/index.html` | `resources/web/index.html` |
+| 内置包 | `<repo>/packs/builtin` | `resources/packs/builtin` |
+| 扩展脚本 | `<desktop>/dist/extension.js` | `app.asar/dist/extension.js` |
+| preload | `dist-electron/preload.cjs` | 同左（asar 内） |
+
+## 坑点（都踩过）
+
+1. **单实例锁**：`app.requestSingleInstanceLock()` 失败时必须 `app.quit()` 且不再执行 `bootstrap()`，否则 xvfb 下会同时起两个窗口，CDP 连到旧进程。
+2. **`--headless-smoke` 不能在 `show:true` 下跑**：CI/容器无 GPU，`app.disableHardwareAcceleration()` + `show:false` 才稳定；否则 WebGL 初始化直接抛错。
+3. **注入扩展脚本用 `executeJavaScript` 追加 `<script>`，不要用 preload 里的 import**：扩展是 IIFE bundle，需要页面 `file://` 源，preload 的模块作用域注入拿不到 DOM。
+4. **打包后 `__dirname` 是 `app.asar/dist-electron`**，`desktopRoot()` 不能用于 resources 路径；凡是打包资源一律走 `process.resourcesPath`。
+5. **Linux root 运行必须加 `--no-sandbox`**（main.ts 已按 uid 自动加），否则 Electron 起不来。
+6. **`will-navigate` 必须拦非 file: 跳转**，否则外部链接会把应用窗口导航走，且丢失 preload 上下文。
+
+## 进度
+
+- ✅ 单实例、菜单（打开 CAD / 导入数据包 / 域切换 / 关于）、拖放转发、最近文件（v0.1 未做）
+- ✅ headless smoke：`SMOKE_OK`，含 CAD 统计与 UI 结构断言
+- ✅ IPC 白名单式封装（渲染层无 fs / net 权限）
+- ⏳ 窗口图标（`build/icon.ico` 已用于 exe，窗口图标待接）
+- ⏳ 自动更新、崩溃上报
+
+## 待办
+
+1. 最近文件列表持久化到 `userData/recent.json`，菜单动态生成。
+2. 单实例二次启动时把文件参数转给已存在窗口（`second-instance` 目前只聚焦）。
+3. 打包体积治理：`node-opcua` 懒加载或改为可选 sidecar（当前便携包 472 MB 解压）。

@@ -2,6 +2,8 @@
 
 Windows 11 桌面外壳（Electron）+ 原型渲染层扩展。根目录的 `index.html` / `app.js` / `styles.css` / `electrical.*` 保持原样，桌面能力全部由 `desktop/src/extension.ts` 注入。
 
+> 模块划分、数据结构、坑点与待办见 [`docs/desktop/MODULES.md`](../docs/desktop/MODULES.md)（索引）；各模块目录下有 `MODULE.md`。
+
 ## 常用命令
 
 ```bash

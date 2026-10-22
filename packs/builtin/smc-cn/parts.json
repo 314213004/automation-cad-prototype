@@ -1,7 +1,7 @@
 [
   {
     "id": "MXQ20-50",
-    "model": "MXQ20-50.stp",
+    "model": "MXQ20-50",
     "category": "气缸",
     "vendor": "SMC",
     "specs": {
@@ -15,7 +15,7 @@
   },
   {
     "id": "MGP32-200",
-    "model": "MGP32-200.stp",
+    "model": "MGP32-200",
     "category": "气缸",
     "vendor": "SMC",
     "specs": {
@@ -29,7 +29,7 @@
   },
   {
     "id": "CDQ2B32-50DZ",
-    "model": "CDQ2B32-50DZ.stp",
+    "model": "CDQ2B32-50DZ",
     "category": "气缸",
     "vendor": "SMC",
     "specs": {
@@ -43,7 +43,7 @@
   },
   {
     "id": "MHZ2-20D",
-    "model": "MHZ2-20D.stp",
+    "model": "MHZ2-20D",
     "category": "气爪",
     "vendor": "SMC",
     "specs": {
@@ -57,7 +57,7 @@
   },
   {
     "id": "SY5120-5LZD",
-    "model": "SY5120-5LZD.stp",
+    "model": "SY5120-5LZD",
     "category": "电磁阀",
     "vendor": "SMC",
     "specs": {
@@ -71,7 +71,7 @@
   },
   {
     "id": "D-M9B",
-    "model": "D-M9B.glb",
+    "model": "D-M9B",
     "category": "传感器",
     "vendor": "SMC",
     "specs": {
@@ -85,7 +85,7 @@
   },
   {
     "id": "KQ2H06-01AS",
-    "model": "KQ2H06-01AS.stp",
+    "model": "KQ2H06-01AS",
     "category": "气动接头",
     "vendor": "SMC",
     "specs": {
@@ -99,7 +99,7 @@
   },
   {
     "id": "AW30-03",
-    "model": "AW30-03.stp",
+    "model": "AW30-03",
     "category": "气源处理",
     "vendor": "SMC",
     "specs": {
