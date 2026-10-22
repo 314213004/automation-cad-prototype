@@ -24,7 +24,8 @@
 | 智慧工厂设计同步（ZIP/manifest/幂等/设置页） | ✅ 本地 mock 验证，真实后端未实现 | `desktop/src/sync/` |
 | PLC 仿真 + Modbus TCP | ✅ 仿真实测，Modbus 未连真机 | `desktop/src/plc/` |
 | 通电联调（6 步 + 3 用例 + PDF） | ✅ | `desktop/src/commission/` |
-| 单元测试 | ✅ 92/92（含设计同步 15 条） | `desktop/test/` |
+| 电气元件库（iec-cn，44 型号/12 分类） | ✅ 按需加载、分类检索、放入原理图 | `packs/builtin/iec-cn/`、`desktop/src/packs/elec-ui.ts` |
+| 单元测试 | ✅ 107/107 | `desktop/test/` |
 | headless smoke | ✅ `SMOKE_OK` | `npm run smoke` |
 | 应用图标 | ✅ 多尺寸 ICO（等轴测立方体） | `desktop/build/icon.ico` |
 
