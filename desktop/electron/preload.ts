@@ -1,0 +1,53 @@
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+interface OpenCadPayload {
+  path: string;
+  source: 'menu' | 'drop';
+}
+
+const desktopApi = {
+  version: () => ipcRenderer.invoke('app:version'),
+  extensionBaseUrl: pathToFileURL(join(__dirname, '..', 'dist') + '/').href,
+  openCadDialog: () => ipcRenderer.invoke('cad:open-dialog'),
+  readFileBuffer: (filePath: string) => ipcRenderer.invoke('cad:read-file', filePath),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
+  packs: {
+    list: () => ipcRenderer.invoke('packs:list'),
+    importZip: (zipPath: string) => ipcRenderer.invoke('packs:import-zip', zipPath),
+    setEnabled: (id: string, enabled: boolean) => ipcRenderer.invoke('packs:set-enabled', id, enabled),
+    remove: (id: string) => ipcRenderer.invoke('packs:remove', id),
+    listParts: (filter?: { q?: string; category?: string; packId?: string }) => ipcRenderer.invoke('packs:list-parts', filter ?? {})
+  },
+  agent: {
+    info: () => ipcRenderer.invoke('agent:info')
+  },
+  factory: {
+    info: () => ipcRenderer.invoke('factory:info'),
+    status: () => ipcRenderer.invoke('factory:status'),
+    connect: (config: unknown) => ipcRenderer.invoke('factory:connect', config),
+    disconnect: () => ipcRenderer.invoke('factory:disconnect'),
+    browse: (nodeId?: string) => ipcRenderer.invoke('factory:browse', nodeId),
+    readTags: (ids: string[]) => ipcRenderer.invoke('factory:read-tags', ids),
+    writeTag: (id: string, value: unknown) => ipcRenderer.invoke('factory:write-tag', id, value),
+    subscribe: (ids: string[]) => ipcRenderer.invoke('factory:subscribe', ids)
+  },
+  onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);
+    ipcRenderer.on('desktop:open-cad', listener);
+    return () => ipcRenderer.removeListener('desktop:open-cad', listener);
+  },
+  onImportPack: (callback: (payload: { path: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: { path: string }) => callback(payload);
+    ipcRenderer.on('desktop:import-pack', listener);
+    return () => ipcRenderer.removeListener('desktop:import-pack', listener);
+  },
+  onSetDomain: (callback: (domain: 'mech' | 'elec') => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, domain: 'mech' | 'elec') => callback(domain);
+    ipcRenderer.on('desktop:set-domain', listener);
+    return () => ipcRenderer.removeListener('desktop:set-domain', listener);
+  }
+};
+
+contextBridge.exposeInMainWorld('desktop', desktopApi);

@@ -1,0 +1,422 @@
+import cadStyles from './cad.css?inline';
+import CadImportWorker from './cad/importer.worker?worker&inline';
+import wasmAssetUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
+import { occtFormatForFile, parseOcctBuffer } from './cad/step';
+import { parseStandardCadBuffer } from './cad/loaders';
+import { CadViewer } from './cad/viewer';
+import type { CadImportResult } from './shared/types';
+
+const ICONS = {
+  cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
+  open: '<svg viewBox="0 0 16 16"><path d="M2 4.2h4l1.4 1.8H14v6.6H2z"/><path d="M9.2 9.1h3.6M11 7.3l1.8 1.8-1.8 1.8"/></svg>',
+  fit: '<svg viewBox="0 0 16 16"><path d="M2.5 2.5h3.2M2.5 2.5v3.2M13.5 2.5h-3.2M13.5 2.5v3.2M2.5 13.5h3.2M2.5 13.5v-3.2M13.5 13.5h-3.2M13.5 13.5v-3.2"/></svg>',
+  wire: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14M4.3 6.7L8 8.1l3.7-1.4"/></svg>',
+  close: '<svg viewBox="0 0 16 16"><path d="M4.4 4.4l7.2 7.2M11.6 4.4l-7.2 7.2"/></svg>'
+};
+
+const CAD_ENTRY = 'cadEntryButton';
+let viewer: CadViewer | null = null;
+let root: HTMLElement | null = null;
+let overlayOpen = false;
+let busy = false;
+let dragDepth = 0;
+let noticeTimer = 0;
+let worker: Worker | null = null;
+let workerSequence = 0;
+const pendingWorker = new Map<number, { resolve(result: CadImportResult): void; reject(error: Error): void }>();
+
+function injectStyles(): void {
+  if (document.getElementById('automation-cad-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'automation-cad-styles';
+  style.textContent = cadStyles;
+  document.head.appendChild(style);
+}
+
+function buildEntryButton(): void {
+  if (document.getElementById(CAD_ENTRY)) return;
+  const target = document.querySelector('.tb-right');
+  if (!target) return;
+  const button = document.createElement('button');
+  button.id = CAD_ENTRY;
+  button.type = 'button';
+  button.className = 'cad-entry-btn';
+  button.title = '打开 CAD 轻量化查看器';
+  button.innerHTML = `${ICONS.cube}<span>CAD 查看</span><span class="cad-entry-badge">STEP</span>`;
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openOverlay();
+  });
+  target.appendChild(button);
+}
+
+function buildOverlay(): void {
+  if (root) return;
+  root = document.createElement('div');
+  root.id = 'automationCadOverlay';
+  root.className = 'cad-overlay';
+  root.hidden = true;
+  root.innerHTML = `
+    <header class="cad-topbar">
+      <div class="cad-brand">
+        <div class="cad-brand-mark">${ICONS.cube}</div>
+        <div>
+          <div class="cad-brand-title">CAD 查看</div>
+          <div class="cad-brand-sub">轻量化查看模式 · 不进建模内核</div>
+        </div>
+      </div>
+      <div class="cad-actions">
+        <button type="button" class="cad-btn cad-btn-primary" data-cad-action="open">${ICONS.open}<span>打开文件</span></button>
+        <button type="button" class="cad-btn" data-cad-action="fit">${ICONS.fit}<span>缩放到适合</span></button>
+        <button type="button" class="cad-btn" data-cad-action="wire">${ICONS.wire}<span>线框</span></button>
+        <button type="button" class="cad-btn" data-cad-action="close">${ICONS.close}<span>关闭</span></button>
+      </div>
+      <div class="cad-spacer"></div>
+      <div class="cad-file-info" id="cadFileInfo">未打开文件</div>
+    </header>
+    <main class="cad-main">
+      <aside class="cad-sidebar">
+        <div class="cad-side-head"><span>零件列表</span><b id="cadPartCount">0</b></div>
+        <div class="cad-parts" id="cadParts">
+          <div class="cad-parts-empty">打开或拖入 STEP / IGES / BREP / STL / OBJ / GLTF / GLB 文件</div>
+        </div>
+        <div class="cad-detail" id="cadDetail">
+          <div class="cad-detail-empty">单击零件查看包围盒与尺寸</div>
+        </div>
+      </aside>
+      <section class="cad-viewport">
+        <div class="cad-host" id="cadHost"></div>
+        <div class="cad-empty" id="cadEmpty">
+          <div class="cad-empty-ico">${ICONS.cube}</div>
+          <div class="cad-empty-title">把 CAD 文件拖到窗口任意位置</div>
+          <div class="cad-empty-sub">STEP / IGES / BREP 由 OCCT WASM 在 Worker 中解析<br>STL / OBJ / GLTF / GLB 使用 three.js 异步加载</div>
+        </div>
+        <div class="cad-hint">左键旋转 · 滚轮缩放 · 中键/右键平移 · 单击零件测量</div>
+        <div class="cad-loading" id="cadLoading" hidden>
+          <div class="cad-spinner"></div>
+          <div id="cadLoadingText">正在解析 CAD 文件…</div>
+        </div>
+      </section>
+    </main>
+    <footer class="cad-footer">
+      <span id="cadStats">就绪 · <strong>0</strong> 个零件</span>
+      <span class="cad-footer-flex"></span>
+      <span class="cad-unit-note">单位按源文件 mm 解释 · 未做隐式缩放</span>
+    </footer>`;
+  document.body.appendChild(root);
+
+  root.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const target = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-action]');
+    if (!target) return;
+    const action = target.dataset.cadAction;
+    if (action === 'open') void chooseAndImport();
+    else if (action === 'fit') viewer?.fit();
+    else if (action === 'wire') {
+      const on = viewer?.toggleWireframe() ?? false;
+      target.classList.toggle('is-active', on);
+      showNotice(on ? '已切换为线框显示' : '已切换为实体显示');
+    } else if (action === 'close') closeOverlay();
+  });
+  root.addEventListener('pointerdown', (event) => event.stopPropagation());
+  root.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
+}
+
+function ensureViewer(): CadViewer {
+  if (viewer) return viewer;
+  const host = requiredElement('cadHost');
+  const parts = requiredElement('cadParts');
+  const detail = requiredElement('cadDetail');
+  viewer = new CadViewer({
+    container: host,
+    partsElement: parts,
+    detailElement: detail,
+    onStats: (text) => {
+      const stats = document.getElementById('cadStats');
+      if (stats) stats.innerHTML = `就绪 · <strong>${text}</strong>`;
+    }
+  });
+  return viewer;
+}
+
+function requiredElement(id: string): HTMLElement {
+  const element = document.getElementById(id);
+  if (!element) throw new Error(`缺少 CAD UI 节点：${id}`);
+  return element;
+}
+
+function openOverlay(): void {
+  buildOverlay();
+  if (!root) return;
+  overlayOpen = true;
+  root.hidden = false;
+  ensureViewer().setActive(true);
+  document.getElementById(CAD_ENTRY)?.classList.add('is-active');
+}
+
+function closeOverlay(): void {
+  overlayOpen = false;
+  if (root) root.hidden = true;
+  viewer?.setActive(false);
+  document.getElementById(CAD_ENTRY)?.classList.remove('is-active');
+  (document.getElementById(CAD_ENTRY) as HTMLButtonElement | null)?.focus();
+}
+
+function updateLoading(on: boolean, text?: string, error = false): void {
+  const loading = document.getElementById('cadLoading');
+  const label = document.getElementById('cadLoadingText');
+  if (!loading || !label) return;
+  loading.hidden = !on;
+  label.textContent = text ?? '正在解析 CAD 文件…';
+  label.classList.toggle('cad-loading-error', error);
+  const spinner = loading.querySelector<HTMLElement>('.cad-spinner');
+  if (spinner) spinner.hidden = error;
+}
+
+function setBusy(on: boolean, text?: string, error = false): void {
+  busy = on;
+  updateLoading(on, text, error);
+}
+
+function showNotice(message: string, error = false): void {
+  let notice = document.getElementById('cadNotice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.id = 'cadNotice';
+    notice.className = 'cad-notice';
+    document.body.appendChild(notice);
+  }
+  notice.textContent = message;
+  notice.classList.toggle('is-error', error);
+  notice.classList.add('is-on');
+  window.clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(() => notice?.classList.remove('is-on'), 3600);
+}
+
+function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function displayFileInfo(name: string): void {
+  const info = document.getElementById('cadFileInfo');
+  if (info) info.textContent = name;
+}
+
+function setEmptyVisible(visible: boolean): void {
+  const empty = document.getElementById('cadEmpty');
+  if (empty) empty.hidden = !visible;
+}
+
+function resolveWasmUrl(): string {
+  if (/^(data:|blob:|https?:|file:)/i.test(wasmAssetUrl)) return wasmAssetUrl;
+  const base = window.desktop?.extensionBaseUrl || new URL('./', window.location.href).href;
+  const relative = wasmAssetUrl.replace(/^\.?\//, '');
+  return new URL(relative, base).href;
+}
+
+function getWorker(): Worker {
+  if (worker) return worker;
+  worker = new CadImportWorker();
+  worker.onmessage = (event: MessageEvent<{ id: number; ok: boolean; result?: CadImportResult; error?: string }>) => {
+    const pending = pendingWorker.get(event.data.id);
+    if (!pending) return;
+    pendingWorker.delete(event.data.id);
+    if (event.data.ok && event.data.result) pending.resolve(event.data.result);
+    else pending.reject(new Error(event.data.error || 'Worker 解析失败'));
+  };
+  worker.onerror = (event) => {
+    const error = new Error(event.message || 'CAD Worker 异常');
+    for (const pending of pendingWorker.values()) pending.reject(error);
+    pendingWorker.clear();
+    worker?.terminate();
+    worker = null;
+  };
+  return worker;
+}
+
+async function parseInWorker(buffer: ArrayBuffer, name: string): Promise<CadImportResult> {
+  const id = ++workerSequence;
+  return await new Promise<CadImportResult>((resolve, reject) => {
+    pendingWorker.set(id, { resolve, reject });
+    getWorker().postMessage({ id, kind: 'occt', name, buffer, wasmUrl: resolveWasmUrl() }, [buffer]);
+  });
+}
+
+function toArrayBuffer(value: Uint8Array | ArrayBuffer): ArrayBuffer {
+  if (value instanceof ArrayBuffer) return value;
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  return copy.buffer;
+}
+
+async function parseBuffer(buffer: ArrayBuffer, name: string): Promise<CadImportResult> {
+  const format = occtFormatForFile(name);
+  return format
+    ? await parseInWorker(buffer, name)
+    : await parseStandardCadBuffer(buffer, name);
+}
+
+async function inspectPath(path: string): Promise<CadImportResult['stats']> {
+  if (!window.desktop) throw new Error('桌面文件接口不可用');
+  const name = fileNameFromPath(path);
+  const bytes = await window.desktop.readFileBuffer(path);
+  const result = await parseBuffer(toArrayBuffer(bytes), name);
+  return result.stats;
+}
+
+async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
+  if (busy) {
+    showNotice('已有文件正在解析，请稍候', true);
+    return;
+  }
+  openOverlay();
+  setBusy(true, `正在解析 ${name}…`);
+  setEmptyVisible(false);
+  try {
+    const result = await parseBuffer(buffer, name);
+    ensureViewer().load(result, name);
+    displayFileInfo(name);
+    const partCount = document.getElementById('cadPartCount');
+    if (partCount) partCount.textContent = String(result.stats.meshCount);
+    setBusy(false);
+    setEmptyVisible(false);
+    showNotice(`${name} 已加载 · ${result.stats.triangleCount} 个三角面`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    busy = false;
+    updateLoading(true, `打开失败：${message}`, true);
+    setEmptyVisible(true);
+    showNotice(message, true);
+    console.error('[cad] 导入失败', error);
+  }
+}
+
+async function importPath(path: string): Promise<void> {
+  const name = fileNameFromPath(path);
+  if (!window.desktop) {
+    showNotice('当前为浏览器预览模式，请使用拖入文件或桌面版打开。', true);
+    return;
+  }
+  try {
+    updateLoading(true, `正在读取 ${name}…`);
+    const bytes = await window.desktop.readFileBuffer(path);
+    await importBuffer(toArrayBuffer(bytes), name);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    busy = false;
+    updateLoading(true, `读取失败：${message}`, true);
+    setEmptyVisible(true);
+    showNotice(message, true);
+  }
+}
+
+async function importDroppedFile(file: File): Promise<void> {
+  const supported = /\.(step|stp|iges|igs|brep|stl|obj|gltf|glb)$/i.test(file.name);
+  if (!supported) {
+    showNotice(`不支持的文件类型：${file.name}`, true);
+    return;
+  }
+  if (window.desktop) {
+    try {
+      const path = window.desktop.getPathForFile(file);
+      if (path) {
+        await importPath(path);
+        return;
+      }
+    } catch {
+      // 浏览器预览或非本地文件时退回 File.arrayBuffer。
+    }
+  }
+  await importBuffer(await file.arrayBuffer(), file.name);
+}
+
+async function chooseAndImport(): Promise<void> {
+  if (!window.desktop) {
+    showNotice('桌面文件对话框不可用，请直接拖入文件。', true);
+    return;
+  }
+  try {
+    const result = await window.desktop.openCadDialog();
+    if (!result.canceled && result.filePaths[0]) await importPath(result.filePaths[0]);
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+async function importPack(path: string): Promise<void> {
+  if (!window.desktop) {
+    showNotice('浏览器预览模式不支持数据包导入。', true);
+    return;
+  }
+  try {
+    const info = await window.desktop.packs.importZip(path);
+    showNotice(`数据包已导入：${info.name} · ${info.partCount} 个条目`);
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+function bindWindowEvents(): void {
+  window.addEventListener('dragover', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
+  window.addEventListener('dragenter', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth += 1;
+    root?.classList.add('is-drag');
+  }, true);
+  window.addEventListener('dragleave', (event) => {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) root?.classList.remove('is-drag');
+  }, true);
+  window.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth = 0;
+    root?.classList.remove('is-drag');
+    const file = event.dataTransfer?.files[0];
+    if (file) void importDroppedFile(file);
+  }, true);
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && overlayOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      closeOverlay();
+    }
+  }, true);
+
+  window.desktop?.onOpenCad((payload) => {
+    void importPath(payload.path);
+  });
+  window.desktop?.onImportPack((payload) => {
+    void importPack(payload.path);
+  });
+  window.desktop?.onSetDomain((domain) => {
+    window.ElecDomain?.setDomain(domain);
+  });
+}
+
+function init(): void {
+  injectStyles();
+  buildEntryButton();
+  buildOverlay();
+  bindWindowEvents();
+  window.AutomationCadViewer = {
+    open: openOverlay,
+    close: closeOverlay,
+    importPath,
+    inspectPath
+  };
+  window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();

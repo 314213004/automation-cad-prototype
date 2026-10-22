@@ -1,0 +1,86 @@
+{
+  "name": "automation-cad-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "非标自动化整机设计软件 · Windows 11 桌面版",
+  "type": "module",
+  "main": "dist-electron/main.cjs",
+  "scripts": {
+    "build:ext": "tsc --noEmit && vite build && node scripts/build-electron.mjs",
+    "start": "electron .",
+    "test": "node --test test/**/*.test.mjs",
+    "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
+    "dist:win": "electron-builder --win nsis --x64"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.2",
+    "adm-zip": "^0.5.16",
+    "mqtt": "^5.14.1",
+    "node-opcua": "2.186.15",
+    "occt-import-js": "0.0.23",
+    "three": "^0.186.0"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^24.7.2",
+    "@types/three": "^0.186.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12",
+    "esbuild": "^0.25.11",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.10"
+  },
+  "build": {
+    "appId": "cn.automationcad.desktop",
+    "productName": "AutomationCAD",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../packs/builtin",
+        "to": "packs/builtin"
+      },
+      {
+        "from": "../index.html",
+        "to": "web/index.html"
+      },
+      {
+        "from": "../app.js",
+        "to": "web/app.js"
+      },
+      {
+        "from": "../styles.css",
+        "to": "web/styles.css"
+      },
+      {
+        "from": "../electrical.js",
+        "to": "web/electrical.js"
+      },
+      {
+        "from": "../electrical.css",
+        "to": "web/electrical.css"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "AutomationCAD-Setup-${version}.${ext}"
+    }
+  }
+}
