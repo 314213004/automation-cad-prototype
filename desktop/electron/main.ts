@@ -9,6 +9,7 @@ import { AgentTools } from '../src/agent/tools';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
+import { describeCheck, runElectricalCheck } from '../src/elec/check';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const APP_NAME = 'AutomationCAD';
@@ -400,6 +401,32 @@ function createWindow(): BrowserWindow {
         console.log('SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1 ratio>0');
       } catch (error) {
         console.error('SMOKE_FAIL enclosure_canvas_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        // 电气校验规则引擎：用一段含跨网络重号 + 截面不足的样例电路自检。
+        const result = runElectricalCheck({
+          wires: [
+            { no: '101', net: 'n1', potential: 'L1', from: 'QF1:2', to: 'KM1:1' },
+            { no: '101', net: 'n2', potential: 'L1', from: 'KM1:2', to: 'M1:U' },
+            { no: 'L1', net: 'n3', potential: 'L2', from: 'QF1:1', to: 'KM1:3' }
+          ],
+          loads: [{ tag: 'M1', powerKw: 7.5, phase: '3P', cosPhi: 0.85, efficiency: 0.9 }],
+          circuits: [{ wireNo: '101', currentA: 40, sectionMm2: 4 }],
+          options: { demandFactor: 0.8 }
+        });
+        const codes = result.findings.map((item) => item.code);
+        if (result.findings.length < 1 || result.counts.error < 1 ||
+            !codes.includes('WIRE_NO_CROSS_NET') || !codes.includes('WIRE_SECTION_UNDER') ||
+            result.summary.breakerSuggestion?.ratedA !== 16) {
+          console.error('SMOKE_FAIL elec_check', JSON.stringify({ codes, counts: result.counts, summary: result.summary }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ELEC_CHECK_OK findings=${result.findings.length} errors=${result.counts.error} ${describeCheck(result)}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL elec_check_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

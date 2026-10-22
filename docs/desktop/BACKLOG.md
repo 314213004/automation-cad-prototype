@@ -6,13 +6,15 @@
 ## 待办（按优先级）
 
 ### P1 电气智能辅助（线号合规 + 功率统计）
-- 状态：⬜ 待开工
+- 状态：🚧 进行中（`desktop/src/elec/check.ts` 规则引擎 + 22 条单测已完成；smoke `SMOKE_ELEC_CHECK_OK findings=4 errors=3`）
+- 已完成：线号合规（缺号/格式/同网重复/跨网络重号/相线电位不符/数字跳号）、功率统计（kW/kVA、需要系数、分相电流、不平衡度、主断路器+进线截面建议、24V 电源余量）、导线截面 vs 载流量与断路器配合校验；`runElectricalCheck` 汇总按级别排序
+- 未完成（下一轮）：电气域「电气校验」面板（级别/位置/建议列表 + PDF 导出）、Agent 工具 `run_electrical_check`
 - 内容：`desktop/src/elec/` 规则引擎：
   - 线号合规：重复线号、缺号、格式（`L1/L2/L3`、`24V/0V`、`101…`）、同一线号跨电位
   - 功率统计：按元件额定功率汇总 kW/kVA、分相电流、需要系数、主断路器与进线建议、24V 电源余量
   - 导线截面 vs 电流对照校验
 - 交互：电气域新增「电气校验」面板，列出问题（级别/位置/建议），可导出 PDF；新增 Agent 工具 `run_electrical_check`
-- 验收：`npm test` 新增≥10；smoke `SMOKE_ELEC_CHECK_OK findings>=1`
+- 验收：`npm test` 新增≥10（本轮 +22）；smoke `SMOKE_ELEC_CHECK_OK findings>=1`（本轮已达成）
 
 ### P2 电箱底板画布（真实尺寸布局）
 - 状态：✅ 已完成（`df8f1a2`）：185 测试、`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`；尺寸覆盖 191/371
