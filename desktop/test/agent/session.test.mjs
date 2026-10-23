@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentSession } from '../../src/agent/session.ts';
+import { parseToolResultData } from '../../src/agent/guard.ts';
 
 function toolCall(id, name, args = {}) {
   return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
@@ -70,7 +71,8 @@ test('会话 1 次工具调用后继续生成最终文本', async () => {
   const toolMessage = llm.calls[1].find((message) => message.role === 'tool');
   assert.equal(toolMessage.name, 'list_components');
   assert.equal(toolMessage.tool_call_id, 'call-1');
-  assert.match(toolMessage.content, /"count":1/);
+  assert.match(toolMessage.content, /tool_result_data/);
+  assert.equal(parseToolResultData(toolMessage.content)?.data?.count, 1);
 });
 
 test('会话 2 次工具调用按顺序执行并回灌结果', async () => {
@@ -109,9 +111,9 @@ test('工具失败结果原样回灌给模型且对话继续', async () => {
   const reply = await session.run('读取 BOM');
   assert.equal(reply, '读取失败，请稍后再试。');
   const toolMessage = llm.calls[1].find((message) => message.role === 'tool');
-  const parsed = JSON.parse(toolMessage.content);
-  assert.equal(parsed.ok, false);
-  assert.equal(parsed.error.code, 'BOOM');
+  const parsed = parseToolResultData(toolMessage.content);
+  assert.equal(parsed?.ok, false);
+  assert.equal(parsed?.error.code, 'BOOM');
   assert.equal(parsed.error.message, '业务失败');
 });
 
@@ -133,9 +135,9 @@ test('写工具确认被拒绝时不执行命令并返回 USER_DENIED', async ()
   assert.equal(bus.calls.length, 0);
   assert.deepEqual(prompts, [{ name: 'insert_component', args: { partId: 'MXQ20-50' } }]);
   const toolMessage = llm.calls[1].find((message) => message.role === 'tool');
-  const parsed = JSON.parse(toolMessage.content);
-  assert.equal(parsed.ok, false);
-  assert.equal(parsed.code, 'USER_DENIED');
+  const parsed = parseToolResultData(toolMessage.content);
+  assert.equal(parsed?.ok, false);
+  assert.equal(parsed?.code, 'USER_DENIED');
 });
 
 test('写工具 export_cost_report 执行前请求二次确认', async () => {

@@ -61,7 +61,7 @@ const RULES: IntentRule[] = [
       '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '换成', '换掉',
       '替换', '导入'
     ],
-    normal: ['放两个', '加个', '添加', '摆', '修改', '改成', '改一下', '移走']
+    normal: ['放两个', '加个', '添加', '摆', '修改', '改成', '改一下', '改掉', '移走']
   },
   {
     intent: 'generate',
@@ -86,7 +86,7 @@ const RULES: IntentRule[] = [
   {
     intent: 'query',
     strong: ['有哪些', '有什么', '列出', '列一下', '搜索', '搜一下', '查找', '找一下', '查一下', 'BOM', '物料清单'],
-    normal: ['型号', '参数', '在哪', '什么', '清单', '看看', '多少', '几个', '价格', '读一下']
+    normal: ['型号', '参数', '在哪', '什么', '清单', '看看', '看一下', '多少', '几个', '价格', '读一下']
   }
 ];
 
@@ -408,6 +408,94 @@ function isBareReferencePriceQuery(text: string, category: string | null): boole
   return /(多少钱|价格|费用|报价|成本|总价|合计)/.test(text);
 }
 
+/** 明确禁止的操作：系统目录、系统账户文件、审计文件。 */
+const FORBIDDEN_TARGET = /(?:[A-Za-z]:\\(?:Windows|System32|Program Files|ProgramData)\\|(?:^|[\\/])(?:etc|proc|sys)[\\/]|(?:^|[\\/])\.ssh[\\/]|agent-audit\.jsonl)/i;
+const AUDIT_TAMPER = /(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|delete|clear|tamper|overwrite)[^。；;\n]{0,30}(?:审计|agent-audit|audit)|(?:审计|agent-audit|audit)[^。；;\n]{0,30}(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|delete|clear|tamper|overwrite)/i;
+/** 典型跨域误用：拿 PLC 程序去生成/修改报价、BOM、干涉或电气结论。 */
+const CROSS_DOMAIN_MISUSE = /(?:(?:plc|程序)[^。；;\n]{0,24}(?:bom|报价|成本|干涉|电气校验)|(?:bom|报价|成本|干涉|电气校验)[^。；;\n]{0,24}(?:plc|程序))/i;
+
+const DESIGNATOR_PATTERN = /^(?:[A-Za-z]{1,4}[-_]?\d+[A-Za-z0-9-]*|\d+)$/;
+
+function planUpdateComponent(value: string): ToolPlan | null {
+  const match = value.match(
+    /(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:的)?\s*(型号|数量|备注|位号|名称)?\s*(?:改成|改为|换成|换型号|型号改成|数量改成|备注改成|修改为|设置为)\s*(.*)$/
+  );
+  if (!match) return null;
+  const ref = (match[1] ?? '').trim();
+  if (!ref) return null;
+  const attribute = match[2];
+  // 只有位号/明确属性/明确元件对象才走 update_component，
+  // 避免「把成本报告改成 PDF」这类句子被误当成元件修改。
+  if (!DESIGNATOR_PATTERN.test(ref) && !attribute && !/(?:位号|元件|元器件)/.test(value)) return null;
+  const rest = (match[3] ?? '').trim().replace(/[，,。；;]+$/, '');
+  const args: Record<string, unknown> = { ref };
+  const missing: string[] = [];
+  let why = `按位号 ${ref} 修改元器件`;
+  if (attribute === '数量') {
+    const qty = Number(rest);
+    if (!Number.isInteger(qty) || qty <= 0) missing.push('qty');
+    else args.qty = qty;
+    why = `把 ${ref} 的数量改为 ${Number.isFinite(qty) ? qty : rest}`;
+  } else if (attribute === '备注') {
+    if (!rest) missing.push('remark');
+    else args.remark = rest;
+    why = `把 ${ref} 的备注改为「${rest}」`;
+  } else {
+    if (!rest) missing.push('model');
+    else args.model = rest;
+    why = `把 ${ref} 的型号改为 ${rest}`;
+  }
+  return {
+    tool: 'update_component',
+    args,
+    readOnly: false,
+    missing,
+    why: `${why}（需确认，可撤销）`
+  };
+}
+
+function planRemoveComponent(value: string): ToolPlan | null {
+  const explicit = value.match(/(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:从底板|从\s*BOM|从\s*bom)?\s*(?:删掉|删除|移除)/);
+  const afterVerb = value.match(/(?:删掉|删除|移除)\s*(.+)$/);
+  const explicitRef = explicit?.[1]?.trim();
+  const afterText = afterVerb?.[1]?.trim();
+  const mentionsPlate = /底板/.test(value);
+  const mentionsBom = /bom|物料清单/i.test(value);
+  let ref: string | undefined;
+  if (explicitRef && (DESIGNATOR_PATTERN.test(explicitRef) || mentionsPlate || mentionsBom)) {
+    ref = explicitRef;
+  } else if (afterText && !/^这个|^那个|^它/.test(afterText)) {
+    const designator = afterText.match(/([A-Za-z]{1,4}[-_]?\d+[A-Za-z0-9-]*)/);
+    if (designator) ref = designator[1];
+    else if (mentionsPlate || /第[一二三四五六七八九十百\d]+个/.test(afterText)) ref = afterText;
+  }
+  if (!ref) return null;
+  const args: Record<string, unknown> = { ref };
+  if (mentionsPlate) args.target = 'plate';
+  else if (mentionsBom) args.target = 'bom';
+  return {
+    tool: 'remove_component',
+    args,
+    readOnly: false,
+    missing: [],
+    why: `按位号 ${ref} 从${mentionsBom ? ' BOM' : '底板'}移除元器件（需确认，可用 undo_last 撤销）`
+  };
+}
+
+function planExportFiles(value: string): ToolPlan | null {
+  if (!/(?:导出|出图|输出)/.test(value)) return null;
+  if (/(?:成本|报价|费用|报告|报表)/.test(value)) return null;
+  const kind = value.match(/(?:pdf|dxf|glb|bom)\b/i)?.[0]?.toLowerCase();
+  if (!kind) return null;
+  return {
+    tool: 'export_files',
+    args: { kind },
+    readOnly: false,
+    missing: [],
+    why: `导出当前装配体为 ${kind.toUpperCase()}（写入 userData/exports/，需确认）`
+  };
+}
+
 /**
  * 把中文指令映射成一个工具计划。
  * 返回 null 表示「没有任何工具能接住」，调用方应如实说做不了。
@@ -429,14 +517,23 @@ function planToolBase(text: string): ToolPlan | null {
   // 联调/同步工具尚未注册：规则层只能明确说「暂不支持」，不能降级成搜索元件。
   if (match.intent === 'commission' || match.intent === 'sync') return null;
 
+  // 越权文件、审计篡改、危险路径与跨域误用一律拒绝，不能靠后续工具兜底。
+  if (FORBIDDEN_TARGET.test(value) || AUDIT_TAMPER.test(value) || CROSS_DOMAIN_MISUSE.test(value)) {
+    return null;
+  }
+
   const category = matchCategory(value);
 
   if (/(撤销|撤消)/.test(value)) {
     return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '撤销最近一次写操作' };
   }
-  if (/(删掉|删除)/.test(value)) {
+  if (/(删掉|删除|移除)/.test(value)) {
+    const removePlan = planRemoveComponent(value);
+    if (removePlan) return removePlan;
     return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '删除能力暂由撤销最近一次写操作承接（需确认）' };
   }
+  const updatePlan = planUpdateComponent(value);
+  if (updatePlan) return updatePlan;
 
   // 写操作优先判断：宁可多要一次确认，也不能把写当成只读。
   if (/(导出|生成|出一份|出份|打印)/.test(value) && /(成本|报价|费用|报告|报表|报价单)/.test(value)) {
@@ -446,6 +543,26 @@ function planToolBase(text: string): ToolPlan | null {
       readOnly: false,
       missing: [],
       why: `生成并落盘 ${exportFormat(value).toUpperCase()} 成本报告（写入 userData/exports/，需确认）`
+    };
+  }
+  const exportFilesPlan = planExportFiles(value);
+  if (exportFilesPlan) return exportFilesPlan;
+  if (/(?:生成|导出|输出).*(?:plc|程序)/i.test(value) && /plc/i.test(value)) {
+    return {
+      tool: 'run_plc_generate',
+      args: {},
+      readOnly: false,
+      missing: [],
+      why: '按当前机型生成 PLC 工程文件与 ZIP（写入 userData/exports/，需确认）'
+    };
+  }
+  if (/(?:当前|现在|我这台机器)[^。；;\n]{0,12}(?:上下文|状态|视图|域|项目)|工程上下文|项目上下文|底板[^。；;\n]{0,8}(?:空间|剩余)|还剩多少空间|剩余多少空间/.test(value)) {
+    return {
+      tool: 'get_project_context',
+      args: {},
+      readOnly: true,
+      missing: [],
+      why: '读取当前域、视图、选中对象、机型与底板余量'
     };
   }
   if (/(导入|打开).*(step|stp|iges|stl|obj|glb)/i.test(value)) {

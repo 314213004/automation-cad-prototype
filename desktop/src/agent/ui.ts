@@ -39,6 +39,7 @@ import {
   type PlanStepResult
 } from './planner.ts';
 import { collectAgentContext, type AgentContext } from './context.ts';
+import { unwrapToolResultData } from './guard.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -306,7 +307,19 @@ interface ToolOutcome {
 }
 
 function parseToolOutcome(content: string | null | undefined): ToolOutcome {
-  const raw = content ?? '';
+  const wrapper = content ?? '';
+  const raw = unwrapToolResultData(wrapper) ?? wrapper;
+  let untrusted = false;
+  try {
+    const envelope = JSON.parse(wrapper) as unknown;
+    untrusted =
+      typeof envelope === 'object' && envelope !== null &&
+      (envelope as Record<string, unknown>).kind === 'tool_result_data' &&
+      (envelope as Record<string, unknown>).untrusted === true;
+  } catch {
+    // 不是数据块时按普通结果处理。
+  }
+  const prefix = untrusted ? '[不可信数据] ' : '';
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
@@ -325,12 +338,12 @@ function parseToolOutcome(content: string | null | undefined): ToolOutcome {
         : error && typeof error.message === 'string'
           ? error.message
           : '';
-      return { ok, code, message, detail: summaryText(raw, 260) };
+      return { ok, code, message, detail: `${prefix}${summaryText(raw, 260)}` };
     }
   } catch {
     // 非 JSON 结果按成功展示原文，不臆断错误码。
   }
-  return { ok: true, code: 'OK', message: '', detail: summaryText(raw, 260) };
+  return { ok: true, code: 'OK', message: '', detail: `${prefix}${summaryText(raw, 260)}` };
 }
 
 function failureSuggestionHtml(input: {

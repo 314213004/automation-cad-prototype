@@ -21,6 +21,7 @@ import {
 } from './router.ts';
 import type { AgentContext } from './context.ts';
 import type { ReferenceSource } from './reference.ts';
+import { parseToolResultData } from './guard.ts';
 
 export type PreviewTone = 'read' | 'write' | 'none';
 
@@ -137,7 +138,7 @@ export function summarizeTurn(
     if (message.role !== 'tool') continue;
     toolCalls += 1;
     try {
-      const parsed = JSON.parse(message.content ?? '') as unknown;
+      const parsed = parseToolResultData(message.content) ?? JSON.parse(message.content ?? '') as unknown;
       if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
         failures += 1;
       }

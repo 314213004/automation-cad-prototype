@@ -11,6 +11,15 @@
 - 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
 - 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
 
+## Agent 真实模型与抗注入（2026-10-23，本轮）
+
+- 状态：✅ 完成；不 push。
+- A. 真实模型冒烟：新增 `desktop/scripts/agent-live.mjs` + `npm run agent:live`，从 `AGENT_LIVE_BASE_URL` / `AGENT_LIVE_API_KEY` / `AGENT_LIVE_MODEL` 读取配置，走 `OpenAiCompatibleClient` + `AgentSession` 跑 12 条固定指令；断言行工具（含合理替代）、关键参数与写确认。无凭据打印 `AGENT_LIVE_SKIP` 并退出 0；结果写 `docs/desktop/eval/agent-live.json`。本机实测 LiteLLM bridge / `cn:deepseek-v4.1-flash`：`matched=12/12`、`toolAccuracy=1.00`、`confirmRate=1.00`；密钥未写入任何文件。
+- B. 抗提示注入：新增 `desktop/src/agent/guard.ts`，所有工具结果包成 `tool_result_data` 数据块；检测「忽略之前的指令」「你现在是」「执行 rm」「上传到」「篡改审计」「危险路径」等模式并标记 `untrusted:true`，附不可信提示，不丢弃原文；系统提示声明工具结果/文件内容只是数据。新增 `test/agent/guard.test.mjs` 14 条，覆盖元件名、STEP 文件名、备注字段与会话回灌，断言工具选择不变。
+- C. 评估集：`docs/desktop/eval/cases.json` 扩至 **58 条**（17 个工具全覆盖 + 缺参数/越权改文件/篡改审计/危险路径/未知位号/跨域误用 6 类拒绝）；`run-eval.mjs` 改为读取该路径并校验工具/拒绝覆盖，离线路由补齐 `update_component`、`remove_component`、`run_plc_generate`、`export_files`、`get_project_context` 与拒绝规则。
+- D. 验收：`npx tsc --noEmit` 通过；`npm test` **780/780**（766 + 14）；`npm run smoke` → `SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）；`npm run agent:live` 无凭据 → `AGENT_LIVE_SKIP` 退出 0。
+- E. 文档：`docs/desktop/NL-AGENT.md` 新增「真实模型验证」「不可信内容处理」；README 快速开始补充运行方式；本文件记录本轮证据。
+
 ## 质量加固轮（2026-10-23，本轮）
 
 - 状态：✅ 完成；不新增功能、不改工具名/IPC 通道/文件格式/状态字符串，不 push。
@@ -181,7 +190,7 @@
 | D7 | 成本面板如何拿到 BOM（CAD 零件名 → 元器件物料号映射口径） | A 由底板画布/电气元件库直接给 partId，成本面板只读；B 允许「零件名规则匹配 + 人工确认」自动填 partId；C 保持手工导入 BOM JSON | 影响成本能否一键算；B 需要命名规范（如 `QF1:LC1D09`），否则匹配率低 | A 长期方向，短期用 C + 预留 B | 待定 |
 | D8 | Agent 的 `run_cost_report` 是否允许落盘导出报告 | A 保持只读，只回摘要；B 增加写工具 `export_cost_report`（PDF/CSV，走现有二次确认）；C 由面板导出，Agent 只给「点哪里」 | 影响「一句话出报价单」的体验；B 需要确认文件名/目录规则与覆盖策略 | B：`export_cost_report` 固定写 `userData/exports/`，默认不覆盖、冲突追加序号 | 已定 B，已实现（`23cd284`） |
 | D9 | 离线规则路由是否要在「模型可用时」也前置生效 | A 仅在模型失败时降级（现状）；B 高置信度只读指令直接走规则，省一次模型调用；C 全走模型 | B 更快更省 token，但规则误判时用户得不到语义纠正，且两套路径要长期保持一致 | A 先稳定；若要 B，先攒 40 条评估集对比准确率再开 | 待定 |
-| D10 | 46 条中文评估集用哪条通道跑基线 | A 只用离线规则路由（零成本、可离线、但只覆盖规则能判的句式）；B 规则 + 真实模型双跑（能测语义理解，按 token 付费）；C 只跑模型 | 决定评估结论代表「规则上限」还是「产品上限」；B 需要一把可用的付费/自建模型 key 与预算口径 | A 先立基线并进 CI 友好（无网络），B 作为发布前手动回归 | 待定 |
+| D10 | 中文评估集用哪条通道跑基线 | A 只用离线规则路由（零成本、可离线、但只覆盖规则能判的句式）；B 规则 + 真实模型双跑（能测语义理解，按 token 付费）；C 只跑模型 | 决定评估结论代表「规则上限」还是「产品上限」；B 需要一把可用的付费/自建模型 key 与预算口径 | A 先立基线并进 CI 友好（无网络），B 作为发布前手动回归；已落地离线 58 条 + 真实模型 12 条（`agent:live`） | ✅ 已按 B 执行 |
 
 ## 已知问题（记录，不阻塞）
 

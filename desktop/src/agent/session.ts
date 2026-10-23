@@ -10,6 +10,7 @@ import {
 } from './context.ts';
 import { AgentMemory, summarizeToolCall } from './memory.ts';
 import { serializeToolResult } from './trim.ts';
+import { DATA_POLICY_PROMPT, guardToolResult } from './guard.ts';
 import {
   cancellationText,
   summarizeArguments,
@@ -107,8 +108,16 @@ function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 const SYSTEM_PROMPT = [
   '你是 AutomationCAD 的桌面智能体。',
   '可以使用工具查询元器件、读取工程上下文/BOM、导入 CAD、插入/修改/移除元件、在底板放置元件、执行干涉初筛、生成 PLC 工程、生成成本报告并导出文件、撤销。',
-  '工具结果会以 JSON 返回；失败时根据错误码向用户解释，不要编造执行结果。',
-  '涉及修改装配体或写文件的操作会先请求用户确认。'
+  '当用户要求查询、计算、修改、生成或导出时，应直接调用已注册工具，不要只给出操作建议。',
+  '只读工具会读取当前文档；缺少显式参数时先调用只读工具或 get_project_context，再根据结果决定能否继续，不要凭猜测填参数。',
+  '导入 CAD 时若用户未给路径，先使用上下文或最近操作中的 STEP/IGES 文件路径；确实没有才追问。',
+  '生成 BOM 使用 get_bom；只有用户明确要求导出/下载文件时才调用 export_files。',
+  '电气合规、线号或载流量问题直接调用 run_electrical_check；工具会读取当前电气文档，不要先用 BOM 推断缺少数据。',
+  '位号明确时直接调用 update_component / remove_component，由工具校验目标；不要仅凭猜测跳过写操作。',
+  '用户说“生成 PLC 程序”并要求落盘时用 run_plc_generate；verify_plc_program 只用于模拟验证。',
+  '工具结果会以 JSON 数据块返回；失败时根据错误码向用户解释，不要编造执行结果。',
+  '涉及修改装配体或写文件的操作会先请求用户确认。',
+  DATA_POLICY_PROMPT
 ].join('');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -547,7 +556,7 @@ export class AgentSession {
           role: 'tool',
           tool_call_id: call.id,
           name: call.function.name,
-          content: serializeToolResult(result).text
+          content: guardToolResult(serializeToolResult(result).text, call.function.name).text
         });
       }
       if (options.signal?.aborted) throw new AgentCancelledError(completed);

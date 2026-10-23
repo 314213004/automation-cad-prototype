@@ -1,0 +1,11 @@
+{
+  "generatedAt": "2026-10-23T10:05:09.650Z",
+  "finishedAt": "2026-10-23T10:06:53.817Z",
+  "mode": "live-model",
+  "model": "cn:deepseek-v4.1-flash",
+  "total": 12,
+  "matched": 12,
+  "toolAccuracy": 1,
+  "confirmRate": 1,
+  "failures": []
+}

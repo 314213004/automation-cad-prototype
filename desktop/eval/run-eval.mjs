@@ -15,8 +15,17 @@ import { AgentTools } from '../src/agent/tools.ts';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = resolve(HERE, '..');
 const REPO_ROOT = resolve(DESKTOP_ROOT, '..');
-const CASES_PATH = resolve(HERE, 'agent-cases.json');
+const CASES_PATH = resolve(REPO_ROOT, 'docs/desktop/eval/cases.json');
 const OUTPUT_PATH = resolve(REPO_ROOT, 'docs/desktop/eval/latest.json');
+
+const REJECTION_TAGS = [
+  'reject_missing_argument',
+  'reject_forbidden_file',
+  'reject_audit_tamper',
+  'reject_dangerous_path',
+  'reject_unknown_ref',
+  'reject_cross_domain'
+];
 
 const INTENTS = new Set(['query', 'compute', 'modify', 'generate', 'commission', 'sync', 'out_of_scope']);
 const TOOL_NAMES = new Set(new AgentTools({ listParts: () => [] }).list().map((tool) => tool.name));
@@ -76,7 +85,11 @@ function expectedSteps(testCase) {
   if (Array.isArray(testCase.expect.steps) && testCase.expect.steps.length > 0) {
     return testCase.expect.steps;
   }
-  return [{ tool: testCase.expect.tool, argsContains: testCase.expect.argsContains ?? {} }];
+  return [{
+    tool: testCase.expect.tool,
+    argsContains: testCase.expect.argsContains ?? {},
+    ...(Array.isArray(testCase.expect.missing) ? { missing: testCase.expect.missing } : {})
+  }];
 }
 
 function actualPlans(testCase) {
@@ -89,7 +102,7 @@ function actualPlans(testCase) {
 function validateCases(cases) {
   const errors = [];
   if (!Array.isArray(cases)) return ['评估集必须是 JSON 数组'];
-  if (cases.length !== 46) errors.push(`评估集应为 46 条，实际 ${cases.length} 条`);
+  if (cases.length < 40) errors.push(`评估集至少 40 条，实际 ${cases.length} 条`);
 
   const ids = new Set();
   const intents = new Set();
@@ -97,6 +110,8 @@ function validateCases(cases) {
   let ambiguous = 0;
   let multiStep = 0;
   let outOfScope = 0;
+  const coveredTools = new Set();
+  const rejectionTags = new Set();
 
   for (const [index, testCase] of cases.entries()) {
     const label = testCase?.id ?? `#${index + 1}`;
@@ -121,25 +136,37 @@ function validateCases(cases) {
     if (!testCase.expect.argsContains || typeof testCase.expect.argsContains !== 'object') {
       errors.push(`${label}: expect.argsContains 必须是对象`);
     }
+    if (testCase.expect.tool !== null) coveredTools.add(testCase.expect.tool);
+    if (testCase.expect.missing !== undefined && !Array.isArray(testCase.expect.missing)) {
+      errors.push(`${label}: expect.missing 必须是数组`);
+    }
     for (const step of testCase.expect.steps ?? []) {
       if (!TOOL_NAMES.has(step.tool)) errors.push(`${label}: steps 工具名不存在 ${step.tool}`);
       if (!step.argsContains || typeof step.argsContains !== 'object') {
         errors.push(`${label}: steps.argsContains 必须是对象`);
       }
+      coveredTools.add(step.tool);
     }
     const tags = Array.isArray(testCase.tags) ? testCase.tags : [];
     if (tags.includes('reference')) references += 1;
     if (tags.includes('ambiguous')) ambiguous += 1;
     if (tags.includes('multi_step')) multiStep += 1;
     if (testCase.intent === 'out_of_scope') outOfScope += 1;
+    for (const tag of REJECTION_TAGS) if (tags.includes(tag)) rejectionTags.add(tag);
   }
 
   if (references < 10) errors.push(`指代用例至少 10 条，实际 ${references} 条`);
   if (ambiguous < 5) errors.push(`歧义用例至少 5 条，实际 ${ambiguous} 条`);
   if (multiStep < 5) errors.push(`多步用例至少 5 条，实际 ${multiStep} 条`);
-  if (outOfScope !== 5) errors.push(`超纲用例应为 5 条，实际 ${outOfScope} 条`);
+  if (outOfScope < 5) errors.push(`超纲用例至少 5 条，实际 ${outOfScope} 条`);
   if (intents.size !== INTENTS.size) {
     errors.push(`应覆盖 7 类意图，实际 ${[...intents].join(', ')}`);
+  }
+  for (const tool of TOOL_NAMES) {
+    if (!coveredTools.has(tool)) errors.push(`评估集未覆盖工具：${tool}`);
+  }
+  for (const tag of REJECTION_TAGS) {
+    if (!rejectionTags.has(tag)) errors.push(`评估集未覆盖拒绝场景：${tag}`);
   }
   return errors;
 }
@@ -179,7 +206,14 @@ function evaluate(cases) {
     if (expectsNoTool) {
       toolsOk = plans.length === 0;
     } else {
-      toolsOk = plans.length === expected.length && expectedTools.every((tool, index) => actualTools[index] === tool);
+      toolsOk =
+        plans.length === expected.length &&
+        expectedTools.every((tool, index) => actualTools[index] === tool) &&
+        expected.every((step, index) => {
+          if (!Array.isArray(step.missing) || step.missing.length === 0) return true;
+          const actualMissing = Array.isArray(plans[index]?.missing) ? plans[index].missing : [];
+          return step.missing.every((key) => actualMissing.includes(key));
+        });
     }
 
     const hasExpectedArgs = expected.some((step) => Object.keys(step.argsContains ?? {}).length > 0);
@@ -288,12 +322,14 @@ async function main() {
     version,
     mode: 'offline-rules',
     dataset: {
-      path: 'desktop/eval/agent-cases.json',
+      path: 'docs/desktop/eval/cases.json',
       count: cases.length,
       references: cases.filter((entry) => entry.tags?.includes('reference')).length,
       ambiguous: cases.filter((entry) => entry.tags?.includes('ambiguous')).length,
       multiStep: cases.filter((entry) => entry.tags?.includes('multi_step')).length,
-      outOfScope: cases.filter((entry) => entry.intent === 'out_of_scope').length
+      outOfScope: cases.filter((entry) => entry.intent === 'out_of_scope').length,
+      toolCoverage: [...new Set(cases.flatMap((entry) => [entry.expect?.tool, ...(entry.expect?.steps ?? []).map((step) => step.tool)]).filter(Boolean))].sort(),
+      rejections: REJECTION_TAGS.filter((tag) => cases.some((entry) => entry.tags?.includes(tag)))
     },
     thresholds: THRESHOLDS,
     passed,
