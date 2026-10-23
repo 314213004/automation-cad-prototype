@@ -27,6 +27,7 @@ tools.ts（AgentTools + 17 个 AgentTool）
  │    ├─ audit-view.ts → 审计筛选 / 时间倒序 / 200 条上限 / CSV
  │    ├─ feedback.ts → 进度事件 / 参数摘要 / 耗时 / 取消文案
  │    ├─ suggest.ts → 失败建议纯函数（六类错误码 + 未知码回落）
+ │    ├─ advisor.ts → 主动建议纯函数（0–3 条 next-best-action + BOM 指纹）
  │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执）
 ```
 
@@ -269,7 +270,8 @@ window.__AgentBridge = {
   insertComponent(part), removeComponent(meshIndex),
   placeEnclosurePart({ partId, x, y, rotate?, railSnap? }),
   removeEnclosurePart(placementId),
-  getProjectContext(), updateComponent(payload), removeProjectComponent(payload),
+  getProjectContext(), getAdvisorState(), markPlcGenerated(),
+  updateComponent(payload), removeProjectComponent(payload),
   restoreProjectComponent(token), exportArtifact({ kind }),
   runInterference(), importPath(path)
 }
@@ -278,6 +280,38 @@ window.__AgentBridge = {
 - `addPlaceholderPart(name)` 在 three 场景加入 20×20×20 mm 实体 + 线框占位盒，同时进入零件列表与干涉 `modelParts`。
 - 占位件沿已有包围盒右侧排布，避免默认重叠。
 - 未就绪时桥方法返回 `{ ok:false, message:'渲染层尚未就绪' }`，不抛异常。
+
+## 主动建议（P7-H）
+
+`advisor.ts` 是纯函数模块：`suggestNextActions(context, project, { ignored?, limit? })`，不读 DOM、不调工具、不写内存。输入 `AgentContext` 与 `AdvisorProjectState`：
+
+```ts
+interface AdvisorProjectState {
+  bomRows: number;
+  unplaced: number;
+  conflicts: number | null;      // null = 有 CAD 但尚未跑干涉检查
+  missingDimensions: number;
+  hasCadModel: boolean;
+  elecCheckPassed: boolean | null;
+  elecIssueCount: number;
+  costStale: boolean;
+  plcGenerated: boolean;
+}
+```
+
+规则按 weight 降序取前 3（完整表见 `docs/desktop/NL-AGENT.md` 8.4）：底板重叠 100、电气校验未通过 95、干涉命中 90、缺尺寸 85、有 CAD 未检查 70、成本过期 65、PLC 未生成 60、全部就绪 50。`why` 必须引用输入数字；无命中或全被忽略时返回空数组。
+
+状态来源：
+- `window.__AgentBridge.getAdvisorState()`：BOM 行数、未放置数、干涉命中/未检查、CAD 是否存在、电气校验结果、成本指纹是否变化、PLC 是否生成；
+- `window.desktop.packs.listParts()`：渲染层按 BOM 的 `partId` 补齐 `dims.w/h`，得到缺尺寸件数；
+- `window.__CostPanel.state()` 暴露最近一次计算的 BOM 指纹，`markPlcGenerated` 记录 Agent 生成 PLC 的事实；PLC 面板 `uiState().generated` 记录面板生成。
+
+侧栏：
+- `renderShell()` 顶部固定「建议」区，`renderAdvisor()` 只更新 `#agentAdvisorList`，不重建对话 DOM；
+- `ask` 卡片填入输入框并触发 `input` 预览；`tool` 卡片生成 `fromSuggestion` 的单步 `AgentPlan`，点「全部执行」后走 `executePlan`，写工具仍二次确认；
+- `ignoredAdvisorIds` 是模块内存 Set，只影响本次会话；`refreshAdvisor()` 在 `agent:progress` end、对话/计划结束与面板刷新时调用，用递增序号丢弃过期响应。
+
+单测 `test/agent/advisor.test.mjs` 21 条；冒烟 `SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`。
 
 ## 坑点
 
@@ -310,9 +344,10 @@ window.__AgentBridge = {
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 780/780（P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 801/801（P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 58 条，覆盖 17 工具与 6 类拒绝
+- ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
 - ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 
 ## 待办

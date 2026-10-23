@@ -30,6 +30,7 @@ import { initPlcGenUi } from './plcgen/ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel } from './agent/ui';
+import { bomSignatureFromRows } from './agent/advisor';
 import type { SyncUploadPayload } from './sync/types';
 import type { InterferenceHit, InterferencePart } from './mech/interference';
 import { initInterferencePanel, type InterferencePanelHandle } from './mech/interference-ui';
@@ -74,6 +75,7 @@ type RemovedComponentSnapshot =
   | { location: 'bom'; snapshot: NonNullable<ReturnType<CadViewer['detachPart']>> };
 const removedComponentSnapshots = new Map<string, RemovedComponentSnapshot>();
 let removedComponentSequence = 0;
+let lastPlcGeneratedAt = '';
 
 function injectStyles(): void {
   if (document.getElementById('automation-cad-styles')) return;
@@ -982,6 +984,51 @@ function initAgentBridge(): void {
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
+    },
+    getAdvisorState: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const bomRows = viewer?.getBomRows() ?? [];
+        const scene = viewer?.getSceneParts() ?? [];
+        const enclosure = enclosureState();
+        const storedPlate = enclosure ? null : persistedEnclosurePlate();
+        const placements: Array<{ partId?: unknown }> = enclosure
+          ? enclosure.placements
+          : Array.isArray(storedPlate?.placements)
+            ? storedPlate.placements.filter((item): item is { partId?: unknown } =>
+                Boolean(item && typeof item === 'object'))
+            : [];
+        const placedPartIds = new Set(placements
+          .map((item) => typeof item.partId === 'string' ? item.partId : '')
+          .filter(Boolean));
+        const unplaced = bomRows.filter((row) =>
+          typeof row.partId === 'string' && row.partId.length > 0 && !placedPartIds.has(row.partId)
+        ).length;
+        const elec = window.__ElecCheckPanel?.result?.() ?? null;
+        const costState = window.__CostPanel?.state?.();
+        const currentSignature = bomSignatureFromRows(bomRows);
+        const lastSignature = typeof costState?.bomSignature === 'string' ? costState.bomSignature : '';
+        const hasCadModel = scene.length > 0;
+        const conflicts = hasCadModel && interference ? (interference.hasRun() ? interference.getHits().length : null) : null;
+        const plcPanelGenerated = window.__PlcGenPanel?.uiState?.().generated === true;
+        return {
+          bomRows: bomRows.length,
+          unplaced,
+          conflicts,
+          missingDimensions: 0,
+          hasCadModel,
+          elecCheckPassed: elec ? elec.counts.error === 0 : null,
+          elecIssueCount: elec ? elec.counts.error : 0,
+          costStale: Boolean(lastSignature) && lastSignature !== currentSignature,
+          plcGenerated: Boolean(lastPlcGeneratedAt) || plcPanelGenerated
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    markPlcGenerated: () => {
+      lastPlcGeneratedAt = new Date().toISOString();
+      return { ok: true };
     },
     insertComponent: (part: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();

@@ -19,6 +19,7 @@ export interface InterferencePanelOptions {
 export interface InterferencePanelHandle {
   run(parts?: readonly InterferencePart[]): InterferenceHit[];
   getHits(): InterferenceHit[];
+  hasRun(): boolean;
 }
 
 function escapeText(value: string): string {
@@ -59,6 +60,7 @@ function severityLabel(severity: InterferenceHit['severity']): string {
 export function initInterferencePanel(options: InterferencePanelOptions): InterferencePanelHandle {
   let hits: InterferenceHit[] = [];
   let currentParts: readonly InterferencePart[] = [];
+  let hasRun = false;
   options.container.innerHTML = `<div class="cad-interference-actions">
       <button type="button" class="cad-btn cad-btn-primary" data-interference-run>运行检测</button>
       <button type="button" class="cad-btn" data-interference-clear>清除高亮</button>
@@ -92,6 +94,7 @@ export function initInterferencePanel(options: InterferencePanelOptions): Interf
       bbox: { min: [...part.bbox.min], max: [...part.bbox.max] }
     }));
     try {
+      hasRun = true;
       hits = detectInterferences(currentParts, { ignoredPairs: ignored });
     } catch (error) {
       hits = [];
@@ -158,6 +161,9 @@ export function initInterferencePanel(options: InterferencePanelOptions): Interf
     run,
     getHits(): InterferenceHit[] {
       return hits.map((hit) => ({ ...hit, overlap: [...hit.overlap], center: [...hit.center] }));
+    },
+    hasRun(): boolean {
+      return hasRun;
     }
   };
 }

@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
-| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、结果裁剪、执行进度/取消、失败建议、审计筛选与导出、侧栏问答与计划卡片 UI |
+| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、审计筛选与导出、侧栏问答/建议/计划卡片 UI |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -83,6 +83,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ P7-D Agent 工具扩展 v1：注册表 12 → 17；新增 `get_project_context`（只读、缺失返回 null）、`update_component` / `remove_component`（可撤销）、`run_plc_generate`（预检失败不落盘）、`export_files`（pdf/dxf/glb/bom 共用净化与冲突规则）；MCP/RPC/UI 共用同一注册表，新增 30 条单测
 - ✅ P7-E Agent 上下文与指代：结构化快照 ≤1.5 KB、选中/最近操作/几何三级指代（<0.6 不猜）、最近 5 次工具会话记忆、列表 20 条/文本 2 KB/结果 10 KB 裁剪；`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`
 - ✅ P7-F Agent 交互体验：工具执行前 n/N + 脱敏参数、500 ms 秒表、10 s 可取消提示、结果卡片与连续 3 步耗时；`AbortController` 取消对话/计划并区分「未写入」与已完成写步骤；`suggest.ts` 六类错误码建议 + 未知码回落；审计按工具/结果筛选、CSV 导出、单条完整 JSON、最近 200 条上限；`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`
+- ✅ P7-H Agent 主动建议：`advisor.ts` 纯函数输入 `AgentContext` + 项目状态摘要，输出 0–3 条 `{id,title,why,action,weight}`；覆盖底板重叠、电气校验未通过、干涉命中/未检查、缺尺寸、成本过期、PLC 未生成、全部就绪交付；侧栏顶部卡片支持 ask 填入输入框、tool 走单步计划确认、本次会话忽略，工具执行后非阻塞刷新；`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`，单测 21 条
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

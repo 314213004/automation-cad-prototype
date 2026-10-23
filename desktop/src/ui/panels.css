@@ -245,3 +245,21 @@
 .acp-audit-row.is-error .acp-audit-tool,.acp-audit-row.is-error .acp-audit-code{color:#ffc9c4}
 .acp-audit-row.is-ok .acp-audit-code{color:#8ee0d4}
 .acp-audit-json{margin:5px 0 2px;padding:6px 7px;max-height:220px;overflow:auto;border:1px solid #2f363c;border-radius:3px;background:#171a1d;color:#c8d0d6;font:9px/1.55 var(--font-mono,monospace);white-space:pre-wrap;word-break:break-word}
+
+/* 主动建议（next-best-action） */
+.acp-advisor{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.acp-advisor-card{
+  position:relative;padding:8px 9px;border:1px solid #3b444b;border-left:3px solid #2b8f84;border-radius:4px;
+  background:linear-gradient(180deg,#232a2a,#1f2427);cursor:pointer;
+}
+.acp-advisor-card:hover{border-color:#4c6663;border-left-color:#42c2b0;background:#252c2c}
+.acp-advisor-card:focus-visible{outline:2px solid rgba(20,184,166,.5);outline-offset:1px}
+.acp-advisor-card-head{display:flex;align-items:flex-start;gap:8px}
+.acp-advisor-title{flex:1;min-width:0;color:#e4efec;font-size:12px;font-weight:600;line-height:1.45}
+.acp-advisor-ignore{
+  flex:0 0 auto;padding:0;border:0;background:transparent;color:#78868d;font:9px/1.4 var(--font-mono,monospace);
+  cursor:pointer;
+}
+.acp-advisor-ignore:hover{color:#ffc9c4}
+.acp-advisor-why{margin-top:4px;color:#9aa8a5;font-size:10px;line-height:1.55;word-break:break-word}
+.acp-advisor-action{margin-top:5px;color:#6fcfbf;font:9px/1.4 var(--font-mono,monospace)}

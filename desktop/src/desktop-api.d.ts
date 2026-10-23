@@ -396,6 +396,8 @@ interface AgentBridgeApi {
     units: string | null;
     recentActions?: Array<{ tool?: string; name?: string; summary?: string; at: string }>;
   } | AgentBridgeFailure;
+  getAdvisorState(): import('./agent/advisor').AdvisorProjectState | AgentBridgeFailure;
+  markPlcGenerated(): { ok: boolean };
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
@@ -714,6 +716,8 @@ interface Window {
       history: number;
       previewPath: string | null;
       precheckErrors: number;
+      generated?: boolean;
+      generatedAt?: string;
       stats: string;
     };
   };
@@ -742,6 +746,7 @@ interface Window {
     setBom(payload: Partial<import('./cost/engine').CostInput>, label?: string): { rows: number };
     run(input: Partial<import('./cost/engine').CostInput>): Promise<import('./cost/engine').CostReport | null>;
     result(): import('./cost/engine').CostReport | null;
+    state(): { hasReport: boolean; computedAt: string; bomSignature: string };
     html(): string;
     csv(): string;
     exportPdf(): Promise<{ path: string; htmlPath: string }>;

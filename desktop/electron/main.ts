@@ -17,6 +17,7 @@ import { executePlan, plan } from '../src/agent/planner';
 import {
   buildAgentContext,
   collectAgentContext,
+  emptyAgentContext,
   serializeAgentContext
 } from '../src/agent/context';
 import { resolveReference } from '../src/agent/reference';
@@ -24,6 +25,7 @@ import { trimListResult } from '../src/agent/trim';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
 import { suggestFailure } from '../src/agent/suggest';
+import { suggestNextActions } from '../src/agent/advisor';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
@@ -1671,6 +1673,41 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_AGENT_UX_OK steps=${uxStarts.length} audit=${uxAudit.entries.length} cancel=${uxCancelOk}`);
       } catch (error) {
         console.error('SMOKE_FAIL agent_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const advisorContext = {
+          ...emptyAgentContext(),
+          domain: 'mech' as const,
+          plate: { width: 600, height: 400, placed: 7, overlaps: 3 }
+        };
+        const suggestions = suggestNextActions(advisorContext, {
+          bomRows: 12,
+          unplaced: 1,
+          conflicts: null,
+          missingDimensions: 5,
+          hasCadModel: true,
+          elecCheckPassed: true,
+          elecIssueCount: 0,
+          costStale: false,
+          plcGenerated: false
+        });
+        if (
+          suggestions.length !== 3 ||
+          suggestions[0]?.id !== 'overlap' ||
+          suggestions.some((suggestion) => !suggestion.why || !/\d/.test(suggestion.why))
+        ) {
+          console.error('SMOKE_FAIL agent_advisor', JSON.stringify(suggestions.map((suggestion) => ({
+            id: suggestion.id,
+            why: suggestion.why
+          }))));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_ADVISOR_OK suggestions=${suggestions.length} top=${suggestions[0]?.id}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_advisor_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

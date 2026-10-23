@@ -1089,6 +1089,11 @@ function registerPlcGenerateCommand(bus: CommandBus): void {
         });
         const zip = createZip(generated.files);
         writeFileSync(plan.zipPath, zip);
+        try {
+          await ctx.bridge.call('markPlcGenerated');
+        } catch {
+          // 建议区状态是可降级信息，不能因标记失败影响已完成的 PLC 落盘。
+        }
         return {
           ok: true,
           data: {

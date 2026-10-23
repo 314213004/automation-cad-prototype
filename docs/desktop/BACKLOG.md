@@ -11,6 +11,16 @@
 - 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
 - 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
 
+## Agent 主动建议（P7-H，2026-10-23，本轮）
+
+- 状态：✅ 完成；未 push。
+- A. 建议引擎：新增 `desktop/src/agent/advisor.ts`，纯函数 `suggestNextActions(context, project, options?)`；输入 BOM 行数、未放置件数、干涉命中/未检查、缺尺寸件数、CAD 是否存在、电气校验结果、成本是否过期、PLC 是否已生成，输出 0–3 条 `{id,title,why,action,weight}`。规则顺序：底板重叠 100、电气校验未通过 95、干涉命中 90、缺尺寸 85、未做干涉检查 70、成本过期 65、PLC 未生成 60、全部就绪交付包 50；`why` 全部引用真实数字，无命中返回空数组。
+- B. UI 接入：侧栏顶部「建议」区最多 3 张卡片；ask 卡片填入输入框，tool 卡片生成单步计划确认（写操作仍二次确认）；「忽略」写入本次会话内存 Set，刷新时作为 `options.ignored` 传入；`agent:progress` end、对话/计划结束与面板刷新都会调用 `refreshAdvisor()`，只更新建议列表 DOM，不打断对话。
+- C. 状态来源：`__AgentBridge.getAdvisorState()` 汇总 BOM / 未放置 / 干涉 / 电气 / 成本指纹 / PLC 标记，`packs.listParts()` 在渲染层补齐 `dims` 缺尺寸数；`__CostPanel.state()` 暴露成本计算的 BOM 指纹，`run_plc_generate` 成功后调用 `markPlcGenerated`。
+- D. 测试：新增 `desktop/test/agent/advisor.test.mjs` 21 条，覆盖每条规则命中/不命中、优先级排序、上限 3、空状态、忽略后不返回、忽略后刷新不复活、why 数字、BOM 指纹。
+- E. 验收：`npx tsc --noEmit` 通过；`npm test` **801/801**（780 + 21）；`npm run smoke` → `SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）。
+- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.4「主动建议」规则表；README 智能体表与面板说明；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
+
 ## Agent 真实模型与抗注入（2026-10-23，本轮）
 
 - 状态：✅ 完成；不 push。
@@ -80,7 +90,7 @@
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
 ### P7 自然语言交互 Agent
-- 状态：✅ P7-A / P7-B / P7-C / P7-D / P7-E / P7-F 完成（P7-A：离线规则路由 + 上下文裁剪 + 审计 + 侧栏只读问答 UI + 评估集；P7-B：`place_component` 底板放置 + 二次确认 + 撤销联动；P7-C：离线多步规划 + 计划卡片 + 顺序执行 + 失败停止；P7-D：Agent 工具扩展 v1，12 → 17 个工具；P7-E：上下文快照与指代；P7-F：执行进度/取消/失败建议/审计增强）
+- 状态：✅ P7-A / P7-B / P7-C / P7-D / P7-E / P7-F / P7-G / P7-H 完成（P7-A：离线规则路由 + 上下文裁剪 + 审计 + 侧栏只读问答 UI + 评估集；P7-B：`place_component` 底板放置 + 二次确认 + 撤销联动；P7-C：离线多步规划 + 计划卡片 + 顺序执行 + 失败停止；P7-D：Agent 工具扩展 v1，12 → 17 个工具；P7-E：上下文快照与指代；P7-F：执行进度/取消/失败建议/审计增强；P7-G：真实模型冒烟 + 抗注入；P7-H：主动建议 next-best-action）
 - 已完成（P7-A-1，`424711c`）：
   - `src/agent/router.ts`：7 类意图关键词计分（写操作同分优先）、`planTool` 中文→工具+参数、`planReadOnly` 只读白名单、类别同义词按长度倒序（热继电器不被继电器吃掉）、`extractQuery` 去客套/动词/疑问词
   - `src/agent/context.ts`：`buildAgentContext` 默认 ≤2048 字节，降级顺序「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」，回报 `bytes/truncated/droppedTools/droppedRecent`

@@ -36,9 +36,16 @@ import {
   describePlanStep,
   plan as buildAgentPlan,
   type AgentPlan,
+  type PlanStep,
   type PlanStepResult
 } from './planner.ts';
 import { collectAgentContext, type AgentContext } from './context.ts';
+import {
+  suggestNextActions,
+  type AdvisorProjectState,
+  type AdvisorSuggestion
+} from './advisor.ts';
+import { READ_ONLY_TOOLS } from './router.ts';
 import { unwrapToolResultData } from './guard.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
@@ -84,6 +91,9 @@ let progressMetrics = new Map<string, { elapsedMs: number; ok: boolean; code: st
 let cancelRequested = false;
 let disposeProgress: (() => void) | null = null;
 let activeRunId = '';
+let advisorSuggestions: AdvisorSuggestion[] = [];
+const ignoredAdvisorIds = new Set<string>();
+let advisorRefreshSeq = 0;
 
 interface LiveProgress {
   key: string;
@@ -108,6 +118,8 @@ interface MultiPlanState {
   feedback: string;
   tone: 'ok' | 'error' | '';
   dismissed: boolean;
+  /** 由建议卡片直接生成，单步也要显示计划确认卡片。 */
+  fromSuggestion?: boolean;
 }
 
 let multiPlan: MultiPlanState | null = null;
@@ -141,6 +153,8 @@ function renderShell(): void {
   const history = Array.isArray(infoState.history) ? infoState.history.slice(-5).reverse() : [];
   const toolCount = infoState.toolCount ?? tools.length;
   body.innerHTML = `
+    <div class="acp-section-title">建议 <b id="agentAdvisorCount">—</b></div>
+    <div class="acp-advisor" id="agentAdvisorList" aria-live="polite"></div>
     <div class="acp-section-title">对话 <b id="agentChatCount">0</b></div>
     <div class="acp-chat-log" id="agentChatLog">
       <div class="acp-empty">输入任务后，智能体会按需调用工具。写操作会先弹出确认。</div>
@@ -261,6 +275,7 @@ function renderShell(): void {
   renderMessages();
   renderPreview();
   renderAudit();
+  renderAdvisor();
   updateBusyState();
 }
 
@@ -450,6 +465,7 @@ function applyProgress(event: DesktopAgentProgressEvent): void {
     });
   }
   renderProgress();
+  if (event.phase === 'end') void refreshAdvisor();
   if (progressSteps.some((step) => step.elapsedMs === undefined)) startProgressTicker();
 }
 
@@ -608,6 +624,179 @@ function currentAgentContext(): AgentContext {
   return collectAgentContext({ projectContext: () => raw });
 }
 
+const EMPTY_ADVISOR_STATE: AdvisorProjectState = {
+  bomRows: 0,
+  unplaced: 0,
+  conflicts: null,
+  missingDimensions: 0,
+  hasCadModel: false,
+  elecCheckPassed: null,
+  elecIssueCount: 0,
+  costStale: false,
+  plcGenerated: false
+};
+
+function advisorNumber(value: unknown): number {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.trunc(number) : 0;
+}
+
+function advisorStateFromBridge(value: unknown): AdvisorProjectState | null {
+  if (!value || typeof value !== 'object' || !('bomRows' in value)) return null;
+  const source = value as Record<string, unknown>;
+  const conflicts = source.conflicts === null ? null : advisorNumber(source.conflicts);
+  const elec = source.elecCheckPassed;
+  return {
+    bomRows: advisorNumber(source.bomRows),
+    unplaced: advisorNumber(source.unplaced),
+    conflicts,
+    missingDimensions: advisorNumber(source.missingDimensions),
+    hasCadModel: source.hasCadModel === true,
+    elecCheckPassed: elec === true ? true : elec === false ? false : null,
+    elecIssueCount: advisorNumber(source.elecIssueCount),
+    costStale: source.costStale === true,
+    plcGenerated: source.plcGenerated === true
+  };
+}
+
+function bomPartIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
+  for (const row of value) {
+    if (!row || typeof row !== 'object') continue;
+    const partId = (row as Record<string, unknown>).partId;
+    if (typeof partId === 'string' && partId.trim()) ids.add(partId.trim());
+  }
+  return [...ids];
+}
+
+/**
+ * 采集建议所需的状态摘要。桥不可用时返回空摘要，不让侧栏报错。
+ * 缺尺寸数需要数据包的 dims，渲染层通过 `packs.listParts()` 只读补齐。
+ */
+async function collectAdvisorState(): Promise<AdvisorProjectState> {
+  const bridge = window.__AgentBridge;
+  if (!bridge) return { ...EMPTY_ADVISOR_STATE };
+  let base: AdvisorProjectState | null = null;
+  try {
+    base = advisorStateFromBridge(bridge.getAdvisorState?.());
+  } catch {
+    base = null;
+  }
+  let bom: unknown = null;
+  try {
+    bom = bridge.getBom?.() ?? null;
+  } catch {
+    bom = null;
+  }
+  const state = base ?? { ...EMPTY_ADVISOR_STATE };
+  let missingDimensions = state.missingDimensions;
+  const partIds = bomPartIds(bom);
+  if (partIds.length > 0) {
+    try {
+      const parts = await window.desktop?.packs.listParts();
+      if (Array.isArray(parts)) {
+        const dimsById = new Map(parts.map((part) => [part.id, part.dims] as const));
+        missingDimensions = partIds.filter((id) => {
+          const dims = dimsById.get(id);
+          return !dims || !(dims.w > 0) || !(dims.h > 0);
+        }).length;
+      }
+    } catch {
+      missingDimensions = state.missingDimensions;
+    }
+  }
+  return {
+    ...state,
+    bomRows: Array.isArray(bom) ? bom.length : state.bomRows,
+    missingDimensions
+  };
+}
+
+function renderAdvisor(): void {
+  const list = body?.querySelector<HTMLElement>('#agentAdvisorList');
+  const count = body?.querySelector<HTMLElement>('#agentAdvisorCount');
+  if (!list) return;
+  if (count) count.textContent = String(advisorSuggestions.length);
+  if (advisorSuggestions.length === 0) {
+    list.innerHTML = '<div class="acp-empty">当前没有需要处理的建议。工具执行后会自动刷新。</div>';
+    return;
+  }
+  list.innerHTML = advisorSuggestions.map((suggestion) => {
+    const action = suggestion.action.kind === 'ask'
+      ? '填入输入框'
+      : `计划确认 → ${suggestion.action.tool}`;
+    return `<div class="acp-advisor-card" data-advisor-id="${escapeHtml(suggestion.id)}" role="button" tabindex="0">
+      <div class="acp-advisor-card-head">
+        <span class="acp-advisor-title">${escapeHtml(suggestion.title)}</span>
+        <button type="button" class="acp-advisor-ignore" data-advisor-ignore="${escapeHtml(suggestion.id)}">忽略</button>
+      </div>
+      <div class="acp-advisor-why">${escapeHtml(suggestion.why)}</div>
+      <div class="acp-advisor-action">${escapeHtml(action)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function refreshAdvisor(): Promise<void> {
+  const seq = ++advisorRefreshSeq;
+  const context = currentAgentContext();
+  let state: AdvisorProjectState;
+  try {
+    state = await collectAdvisorState();
+  } catch {
+    return;
+  }
+  if (seq !== advisorRefreshSeq || !body) return;
+  advisorSuggestions = suggestNextActions(context, state, { ignored: ignoredAdvisorIds });
+  renderAdvisor();
+}
+
+function ignoreAdvisorSuggestion(id: string): void {
+  if (!id) return;
+  ignoredAdvisorIds.add(id);
+  advisorSuggestions = advisorSuggestions.filter((suggestion) => suggestion.id !== id);
+  renderAdvisor();
+}
+
+function applyAdvisorSuggestion(id: string): void {
+  const suggestion = advisorSuggestions.find((item) => item.id === id);
+  if (!suggestion || !body || !window.desktop) return;
+  if (suggestion.action.kind === 'ask') {
+    const input = fieldElement('agentChatInput');
+    if (!input) return;
+    input.value = suggestion.action.prompt;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    chatFeedback(`已填入建议：${suggestion.title}`);
+    return;
+  }
+  if (thinking || multiPlan?.running) {
+    chatFeedback('当前有任务正在执行，完成后再试这条建议。', true);
+    return;
+  }
+  const action = suggestion.action;
+  const step: PlanStep = {
+    tool: action.tool,
+    args: { ...action.args },
+    why: suggestion.why,
+    readOnly: READ_ONLY_TOOLS.has(action.tool)
+  };
+  multiPlan = {
+    input: `建议：${suggestion.title}`,
+    plan: { steps: [step], confidence: 1 },
+    results: [],
+    next: 0,
+    running: false,
+    feedback: '点击「全部执行」确认后才会调用工具；写操作仍会再弹一次确认。',
+    tone: '',
+    dismissed: false,
+    fromSuggestion: true
+  };
+  chatFeedback('');
+  renderMultiPlan();
+  body.querySelector<HTMLElement>('#agentPlanCard')?.scrollIntoView({ block: 'nearest' });
+}
+
 function isMultiStepText(text: string): boolean {
   return /(?:然后|接着|之后|最后|并且|同时|再|并)/.test(text);
 }
@@ -651,7 +840,9 @@ function renderMultiPlan(): void {
   if (!card) return;
   const state = multiPlan;
   const show = Boolean(state && !state.dismissed && (
-    state.plan.steps.length >= 2 || (state.plan.refused === true && (isMultiStepText(state.input) || (state.plan.warnings?.length ?? 0) > 0))
+    state.plan.steps.length >= 2 ||
+    (state.fromSuggestion === true && state.plan.steps.length > 0) ||
+    (state.plan.refused === true && (isMultiStepText(state.input) || (state.plan.warnings?.length ?? 0) > 0))
   ));
   if (!state || !show) {
     card.hidden = true;
@@ -670,7 +861,13 @@ function renderMultiPlan(): void {
   const runStep = body?.querySelector<HTMLButtonElement>('#agentPlanRunStep');
   const cancel = body?.querySelector<HTMLButtonElement>('#agentPlanCancel');
 
-  if (title) title.textContent = state.plan.refused ? '多步计划 · 未执行' : `多步计划 · ${state.plan.steps.length} 步`;
+  if (title) {
+    title.textContent = state.plan.refused
+      ? '多步计划 · 未执行'
+      : state.fromSuggestion
+        ? `建议确认 · ${state.plan.steps.length} 步`
+        : `多步计划 · ${state.plan.steps.length} 步`;
+  }
   if (meta) {
     meta.textContent = state.plan.refused
       ? '已拒绝'
@@ -797,6 +994,7 @@ async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
     renderMultiPlan();
     updateBusyState();
     void loadAudit();
+    void refreshAdvisor();
   }
 }
 
@@ -1016,6 +1214,7 @@ async function sendMessage(): Promise<void> {
     thinking = false;
     cancelRequested = false;
     updateBusyState();
+    void refreshAdvisor();
   }
 }
 
@@ -1104,6 +1303,28 @@ function bindControls(): void {
       void sendMessage();
     }
   });
+  const advisorList = body?.querySelector<HTMLElement>('#agentAdvisorList');
+  const handleAdvisorKey = (event: KeyboardEvent): void => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-advisor-ignore]')) return;
+    const card = target.closest<HTMLElement>('[data-advisor-id]');
+    if (!card) return;
+    event.preventDefault();
+    applyAdvisorSuggestion(card.dataset.advisorId ?? '');
+  };
+  advisorList?.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    const ignore = target.closest<HTMLElement>('[data-advisor-ignore]');
+    if (ignore) {
+      event.stopPropagation();
+      ignoreAdvisorSuggestion(ignore.dataset.advisorIgnore ?? '');
+      return;
+    }
+    const card = target.closest<HTMLElement>('[data-advisor-id]');
+    if (card) applyAdvisorSuggestion(card.dataset.advisorId ?? '');
+  });
+  advisorList?.addEventListener('keydown', handleAdvisorKey);
 }
 
 async function refresh(): Promise<void> {
@@ -1122,6 +1343,7 @@ async function refresh(): Promise<void> {
     messages = Array.isArray(chat.messages) ? chat.messages : [];
     renderShell();
     void loadAudit();
+    void refreshAdvisor();
   } catch (error) {
     infoState = { error: `读取智能体状态失败：${errorMessage(error)}` };
     body.innerHTML = `<div class="acp-status is-on is-error">${escapeHtml(infoState.error ?? '')}</div>

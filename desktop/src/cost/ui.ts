@@ -20,6 +20,7 @@ import {
 import { computeCost, type CostBomRow, type CostInput, type CostReport } from './engine.ts';
 import { isUsablePricebookItem, validatePricebook, type Pricebook } from './pricebook.ts';
 import { costReportCsv, describeCost, money, renderCostReportHtml } from './report.ts';
+import { bomSignatureFromRows } from '../agent/advisor.ts';
 
 const COST_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5V2.5h8.2l2.8 2.8v8.2z"/><path d="M4.8 6.4h4.4M4.8 9h4.4M4.8 11.4h2.8"/><path d="M10.7 2.7v2.8h2.8"/></svg>';
 const NO_PRICEBOOK_HINT = '尚未加载价格簿：请导入正式价目表 JSON，或确认桌面版内置价格簿可用';
@@ -48,6 +49,8 @@ let drawer: DrawerHandle | null = null;
 let nodes: PanelNodes | null = null;
 let lastReport: CostReport | null = null;
 let lastHtml = '';
+let lastBomSignature = '';
+let lastComputedAt = '';
 let bookState: BookState | null = null;
 let pendingBom: Partial<CostInput> | null = null;
 let bomLabel = '未载入 BOM';
@@ -234,6 +237,8 @@ async function runWith(input: Partial<CostInput> | null): Promise<CostReport | n
     const wireSection = input?.wireSection ?? pendingBom?.wireSection;
     if (wireSection) merged.wireSection = wireSection;
     const report = computeCost(merged);
+    lastBomSignature = bomSignatureFromRows(merged.bom);
+    lastComputedAt = new Date().toISOString();
     render(report);
     if (book.usable === 0) {
       notify('价格簿内没有可用条目（示例条目不计价），合计将只包含人工与辅材', true);
@@ -464,6 +469,7 @@ export function initCostPanel(): void {
     },
     run: async (input: Partial<CostInput>) => await runWith(input),
     result: () => lastReport,
+    state: () => ({ hasReport: Boolean(lastReport), computedAt: lastComputedAt, bomSignature: lastBomSignature }),
     html: () => lastHtml,
     csv: () => (lastReport ? costReportCsv(lastReport) : ''),
     exportPdf,

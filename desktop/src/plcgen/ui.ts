@@ -79,6 +79,7 @@ let lastPrecheck: PrecheckResult | null = null;
 let lastFiles: GeneratedFile[] = [];
 let lastStats: ProjectStats | null = null;
 let lastGeneratedAt = '';
+let generatedInSession = false;
 let exportPath = '';
 let selectedFile: string | null = null;
 let viewingHistory = false;
@@ -496,6 +497,7 @@ async function runGenerate(): Promise<GenerateProjectSuccess | null> {
     lastFiles = result.files;
     lastStats = result.stats;
     lastGeneratedAt = new Date().toISOString();
+    generatedInSession = true;
     exportPath = '';
     viewingHistory = false;
     if (nodes) nodes.exportPath.textContent = '';
@@ -826,6 +828,8 @@ export function initPlcGenUi(uiOptions: PlcGenUiOptions = {}): void {
       hasConfig: Boolean(config),
       generateDisabled: nodes ? nodes.generate.disabled : true,
       simulateDisabled: nodes ? nodes.simulate.disabled : true,
+      generated: generatedInSession,
+      generatedAt: lastGeneratedAt,
       verifyOk: lastVerify ? lastVerify.ok : null,
       verifySteps: lastVerify?.simulation?.steps.length ?? 0,
       verifyAlarms: lastVerify?.simulation?.alarms.length ?? 0,

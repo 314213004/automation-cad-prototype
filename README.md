@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**780 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文与指代 / 工厂的 headless smoke
+- 质量基线：**801 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文与指代 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -110,7 +110,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 ![智能体面板：对话、工具、模型设置](docs/desktop/screenshots/09-agent.png)
 
-*智能体面板：自上而下是对话与工具调用区、执行进度/结果卡片、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、17 个工具、token 文件路径）与可筛选/导出的审计面板。写操作执行前会弹出二次确认；执行中可取消。*
+*智能体面板：最上方是「建议」区（0–3 张 next-best-action 卡片，点击填入输入框或走单步计划确认，可本次会话忽略），其下是对话与工具调用区、执行进度/结果卡片、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、17 个工具、token 文件路径）与可筛选/导出的审计面板。写操作执行前会弹出二次确认；执行中可取消。*
 
 ### 智慧工厂同步设置
 
@@ -189,10 +189,11 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 执行反馈 | 工具执行前显示「正在执行 `tool` · 第 n/N 步」与脱敏参数；执行中 500 ms 秒表、超过 10 s 提示可取消；完成后显示成功/失败、耗时与结果码，连续 3 步汇总耗时 | ✅ P7-F |
 | 取消执行 | 侧栏「取消执行」经 `AbortController` 中断当前工具；无写入时提示「已取消，未写入任何更改」，已有写步骤时逐条列出并提示 `undo_last` | ✅ P7-F |
 | 失败建议 | `suggest.ts` 按 `PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED` 给中文建议与替代方案；未知码只复述消息，不编造原因 | ✅ P7-F |
+| 主动建议 | `advisor.ts` 纯函数按底板重叠 / 干涉 / 缺尺寸 / 电气校验 / 成本过期 / PLC 未生成等真实状态给出 0–3 条 next-best-action；侧栏顶部卡片可直接填入输入框或走单步计划确认，支持本次会话忽略与工具执行后刷新 | ✅ P7-H |
 | 审计面板 | 最近 200 条，按时间倒序；列为时间/工具/参数摘要/结果码/耗时，可按工具与结果筛选、导出当前 CSV、单条展开完整脱敏 JSON；超出上限提示丢弃数量 | ✅ P7-F |
 | 离线评估 | `docs/desktop/eval/cases.json` 58 条中文用例（17 个工具全覆盖 + 6 类拒绝场景）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 17 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、审计筛选与导出、58 条中文评估集、真实模型 12 指令冒烟、工具结果抗注入 | ✅ P7-A～P7-F 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 17 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、审计筛选与导出、58 条中文评估集、真实模型 12 指令冒烟、工具结果抗注入 | ✅ P7-A～P7-H 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -262,7 +263,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（780 个）
+│   ├── test/                                 # node:test 单测与集成测试（801 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -290,7 +291,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 780 个单测（node:test）
+npm test          # 801 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP

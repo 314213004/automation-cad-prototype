@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型 12 指令冒烟 + 工具结果抗提示注入，评估集扩至 58 条）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型 12 指令冒烟 + 工具结果抗提示注入，评估集扩至 58 条）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -210,7 +210,7 @@ UI 与 IPC：
 2. **命令面板**（快）：`Ctrl+K` 模糊搜索 + 自然语言混合，回车即执行只读命令
 3. **@ 对象**：在画布/原理图上选中元件后 `@`，指令自动带上该对象
 4. **语音**（后期）：本地 STT，仅对白名单指令生效
-5. **主动建议**（后期）：检测到「未绑点位」「缺价」「干涉」时在状态栏提示，一键让 Agent 处理
+5. **主动建议**（P7-H）：侧栏顶部按工程状态给出 0–3 条 next-best-action，见 8.4
 
 ### 8.1 执行反馈（P7-F）
 
@@ -244,6 +244,31 @@ UI 与 IPC：
 - 按工具与结果（全部 / 仅成功 / 仅失败）筛选；导出当前筛选结果为 CSV，文件名走统一 `sanitizeFileName`，内容带 UTF-8 BOM。
 - 单条展开显示完整 JSON；整条记录再次递归脱敏，历史记录里的裸密钥也不会重新出现在界面或导出文件。
 - 最多展示最近 200 条；更早记录丢弃并在面板提示数量。审计文件本身仍只追加保留。
+
+### 8.4 主动建议（next-best-action，P7-H）
+
+`desktop/src/agent/advisor.ts` 是纯函数 `suggestNextActions(context, projectState, options?)`：输入 `AgentContext` + 项目状态摘要（BOM 行数、未放置件数、干涉检查命中数、缺尺寸件数、是否有 CAD、电气校验是否通过、成本是否过期、PLC 是否已生成、电气严重问题数），输出 0–3 条 `{id,title,why,action,weight}`。`why` 必须引用输入里的真实数字；排序按 `weight` 降序，同分保持规则表顺序；`options.ignored` 由调用方传入本次会话忽略的 id，引擎本身不保存状态。
+
+| 顺序 | id | 触发条件 | 建议标题 | 动作 |
+|---:|---|---|---|---|
+| 1 | `overlap` | `context.plate.overlaps > 0` | 查看 N 处重叠 | `ask`「底板哪里重叠了」 |
+| 2 | `elec-failed` | `elecCheckPassed === false` | 先修 N 处相序/线径问题 | `ask`「电气校验哪些地方没通过」 |
+| 3 | `interference-hits` | 有 CAD 且 `conflicts > 0` | 处理 N 处干涉 | `ask`「CAD 哪里干涉了」 |
+| 4 | `missing-dimensions` | `missingDimensions > 0` | 这 N 个件没有尺寸，底板画不了 | `ask`「哪些件缺少尺寸」 |
+| 5 | `interference-unchecked` | 有 CAD 且 `conflicts === null` | 跑一次干涉检查 | `tool: run_interference_check` |
+| 6 | `cost-stale` | 成本结果早于 BOM 变更 | 成本已过期，重算 | `tool: run_cost_report` |
+| 7 | `plc-missing` | BOM > 0、未放置 0、缺尺寸 0、PLC 未生成 | 按当前选型生成 PLC | `tool: run_plc_generate` |
+| 8 | `deliver-package` | BOM > 0、有 CAD、未放置 0、干涉 0、缺尺寸 0、电气通过、成本未过期、PLC 已生成 | 导出交付包（BOM+PDF+PLC） | `ask`「导出交付包：BOM、PDF 和 PLC」 |
+
+权重依次为 `100 / 95 / 90 / 85 / 70 / 65 / 60 / 50`；默认最多 3 条，0–3 之间可配置，无命中返回空数组，不凑数。`conflicts: null` 表示「有 CAD 但还没跑过干涉检查」，因此不会把「检查结果 0 处」误判成「没检查」。
+
+侧栏行为：
+- 「建议」区固定在侧栏顶部，每张卡片显示标题、一句带数字的依据与动作类型；
+- `ask` 卡片点击后把 prompt 填入输入框（不自动发送）；`tool` 卡片生成一张单步计划确认卡，用户点「全部执行」后才调用，写工具仍由 `executePlan` 再弹一次确认；
+- 「忽略」只写入本次会话的内存 `Set<string>`，刷新建议时作为 `options.ignored` 传入，同一会话不再出现，重开应用后恢复；
+- 每次工具执行结束（`agent:progress` 的 `end` 事件）、对话结束、计划执行结束都会刷新建议；刷新只更新建议列表 DOM，不重建对话、不清空输入框、不打断正在进行的会话。
+
+冒烟：`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`；单测 `test/agent/advisor.test.mjs` 21 条，覆盖每条规则命中/不命中、优先级、上限、空状态、忽略与刷新不复活、`why` 数字、BOM 指纹。
 
 ## 9. 质量评估
 
@@ -307,15 +332,15 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 - A（1 周）：只读问答 + 4 个查询/计算工具接入 + 侧栏聊天 + 审计
 - B（1 周）：单步写操作（放件、导出）+ 确认机制 + 撤销联动
 - C（2 周）：✅ 多步规划（计划预览 / 顺序执行 / 失败停止 / 写步骤一次确认）+ 成本工具
-- D（持续）：联调/同步类工具、主动建议、语音、评估集扩容
+- D（持续）：联调/同步类工具、语音、评估集扩容；主动建议已在 P7-H 落地
 
 ## 11. 验收（A 期）
 
 - 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`；`SMOKE_AGENT_TOOLS_V2 tools=17`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 780/780，其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 780/780）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 801/801（P7-H 主动建议 21 条），其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 801/801）
 - 评估集与回归 —— ✅ P7-G：58 条中文用例（17 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58 意图、58/58 工具、25/25 参数、5/5 超纲拒绝、5/5 多步）；真实模型冒烟 `matched=12/12`
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
