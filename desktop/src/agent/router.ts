@@ -145,6 +145,9 @@ export function routeIntent(text: string): IntentMatch {
   if (!normalized) {
     return { intent: 'out_of_scope', confidence: 'low', score: 0, hits: [], reason: '输入为空' };
   }
+  if (isDocQuestion(normalized)) {
+    return { intent: 'query', confidence: 'high', score: 3, hits: ['本地文档'], reason: '文档类问题，查本地知识库' };
+  }
   // 多步指令以最后一步的目标分类：「读 BOM 然后做干涉」应算计算而不是查询。
   const steps = splitInstructionSteps(normalized);
   const lastStep = steps.length > 1 ? steps[steps.length - 1]! : normalized;
@@ -191,10 +194,11 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 17 个工具里，只读 8 个、写操作 9 个。 */
+/** 目前注册的 18 个工具里，只读 9 个、写操作 9 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
+  'search_docs',
   'get_bom',
   'get_project_context',
   'run_interference_check',
@@ -414,6 +418,25 @@ const AUDIT_TAMPER = /(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|d
 /** 典型跨域误用：拿 PLC 程序去生成/修改报价、BOM、干涉或电气结论。 */
 const CROSS_DOMAIN_MISUSE = /(?:(?:plc|程序)[^。；;\n]{0,24}(?:bom|报价|成本|干涉|电气校验)|(?:bom|报价|成本|干涉|电气校验)[^。；;\n]{0,24}(?:plc|程序))/i;
 
+/** 文档类问题：问用法、限制、决策依据或缺失尺寸处理，应查本地知识库而不是猜。 */
+const DOC_QUESTION = /(怎么用|怎么放|怎么操作|怎么处理|怎么办|如何|为什么|为何|决策|限制|规范|约定|原理|含义|文档|知识库|缺尺寸|没有尺寸|尺寸缺失|(?:^|[^a-z0-9])d\d+(?:[^a-z0-9]|$))/i;
+const DOC_QUERY_NOISE = /(?:请问|帮我|麻烦|查一下|查查|搜索一下|搜一下|看一下|说说|解释一下|怎么处理|怎么办|怎么用|怎么放|怎么操作|如何|为什么|为何|是什么|是啥|一下|怎么|的|吗|呢|吧)/g;
+
+export function isDocQuestion(text: string): boolean {
+  return DOC_QUESTION.test(text ?? '');
+}
+
+/** 去掉客套话与疑问词，保留 D2、导轨、缺尺寸等检索关键词。 */
+export function docQuery(text: string): string {
+  const source = (text ?? '').trim();
+  const cleaned = source
+    .replace(/[，。！？、,.!?；;：:"'“”‘’()（）]/g, ' ')
+    .replace(DOC_QUERY_NOISE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || source;
+}
+
 const DESIGNATOR_PATTERN = /^(?:[A-Za-z]{1,4}[-_]?\d+[A-Za-z0-9-]*|\d+)$/;
 
 function planUpdateComponent(value: string): ToolPlan | null {
@@ -563,6 +586,16 @@ function planToolBase(text: string): ToolPlan | null {
       readOnly: true,
       missing: [],
       why: '读取当前域、视图、选中对象、机型与底板余量'
+    };
+  }
+  if (isDocQuestion(value)) {
+    const query = docQuery(value);
+    return {
+      tool: 'search_docs',
+      args: { query },
+      readOnly: true,
+      missing: [],
+      why: `检索本地项目文档与元件库知识：${query}`
     };
   }
   if (/(导入|打开).*(step|stp|iges|stl|obj|glb)/i.test(value)) {

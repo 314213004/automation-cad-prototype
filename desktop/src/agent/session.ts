@@ -117,6 +117,7 @@ const SYSTEM_PROMPT = [
   '导入 CAD 时若用户未给路径，先使用上下文或最近操作中的 STEP/IGES 文件路径；确实没有才追问。',
   '生成 BOM 使用 get_bom；只有用户明确要求导出/下载文件时才调用 export_files。',
   '电气合规、线号或载流量问题直接调用 run_electrical_check；工具会读取当前电气文档，不要先用 BOM 推断缺少数据。',
+  '涉及「怎么操作 / 限制 / 决策依据 / 为什么」时先调用 search_docs 查本地项目文档；答案要引用返回的 source 与 heading。没有命中就明确说查不到，禁止凭空编造。',
   '位号明确时直接调用 update_component / remove_component，由工具校验目标；不要仅凭猜测跳过写操作。',
   '用户说“生成 PLC 程序”并要求落盘时用 run_plc_generate；verify_plc_program 只用于模拟验证。',
   '工具结果会以 JSON 数据块返回；失败时根据错误码向用户解释，不要编造执行结果。',

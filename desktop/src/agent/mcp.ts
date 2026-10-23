@@ -21,7 +21,7 @@ export interface McpServerOptions {
   proxy?: DesktopRpcProxy;
 }
 
-const LOCAL_READ_TOOLS = new Set(['list_components', 'search_components']);
+const LOCAL_READ_TOOLS = new Set(['list_components', 'search_components', 'search_docs']);
 const DESKTOP_REQUIRED_TOOLS = new Set([
   'import_cad',
   'insert_component',

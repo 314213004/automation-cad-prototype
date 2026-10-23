@@ -57,7 +57,7 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 17 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 18 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'export_cost_report',
     'export_files',
@@ -73,6 +73,7 @@ test('工具表为 17 个且不存在 NOT_IMPLEMENTED', () => {
     'run_interference_check',
     'run_plc_generate',
     'search_components',
+    'search_docs',
     'undo_last',
     'update_component',
     'verify_plc_program'

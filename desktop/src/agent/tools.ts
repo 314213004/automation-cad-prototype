@@ -4,6 +4,7 @@ import type { CommandHistoryEntry, CommandResult } from './commands';
 import { resolvePartReference } from './placement.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
+import { searchDocs } from './kb/search.ts';
 
 export interface AgentTool {
   name: string;
@@ -127,6 +128,16 @@ const EXPORT_FILES_SCHEMA = {
     }
   },
   required: ['kind'],
+  additionalProperties: false
+};
+
+const SEARCH_DOCS_SCHEMA = {
+  type: 'object',
+  properties: {
+    query: { type: 'string', description: '要查的文档问题或关键词，如「导轨」「干涉」「D2 决策」' },
+    limit: { type: 'integer', minimum: 1, maximum: 5, description: '返回条数，默认 3，最多 5' }
+  },
+  required: ['query'],
   additionalProperties: false
 };
 
@@ -450,6 +461,26 @@ export class AgentTools {
         if (!q) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：q' };
         const components = this.componentQuery(args);
         return { ok: true, query: q, count: components.length, components };
+      }
+    });
+
+    this.add({
+      name: 'search_docs',
+      description:
+        '离线检索项目自带文档、截图索引与元件库分类（本地知识库）。涉及「怎么操作 / 限制 / 决策 / 为什么 / 缺尺寸怎么处理」时先查这里；只读、不联网，无命中返回空数组，不要编造。',
+      inputSchema: SEARCH_DOCS_SCHEMA,
+      handler: async (args) => {
+        const query = getString(args.query);
+        if (!query) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：query' };
+        if (args.limit !== undefined) {
+          const limit = getNumber(args.limit);
+          if (limit === undefined || !Number.isInteger(limit) || limit < 1 || limit > 5) {
+            return { ok: false, code: 'INVALID_ARGUMENT', message: 'limit 必须是 1–5 的整数' };
+          }
+        }
+        const limit = getNumber(args.limit);
+        const hits = searchDocs(query, limit);
+        return { ok: true, query, hits };
       }
     });
 

@@ -59,12 +59,13 @@
 | `SMOKE_COST_AGENT_OK` | `bomSource=argument lines=6 missing=1 grand=1398.64` |
 | `SMOKE_COST_AGENT_EXPORT_OK` | `format=csv bytes=737 name=sanitized` |
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
-| `SMOKE_AGENT_TOOLS_OK` | `tools=17 implemented=17` |
-| `SMOKE_AGENT_TOOLS_V2` | `tools=17`，新增工具全部注册 |
+| `SMOKE_AGENT_TOOLS_OK` | `tools=18 implemented=18` |
+| `SMOKE_AGENT_TOOLS_V2` | `tools=18`，新增工具全部注册 |
+| `SMOKE_AGENT_KB_OK` | `docs=12 chunks=291 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
 | `SMOKE_AGENT_READONLY_UI_OK` | `preview=2 offline=1 rows=2 summary=ok scene=0` |
-| `SMOKE_AGENT_NL_OK` | `intents=7 tools=17 audit=3 ctx=541` |
+| `SMOKE_AGENT_NL_OK` | `intents=7 tools=18 audit=3 ctx=555` |
 | `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
 | `SMOKE_AGENT_PLAN_OK` | `steps=3 confirm=1` |
 | `SMOKE_PROTO_INSERT_OK` | `parts=7→8 dof=+2` |
@@ -86,7 +87,7 @@
 | P4 大模型性能 | ✅ | 渲染规划（合批/视锥/LOD）与视图器接入、10 万面基准 | `f6962b3`、`71c0e9b` | 纯函数规划 + 批次层 |
 | P5 智慧工厂服务端 | 🔄 | 设计包 ZIP/manifest/幂等/上传/列表/diff/下载；本地端到端 | `0a1733e`、`ce11575` | 生产实例不可达，待 D2 |
 | P6 硬件成本统计 | 🔄 | 价格簿、引擎、面板、A4/CSV 导出、Agent 工具与落盘 | `a8c1e5f`、`6d70ae7`、`a66b26e`、`23cd284` | P6-5 采购价对接待 D2 |
-| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划、工具扩展 v1 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 17 工具（只读 8 / 写 9）；真实模型仅按 OpenAI 兼容协议验证 |
+| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划、工具扩展 v1、本地知识检索 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 18 工具（只读 9 / 写 9）；真实模型仅按 OpenAI 兼容协议验证 |
 | P8 PLC 程序生成 | 🔄 | 预检、变量表、五个基础块、自动序列/报警/安全、11 文件、UI/zip/历史、模拟器 | `b36635b`、`ccbd0fc`、`1f50bac`、`a6b0534` | P8-5 厂商工程文件未做 |
 | P9 参数化建模 | 🔄 | build123d sidecar、特征树、防抖重建、STEP/STL、多实体装配与 BOM/成本联动 | `5c2a8c3`、`9eda660`、`8867853`、`449d060` | P9-4 草图约束未做；依赖 Python |
 

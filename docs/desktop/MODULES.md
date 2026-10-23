@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
-| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、审计筛选与导出、侧栏问答/建议/计划/流程卡片 UI |
+| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、审计筛选与导出、侧栏问答/建议/计划/流程卡片 UI |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -76,7 +76,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`
+- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
@@ -86,6 +86,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ P7-H Agent 主动建议：`advisor.ts` 纯函数输入 `AgentContext` + 项目状态摘要，输出 0–3 条 `{id,title,why,action,weight}`；覆盖底板重叠、电气校验未通过、干涉命中/未检查、缺尺寸、成本过期、PLC 未生成、全部就绪交付；侧栏顶部卡片支持 ask 填入输入框、tool 走单步计划确认、本次会话忽略，工具执行后非阻塞刷新；`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`，单测 21 条
 - ✅ P7-I Agent 可复用流程：`recipes.ts` 内置 5 个纯数据模板（新机台快速起步 / 底板布置交付 / 电气交付 / 成本核对 / 整包交付），步骤全部引用注册表内工具，参数支持 `{from:'context.machine.name'}` 点路径占位符；`runRecipe` 前置条件拦截、步骤可跳过、写工具逐次确认（可选同类免问，默认关）、失败停止并保留已完成、总/分步耗时、Markdown 执行记录；侧栏「流程」下拉预览 + 分步进度 + 导出；`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`，单测 29 条
 - ✅ P7-J Agent 工具调用纠错：`repair.ts` 纯函数剥离围栏/解释文字、修单引号/尾逗号/注释、单位数字与字符串布尔/整数、截断补全（限 3 层）、未知字段删除、`partId` 从选中对象回填；修复后必须过 schema，首个错误给中文路径（如「参数 qty 应为整数，收到 "3 个"」），非法值不猜。`retry.ts` 首次失败带原因重试 1 次，仍失败回落两条可点击候选；审计新增 `retries/reason/repairs`；LLM 客户端默认 `response_format=json_object` 并在端点不支持时自动降级。`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`
+- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 12 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；新工具 `search_docs`（只读，工具数 17 → 18），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

@@ -5,7 +5,9 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 17 个 AgentTool）
+tools.ts（AgentTools + 18 个 AgentTool）
+ ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
+ ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
  ├─ mcp.ts        → MCP stdio server，工具定义直接复用
  ├─ mcp-proxy.ts  → stdio MCP → 桌面 RPC 写工具代理（10 秒超时）
@@ -61,6 +63,7 @@ interface Bridge {
 |------|------|------|------|
 | `list_components` | `q? / category? / packId?` | 无（直接读 registry） | ✅ 可用 |
 | `search_components` | `q` | 无（直接读 registry） | ✅ 可用 |
+| `search_docs` | `query / limit?` | 无（直接读内嵌 `kb.json`） | ✅ 只读：来源 + 标题 + 摘要 + 分数；无命中返回空 |
 | `import_cad` | `path` | `import_cad` | ✅ 可用 |
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
 | `get_project_context` | 无 | `get_project_context` | ✅ 只读：域/视图/选中/机型/底板/单位/最近操作，缺失为 null |
@@ -78,6 +81,14 @@ interface Bridge {
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
 
 `get_bom` 的 BOM 由「当前 CAD 零件 + 已插入占位件」生成：序号递增、名称/型号取零件名、数量 1、材料 `—`，并带 `note` 说明这是简化 BOM。没有模型时返回空数组。
+
+## 本地知识检索（kb/）
+
+- `kb/index.ts`：构建期读取 `docs/desktop/` 的 12 份文档、`screenshots/` 文件名和 `packs/builtin/*/parts.json` 分类名；按 Markdown 标题切块（≤800 字符），`source` 为 `文件#标题路径`，附 `line`。`buildKnowledgeBase()` 输出 `{meta,chunks}`；`meta.sources[].headingHash` 是标题列表 SHA-256。
+- `kb/search.ts`：启动只加载 `kb.json`，不扫盘、不联网。中文 2-gram、英文/数字按词切分；简化 BM25（k1=1.5、b=0.75）+ IDF；默认 top 3、`limit` 1–5；没有查询词命中返回 `[]`，不做模糊兜底。结果整体压到 2048 字节内。
+- `scripts/build-kb.mjs` / `npm run kb:build`：重建并写回 `kb.json`；超过 400 KB 时只保留前 200 块并写 `truncated/droppedChunks`。
+- 系统提示要求「怎么操作 / 限制 / 决策 / 为什么」先调 `search_docs`；命中引用 `source` 与 `heading`，无命中直说查不到。
+- 测试 `test/agent/kb.test.mjs` 18 条：分块/source/line、800 字符、2-gram、导轨/干涉/D2、无命中、top3、1–5、2 KB、400 KB、截图/分类、标题 hash 同步与工具参数校验。
 
 ## 可复用流程模板（P7-I）
 
@@ -288,7 +299,7 @@ IPC 与 UI：
 
 - `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
 - UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
-- `llm.ts` 以 OpenAI 兼容格式发送 17 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `llm.ts` 以 OpenAI 兼容格式发送 18 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
 - `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，先经 `serializeToolResult` 裁剪、再由 `guard.ts` 包成不可信数据块，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
 - `import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
 - 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
@@ -416,8 +427,8 @@ parseFallbackCandidates(text): string[]
 
 ## 进度
 
-- ✅ 注册表 + 17 工具（只读 8 / 写 9）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 17 个）
+- ✅ 注册表 + 18 工具（只读 9 / 写 9）+ 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 18 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
@@ -426,9 +437,9 @@ parseFallbackCandidates(text): string[]
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 872/872（P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 890/890（新增 `kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=18 implemented=18`、`SMOKE_AGENT_TOOLS_V2 tools=18`、`SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
-- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 58 条，覆盖 17 工具与 6 类拒绝
+- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 61 条，覆盖 18 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
 - ✅ P7-I 可复用流程：`recipes.ts` 5 个纯数据模板 + `runRecipe` 前置条件/跳过/逐次确认/失败报告/Markdown；侧栏流程下拉与执行记录导出
 - ✅ P7-J 工具调用纠错：`repair.ts` 脏 JSON 修复 + schema 中文路径 + 截断限 3 层 + `partId` 选中回填；`retry.ts` 一次重试与两条候选回落；审计 `retries/reason/repairs`；LLM `response_format` 自动降级

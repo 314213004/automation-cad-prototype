@@ -853,5 +853,50 @@
       "reject_cross_domain"
     ],
     "note": "跨域误用：PLC 程序生成与 BOM 报价是两条域，不能拼接执行。"
+  },
+  {
+    "id": "k01",
+    "input": "底板画布怎么放导轨",
+    "intent": "query",
+    "expect": {
+      "tool": "search_docs",
+      "argsContains": {
+        "query": "底板画布 导轨"
+      }
+    },
+    "tags": [
+      "docs"
+    ],
+    "note": "文档类问题：先查本地知识库里的底板画布与导轨吸附说明。"
+  },
+  {
+    "id": "k02",
+    "input": "D2 是什么决策",
+    "intent": "query",
+    "expect": {
+      "tool": "search_docs",
+      "argsContains": {
+        "query": "D2 决策"
+      }
+    },
+    "tags": [
+      "docs"
+    ],
+    "note": "决策类问题：检索 D2 的待决策记录，不凭空回答。"
+  },
+  {
+    "id": "k03",
+    "input": "没有尺寸的件怎么处理",
+    "intent": "query",
+    "expect": {
+      "tool": "search_docs",
+      "argsContains": {
+        "query": "没有尺寸 件"
+      }
+    },
+    "tags": [
+      "docs"
+    ],
+    "note": "限制类问题：检索缺尺寸处理口径（DIMS-GAPS）。"
   }
 ]

@@ -27,6 +27,7 @@ import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/a
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
 import { suggestFailure } from '../src/agent/suggest';
 import { suggestNextActions } from '../src/agent/advisor';
+import { KB_STATS } from '../src/agent/kb/search';
 import { repairToolCall } from '../src/agent/repair';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
@@ -1175,9 +1176,12 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
-        const summaries = agentTools?.summaries() ?? [];
+        const activeTools = agentTools;
+        if (!activeTools) throw new Error('Agent 工具尚未启动');
+        const summaries = activeTools.summaries();
         if (
-          summaries.length !== 17 ||
+          summaries.length !== 18 ||
+          !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
           !summaries.some((tool) => tool.name === 'export_cost_report') ||
@@ -1195,6 +1199,17 @@ function createWindow(): BrowserWindow {
         }
         console.log(`SMOKE_AGENT_TOOLS_OK tools=${summaries.length} implemented=${summaries.length}`);
         console.log(`SMOKE_AGENT_TOOLS_V2 tools=${summaries.length}`);
+
+        const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
+          ok?: boolean;
+          hits?: Array<{ source?: string; heading?: string; snippet?: string }>;
+        };
+        if (!kbResult?.ok || kbResult.hits?.length !== 1 || !kbResult.hits[0]?.source?.includes('docs/desktop/')) {
+          console.error('SMOKE_FAIL agent_kb', JSON.stringify(kbResult));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_KB_OK docs=${KB_STATS.docs} chunks=${KB_STATS.chunks} query=D2 hits=${kbResult.hits.length}`);
 
         const bridgeState = await window.webContents.executeJavaScript(
           `(() => {

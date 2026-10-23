@@ -60,7 +60,7 @@ test('错误 token 访问返回 401', async () => {
   assert.equal(response.status, 401);
 });
 
-test('有 token 能列出 17 个工具与健康信息', async () => {
+test('有 token 能列出 18 个工具与健康信息', async () => {
   const response = await fetch(`${url}/rpc`, {
     method: 'POST',
     headers: {
@@ -71,14 +71,14 @@ test('有 token 能列出 17 个工具与健康信息', async () => {
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.result.tools.length, 17);
+  assert.equal(body.result.tools.length, 18);
 
   const health = await fetch(`${url}/health`, {
     headers: { authorization: `Bearer ${token}` }
   });
   assert.equal(health.status, 200);
   const healthBody = await health.json();
-  assert.equal(healthBody.toolCount, 17);
+  assert.equal(healthBody.toolCount, 18);
   assert.equal(healthBody.version, '0.1.0-test');
 });
 

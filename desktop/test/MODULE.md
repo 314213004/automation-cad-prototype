@@ -10,10 +10,10 @@
 | CAD 解析 | `test/cad/step.test.mjs` | 同上 | 用 `test/fixtures/cube.stp`，断言 12 面 / 300³ mm |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
-| 工具表 | `test/agent/tools.test.mjs` | 同上 | 17 工具、BOM 空数组、干涉截断、插入与撤销 |
+| 工具表 | `test/agent/tools.test.mjs` | 同上 | 18 工具、BOM 空数组、干涉截断、插入与撤销 |
 | 工具扩展 v1 | `test/agent/tools-v2.test.mjs` | 同上 | 上下文 null 字段、元件修改/移除、PLC 预检拦截不落盘、导出白名单/净化/覆盖、确认拒绝 |
 | 底板放置 | `test/agent/place-component.test.mjs` | 同上 | 参数校验、AMBIGUOUS、NO_DIMENSIONS、越界/重叠告警、旋转/吸附、撤销、确认拒绝 |
-| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 17 个工具 |
+| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 18 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
 | MCP 代理 | `test/agent/mcp-proxy.test.mjs` | 同上 | 写工具转发、无桌面时只读回退/写工具降级、超时不泄露 token |
 | 模型配置 | `test/agent/llm-config.test.mjs` | 同上 | 默认值、apiKey 掩码、600 权限、掩码保存保留原密钥 |
@@ -50,13 +50,14 @@ SMOKE_COMMISSION_PDF_OK path=.../report.pdf
 SMOKE_COMMISSION_3D_OK ticks=... parts=16
 SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16 ticks=...
 SMOKE_DIAGNOSE_OK codes=1
-SMOKE_AGENT_TOOLS_OK tools=17 implemented=17
-SMOKE_AGENT_TOOLS_V2 tools=17
+SMOKE_AGENT_TOOLS_OK tools=18 implemented=18
+SMOKE_AGENT_TOOLS_V2 tools=18
+SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
 SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0
-SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541
+SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555
 SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1
 SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap
 SMOKE_OK
@@ -85,7 +86,7 @@ npm run build:ext
 ## 进度
 
 - ✅ 766 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
-- ✅ smoke 含智能体 17 工具/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
+- ✅ smoke 含智能体 18 工具/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出/本地知识检索、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 

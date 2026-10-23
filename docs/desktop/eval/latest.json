@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-23T10:48:42.395Z",
+  "generatedAt": "2026-10-23T11:01:25.549Z",
   "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 58,
+    "count": 61,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
@@ -24,6 +24,7 @@
       "run_interference_check",
       "run_plc_generate",
       "search_components",
+      "search_docs",
       "undo_last",
       "update_component",
       "verify_plc_program"
@@ -47,18 +48,18 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 58,
-      "total": 58,
+      "correct": 61,
+      "total": 61,
       "rate": 1
     },
     "tools": {
-      "correct": 58,
-      "total": 58,
+      "correct": 61,
+      "total": 61,
       "rate": 1
     },
     "params": {
-      "correct": 25,
-      "total": 25,
+      "correct": 28,
+      "total": 28,
       "rate": 1
     },
     "refused": {
@@ -1678,6 +1679,102 @@
       "paramsOk": null,
       "refusedOk": true,
       "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "k01",
+      "input": "底板画布怎么放导轨",
+      "tags": [
+        "docs"
+      ],
+      "note": "文档类问题：先查本地知识库里的底板画布与导轨吸附说明。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_docs"
+      ],
+      "actualTools": [
+        "search_docs"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_docs",
+          "args": {
+            "query": "底板画布 导轨"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "k02",
+      "input": "D2 是什么决策",
+      "tags": [
+        "docs"
+      ],
+      "note": "决策类问题：检索 D2 的待决策记录，不凭空回答。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_docs"
+      ],
+      "actualTools": [
+        "search_docs"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_docs",
+          "args": {
+            "query": "D2 决策"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "k03",
+      "input": "没有尺寸的件怎么处理",
+      "tags": [
+        "docs"
+      ],
+      "note": "限制类问题：检索缺尺寸处理口径（DIMS-GAPS）。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_docs"
+      ],
+      "actualTools": [
+        "search_docs"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_docs",
+          "args": {
+            "query": "没有尺寸 件"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
       "passed": true
     }
   ]

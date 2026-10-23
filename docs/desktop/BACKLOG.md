@@ -3,6 +3,16 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 本地知识检索（离线 RAG，2026-10-23，本轮）
+
+- 状态：✅ 完成；不 push。
+- A. 索引：新增 `desktop/src/agent/kb/index.ts`，输入 12 份 `docs/desktop/*.md` + `screenshots/` 文件名 + `packs/builtin/*/parts.json` 分类名；按 Markdown 标题切块（≤800 字符），保留 `source`（文件#标题路径）/`heading`/`line`。新增 `scripts/build-kb.mjs` 与 `npm run kb:build`，输出 `desktop/src/agent/kb/kb.json`（当前 12 docs / 291 chunks / 约 300 KB，≤400 KB）；超限时保留前 200 块并记录 `truncated/droppedChunks`。启动只加载 JSON，不扫盘、不联网。
+- B. 检索：新增 `desktop/src/agent/kb/search.ts` 纯函数；中文 2-gram + 英文/数字词，简化 BM25（k1=1.5、b=0.75）+ IDF，默认 top 3；无查询词命中直接返回 `[]`；结果整体 ≤2 KB。
+- C. 工具：新增只读 `search_docs({query, limit?})`，返回 `{ok,query,hits:[{source,heading,snippet,score}]}`；工具数 17 → 18（只读 9 + 写 9），MCP/RPC/UI/README/工具清单同步；系统提示要求「怎么操作 / 限制 / 决策 / 为什么」先查文档，查不到直说。
+- D. 测试：新增 `desktop/test/agent/kb.test.mjs` 18 条（分块/source/line、800 字符、2-gram、导轨/干涉/D2、无命中、top3、limit、2 KB、400 KB、截图/分类、标题 hash 同步、工具参数）。
+- E. 验收：`npx tsc --noEmit` 通过；`npm test` **890/890**；`npm run smoke` → `SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1`、既有 Agent 断言全绿、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（61/61，新增 k01–k03 文档用例）。
+- F. 文档：`docs/desktop/NL-AGENT.md` 新增「4.1 本地知识检索（离线 RAG）」；README 工具数与 `npm run kb:build`；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
+
 ## Agent 工具调用纠错与重试（P7-J，2026-10-23，本轮）
 
 - 状态：✅ 完成；不 push。
