@@ -18,6 +18,9 @@ export interface AgentSessionOptions {
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
 
+/** 最近一次回复的通道：在线模型 / 离线规则。UI 用它显示统一回执。 */
+export type AgentReplyMode = 'online' | 'offline';
+
 const MUTATING_TOOLS = new Set(['import_cad', 'insert_component', 'undo_last', 'export_cost_report']);
 const COMMAND_ALIASES: Record<string, string> = {
   run_interference_check: 'run_interference'
@@ -54,6 +57,7 @@ export class AgentSession {
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private readonly offlineFallback: boolean;
   private messages: LlmMessage[] = [];
+  private replyMode: AgentReplyMode = 'online';
 
   constructor(options: AgentSessionOptions) {
     this.llm = options.llm;
@@ -83,6 +87,12 @@ export class AgentSession {
 
   clear(): void {
     this.messages = [];
+    this.replyMode = 'online';
+  }
+
+  /** 最近一次 `run()` 走的是哪条通道；离线降级时返回 'offline'。 */
+  mode(): AgentReplyMode {
+    return this.replyMode;
   }
 
   private push(message: LlmMessage): void {
@@ -201,6 +211,7 @@ export class AgentSession {
   async run(userText: string): Promise<string> {
     const text = userText.trim();
     if (!text) throw new Error('请输入要发送给智能体的内容');
+    this.replyMode = 'online';
     this.push({ role: 'user', content: text });
 
     for (let iteration = 0; iteration < this.maxIterations; iteration += 1) {
@@ -210,6 +221,7 @@ export class AgentSession {
       } catch (error) {
         const offline = await this.runOffline(text);
         if (offline) {
+          this.replyMode = 'offline';
           this.push({ role: 'assistant', content: offline });
           return offline;
         }

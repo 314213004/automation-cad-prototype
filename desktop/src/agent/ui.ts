@@ -5,6 +5,14 @@ import {
   errorMessage,
   escapeHtml
 } from '../ui/panels';
+import {
+  auditSummaryText,
+  buildPlanPreview,
+  buildReceipt,
+  describeAuditEntry,
+  summarizeTurn,
+  type Receipt
+} from './preview.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -38,6 +46,9 @@ let llmState: DesktopAgentLlmConfig | null = null;
 let messages: DesktopAgentChatMessage[] = [];
 let thinking = false;
 let apiKeyDirty = false;
+let lastReceipt: Receipt | null = null;
+let auditState: DesktopAgentAuditResult | null = null;
+let auditLoading = false;
 
 function serviceAddress(info: AgentInfo): string {
   if (info.host && info.port) return `${info.host}:${info.port}`;
@@ -81,6 +92,11 @@ function renderShell(): void {
         <span class="acp-pill" id="agentChatStatus">就绪</span>
       </div>
       <div class="acp-note acp-chat-feedback" id="agentChatFeedback" hidden></div>
+      <div class="acp-plan-preview is-none" id="agentPlanPreview">
+        <div class="acp-plan-title" id="agentPlanTitle">等待输入</div>
+        <div class="acp-plan-detail" id="agentPlanDetail">预览不会执行任何命令；输入后会显示将要调用的工具。</div>
+        <div class="acp-plan-hint" id="agentPlanHint"></div>
+      </div>
     </div>
 
     <div class="acp-section-title">模型设置 <b>OpenAI 兼容</b></div>
@@ -135,11 +151,22 @@ function renderShell(): void {
           </div>
           <span class="acp-pill ${entry.ok ? 'is-ok' : 'is-error'}">${entry.ok ? '成功' : '失败'}</span>
         </div>
-      </div>`).join('')}`;
+      </div>`).join('')}
+
+    <div class="acp-section-title">审计 <b id="agentAuditCount">—</b></div>
+    <div class="acp-audit-list" id="agentAuditList"><div class="acp-empty">正在读取审计…</div></div>
+    <div class="acp-row">
+      <button type="button" class="acp-btn" id="agentAuditRefresh">刷新审计</button>
+      <span class="acp-note" id="agentAuditSummary"></span>
+    </div>
+    <div class="acp-note">审计只记录工具名、结果与脱敏后的参数摘要，最近 50 条。</div>
+  `;
 
   bindControls();
   fillConfig();
   renderMessages();
+  renderPreview();
+  renderAudit();
   updateBusyState();
 }
 
@@ -229,9 +256,84 @@ function renderMessages(): void {
       blocks.push(renderToolCard({ id, type: 'function', function: { name, arguments: '{}' } }, message));
     }
   }
+  if (lastReceipt) {
+    blocks.push(`<div class="acp-chat-receipt ${lastReceipt.tone}">
+      <div class="acp-chat-receipt-head">${escapeHtml(lastReceipt.text)}</div>
+      <div class="acp-pack-meta">${escapeHtml(lastReceipt.note)}</div>
+    </div>`);
+  }
   log.innerHTML = blocks.join('');
   log.scrollTop = log.scrollHeight;
   if (count) count.textContent = String(messages.length);
+}
+
+/** 计划预览：只读 / 写操作 / 无法识别 三种底色，绝不触发执行。 */
+function renderPreview(): void {
+  const box = body?.querySelector<HTMLElement>('#agentPlanPreview');
+  if (!box) return;
+  const text = fieldElement('agentChatInput')?.value ?? '';
+  const preview = buildPlanPreview(text);
+  box.classList.remove('is-none', 'is-read', 'is-write');
+  box.classList.add(`is-${preview.tone}`);
+  const title = body?.querySelector<HTMLElement>('#agentPlanTitle');
+  const detail = body?.querySelector<HTMLElement>('#agentPlanDetail');
+  const hint = body?.querySelector<HTMLElement>('#agentPlanHint');
+  if (title) title.textContent = preview.tone === 'none' ? preview.title : `${preview.title}（${preview.intentLabel}）`;
+  if (detail) detail.textContent = preview.detail;
+  if (hint) hint.textContent = preview.hint;
+  box.dataset.tool = preview.tool ?? '';
+  box.dataset.readOnly = preview.readOnly ? '1' : '0';
+  box.dataset.offline = preview.offlineAllowed ? '1' : '0';
+}
+
+/** 审计面板：最近 8 条 + 汇总，读不到时给中文原因，不静默空白。 */
+function renderAudit(): void {
+  const list = body?.querySelector<HTMLElement>('#agentAuditList');
+  const count = body?.querySelector<HTMLElement>('#agentAuditCount');
+  const summaryElement = body?.querySelector<HTMLElement>('#agentAuditSummary');
+  if (!list) return;
+  if (auditLoading) {
+    list.innerHTML = '<div class="acp-empty">正在读取审计…</div>';
+    return;
+  }
+  if (!auditState) {
+    list.innerHTML = '<div class="acp-empty">审计尚未读取</div>';
+    return;
+  }
+  if (!auditState.ok) {
+    list.innerHTML = `<div class="acp-note is-error">读取审计失败：${escapeHtml(auditState.message ?? '未知错误')}</div>`;
+    if (count) count.textContent = '—';
+    if (summaryElement) summaryElement.textContent = '';
+    return;
+  }
+  const entries = Array.isArray(auditState.entries) ? auditState.entries.slice(-8).reverse() : [];
+  if (count) count.textContent = String(auditState.summary?.total ?? entries.length);
+  if (summaryElement) summaryElement.textContent = auditSummaryText(auditState.summary);
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="acp-empty">还没有工具调用记录。离线问答与模型调用都会写入审计。</div>';
+    return;
+  }
+  list.innerHTML = entries.map((entry) => {
+    const row = describeAuditEntry(entry);
+    return `<div class="acp-audit-row ${row.tone}">
+      <span class="acp-pack-name">${escapeHtml(row.title)}</span>
+      <span class="acp-pack-meta">${escapeHtml(row.meta)}</span>
+    </div>`;
+  }).join('');
+}
+
+async function loadAudit(): Promise<void> {
+  if (!window.desktop) return;
+  auditLoading = true;
+  renderAudit();
+  try {
+    auditState = await window.desktop.agent.audit.read();
+  } catch (error) {
+    auditState = { ok: false, message: errorMessage(error) };
+  } finally {
+    auditLoading = false;
+    renderAudit();
+  }
 }
 
 function updateBusyState(): void {
@@ -253,6 +355,18 @@ function chatFeedback(message: string, isError = false): void {
   element.classList.toggle('is-error', isError);
 }
 
+/** 取最后一条用户消息之后的对话，用于统计本轮工具调用次数。 */
+function lastTurnMessages(): Array<{ role: string; content?: string | null }> {
+  let start = 0;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]!.role === 'user') {
+      start = index;
+      break;
+    }
+  }
+  return messages.slice(start).map((message) => ({ role: message.role, content: message.content }));
+}
+
 async function sendMessage(): Promise<void> {
   if (!body || thinking) return;
   const input = fieldElement('agentChatInput');
@@ -265,12 +379,27 @@ async function sendMessage(): Promise<void> {
   thinking = true;
   chatFeedback('');
   if (input) input.value = '';
+  renderPreview();
   updateBusyState();
+  const started = Date.now();
   try {
     const result = await window.desktop.agent.chat.send(text);
     messages = Array.isArray(result.messages) ? result.messages : messages;
+    if (result.ok) {
+      const turn = summarizeTurn(lastTurnMessages());
+      lastReceipt = buildReceipt({
+        mode: result.mode === 'offline' ? 'offline' : 'online',
+        elapsedMs: typeof result.elapsedMs === 'number' ? result.elapsedMs : Date.now() - started,
+        toolCalls: turn.toolCalls,
+        failures: turn.failures
+      });
+    }
     renderMessages();
-    if (!result.ok) chatFeedback(result.message || '智能体请求失败', true);
+    if (!result.ok) {
+      chatFeedback(result.message || '智能体请求失败', true);
+    } else {
+      void loadAudit();
+    }
   } catch (error) {
     chatFeedback(`智能体请求失败：${errorMessage(error)}`, true);
   } finally {
@@ -284,6 +413,7 @@ async function clearMessages(): Promise<void> {
   try {
     const result = await window.desktop.agent.chat.clear();
     messages = Array.isArray(result.messages) ? result.messages : [];
+    lastReceipt = null;
     renderMessages();
     chatFeedback('');
   } catch (error) {
@@ -341,6 +471,8 @@ function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmSave')?.addEventListener('click', () => { void saveSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmTest')?.addEventListener('click', () => { void testSettings(); });
+  body?.querySelector<HTMLButtonElement>('#agentAuditRefresh')?.addEventListener('click', () => { void loadAudit(); });
+  body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('input', () => { renderPreview(); });
   body?.querySelector<HTMLInputElement>('#agentLlmApiKey')?.addEventListener('input', () => { apiKeyDirty = true; });
   body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('keydown', (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
@@ -365,6 +497,7 @@ async function refresh(): Promise<void> {
     llmState = config;
     messages = Array.isArray(chat.messages) ? chat.messages : [];
     renderShell();
+    void loadAudit();
   } catch (error) {
     infoState = { error: `读取智能体状态失败：${errorMessage(error)}` };
     body.innerHTML = `<div class="acp-status is-on is-error">${escapeHtml(infoState.error ?? '')}</div>

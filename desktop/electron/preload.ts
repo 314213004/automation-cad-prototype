@@ -42,6 +42,9 @@ const desktopApi = {
       send: (text: string) => ipcRenderer.invoke('agent:chat:send', text),
       history: () => ipcRenderer.invoke('agent:chat:history'),
       clear: () => ipcRenderer.invoke('agent:chat:clear')
+    },
+    audit: {
+      read: () => ipcRenderer.invoke('agent:audit:read')
     }
   },
   parametric: {

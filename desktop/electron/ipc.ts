@@ -671,8 +671,15 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     }
     try {
       const current = getSession();
+      const started = Date.now();
       const reply = await current.run(text);
-      return { ok: true, reply, messages: current.history() };
+      return {
+        ok: true,
+        reply,
+        mode: current.mode(),
+        elapsedMs: Math.max(0, Date.now() - started),
+        messages: current.history()
+      };
     } catch (error) {
       return {
         ok: false,

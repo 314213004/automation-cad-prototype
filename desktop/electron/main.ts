@@ -8,7 +8,7 @@ import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
 import { buildAgentContext } from '../src/agent/context';
-import { createAuditLog, parseAuditLines } from '../src/agent/audit';
+import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
@@ -882,6 +882,82 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_CHAT_UI_OK fields=${chatUi.fields} log=${chatUi.log}`);
+
+        // P7-A-2：侧栏计划预览（只读可离线 / 写操作需联网）+ 审计面板
+        const auditUiFile = join(app.getPath('userData'), 'agent-audit.jsonl');
+        appendFileSync(
+          auditUiFile,
+          `${formatAuditLine({ tool: 'run_cost_report', ok: true, source: 'offline' })}\n` +
+          `${formatAuditLine({ tool: 'export_cost_report', ok: false, code: 'USER_DENIED', source: 'llm' })}\n`,
+          'utf8'
+        );
+
+        const readonlyUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const input = document.getElementById('agentChatInput');
+            const box = document.getElementById('agentPlanPreview');
+            if (!input || !box) return { error: 'missing_preview' };
+            const sceneParts = () => {
+              const scene = window.__AgentBridge?.getScene?.();
+              return Array.isArray(scene?.parts) ? scene.parts.length : -1;
+            };
+            const before = sceneParts();
+            const type = async (text) => {
+              input.value = text;
+              input.dispatchEvent(new Event('input', { bubbles: true }));
+              await wait(80);
+              return {
+                tool: box.dataset.tool || '',
+                readOnly: box.dataset.readOnly || '',
+                offline: box.dataset.offline || '',
+                title: document.getElementById('agentPlanTitle')?.textContent || '',
+                hint: document.getElementById('agentPlanHint')?.textContent || ''
+              };
+            };
+            const read = await type('列一下所有接触器');
+            const write = await type('插入一个气缸');
+            const after = sceneParts();
+            document.getElementById('agentAuditRefresh')?.click();
+            let rows = 0;
+            let summary = '';
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              await wait(100);
+              rows = document.querySelectorAll('#agentAuditList .acp-audit-row').length;
+              summary = document.getElementById('agentAuditSummary')?.textContent || '';
+              if (rows >= 2) break;
+            }
+            const firstRow = document.querySelector('#agentAuditList .acp-audit-row')?.textContent || '';
+            return { before, after, read, write, rows, summary, firstRow };
+          })()`
+        ) as {
+          error?: string;
+          before: number;
+          after: number;
+          read: { tool: string; readOnly: string; offline: string; title: string; hint: string };
+          write: { tool: string; readOnly: string; offline: string; title: string; hint: string };
+          rows: number;
+          summary: string;
+          firstRow: string;
+        };
+        if (
+          readonlyUi.error ||
+          readonlyUi.read?.tool !== 'list_components' ||
+          readonlyUi.read?.readOnly !== '1' ||
+          readonlyUi.read?.offline !== '1' ||
+          readonlyUi.write?.tool !== 'insert_component' ||
+          readonlyUi.write?.readOnly !== '0' ||
+          readonlyUi.write?.offline !== '0' ||
+          !readonlyUi.write?.hint.includes('partId') ||
+          readonlyUi.rows < 2 ||
+          !readonlyUi.summary.includes('共 2 条') ||
+          readonlyUi.before !== readonlyUi.after
+        ) {
+          console.error('SMOKE_FAIL agent_readonly_ui', JSON.stringify(readonlyUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=${readonlyUi.rows} summary=ok scene=${readonlyUi.after}`);
 
         // P7-A：离线规则路由 + 上下文裁剪 + 审计脱敏（无网络也必须是真实覆盖）
         const nlSamples = [

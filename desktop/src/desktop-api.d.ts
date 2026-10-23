@@ -230,7 +230,32 @@ interface DesktopAgentChatResult {
   ok: boolean;
   reply?: string;
   message?: string;
+  /** 本轮走的通道：在线模型 / 离线规则（P7-A-2 统一回执） */
+  mode?: 'online' | 'offline';
+  elapsedMs?: number;
   messages: DesktopAgentChatMessage[];
+}
+
+interface DesktopAgentAuditEntry {
+  at: string;
+  tool: string;
+  ok: boolean;
+  code?: string;
+  source?: 'llm' | 'offline' | 'rpc' | 'mcp';
+  args?: Record<string, unknown>;
+  message?: string;
+}
+
+interface DesktopAgentAuditResult {
+  ok: boolean;
+  entries?: DesktopAgentAuditEntry[];
+  summary?: {
+    total: number;
+    failed: number;
+    tools: Record<string, number>;
+    lastAt: string | null;
+  };
+  message?: string;
 }
 
 interface DesktopAgentLlmTestResult {
@@ -322,6 +347,9 @@ interface Window {
         send(text: string): Promise<DesktopAgentChatResult>;
         history(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
         clear(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
+      };
+      audit: {
+        read(): Promise<DesktopAgentAuditResult>;
       };
     };
     parametric: {
