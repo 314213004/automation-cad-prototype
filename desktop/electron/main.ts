@@ -14,7 +14,13 @@ import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
 import { executePlan, plan } from '../src/agent/planner';
-import { buildAgentContext } from '../src/agent/context';
+import {
+  buildAgentContext,
+  collectAgentContext,
+  serializeAgentContext
+} from '../src/agent/context';
+import { resolveReference } from '../src/agent/reference';
+import { trimListResult } from '../src/agent/trim';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
@@ -1496,6 +1502,59 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
+
+        const uiContext = collectAgentContext({
+          projectContext: () => ({
+            domain: 'elec',
+            view: '底板',
+            selection: { kind: 'placement', id: 'p1', label: 'QF1' },
+            machine: { name: '烟包机', stations: 4, actuators: 8, sensors: 12 },
+            plate: {
+              width: 600,
+              height: 400,
+              placed: 3,
+              overlaps: 0,
+              placements: [
+                { id: 'p1', tag: 'QF1', model: 'iC65N-C16-1P', x: 200, y: 40, w: 36, h: 80 },
+                { id: 'p2', tag: 'KM1', model: 'LC1D09', x: 20, y: 40, w: 45, h: 80 },
+                { id: 'p3', tag: 'KA1', model: 'RXM2AB2BD', x: 80, y: 200, w: 30, h: 60 }
+              ]
+            },
+            units: 'mm'
+          }),
+          recentActions: () => [
+            { tool: 'search_components', summary: 'search_components 成功', at: '2026-10-23T00:00:01Z' },
+            { tool: 'get_bom', summary: 'get_bom 成功', at: '2026-10-23T00:00:02Z' },
+            { tool: 'run_cost_report', summary: 'run_cost_report 成功', at: '2026-10-23T00:00:03Z' },
+            { tool: 'place_component', summary: 'place_component 成功 [target=placement:p1:QF1]', at: '2026-10-23T00:00:04Z' }
+          ]
+        }, () => '2026-10-23T00:00:05Z');
+        const serializedContext = serializeAgentContext(uiContext);
+        const deictic = resolveReference('把它改一下', uiContext);
+        const geometry = resolveReference('左边第二个', uiContext);
+        const trimmed = trimListResult(Array.from({ length: 25 }, (_unused, index) => ({ index })));
+        if (
+          serializedContext.bytes > 1536 ||
+          uiContext.selection === null ||
+          uiContext.recentActions.length !== 3 ||
+          deictic.target?.id !== 'p1' ||
+          geometry.target?.id !== 'p3' ||
+          trimmed.items.length !== 20 ||
+          trimmed.total !== 25 ||
+          !trimmed.truncated
+        ) {
+          console.error('SMOKE_FAIL agent_context_snapshot', JSON.stringify({
+            bytes: serializedContext.bytes,
+            selection: uiContext.selection,
+            recent: uiContext.recentActions.length,
+            deictic,
+            geometry,
+            trimmed: { items: trimmed.items.length, total: trimmed.total, truncated: trimmed.truncated }
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_AGENT_CONTEXT_OK selection=1 recent=3');
 
         const auditPath = join(app.getPath('userData'), 'agent-audit-smoke.jsonl');
         const auditLog = createAuditLog({ write: (line) => appendFileSync(auditPath, `${line}\n`, 'utf8') });

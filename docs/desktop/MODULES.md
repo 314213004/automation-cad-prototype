@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
-| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文裁剪、审计、侧栏问答与计划卡片 UI |
+| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、结果裁剪、审计、侧栏问答与计划卡片 UI |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -66,7 +66,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 ## 当前总体进度（2026-10-23）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 717 个单测 + 完整 smoke 断言全绿
+- ✅ 745 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -76,11 +76,12 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`
+- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板（最近 8 条 + 汇总）；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
 - ✅ P7-D Agent 工具扩展 v1：注册表 12 → 17；新增 `get_project_context`（只读、缺失返回 null）、`update_component` / `remove_component`（可撤销）、`run_plc_generate`（预检失败不落盘）、`export_files`（pdf/dxf/glb/bom 共用净化与冲突规则）；MCP/RPC/UI 共用同一注册表，新增 30 条单测
+- ✅ P7-E Agent 上下文与指代：结构化快照 ≤1.5 KB、选中/最近操作/几何三级指代（<0.6 不猜）、最近 5 次工具会话记忆、列表 20 条/文本 2 KB/结果 10 KB 裁剪；`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

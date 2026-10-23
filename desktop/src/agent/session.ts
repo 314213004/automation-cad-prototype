@@ -3,6 +3,13 @@ import type { AgentCommandExecutor } from './tools.ts';
 import type { LlmClient, LlmMessage, LlmToolCall } from './llm.ts';
 import type { AgentAuditRecord } from './audit.ts';
 import { describePlan, planReadOnly } from './router.ts';
+import {
+  emptyAgentContext,
+  serializeAgentContext,
+  type AgentContext
+} from './context.ts';
+import { AgentMemory, summarizeToolCall } from './memory.ts';
+import { serializeToolResult } from './trim.ts';
 
 export interface AgentSessionOptions {
   llm: LlmClient;
@@ -14,6 +21,8 @@ export interface AgentSessionOptions {
   audit?: (record: AgentAuditRecord) => void;
   /** 模型不可用时是否走离线规则路由（只读工具）；默认开启。 */
   offlineFallback?: boolean;
+  /** 每轮对话开始时采集 UI 上下文；失败按空快照处理，不阻断对话。 */
+  contextProvider?: () => AgentContext | null | Promise<AgentContext | null>;
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
@@ -66,8 +75,11 @@ export class AgentSession {
   private readonly historyLimit: number;
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private readonly offlineFallback: boolean;
+  private readonly contextProvider: AgentSessionOptions['contextProvider'];
+  private readonly memory = new AgentMemory();
   private messages: LlmMessage[] = [];
   private replyMode: AgentReplyMode = 'online';
+  private turnContext: AgentContext = emptyAgentContext();
 
   constructor(options: AgentSessionOptions) {
     this.llm = options.llm;
@@ -77,6 +89,7 @@ export class AgentSession {
     this.historyLimit = Math.max(2, Math.trunc(options.historyLimit ?? 20));
     this.audit = options.audit;
     this.offlineFallback = options.offlineFallback !== false;
+    this.contextProvider = options.contextProvider;
   }
 
   private recordAudit(record: AgentAuditRecord): void {
@@ -99,6 +112,8 @@ export class AgentSession {
   clear(): void {
     this.messages = [];
     this.replyMode = 'online';
+    this.turnContext = emptyAgentContext();
+    this.memory.clear();
   }
 
   /** 最近一次 `run()` 走的是哪条通道；离线降级时返回 'offline'。 */
@@ -113,9 +128,18 @@ export class AgentSession {
     }
   }
 
+  private systemPrompt(): LlmMessage {
+    const packed = serializeAgentContext(this.turnContext);
+    const memory = this.memory.prompt();
+    return {
+      role: 'system',
+      content: [SYSTEM_PROMPT, packed.text, memory].filter(Boolean).join('\n\n')
+    };
+  }
+
   private context(): LlmMessage[] {
     return [
-      { role: 'system', content: SYSTEM_PROMPT },
+      this.systemPrompt(),
       ...this.messages.map((message) => ({ ...message }))
     ];
   }
@@ -125,6 +149,7 @@ export class AgentSession {
     try {
       args = parseArguments(call.function.arguments);
     } catch (error) {
+      this.memory.record(summarizeToolCall(call.function.name, {}, failedTool('INVALID_ARGUMENT', '参数不是合法 JSON')));
       this.recordAudit({
         tool: call.function.name,
         ok: false,
@@ -142,10 +167,12 @@ export class AgentSession {
         allowed = await this.confirmWrite(name, args);
       } catch (error) {
         const message = `确认对话框失败：${error instanceof Error ? error.message : String(error)}`;
+        this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
         this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args, message });
         return { ok: false, code: 'USER_DENIED', message };
       }
       if (!allowed) {
+        this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
         this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args });
         return { ok: false, code: 'USER_DENIED', message: '用户拒绝执行该工具' };
       }
@@ -157,6 +184,7 @@ export class AgentSession {
         ? await this.bus.undoLast()
         : await this.bus.execute(COMMAND_ALIASES[name] ?? name, args);
     } catch (error) {
+      this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'TOOL_EXECUTION_FAILED' }));
       this.recordAudit({
         tool: name,
         ok: false,
@@ -175,6 +203,7 @@ export class AgentSession {
       args,
       ...(result.ok ? {} : { code: result.error?.code ?? 'COMMAND_FAILED' })
     });
+    this.memory.record(summarizeToolCall(name, args, result));
 
     if (name === 'run_interference_check' && result.ok && isRecord(result.data) && Array.isArray(result.data.items)) {
       return {
@@ -192,7 +221,7 @@ export class AgentSession {
    */
   private async runOffline(text: string): Promise<string | null> {
     if (!this.offlineFallback) return null;
-    const plan = planReadOnly(text);
+    const plan = planReadOnly(text, this.turnContext);
     if (!plan) return null;
     let result: CommandResult;
     try {
@@ -209,13 +238,18 @@ export class AgentSession {
       args: plan.args,
       ...(result.ok ? {} : { code: result.error?.code ?? 'COMMAND_FAILED' })
     });
+    this.memory.record(summarizeToolCall(plan.tool, plan.args, result));
     if (!result.ok) {
       return `模型暂不可用，离线规则已调用 ${plan.tool}，但返回失败：${result.error?.message ?? '未知错误'}`;
     }
-    const detail = result.data === undefined ? '' : JSON.stringify(result.data);
+    const detail = result.data === undefined ? '' : serializeToolResult(result.data).text;
     const summary = detail.length > 600 ? `${detail.slice(0, 600)}…` : detail;
+    const reference = plan.resolvedFrom
+      ? `已使用${plan.resolvedFrom === 'selection' ? '选中对象' : plan.resolvedFrom === 'recent' ? '最近操作对象' : '底板对象'}：${plan.resolvedLabel ?? ''}`
+      : '';
     return [
       '当前模型不可用，已切换为离线规则路由（只执行只读工具，写操作需要联网确认）。',
+      reference,
       `已执行：${describePlan(plan)}`,
       summary ? `结果：${summary}` : ''
     ].filter(Boolean).join('\n');
@@ -225,6 +259,14 @@ export class AgentSession {
     const text = userText.trim();
     if (!text) throw new Error('请输入要发送给智能体的内容');
     this.replyMode = 'online';
+    this.turnContext = emptyAgentContext();
+    if (this.contextProvider) {
+      try {
+        this.turnContext = await this.contextProvider() ?? emptyAgentContext();
+      } catch {
+        this.turnContext = emptyAgentContext();
+      }
+    }
     this.push({ role: 'user', content: text });
 
     for (let iteration = 0; iteration < this.maxIterations; iteration += 1) {
@@ -261,7 +303,7 @@ export class AgentSession {
           role: 'tool',
           tool_call_id: call.id,
           name: call.function.name,
-          content: JSON.stringify(result)
+          content: serializeToolResult(result).text
         });
       }
     }

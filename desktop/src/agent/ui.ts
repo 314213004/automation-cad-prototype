@@ -19,6 +19,7 @@ import {
   type AgentPlan,
   type PlanStepResult
 } from './planner.ts';
+import { collectAgentContext, type AgentContext } from './context.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -304,7 +305,8 @@ function renderPreview(): void {
   const box = body?.querySelector<HTMLElement>('#agentPlanPreview');
   if (!box) return;
   const text = fieldElement('agentChatInput')?.value ?? '';
-  const preview = buildPlanPreview(text);
+  const context = currentAgentContext();
+  const preview = buildPlanPreview(text, context);
   box.classList.remove('is-none', 'is-read', 'is-write');
   box.classList.add(`is-${preview.tone}`);
   const title = body?.querySelector<HTMLElement>('#agentPlanTitle');
@@ -316,7 +318,20 @@ function renderPreview(): void {
   box.dataset.tool = preview.tool ?? '';
   box.dataset.readOnly = preview.readOnly ? '1' : '0';
   box.dataset.offline = preview.offlineAllowed ? '1' : '0';
-  refreshMultiPlan(text);
+  box.dataset.resolvedFrom = preview.resolvedFrom ?? '';
+  box.dataset.resolvedLabel = preview.resolvedLabel ?? '';
+  refreshMultiPlan(text, context);
+}
+
+/** 只读采集现有 UI 状态；不新增全局单例，采集失败时返回空上下文。 */
+function currentAgentContext(): AgentContext {
+  let raw: unknown = null;
+  try {
+    raw = window.__AgentBridge?.getProjectContext?.() ?? null;
+  } catch {
+    raw = null;
+  }
+  return collectAgentContext({ projectContext: () => raw });
 }
 
 function isMultiStepText(text: string): boolean {
@@ -324,7 +339,7 @@ function isMultiStepText(text: string): boolean {
 }
 
 /** 输入变化时重建计划；执行中保持同一份计划，避免逐步执行被输入事件重置。 */
-function refreshMultiPlan(text: string): void {
+function refreshMultiPlan(text: string, context: AgentContext): void {
   if (multiPlan && multiPlan.input !== text && !multiPlan.running) multiPlan = null;
   if (!text) {
     if (!multiPlan?.running) multiPlan = null;
@@ -337,7 +352,7 @@ function refreshMultiPlan(text: string): void {
       : undefined;
     multiPlan = {
       input: text,
-      plan: buildAgentPlan(text, toolNames ? { tools: toolNames } : {}),
+      plan: buildAgentPlan(text, { ...(toolNames ? { tools: toolNames } : {}), context }),
       results: [],
       next: 0,
       running: false,
@@ -410,6 +425,7 @@ function renderMultiPlan(): void {
             <span class="acp-plan-step-head"><b>${index + 1}. ${escapeHtml(step.tool)}</b>${missing}<span class="acp-plan-io">${step.readOnly ? '只读' : '写'}</span></span>
             <span class="acp-plan-step-args">${escapeHtml(args)}</span>
             <span class="acp-plan-step-why">${escapeHtml(step.why)}</span>
+            ${step.resolvedFrom ? `<span class="acp-plan-basis">已使用${step.resolvedFrom === 'selection' ? '选中对象' : step.resolvedFrom === 'recent' ? '最近操作对象' : '底板对象'}：${escapeHtml(step.resolvedLabel ?? '')}</span>` : ''}
           </span>
         </div>`;
       }).join('') + (state.plan.warnings ?? []).map((warning) =>

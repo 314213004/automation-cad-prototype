@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**717 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**745 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文与指代 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -176,8 +176,11 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | JSON-RPC | `127.0.0.1:7420`，Bearer token（userData 下 `agent-token`），仅监听本机 | ✅ |
 | MCP stdio | 复用同一工具注册表；写工具经桌面 RPC 代理，桌面未启动时明确返回 `DESKTOP_NOT_RUNNING` | ✅ |
 | 应用内对话 | OpenAI 兼容接口、工具调用循环、写操作二次确认、密钥仅本机进程 | ✅ |
-| 离线规则路由 | 无模型/断网时按关键词规则判 7 类意图并只执行只读工具（写操作明确拒绝），`ctx` 上限 2 KB | ✅ |
-| 上下文裁剪 | 工程上下文分级降级（删工具描述 → 删工具 → 删最近操作 → 硬截断），默认 ≤2048 字节 | ✅ |
+| 离线规则路由 | 无模型/断网时按关键词规则判 7 类意图并只执行只读工具（写操作明确拒绝） | ✅ |
+| 上下文快照 | `collectAgentContext()` 采集域 / 视图 / 选中对象（零件、网格、placement、特征）/ 机型 / 底板 / 最近 3 次操作 / 单位；序列化 ≤1.5 KB，采集失败字段为 null 不抛错 | ✅ P7-E |
+| 指代消解 | 选中对象优先（0.95）→ 最近操作对象（0.72）→ 底板几何排序（0.78）；低于 0.6 返回 null 并追问一次，不猜 | ✅ P7-E |
+| 会话记忆 | 最近 5 次工具调用摘要（工具名 / 关键参数 / 结果码）追加到系统提示末尾，滚动丢弃，不落盘、不上传 | ✅ P7-E |
+| 结果裁剪 | 列表 >20 条保留前 20 + `total` + `truncated:true`；长文本按 2 KB 截断；单个工具结果进入模型前硬上限 10 KB | ✅ P7-E |
 | 审计 | 每次工具调用一行 NDJSON 写 `<userData>/agent-audit.jsonl`，`sk-`/`Bearer`/`token` 等凭据脱敏；`agent:audit:read` 只读接口 | ✅ |
 | 计划预览 | 侧栏输入时实时显示「只读 · 可离线」或「写操作 · 需联网确认」，写操作缺参数直接点名（如 `partId`）；预览只展示、不执行 | ✅ |
 | 多步规划 | `planner.ts` 离线规则：查件→放置→校验、BOM→成本→导出、导入→干涉、PLC 生成→模拟验证、设计包→上传；未知工具过滤 + warning，规则不命中/置信度 < 0.6 明确拒绝并给建议 | ✅ P7-C |
@@ -186,7 +189,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 审计面板 | 侧栏「审计」区展示最近 8 条（工具 · 成功/失败 · 来源 · 错误码）与汇总，可手动刷新 | ✅ |
 | 离线评估 | `desktop/eval/agent-cases.json` 46 条中文用例（16 指代 / 7 歧义 / 5 多步 / 5 超纲）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 17 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文注入、意图路由、离线多步规划、审计、46 条中文评估集 | ✅ P7-A / P7-B / P7-C / P7-D 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 17 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、审计、46 条中文评估集 | ✅ P7-A～P7-E 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -254,7 +257,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（717 个）
+│   ├── test/                                 # node:test 单测与集成测试（745 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -282,7 +285,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 717 个单测（node:test）
+npm test          # 745 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
@@ -299,7 +302,7 @@ smoke 覆盖并断言：
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
-- 智能体工具注册、渲染桥读写、对话面板字段；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`：7 类意图全覆盖、写计划不进入离线通道、上下文 ≤2 KB、审计 3 条且密钥不落原文）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展 v1（`SMOKE_AGENT_TOOLS_V2 tools=17`：上下文、元件修改/移除、PLC 落盘、通用导出全部注册）。
+- 智能体工具注册、渲染桥读写、对话面板字段；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展 v1（`SMOKE_AGENT_TOOLS_V2 tools=17`：上下文、元件修改/移除、PLC 落盘、通用导出全部注册）。
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`，最后 `SMOKE_OK`。
 

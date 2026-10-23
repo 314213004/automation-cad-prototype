@@ -337,10 +337,33 @@ interface AgentBridgeApi {
   getProjectContext(): {
     domain: string | null;
     view: string | null;
-    selection: { name: string; bbox: number[] } | null;
+    selection: {
+      kind: 'component' | 'mesh' | 'placement' | 'feature';
+      id: string;
+      label: string;
+      name?: string;
+      bbox?: number[];
+    } | null;
     machine: { id: string; name: string; stations: number; actuators: number; sensors: number } | null;
-    plate: { width: number; height: number; rails: unknown[]; placed?: number } | null;
+    plate: {
+      width: number;
+      height: number;
+      rails: unknown[];
+      placed?: number;
+      overlaps?: number;
+      placements?: Array<{
+        id: string;
+        partId: string;
+        model: string;
+        x: number;
+        y: number;
+        w: number;
+        h: number;
+        tag?: string;
+      }>;
+    } | null;
     units: string | null;
+    recentActions?: Array<{ tool?: string; name?: string; summary?: string; at: string }>;
   } | AgentBridgeFailure;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };

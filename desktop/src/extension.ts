@@ -18,6 +18,7 @@ import {
   closeEnclosure,
   enclosureState,
   initEnclosureUi,
+  isEnclosureOpen,
   placePartInEnclosure,
   removeEnclosurePart,
   restoreEnclosurePlacement,
@@ -753,7 +754,13 @@ async function importPack(path: string): Promise<void> {
   }
 }
 
-function persistedEnclosurePlate(): { width: number; height: number; rails: unknown[]; placed?: number } | null {
+function persistedEnclosurePlate(): {
+  width: number;
+  height: number;
+  rails: unknown[];
+  placed?: number;
+  placements?: unknown[];
+} | null {
   try {
     const raw = window.localStorage.getItem('automationcad.enclosure.v1');
     if (!raw) return null;
@@ -769,7 +776,10 @@ function persistedEnclosurePlate(): { width: number; height: number; rails: unkn
       width,
       height,
       rails: Array.isArray(plate.rails) ? plate.rails : [],
-      ...(Array.isArray(source.placements) ? { placed: source.placements.length } : {})
+      ...(Array.isArray(source.placements) ? {
+        placed: source.placements.length,
+        placements: source.placements
+      } : {})
     };
   } catch {
     return null;
@@ -829,6 +839,63 @@ function agentBridgeUnavailable(): { ok: false; message: string } {
   return { ok: false, message: '渲染层尚未就绪' };
 }
 
+type AgentUiSelection = {
+  kind: 'component' | 'mesh' | 'placement' | 'feature';
+  id: string;
+  label: string;
+};
+
+/** 采集当前最相关选中项：底板 → 运动学网格 → 参数化特征 → CAD 零件。 */
+function currentAgentSelection(): AgentUiSelection | null {
+  try {
+    if (isEnclosureOpen()) {
+      const selected = enclosureState()?.selected;
+      if (selected) {
+        return {
+          kind: 'placement',
+          id: selected.id,
+          label: selected.tag ?? selected.model ?? selected.partId ?? selected.id
+        };
+      }
+    }
+  } catch {
+    // 某个面板未就绪时继续尝试下一个。
+  }
+  try {
+    if (kinematics?.isOpen()) {
+      const mesh = kinematics.state().selectedMeshes[0];
+      if (mesh) return { kind: 'mesh', id: String(mesh.id), label: mesh.name };
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if (parametric?.isOpen()) {
+      const state = parametric.state();
+      if (state.selected) {
+        const doc = parametric.getDoc();
+        const feature = doc.instances
+          .flatMap((instance) => instance.features)
+          .find((entry) => entry.id === state.selected);
+        return {
+          kind: 'feature',
+          id: state.selected,
+          label: feature?.name ?? state.selected
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    const snapshot = viewer?.getSelectionSnapshot();
+    if (snapshot) return { kind: 'component', id: snapshot.name, label: snapshot.name };
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function initAgentBridge(): void {
   if (window.__AgentBridge) return;
   const bridge = {
@@ -876,12 +943,7 @@ function initAgentBridge(): void {
         const domain = domainButton?.dataset.domain ?? document.body.dataset.domain ?? null;
         const activeView = Array.from(document.querySelectorAll<HTMLElement>('.view')).find((element) => !element.hidden);
         const view = activeView?.dataset.view ?? null;
-        let selection: { name: string; bbox: number[] } | null = null;
-        try {
-          selection = viewer?.getSelectionSnapshot() ?? null;
-        } catch {
-          selection = null;
-        }
+        const selection = currentAgentSelection();
         let machine: { id: string; name: string; stations: number; actuators: number; sensors: number } | null = null;
         try {
           const config = commission?.getMachineConfig();
@@ -904,7 +966,9 @@ function initAgentBridge(): void {
               width: enclosure.plate.width,
               height: enclosure.plate.height,
               rails: enclosure.plate.rails,
-              placed: enclosure.placed
+              placed: enclosure.placed,
+              overlaps: enclosure.overlap,
+              placements: enclosure.placements
             }
           : storedPlate;
         return {

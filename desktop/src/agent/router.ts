@@ -11,6 +11,12 @@
  */
 
 import { extractPlacementSpec, isPlacementInstruction } from './placement.ts';
+import type { AgentContext } from './context.ts';
+import {
+  hasReferenceExpression,
+  resolveReference,
+  type ReferenceSource
+} from './reference.ts';
 
 export type IntentKind =
   | 'query'
@@ -180,6 +186,9 @@ export interface ToolPlan {
   /** 写工具缺少的必要参数，离线时用于解释为什么不执行。 */
   missing: string[];
   why: string;
+  /** 指代消解命中时标记依据来源，供 UI 显示「已使用选中对象」。 */
+  resolvedFrom?: ReferenceSource;
+  resolvedLabel?: string;
 }
 
 /** 目前注册的 17 个工具里，只读 8 个、写操作 9 个。 */
@@ -403,7 +412,7 @@ function isBareReferencePriceQuery(text: string, category: string | null): boole
  * 把中文指令映射成一个工具计划。
  * 返回 null 表示「没有任何工具能接住」，调用方应如实说做不了。
  */
-export function planTool(text: string): ToolPlan | null {
+function planToolBase(text: string): ToolPlan | null {
   const value = (text ?? '').trim();
   if (!value) return null;
   if (/(?:验证|模拟|自检).*(?:plc|程序)|(?:plc|程序).*(?:验证|模拟|自检)/i.test(value)) {
@@ -560,16 +569,56 @@ export function planTool(text: string): ToolPlan | null {
   return null;
 }
 
+/**
+ * 用指代消解补全对象参数。只对「需要单个对象」的工具生效；查询/计算类工具
+ * 即使句子里有「这个柜子」也不会被硬塞一个莫名其妙的 id。
+ */
+function completePlanFromReference(plan: ToolPlan, text: string, context?: AgentContext): ToolPlan {
+  if (!context || !hasReferenceExpression(text)) return plan;
+  const resolution = resolveReference(text, context);
+  const target = resolution.target;
+  if (!target) return plan;
+
+  const args = { ...plan.args };
+  let changed = false;
+  if (plan.tool === 'update_component' || plan.tool === 'remove_component') {
+    if (args.ref === undefined && args.partId === undefined) {
+      args.ref = target.label || target.id;
+      changed = true;
+    }
+  } else if (plan.tool === 'insert_component' || plan.tool === 'place_component') {
+    if (args.partId === undefined && target.kind === 'component') {
+      args.partId = target.id;
+      changed = true;
+    }
+  }
+  if (!changed) return plan;
+
+  const missing = plan.missing.filter((key) => args[key] === undefined || args[key] === null || args[key] === '');
+  return {
+    ...plan,
+    args,
+    missing,
+    resolvedFrom: target.source,
+    resolvedLabel: target.label || target.id
+  };
+}
+
+export function planTool(text: string, context?: AgentContext): ToolPlan | null {
+  const plan = planToolBase(text);
+  return plan ? completePlanFromReference(plan, text, context) : null;
+}
+
 /** 多步计划：按明确连接词拆句，任何一步落空都不执行，避免「做一半」。 */
-export function planToolSequence(text: string): ToolPlan[] | null {
+export function planToolSequence(text: string, context?: AgentContext): ToolPlan[] | null {
   const segments = splitInstructionSteps(text);
   if (segments.length <= 1) {
-    const plan = planTool(text);
+    const plan = planTool(text, context);
     return plan ? [plan] : null;
   }
   const plans: ToolPlan[] = [];
   for (const segment of segments) {
-    const plan = planTool(segment);
+    const plan = planTool(segment, context);
     if (!plan) return null;
     plans.push(plan);
   }
@@ -577,8 +626,8 @@ export function planToolSequence(text: string): ToolPlan[] | null {
 }
 
 /** 离线通道专用：只有只读计划才允许自动执行。 */
-export function planReadOnly(text: string): ToolPlan | null {
-  const plan = planTool(text);
+export function planReadOnly(text: string, context?: AgentContext): ToolPlan | null {
+  const plan = planTool(text, context);
   if (!plan) return null;
   if (!plan.readOnly || !READ_ONLY_TOOLS.has(plan.tool)) return null;
   return plan;

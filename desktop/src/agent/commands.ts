@@ -44,6 +44,8 @@ export interface CommandHistoryEntry {
   name: string;
   at: string;
   ok: boolean;
+  /** 人类可读摘要；对象类操作附带 `[target=kind:id:label]`，供指代消解回退。 */
+  summary?: string;
 }
 
 export interface CommandContext {
@@ -181,6 +183,60 @@ function errorResult(error: unknown, fallbackCode = 'COMMAND_FAILED'): CommandRe
   return failed(fallbackCode, error instanceof Error ? error.message : String(error));
 }
 
+function cleanTargetPart(value: string): string {
+  return value.replace(/[\[\]:\r\n]/g, ' ').trim().slice(0, 60);
+}
+
+function targetMarker(kind: string, id: string, label: string): string {
+  const safeId = cleanTargetPart(id);
+  const safeLabel = cleanTargetPart(label) || safeId;
+  return safeId ? ` [target=${kind}:${safeId}:${safeLabel}]` : '';
+}
+
+function historyObjectTarget(
+  name: string,
+  args: Record<string, unknown>,
+  result?: unknown
+): { kind: 'component' | 'placement'; id: string; label: string } | null {
+  if (!['insert_component', 'place_component', 'update_component', 'remove_component'].includes(name)) return null;
+  const data = isRecord(result) && isRecord(result.data) ? result.data : null;
+  const argsPart = typeof args.partId === 'string' ? args.partId : typeof args.ref === 'string' ? args.ref : '';
+  if (name === 'place_component') {
+    const placement = data && isRecord(data.placement) ? data.placement : null;
+    const id = placement && typeof placement.id === 'string' ? placement.id : '';
+    const label = placement
+      ? (typeof placement.tag === 'string' && placement.tag)
+        || (typeof placement.model === 'string' && placement.model)
+        || (typeof placement.partId === 'string' && placement.partId)
+        || argsPart
+      : argsPart;
+    return id ? { kind: 'placement', id, label: String(label || id) } : null;
+  }
+  const id = argsPart || (data && typeof data.name === 'string' ? data.name : '');
+  if (!id) return null;
+  const label = (data && typeof data.name === 'string' && data.name) || argsPart || id;
+  return { kind: 'component', id, label: String(label) };
+}
+
+/** 命令历史摘要：只保留白名单参数，绝不把密钥写进历史。 */
+export function summarizeCommandResult(
+  name: string,
+  args: Record<string, unknown>,
+  result?: unknown
+): string {
+  const ok = !isRecord(result) || result.ok !== false;
+  const parts: string[] = [];
+  for (const key of ['partId', 'ref', 'q', 'category', 'format', 'model', 'qty', 'x', 'y']) {
+    const value = args[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string') parts.push(`${key}=${cleanTargetPart(value)}`);
+    else if (typeof value === 'number' || typeof value === 'boolean') parts.push(`${key}=${value}`);
+  }
+  const target = historyObjectTarget(name, args, result);
+  const detail = parts.length > 0 ? `（${parts.join(', ')}）` : '';
+  return `${name}${detail}${ok ? ' 成功' : ' 失败'}${target ? targetMarker(target.kind, target.id, target.label) : ''}`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -243,12 +299,12 @@ export class CommandBus {
     try {
       result = await command.run(args, this.context);
     } catch (error) {
-      this.record(name, false);
+      this.record(name, false, summarizeCommandResult(name, args, { ok: false }));
       return errorResult(error);
     }
 
     const ok = result.ok === true;
-    this.record(name, ok);
+    this.record(name, ok, summarizeCommandResult(name, args, result));
     if (!ok) {
       return {
         ok: false,
@@ -292,8 +348,13 @@ export class CommandBus {
     return this.records.map((record) => ({ ...record }));
   }
 
-  private record(name: string, ok: boolean): void {
-    this.records.push({ name, at: new Date().toISOString(), ok });
+  private record(name: string, ok: boolean, summary?: string): void {
+    this.records.push({
+      name,
+      at: new Date().toISOString(),
+      ok,
+      ...(summary ? { summary } : {})
+    });
     if (this.records.length > 200) this.records.splice(0, this.records.length - 200);
   }
 }
@@ -781,6 +842,15 @@ function registerProjectContextCommand(bus: CommandBus): void {
       }
       const data = isRecord(raw) ? raw : {};
       const nullable = (value: unknown): unknown => (value === undefined ? null : value);
+      const recentActions = bus.history()
+        .filter((entry) => entry.name !== 'get_project_context')
+        .slice(-5)
+        .map((entry) => ({
+          tool: entry.name,
+          name: entry.name,
+          summary: entry.summary ?? `${entry.name}${entry.ok ? ' 成功' : ' 失败'}`,
+          at: entry.at
+        }));
       return {
         ok: true,
         data: {
@@ -790,7 +860,7 @@ function registerProjectContextCommand(bus: CommandBus): void {
           machine: nullable(data.machine),
           plate: nullable(data.plate),
           units: nullable(data.units),
-          recentActions: []
+          recentActions
         }
       };
     }

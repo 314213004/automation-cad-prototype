@@ -23,6 +23,7 @@ import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentSession } from '../src/agent/session.ts';
+import { collectAgentContext } from '../src/agent/context.ts';
 import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
@@ -729,6 +730,15 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       bus,
       maxIterations: config.maxIterations,
       audit: (record) => audit.record(record),
+      contextProvider: async () => {
+        try {
+          const result = await bus.execute('get_project_context');
+          if (!result.ok) return null;
+          return collectAgentContext({ projectContext: () => result.data });
+        } catch {
+          return null;
+        }
+      },
       confirmWrite: async (name, args) => {
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;

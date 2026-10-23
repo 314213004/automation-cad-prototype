@@ -557,6 +557,8 @@ export interface KinematicsUiOptions {
 export interface KinematicsUiState {
   sourceFile: string;
   meshes: KinematicsMeshInfo[];
+  /** 网格树里当前勾选的网格（供 Agent 上下文采集）。 */
+  selectedMeshes: KinematicsMeshInfo[];
   parts: MovingPart[];
   errors: number;
   warnings: number;
@@ -1048,6 +1050,9 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
       return {
         sourceFile,
         meshes: meshes.map((mesh) => ({ ...mesh, center: [...mesh.center], size: [...mesh.size] })),
+        selectedMeshes: meshes
+          .filter((mesh) => selected.has(mesh.id))
+          .map((mesh) => ({ ...mesh, center: [...mesh.center], size: [...mesh.size] })),
         parts: parts.map(clonePart),
         errors: validation.errors.length,
         warnings: validation.warnings.length,

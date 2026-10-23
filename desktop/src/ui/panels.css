@@ -195,6 +195,7 @@
 .acp-plan-io{margin-left:auto;color:#7f8a92;font-size:9px}
 .acp-plan-step-args{color:#93a0a9;font:9px/1.45 var(--font-mono,monospace);word-break:break-all}
 .acp-plan-step-why{color:#7f8a92;font-size:9px;line-height:1.5;word-break:break-word}
+.acp-plan-basis{color:#4d8f6f;font-size:9px;line-height:1.5;word-break:break-word}
 .acp-plan-missing{color:#e8d49b;font-size:9px}
 .acp-plan-refused{color:#ffc9c4;font-size:9px;line-height:1.6;word-break:break-word}
 .acp-plan-warning{color:#e8d49b;font-size:9px;line-height:1.5}

@@ -17,6 +17,8 @@ import {
   type ToolPlan
 } from './router.ts';
 import { extractPlacementSpec, isPlacementInstruction } from './placement.ts';
+import type { AgentContext } from './context.ts';
+import type { ReferenceSource } from './reference.ts';
 
 export interface PlanStep {
   tool: string;
@@ -26,6 +28,9 @@ export interface PlanStep {
   readOnly: boolean;
   /** 缺少的关键参数，供 UI 在卡片上直接点名。 */
   missing?: string[];
+  /** 指代消解依据；UI 显示「已使用选中对象：QF1」。 */
+  resolvedFrom?: ReferenceSource;
+  resolvedLabel?: string;
 }
 
 export interface AgentPlan {
@@ -49,6 +54,8 @@ export interface PlanContext {
   baseUrl?: string;
   /** 默认 0.6，测试可显式抬高以验证低置信度拒绝。 */
   minConfidence?: number;
+  /** 当前 UI 上下文；用于指代消解补全参数。 */
+  context?: AgentContext;
 }
 
 const DEFAULT_TOOL_NAMES = new Set([...READ_ONLY_TOOLS, ...WRITE_TOOLS]);
@@ -109,13 +116,15 @@ function fromToolPlan(plan: ToolPlan, confidence: number): Candidate {
     args: { ...plan.args },
     why: plan.why,
     readOnly: plan.readOnly,
-    ...(plan.missing.length > 0 ? { missing: [...plan.missing] } : {})
+    ...(plan.missing.length > 0 ? { missing: [...plan.missing] } : {}),
+    ...(plan.resolvedFrom ? { resolvedFrom: plan.resolvedFrom } : {}),
+    ...(plan.resolvedLabel ? { resolvedLabel: plan.resolvedLabel } : {})
   };
   return { steps: [step], confidence, warnings: [] };
 }
 
 /** 组合 1：查件 → 放置 → 电气校验。 */
-function matchSearchPlaceCheck(text: string, segments: string[]): Candidate | null {
+function matchSearchPlaceCheck(text: string, segments: string[], context?: AgentContext): Candidate | null {
   const wantsSearch = /(?:查|搜|找|选型|选一个)/.test(text);
   const placement = isPlacementInstruction(text) || /(?:放到|放在|摆在|摆到|放置)/.test(text);
   const wantsCheck = /(?:电气校验|校验|复核|检查)/.test(text);
@@ -125,10 +134,10 @@ function matchSearchPlaceCheck(text: string, segments: string[]): Candidate | nu
   // 搜索子句要在「放到/放在」之前截断，否则整句会被 router 判成写操作。
   const searchText = text.split(/(?:放到|放在|摆在|摆到|放置到|放置在|放置)/)[0]?.trim() || text;
   const searchSegment = segments.find((segment) => /(?:查|搜|找|选)/.test(segment)) ?? searchText;
-  const segmentPlan = planTool(searchSegment);
+  const segmentPlan = planTool(searchSegment, context);
   const searchPlan = segmentPlan && (segmentPlan.tool === 'search_components' || segmentPlan.tool === 'list_components')
     ? segmentPlan
-    : planTool(searchText);
+    : planTool(searchText, context);
   const query = typeof searchPlan?.args.q === 'string' ? searchPlan.args.q : spec.partRef;
   const category = typeof searchPlan?.args.category === 'string' ? searchPlan.args.category : undefined;
   if (!query && !category) return null;
@@ -194,13 +203,13 @@ function matchBomCostExport(text: string): Candidate | null {
 }
 
 /** 组合 3：导入 CAD → 干涉初筛。 */
-function matchImportInterference(text: string, segments: string[]): Candidate | null {
+function matchImportInterference(text: string, segments: string[], context?: AgentContext): Candidate | null {
   const wantsImport = /(?:导入|打开).*(?:cad|step|stp|iges|igs|stl|obj|gltf|glb|模型|文件)/i.test(text);
   const wantsInterference = /(?:干涉|碰撞)/.test(text);
   if (!wantsImport || !wantsInterference) return null;
 
   const importSegment = segments.find((segment) => /(?:导入|打开)/.test(segment)) ?? text;
-  const importPlan = planTool(importSegment);
+  const importPlan = planTool(importSegment, context);
   const path = (typeof importPlan?.args.path === 'string' ? importPlan.args.path : undefined) ?? cadPath(text);
   const importArgs: Record<string, unknown> = path ? { path } : {};
   const warnings = /(?:受力|强度|应力)/.test(text)
@@ -261,11 +270,11 @@ function matchDesignPackageSync(text: string, context: PlanContext): Candidate |
 }
 
 /** 通用多步：按明确连接词拆句，每一句都必须能落到已注册工具上。 */
-function matchGenericSequence(segments: string[]): Candidate | null {
+function matchGenericSequence(segments: string[], context?: AgentContext): Candidate | null {
   if (segments.length < 2) return null;
   const steps: PlanStep[] = [];
   for (const segment of segments) {
-    const plan = planTool(segment);
+    const plan = planTool(segment, context);
     if (!plan) return null;
     steps.push(...fromToolPlan(plan, 0.78).steps);
   }
@@ -298,12 +307,12 @@ export function plan(input: string, context: PlanContext = {}): AgentPlan {
 
   const segments = splitInstructionSteps(text);
   const candidate =
-    matchSearchPlaceCheck(text, segments) ??
+    matchSearchPlaceCheck(text, segments, context.context) ??
     matchBomCostExport(text) ??
-    matchImportInterference(text, segments) ??
+    matchImportInterference(text, segments, context.context) ??
     matchPlcVerify(text) ??
     matchDesignPackageSync(text, context) ??
-    matchGenericSequence(segments);
+    matchGenericSequence(segments, context.context);
 
   let steps: PlanStep[];
   let confidence: number;
@@ -313,7 +322,7 @@ export function plan(input: string, context: PlanContext = {}): AgentPlan {
     confidence = candidate.confidence;
     warnings = [...candidate.warnings];
   } else {
-    const single = planTool(text);
+    const single = planTool(text, context.context);
     if (!single) {
       return {
         steps: [],

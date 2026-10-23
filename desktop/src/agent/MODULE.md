@@ -19,7 +19,10 @@ tools.ts（AgentTools + 17 个 AgentTool）
  ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
  │    ├─ planner.ts → 多步规划 plan() + 顺序执行 executePlan()（P7-C）
- │    ├─ context.ts → 工程上下文打包（≤2 KB 分级降级）
+ │    ├─ context.ts → 结构化上下文快照（≤1.5 KB）+ 历史工具清单文本块
+ │    ├─ reference.ts → 选中/最近操作/几何三级指代消解（<0.6 不猜）
+ │    ├─ memory.ts  → 最近 5 次工具调用摘要（仅内存）
+ │    ├─ trim.ts    → 列表 20 条 / 文本 2 KB / 单结果 10 KB 裁剪
  │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
  │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执 / 审计行）
 ```
@@ -97,6 +100,37 @@ summarizeAudit(entries): { total, failed, tools, lastAt }
 - 离线降级：`session.run()` 里 `llm.chat()` 抛错才触发 `runOffline()`；只执行 `planReadOnly`，写计划直接抛回原错误，由 UI 提示需要联网。
 - 上下文：`buildAgentContext` 超限时按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，`truncated/droppedTools/droppedRecent` 如实回报。
 - 审计：`session` 每次工具调用（含 `USER_DENIED`/参数非法/离线）回调 `audit`；`ipc.ts` 写 `userData/agent-audit.jsonl` 并暴露 `agent:audit:read`（最近 50 条 + 汇总）。写失败只回调 `onError`，不影响对话。
+
+## 上下文快照 / 指代 / 记忆 / 结果裁剪（P7-E）
+
+四个模块都是纯函数或纯内存类，无 DOM / fs / net 依赖。
+
+```ts
+interface AgentContext {
+  domain: 'mech'|'elec'|null; view: string|null;
+  selection: { kind:'component'|'mesh'|'placement'|'feature'; id:string; label:string } | null;
+  machine: { name:string; stations:number; actuators:number; sensors:number } | null;
+  plate: { width:number; height:number; placed:number; overlaps:number } | null;
+  recentActions: Array<{ tool:string; summary:string; at:string }>;  // 最近 3 条
+  units: 'mm';
+  placements?: Array<{ id:string; label:string; x:number; y:number; w:number; h:number }>;
+}
+
+collectAgentContext(providers, now?): AgentContext          // 每字段独立容错，失败为 null
+serializeAgentContext(ctx, limit=1536): { text, bytes, truncated, droppedRecent, context }
+resolveReference(text, ctx): { target, confidence, reason }
+trimListResult / trimLongText / trimToolResult / serializeToolResult
+AgentMemory.record / entries / prompt / clear
+```
+
+- **采集**：`extension.ts` 的 `getProjectContext()` 依次读取底板选中 placement → 运动学选中网格 → 参数化选中特征 → CAD 选中零件，并返回机型、底板与 placement 列表；`commands.ts` 把命令历史摘要（带 `[target=kind:id:label]`）并入 `recentActions`。主进程 `AgentSession.contextProvider` 每轮调 `get_project_context`，失败返回 null 快照，不阻断对话。
+- **序列化**：1.5 KB 上限；超限顺序为「删旧 recentActions → 压长字段 → UTF-8 码点边界硬截断」。`[工程上下文]` 中的 recent 摘要会剥掉 target 标记。
+- **指代优先级**：选中对象 0.95 → 最近操作对象 0.72 → 几何 placement 0.78；没有候选返回 `NO_CANDIDATES`，对象信息不足返回 `LOW_CONFIDENCE`，低于 0.6 统一 `target:null`。几何排序：左边 x 升序、右边 x 降序、上面 y 升序、下面 y 降序，读序 y→x。
+- **路由补全**：`planTool/planToolSequence/planReadOnly` 接收可选 `AgentContext`；命中后把对象填进 `partId` / `ref`，清掉对应 `missing`，并写 `resolvedFrom` / `resolvedLabel`。`preview.ts` 与侧栏步骤卡片据此显示「已使用选中对象：QF1」。
+- **会话记忆**：`AgentSession` 每次工具调用后记录 `{tool, args, code}`（关键参数白名单，不含密钥），最多 5 条；系统提示顺序为 `SYSTEM_PROMPT → 上下文快照 → [最近工具调用]`。`clear()` 同时清空记忆。
+- **结果裁剪**：`serializeToolResult` 是模型上下文的唯一入口；列表字段 >20 条变成 `{items,total,truncated}`，字符串 >2 KB 截断并附原文字节数，最终 JSON >10 KB 时保留 `ok` 与 `preview` 兜底。
+
+冒烟：`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`。单测在 `test/agent/context-memory-trim.test.mjs`（28 条）。
 
 ## 侧栏只读问答 UI（P7-A-2）
 
@@ -232,6 +266,9 @@ window.__AgentBridge = {
 11. **回执的通道要由主进程给**：`mode` 从 `AgentSession.mode()` 取，别在渲染层用「回复文案里有没有『离线』」猜，否则离线失败回包会被误标成在线。
 12. **审计数据先脱敏再写**：`maskSecrets` 只处理文本，结构化参数必须走 `redactValue`（按字段名），否则 `{apiKey}` 会原样落盘；写文件失败要吞掉，不能让审计把对话打断。
 13. **放置告警要在钳制前判断**：`placementWarnings` 的 `intended` 是吸附后、`clampToPlate` 前的矩形；用钳制后的坐标判越界会永远没有 `OUT_OF_BOUNDS`。旋转必须先交换宽高，再算导轨吸附与碰撞。
+14. **指代优先级不能反**：有选中对象时「刚才那个」也先用选中对象；几何指代（左边第二个）必须优先于「这个」，否则会拿错 placement。没有候选或置信度 <0.6 时宁可追问，不能回退成搜索关键词。
+15. **上下文裁剪要按 UTF-8 码点落刀**：`slice(0,-1)` 会把汉字或 emoji 代理对切成 U+FFFD；统一用 `truncateUtf8`。工具结果进模型前必须走 `serializeToolResult`，不能在别处直接 `JSON.stringify` 大对象。
+16. **命令历史摘要只放白名单参数**：`recentActions` 会进系统提示，`summarizeCommandResult` 不得拼接 `apiKey/token/password` 等字段；对象标记 `[target=...]` 仅用于回退解析，展示前要剥离。
 
 ## 进度
 
@@ -241,10 +278,11 @@ window.__AgentBridge = {
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
-- ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
+- ✅ 离线规则路由（7 类意图）+ 历史工具清单上下文裁剪 + NDJSON 审计与凭据脱敏（P7-A）
+- ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 717/717（新增 `tools-v2.test.mjs` 30 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 745/745（新增 `context-memory-trim.test.mjs` 28 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 

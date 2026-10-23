@@ -19,6 +19,8 @@ import {
   routeIntent,
   type IntentKind
 } from './router.ts';
+import type { AgentContext } from './context.ts';
+import type { ReferenceSource } from './reference.ts';
 
 export type PreviewTone = 'read' | 'write' | 'none';
 
@@ -39,6 +41,8 @@ export interface PlanPreview {
   offlineAllowed: boolean;
   /** 写操作缺的必要参数，预览里直接点出来，省一次失败往返 */
   missing: string[];
+  resolvedFrom?: ReferenceSource;
+  resolvedLabel?: string;
 }
 
 const EMPTY_PREVIEW: PlanPreview = {
@@ -56,12 +60,12 @@ const EMPTY_PREVIEW: PlanPreview = {
 };
 
 /** 规则预览：只读计划标「只读 · 可离线」，写计划标「写操作 · 需联网确认」。 */
-export function buildPlanPreview(text: string): PlanPreview {
+export function buildPlanPreview(text: string, context?: AgentContext): PlanPreview {
   const trimmed = (text ?? '').trim();
   if (!trimmed) return { ...EMPTY_PREVIEW };
 
   const match = routeIntent(trimmed);
-  const plan = planTool(trimmed);
+  const plan = planTool(trimmed, context);
   const intentLabel = INTENT_LABELS[match.intent];
 
   if (!plan) {
@@ -90,6 +94,15 @@ export function buildPlanPreview(text: string): PlanPreview {
     hint = '写操作需要联网并在弹窗中确认，离线通道不执行。';
   }
 
+  const basis = plan.resolvedFrom
+    ? plan.resolvedFrom === 'selection'
+      ? `已使用选中对象：${plan.resolvedLabel ?? ''}`
+      : plan.resolvedFrom === 'recent'
+        ? `已使用最近操作对象：${plan.resolvedLabel ?? ''}`
+        : `已使用底板对象：${plan.resolvedLabel ?? ''}`
+    : '';
+  if (basis) hint = `${basis}。${hint}`;
+
   return {
     tone,
     title,
@@ -101,7 +114,9 @@ export function buildPlanPreview(text: string): PlanPreview {
     args: { ...plan.args },
     readOnly,
     offlineAllowed: readOnly,
-    missing: [...plan.missing]
+    missing: [...plan.missing],
+    ...(plan.resolvedFrom ? { resolvedFrom: plan.resolvedFrom } : {}),
+    ...(plan.resolvedLabel ? { resolvedLabel: plan.resolvedLabel } : {})
   };
 }
 

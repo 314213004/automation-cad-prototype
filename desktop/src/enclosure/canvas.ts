@@ -46,6 +46,8 @@ export interface EnclosureState {
   usedMm2: number;
   plate: { width: number; height: number; rails: Rail[] };
   placements: Placement[];
+  /** 当前选中 placement；未选中为 null。 */
+  selected: Placement | null;
 }
 
 export interface EnclosurePlaceOptions {
@@ -600,6 +602,9 @@ export class EnclosureCanvas {
   state(): EnclosureState {
     const collisions = findCollisions(this.placements);
     const usage = utilization(this.placements, this.plate);
+    const selected = this.selectedId
+      ? this.placements.find((item) => item.id === this.selectedId) ?? null
+      : null;
     return {
       placed: this.placements.length,
       overlap: collisions.length,
@@ -611,7 +616,8 @@ export class EnclosureCanvas {
         height: this.plate.height,
         rails: this.plate.rails.map((rail) => ({ ...rail }))
       },
-      placements: this.placements.map((item) => ({ ...item }))
+      placements: this.placements.map((item) => ({ ...item })),
+      selected: selected ? { ...selected } : null
     };
   }
 

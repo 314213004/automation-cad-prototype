@@ -77,19 +77,29 @@
 
 稳定错误码：`INVALID_ARGUMENT`（缺参/类型错误）、`PART_NOT_FOUND`（新型号不在数据包）、`NOT_PLACED`（删除目标不在底板/BOM）、`PRECHECK_FAILED`（PLC 预检错误，不落盘）、`UNSUPPORTED_FORMAT`（导出格式不在白名单）、`WRITE_FAILED` / `EXPORT_FAILED`（落盘与内容生成失败）。
 
-## 4. 上下文注入
+## 4. 上下文注入与指代消解（已实现）
 
-每次会话固定注入（不超过 2 KB）：
-- 当前项目名 / 机台编号 device_no / 机型配置规模（工位数、IO 点数）
-- 当前域（机械/电气）与视图（装配/选型/校核/出图/原理图/IO/电箱/底板）
-- 选中对象（元件 id、位号、网格坐标）
-- 最近 3 步操作（可撤销提示）
-- 单位制与精度约定（mm、整数数量）
-- 可用工具清单（名称 + 一句话说明，动态裁剪）
+每次会话固定注入 `AgentContext` 快照（序列化 ≤1.5 KB，`CONTEXT_BYTE_LIMIT=1536`）：
+- `domain`：`mech` / `elec` / null；`view`：装配、底板、原理图等当前视图
+- `selection`：`{ kind: 'component'|'mesh'|'placement'|'feature', id, label }`；依次采集底板选中 placement、运动学选中网格、参数化选中特征、CAD 选中零件
+- `machine`：机型名、工位数、执行机构数、传感器数
+- `plate`：底板宽高、已放置数、重叠数；可附 placement 列表供几何指代
+- `recentActions`：最近 3 条工具操作（工具名、摘要、时间），摘要可带 `[target=kind:id:label]` 供指代回退
+- `units`：固定 `mm`
 
-指代消解：「这个」「刚才那个」「左边的接触器」→ 优先用选中对象，其次最近操作，最后追问一次（只追问一次，避免来回）。
+采集入口是 `desktop/src/agent/context.ts` 的 `collectAgentContext()`：每个 provider 单独 `try/catch`，采集失败字段为 null，不抛错、不新增全局单例。`serializeAgentContext()` 超限时按「删旧 recentActions → 压长字段 → UTF-8 码点边界硬截断」降级，并回报 `bytes / truncated / droppedRecent`。历史调用方仍可用 `buildAgentContext()` 的工具清单文本块（同样受 1.5 KB 上限约束）。
 
-已实现（`desktop/src/agent/context.ts`）：`buildAgentContext()` 输出 `[工程上下文]` 文本块，默认上限 2048 字节；超限按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，并回报 `bytes / truncated / droppedTools / droppedRecent`。smoke 实测 `ctx=2028`。
+**指代优先级**（`desktop/src/agent/reference.ts` 的纯函数 `resolveReference(text, ctx)`）：
+1. `这个 / 它 / 刚才那个 / 选中的` → 当前 `selection`（置信度 0.95）；
+2. 其次最近一次带对象标记的 `recentActions`（0.72）；
+3. `左边第二个 / 上面那个 / 第 N 个` → 按 placement 几何排序取第 N 个（左边 x 升序、右边 x 降序、上面 y 升序、下面 y 降序；0.78）；
+4. 无候选 → `NO_CANDIDATES`；对象信息不足 → `LOW_CONFIDENCE`。**低于 0.6 一律返回 null，由调用方追问一次，不猜对象。**
+
+路由接入：`planTool` / `planToolSequence` / `planReadOnly` 接受可选 `AgentContext`，命中指代时补全对象参数，并在计划步骤上标 `resolvedFrom: 'selection'|'recent'|'geometry'` 与 `resolvedLabel`。侧栏计划预览与步骤卡片显示「已使用选中对象：QF1」这类依据；会话系统提示同时注入上下文快照与会话内记忆。
+
+会话内记忆（`desktop/src/agent/memory.ts`）只保留最近 5 次工具调用（工具名、关键参数、结果码），滚动丢弃，不落盘、不上传，并追加在系统提示末尾。工具结果进入模型前统一经 `desktop/src/agent/trim.ts` 裁剪：列表 >20 条保留前 20 + `total` + `truncated:true`，长文本按 2 KB 截断，单个结果硬上限 10 KB。
+
+冒烟：`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`；单测覆盖采集容错、1.5 KB 体积、指代优先级、几何排序、低置信不猜、记忆滚动、UTF-8 截断与 10 KB 封顶。
 
 ## 5. 意图分类与路由
 

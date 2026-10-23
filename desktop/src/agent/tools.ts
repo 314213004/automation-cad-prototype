@@ -640,10 +640,17 @@ export class AgentTools {
         if (!result.ok) return commandFailure(result);
         const data = isRecord(result.data) ? result.data : {};
         const history = this.commands?.history?.() ?? [];
-        const recentActions = history
-          .filter((entry) => entry.name !== 'get_project_context')
-          .slice(-5)
-          .map((entry) => ({ name: entry.name, at: entry.at, ok: entry.ok }));
+        const recentActions = Array.isArray(data.recentActions) && data.recentActions.length > 0
+          ? data.recentActions
+          : history
+              .filter((entry) => entry.name !== 'get_project_context')
+              .slice(-5)
+              .map((entry) => ({
+                tool: entry.name,
+                name: entry.name,
+                summary: entry.summary ?? `${entry.name}${entry.ok ? ' 成功' : ' 失败'}`,
+                at: entry.at
+              }));
         return {
           ok: true,
           domain: data.domain ?? null,
