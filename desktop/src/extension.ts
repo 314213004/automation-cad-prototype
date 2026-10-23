@@ -40,6 +40,7 @@ import { toCsv, toXlsx, type BomRow } from './export/bom';
 import { toDxf, type DxfShape } from './export/dxf';
 import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
+import { initOrbitView } from './orbit/ui';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -1494,6 +1495,12 @@ function init(): void {
   buildOverlay();
   initMechUi();
   injectStressTab();
+  try {
+    initOrbitView();
+  } catch (error) {
+    // 主视口 3D 注入失败时保留原型等轴测视图，不影响其他扩展。
+    console.warn('[orbit] 主视口 3D 初始化失败，保留等轴测视图', error);
+  }
   bindWindowEvents();
   Object.defineProperty(window, 'AutomationCadKinematics', {
     value: Object.freeze({

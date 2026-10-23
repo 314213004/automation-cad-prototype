@@ -9,6 +9,7 @@
 | 网页原型（根目录） | [PROTOTYPE.md](PROTOTYPE.md) | 视觉与交互基座，双击即开，桌面版直接加载 |
 | Electron 主进程 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md) | 窗口、菜单、IPC、Agent 启动、打包路径 |
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
+| 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
@@ -67,7 +68,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 ## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 1132 个单测 + 完整 smoke 断言全绿
+- ✅ 1170 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -93,6 +94,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 20（只读 10 + 写 10），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1`
 - ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
+- ✅ 主视口可旋转 3D（35-orbit-view）：`src/orbit/` 注入扩展替换原型装配/干涉视口的固定等轴测（原型零改动）；轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F）、树↔3D 选择同步、属性编辑（原型缸径/行程 + 桌面版尺寸/位置）沿叠放链改几何、干涉视图问题件高亮 + 剖切裁剪 + 包围盒初筛叠加；WebGL 不可用保留原型 SVG。38 条单测；`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径 `npm run check:orbit-webgl` → `ORBIT_WEBGL_OK`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

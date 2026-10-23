@@ -109,7 +109,7 @@
 9. **审计不轮转**：`agent-audit.jsonl` 只追加，未做轮转与保留期清理；审计面板只列最近 8 条，无筛选/导出，回执不含 token 用量。
 10. **CI 仅手动触发**：`gh workflow run windows-build --ref main`；未配置 push/PR 自动构建。
 11. **便携包偏大**：Electron 45 + node-opcua，解压后数百 MB；可考虑按需懒加载或 sidecar。
-12. **原型固有投影限制**：3D 为固定等轴测示意，属性编辑不改变拓扑；插件插入件为示意占位体。
+12. **原型固有投影限制（桌面版已部分缓解，35-orbit-view）**：有 WebGL 时主视口为可旋转 three.js，属性编辑沿叠放链改几何；仍是参数化示意体而非 B-rep，插入件为示意占位体；无 WebGL 时回到固定等轴测。
 13. **无 WebGL 的 headless 截图**：xvfb 下 Chromium 将 WebGL 列入 blocklist，CAD 3D 区域显示解析统计降级面板；参数化/PLC/成本/底板面板仍为真实 DOM/SVG 渲染。
 
 ## 待决策索引（D1–D8）
