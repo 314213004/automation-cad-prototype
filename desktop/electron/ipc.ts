@@ -23,6 +23,7 @@ import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentSession } from '../src/agent/session.ts';
+import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
 import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
@@ -773,6 +774,136 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   ipcMain.handle('agent:chat:clear', () => {
     clearSession();
     return { ok: true, messages: [] };
+  });
+
+  // P7-C：计划执行。规划在渲染层离线完成；主进程只接受已注册工具并再次校验。
+  ipcMain.handle('agent:plan:execute', async (_event, payload: unknown) => {
+    const tools = context.getTools();
+    const bus = context.getBus();
+    if (!tools || !bus) {
+      return {
+        ok: false,
+        confirmationRequired: false,
+        confirmed: false,
+        refused: true,
+        results: [],
+        totalMs: 0,
+        summary: '智能体服务尚未启动'
+      };
+    }
+
+    let plan: AgentPlan;
+    let startAt: number | undefined;
+    let maxSteps: number | undefined;
+    try {
+      if (typeof payload !== 'object' || payload === null) throw new Error('计划参数必须是对象');
+      const source = payload as Record<string, unknown>;
+      const rawPlan = source.plan;
+      if (typeof rawPlan !== 'object' || rawPlan === null) throw new Error('缺少计划');
+      const planRecord = rawPlan as Record<string, unknown>;
+      if (!Array.isArray(planRecord.steps)) throw new Error('计划步骤必须是数组');
+      const steps: PlanStep[] = planRecord.steps.map((entry, index) => {
+        if (typeof entry !== 'object' || entry === null) throw new Error(`第 ${index + 1} 步不是对象`);
+        const step = entry as Record<string, unknown>;
+        const tool = typeof step.tool === 'string' ? step.tool.trim() : '';
+        if (!tool) throw new Error(`第 ${index + 1} 步缺少工具名`);
+        if (!tools.has(tool)) throw new Error(`第 ${index + 1} 步工具未注册：${tool}`);
+        const args = typeof step.args === 'object' && step.args !== null && !Array.isArray(step.args)
+          ? { ...(step.args as Record<string, unknown>) }
+          : {};
+        const missing = Array.isArray(step.missing)
+          ? step.missing.filter((value): value is string => typeof value === 'string')
+          : undefined;
+        return {
+          tool,
+          args,
+          why: typeof step.why === 'string' ? step.why : '',
+          readOnly: step.readOnly === true,
+          ...(missing && missing.length > 0 ? { missing } : {})
+        };
+      });
+      const confidence = typeof planRecord.confidence === 'number' && Number.isFinite(planRecord.confidence)
+        ? planRecord.confidence
+        : 0;
+      const suggestions = Array.isArray(planRecord.suggestions)
+        ? planRecord.suggestions.filter((value): value is string => typeof value === 'string')
+        : undefined;
+      const warnings = Array.isArray(planRecord.warnings)
+        ? planRecord.warnings.filter((value): value is string => typeof value === 'string')
+        : undefined;
+      plan = {
+        steps,
+        confidence,
+        ...(planRecord.refused === true ? { refused: true } : {}),
+        ...(typeof planRecord.reason === 'string' ? { reason: planRecord.reason } : {}),
+        ...(suggestions && suggestions.length > 0 ? { suggestions } : {}),
+        ...(warnings && warnings.length > 0 ? { warnings } : {})
+      };
+      startAt = typeof source.startAt === 'number' && Number.isFinite(source.startAt)
+        ? Math.max(0, Math.trunc(source.startAt))
+        : undefined;
+      maxSteps = typeof source.maxSteps === 'number' && Number.isFinite(source.maxSteps)
+        ? Math.max(1, Math.trunc(source.maxSteps))
+        : undefined;
+    } catch (error) {
+      return {
+        ok: false,
+        confirmationRequired: false,
+        confirmed: false,
+        refused: true,
+        results: [],
+        totalMs: 0,
+        summary: `计划无效：${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+
+    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
+    const audit = createAuditLog({ write: (line) => appendFileSync(auditFile, `${line}\n`, 'utf8') });
+    let confirmCount = 0;
+    const result = await executePlan(plan, {
+      ...(startAt !== undefined ? { startAt } : {}),
+      ...(maxSteps !== undefined ? { maxSteps } : {}),
+      confirmPlan: async (request) => {
+        confirmCount += 1;
+        const window = context.getWindow();
+        if (!window || window.isDestroyed()) return false;
+        const detail = request.steps
+          .map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`)
+          .join('\n');
+        const response = await dialog.showMessageBox(window, {
+          type: 'question',
+          title: '智能体多步计划确认',
+          message: request.message,
+          detail: detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail,
+          buttons: ['全部允许', '取消'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true
+        });
+        return response.response === 0;
+      },
+      execute: async (step) => {
+        const outcome = await tools.call(step.tool, step.args);
+        const record = typeof outcome === 'object' && outcome !== null
+          ? outcome as Record<string, unknown>
+          : null;
+        const ok = record ? record.ok !== false : true;
+        const code = record && typeof record.code === 'string'
+          ? record.code
+          : record && typeof record.error === 'object' && record.error !== null && typeof (record.error as Record<string, unknown>).code === 'string'
+            ? String((record.error as Record<string, unknown>).code)
+            : undefined;
+        audit.record({
+          tool: step.tool,
+          ok,
+          source: 'plan',
+          args: step.args,
+          ...(code ? { code } : {})
+        });
+        return outcome;
+      }
+    });
+    return { ...result, confirmations: confirmCount };
   });
 
   ipcMain.handle('agent:chat:send', async (_event, text: unknown) => {

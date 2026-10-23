@@ -11,7 +11,7 @@ export interface AgentAuditRecord {
   ok: boolean;
   code?: string;
   /** 调用来源：模型工具调用 / 离线规则路由 / 外部 RPC / MCP */
-  source?: 'llm' | 'offline' | 'rpc' | 'mcp';
+  source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan';
   args?: Record<string, unknown>;
   message?: string;
 }

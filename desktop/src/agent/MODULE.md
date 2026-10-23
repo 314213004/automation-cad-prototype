@@ -18,6 +18,7 @@ tools.ts（AgentTools + 12 个 AgentTool）
  ├─ llm.ts         → OpenAI 兼容 /chat/completions + tools
  ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
+ │    ├─ planner.ts → 多步规划 plan() + 顺序执行 executePlan()（P7-C）
  │    ├─ context.ts → 工程上下文打包（≤2 KB 分级降级）
  │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
  │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执 / 审计行）
@@ -112,6 +113,44 @@ auditSummaryText(summary): string                        // 空审计 → 「暂
 - 审计面板：打开抽屉/发送后调 `window.desktop.agent.audit.read()`，展示最近 8 条与汇总；读取失败给中文原因，不静默空白。
 - 冒烟钉住三条：只读指令 `offline=1`、写指令 `offline=0` 且提示含 `partId`、预览前后场景零件数不变（预览不执行）。
 
+## 多步规划与执行（P7-C）
+
+`planner.ts` 与 `router.ts` 一样是无 IO 的纯函数模块，供侧栏预览（渲染层）与 IPC 执行（主进程）共用。
+
+```ts
+plan(input, context?): AgentPlan
+// steps: { tool, args, why, readOnly, missing? }[]
+// { confidence, refused?, reason?, suggestions?, warnings? }
+
+executePlan(plan, deps): Promise<ExecutePlanResult>
+// deps: { execute(step,index), confirmPlan?(request), now?, startAt?, maxSteps? }
+// → { ok, confirmationRequired, confirmed, cancelled?, failedAt?, failedIndex?, results[], totalMs, summary, undoHint? }
+```
+
+五类规则组合：
+
+| 场景 | 步骤 |
+|---|---|
+| 查件 → 放置 → 校验 | `search_components` → `place_component` → `run_electrical_check` |
+| 查 BOM → 成本 → 导出 | `get_bom` → `run_cost_report` → `export_cost_report` |
+| 导入 CAD → 干涉 | `import_cad` → `run_interference_check` |
+| 生成 PLC → 模拟验证 | `verify_plc_program`（只读，一次完成生成/模拟） |
+| 生成设计包 → 上传 | `sync_design_package`（需确认；当前未注册，默认过滤并拒绝） |
+
+规则细节：
+- 工具名默认取 `READ_ONLY_TOOLS + WRITE_TOOLS`（与 `tools.ts` 注册表一致）；UI/IPC 传入实时工具列表后逐条过滤，未注册工具写入 `warnings`，全部被过滤则 `refused:true`。**不允许硬编码不存在的工具执行。**
+- 通用多步按 `splitInstructionSteps` 拆句，每句必须能由 `planTool` 接住；任一句落空整单不执行。
+- 规则不命中 `confidence=0.2`；低于 `PLAN_CONFIDENCE_THRESHOLD=0.6`（或 `context.minConfidence`）时拒绝，并返回 5 条可执行建议。
+- 执行器对写步骤按 `READ_ONLY_TOOLS` 判定（不信任步骤里的 `readOnly` 标记），一次汇总确认；拒绝返回 `cancelled:true` 且 `results` 为空。
+- 失败停止：业务 `ok:false`、嵌套 `error.code`、抛异常都归一为结果码（异常 `TOOL_EXCEPTION`）；`failedAt` 为 1 基步骤号，`failedIndex` 为 0 基下标。
+- `insert_component`/`place_component` 成功过且有失败时返回 `undoHint`，提示可用 `undo_last` 回退。
+- 逐步执行由 `deps.startAt / deps.maxSteps` 驱动，UI「全部执行」不传 `maxSteps`，「逐步执行」固定 `maxSteps=1`。
+
+IPC 与 UI：
+- `agent:plan:execute` 在主进程再次校验步骤结构与工具是否注册，确认弹窗只出现一次，审计 `source='plan'`。
+- 侧栏输入多步指令时显示 `#agentPlanCard`：序号、工具、参数 JSON、原因、缺参、只读/写；按钮为「全部执行 / 逐步执行 / 取消」。执行中当前步 `…`、成功 `✓`、失败 `×` 并显示错误码与原因。
+- 冒烟：`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`；额外验证侧栏对两步只读计划点击「全部执行」后两项都变 `is-done`。
+
 ## 命令总线与撤销
 
 - `execute(name, args)` 始终返回 `CommandResult`，异常被转换成中文错误，不向调用方抛。
@@ -193,9 +232,10 @@ window.__AgentBridge = {
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
 - ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
-- ✅ 单测：全套 619/619；smoke：`SMOKE_AGENT_TOOLS_OK tools=12 implemented=12`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
+- ✅ 单测：全套 674/674；smoke：`SMOKE_AGENT_TOOLS_OK tools=12 implemented=12`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
-- ⏳ 更多可撤销写操作（属性修改、删除节点）、MCP resources、写操作逐步确认 UI；联调/同步工具注册后补充真实工具用例
+- ⏳ 更多可撤销写操作（属性修改、删除节点）、MCP resources、单步模型工具调用的逐步确认；联调/同步工具注册后补充真实工具用例
 
 ## 待办
 

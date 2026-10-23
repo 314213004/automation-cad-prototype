@@ -236,12 +236,55 @@ interface DesktopAgentChatResult {
   messages: DesktopAgentChatMessage[];
 }
 
+interface DesktopAgentPlanStep {
+  tool: string;
+  args: Record<string, unknown>;
+  why: string;
+  readOnly: boolean;
+  missing?: string[];
+}
+
+interface DesktopAgentPlan {
+  steps: DesktopAgentPlanStep[];
+  confidence: number;
+  refused?: boolean;
+  reason?: string;
+  suggestions?: string[];
+  warnings?: string[];
+}
+
+interface DesktopAgentPlanStepResult {
+  index: number;
+  step: number;
+  tool: string;
+  ok: boolean;
+  code: string;
+  message?: string;
+  elapsedMs: number;
+  data?: unknown;
+}
+
+interface DesktopAgentPlanExecuteResult {
+  ok: boolean;
+  confirmationRequired: boolean;
+  confirmed: boolean;
+  cancelled?: boolean;
+  refused?: boolean;
+  failedAt?: number;
+  failedIndex?: number;
+  failedTool?: string;
+  results: DesktopAgentPlanStepResult[];
+  totalMs: number;
+  summary: string;
+  undoHint?: string;
+}
+
 interface DesktopAgentAuditEntry {
   at: string;
   tool: string;
   ok: boolean;
   code?: string;
-  source?: 'llm' | 'offline' | 'rpc' | 'mcp';
+  source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan';
   args?: Record<string, unknown>;
   message?: string;
 }
@@ -389,6 +432,13 @@ interface Window {
         send(text: string): Promise<DesktopAgentChatResult>;
         history(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
         clear(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
+      };
+      plan: {
+        execute(payload: {
+          plan: DesktopAgentPlan;
+          startAt?: number;
+          maxSteps?: number;
+        }): Promise<DesktopAgentPlanExecuteResult>;
       };
       audit: {
         read(): Promise<DesktopAgentAuditResult>;

@@ -7,6 +7,7 @@ import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS, renderCostRe
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
+import { executePlan, plan } from '../src/agent/planner';
 import { buildAgentContext } from '../src/agent/context';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
@@ -1286,6 +1287,122 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=${readonlyUi.rows} summary=ok scene=${readonlyUi.after}`);
+
+        // P7-C：多步计划卡片 + 顺序执行 + 写步骤一次确认
+        const planUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const input = document.getElementById('agentChatInput');
+            const card = document.getElementById('agentPlanCard');
+            if (!input || !card) return { error: 'missing_plan_card' };
+            input.value = '读一下当前 BOM，算一下成本，然后导出 CSV 报价单';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await wait(120);
+            return {
+              hidden: card.hidden === true,
+              steps: card.querySelectorAll('.acp-plan-step').length,
+              tools: Array.from(card.querySelectorAll('.acp-plan-step')).map((node) => node.dataset.tool || ''),
+              runAll: Boolean(document.getElementById('agentPlanRunAll')),
+              runStep: Boolean(document.getElementById('agentPlanRunStep')),
+              cancel: Boolean(document.getElementById('agentPlanCancel')),
+              meta: document.getElementById('agentPlanCardMeta')?.textContent || ''
+            };
+          })()`
+        ) as {
+          error?: string;
+          hidden: boolean;
+          steps: number;
+          tools: string[];
+          runAll: boolean;
+          runStep: boolean;
+          cancel: boolean;
+          meta: string;
+        };
+        if (
+          planUi.error ||
+          planUi.hidden ||
+          planUi.steps !== 3 ||
+          planUi.tools.join(',') !== 'get_bom,run_cost_report,export_cost_report' ||
+          !planUi.runAll || !planUi.runStep || !planUi.cancel ||
+          !planUi.meta.includes('3 步')
+        ) {
+          console.error('SMOKE_FAIL agent_plan_ui', JSON.stringify(planUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+
+        const planRunUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const input = document.getElementById('agentChatInput');
+            const card = document.getElementById('agentPlanCard');
+            if (!input || !card) return { error: 'missing_plan_card' };
+            input.value = '读一下当前 BOM，然后查一下 24V 开关电源';
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            await wait(100);
+            const steps = card.querySelectorAll('.acp-plan-step').length;
+            document.getElementById('agentPlanRunAll')?.click();
+            let done = 0;
+            let failed = 0;
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              await wait(100);
+              done = card.querySelectorAll('.acp-plan-step.is-done').length;
+              failed = card.querySelectorAll('.acp-plan-step.is-fail').length;
+              if (done + failed >= steps && steps > 0) break;
+            }
+            return {
+              steps,
+              done,
+              failed,
+              feedback: document.getElementById('agentPlanFeedback')?.textContent || ''
+            };
+          })()`
+        ) as { error?: string; steps: number; done: number; failed: number; feedback: string };
+        if (planRunUi.error || planRunUi.steps !== 2 || planRunUi.done !== 2 || planRunUi.failed !== 0) {
+          console.error('SMOKE_FAIL agent_plan_run_ui', JSON.stringify(planRunUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+
+        const planned = plan('读一下当前 BOM，算一下成本，然后导出 CSV 报价单');
+        let planConfirms = 0;
+        const planTools: string[] = [];
+        const planResult = await executePlan(planned, {
+          confirmPlan: async (request) => {
+            planConfirms += 1;
+            return request.steps.length === 3 && request.writeIndexes.length === 1;
+          },
+          execute: async (step) => {
+            planTools.push(step.tool);
+            if (step.tool === 'export_cost_report') {
+              // 冒烟不落盘：写步骤只验证执行器顺序与确认，不制造临时文件。
+              return { ok: true, data: { simulated: true, format: step.args.format } };
+            }
+            if (!agentTools) return { ok: false, code: 'AGENT_UNAVAILABLE', message: '工具未启动' };
+            return await agentTools.call(step.tool, step.args);
+          }
+        });
+        if (
+          planned.steps.length !== 3 ||
+          planned.steps.map((step) => step.tool).join(',') !== 'get_bom,run_cost_report,export_cost_report' ||
+          planConfirms !== 1 ||
+          planTools.join(',') !== 'get_bom,run_cost_report,export_cost_report' ||
+          !planResult.ok ||
+          !planResult.confirmationRequired ||
+          !planResult.confirmed ||
+          planResult.results.length !== 3 ||
+          planResult.results.some((item) => !item.ok)
+        ) {
+          console.error('SMOKE_FAIL agent_plan', JSON.stringify({
+            steps: planned.steps.map((step) => step.tool),
+            planConfirms,
+            planTools,
+            planResult
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_PLAN_OK steps=${planned.steps.length} confirm=${planConfirms}`);
 
         // P7-A：离线规则路由 + 上下文裁剪 + 审计脱敏（无网络也必须是真实覆盖）
         const nlSamples = [

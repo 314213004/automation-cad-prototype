@@ -13,6 +13,12 @@ import {
   summarizeTurn,
   type Receipt
 } from './preview.ts';
+import {
+  describePlanStep,
+  plan as buildAgentPlan,
+  type AgentPlan,
+  type PlanStepResult
+} from './planner.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -49,6 +55,19 @@ let apiKeyDirty = false;
 let lastReceipt: Receipt | null = null;
 let auditState: DesktopAgentAuditResult | null = null;
 let auditLoading = false;
+
+interface MultiPlanState {
+  input: string;
+  plan: AgentPlan;
+  results: PlanStepResult[];
+  next: number;
+  running: boolean;
+  feedback: string;
+  tone: 'ok' | 'error' | '';
+  dismissed: boolean;
+}
+
+let multiPlan: MultiPlanState | null = null;
 
 function serviceAddress(info: AgentInfo): string {
   if (info.host && info.port) return `${info.host}:${info.port}`;
@@ -96,6 +115,19 @@ function renderShell(): void {
         <div class="acp-plan-title" id="agentPlanTitle">等待输入</div>
         <div class="acp-plan-detail" id="agentPlanDetail">预览不会执行任何命令；输入后会显示将要调用的工具。</div>
         <div class="acp-plan-hint" id="agentPlanHint"></div>
+      </div>
+      <div class="acp-plan-card" id="agentPlanCard" hidden>
+        <div class="acp-plan-card-head">
+          <span class="acp-plan-card-title" id="agentPlanCardTitle">多步计划</span>
+          <span class="acp-pill" id="agentPlanCardMeta"></span>
+        </div>
+        <div class="acp-plan-list" id="agentPlanList"></div>
+        <div class="acp-plan-feedback" id="agentPlanFeedback" hidden></div>
+        <div class="acp-plan-actions" id="agentPlanActions">
+          <button type="button" class="acp-btn acp-btn-primary" id="agentPlanRunAll">全部执行</button>
+          <button type="button" class="acp-btn" id="agentPlanRunStep">逐步执行</button>
+          <button type="button" class="acp-btn" id="agentPlanCancel">取消</button>
+        </div>
       </div>
     </div>
 
@@ -284,6 +316,190 @@ function renderPreview(): void {
   box.dataset.tool = preview.tool ?? '';
   box.dataset.readOnly = preview.readOnly ? '1' : '0';
   box.dataset.offline = preview.offlineAllowed ? '1' : '0';
+  refreshMultiPlan(text);
+}
+
+function isMultiStepText(text: string): boolean {
+  return /(?:然后|接着|之后|最后|并且|同时|再|并)/.test(text);
+}
+
+/** 输入变化时重建计划；执行中保持同一份计划，避免逐步执行被输入事件重置。 */
+function refreshMultiPlan(text: string): void {
+  if (multiPlan && multiPlan.input !== text && !multiPlan.running) multiPlan = null;
+  if (!text) {
+    if (!multiPlan?.running) multiPlan = null;
+    renderMultiPlan();
+    return;
+  }
+  if (!multiPlan) {
+    const toolNames = Array.isArray(infoState.tools) && infoState.tools.length > 0
+      ? infoState.tools.map((tool) => tool.name)
+      : undefined;
+    multiPlan = {
+      input: text,
+      plan: buildAgentPlan(text, toolNames ? { tools: toolNames } : {}),
+      results: [],
+      next: 0,
+      running: false,
+      feedback: '',
+      tone: '',
+      dismissed: false
+    };
+  }
+  renderMultiPlan();
+}
+
+function stepTone(state: MultiPlanState, index: number): { tone: string; icon: string } {
+  const result = state.results.find((item) => item.index === index);
+  if (result) return result.ok ? { tone: 'is-done', icon: '✓' } : { tone: 'is-fail', icon: '×' };
+  if (state.running && state.next === index) return { tone: 'is-running', icon: '…' };
+  return { tone: 'is-pending', icon: String(index + 1) };
+}
+
+/** 多步计划卡片：只展示与触发执行，规划本身仍是纯函数。 */
+function renderMultiPlan(): void {
+  const card = body?.querySelector<HTMLElement>('#agentPlanCard');
+  if (!card) return;
+  const state = multiPlan;
+  const show = Boolean(state && !state.dismissed && (
+    state.plan.steps.length >= 2 || (state.plan.refused === true && (isMultiStepText(state.input) || (state.plan.warnings?.length ?? 0) > 0))
+  ));
+  if (!state || !show) {
+    card.hidden = true;
+    card.dataset.steps = '0';
+    return;
+  }
+  card.hidden = false;
+  card.dataset.steps = String(state.plan.steps.length);
+  card.dataset.running = state.running ? '1' : '0';
+  const writeCount = state.plan.steps.filter((step) => !step.readOnly).length;
+  const title = body?.querySelector<HTMLElement>('#agentPlanCardTitle');
+  const meta = body?.querySelector<HTMLElement>('#agentPlanCardMeta');
+  const list = body?.querySelector<HTMLElement>('#agentPlanList');
+  const feedback = body?.querySelector<HTMLElement>('#agentPlanFeedback');
+  const runAll = body?.querySelector<HTMLButtonElement>('#agentPlanRunAll');
+  const runStep = body?.querySelector<HTMLButtonElement>('#agentPlanRunStep');
+  const cancel = body?.querySelector<HTMLButtonElement>('#agentPlanCancel');
+
+  if (title) title.textContent = state.plan.refused ? '多步计划 · 未执行' : `多步计划 · ${state.plan.steps.length} 步`;
+  if (meta) {
+    meta.textContent = state.plan.refused
+      ? '已拒绝'
+      : `${state.plan.steps.length} 步 · ${writeCount} 步写 · 置信度 ${(state.plan.confidence * 100).toFixed(0)}%`;
+    meta.classList.toggle('is-error', state.plan.refused === true);
+  }
+
+  if (list) {
+    if (state.plan.refused) {
+      const reasons = [
+        state.plan.reason ?? '规则未命中',
+        ...(state.plan.warnings ?? []),
+        ...(state.plan.suggestions ?? []).slice(0, 3).map((item) => `建议：${item}`)
+      ];
+      list.innerHTML = reasons.map((item) => `<div class="acp-plan-refused">${escapeHtml(item)}</div>`).join('');
+    } else {
+      list.innerHTML = state.plan.steps.map((step, index) => {
+        const status = stepTone(state, index);
+        const args = Object.keys(step.args).length > 0 ? JSON.stringify(step.args) : '无参数';
+        const missing = step.missing && step.missing.length > 0
+          ? `<span class="acp-plan-missing">缺 ${escapeHtml(step.missing.join('、'))}</span>`
+          : '';
+        return `<div class="acp-plan-step ${status.tone}" data-step-index="${index + 1}" data-tool="${escapeHtml(step.tool)}">
+          <span class="acp-plan-step-icon">${status.icon}</span>
+          <span class="acp-plan-step-main">
+            <span class="acp-plan-step-head"><b>${index + 1}. ${escapeHtml(step.tool)}</b>${missing}<span class="acp-plan-io">${step.readOnly ? '只读' : '写'}</span></span>
+            <span class="acp-plan-step-args">${escapeHtml(args)}</span>
+            <span class="acp-plan-step-why">${escapeHtml(step.why)}</span>
+          </span>
+        </div>`;
+      }).join('') + (state.plan.warnings ?? []).map((warning) =>
+        `<div class="acp-plan-warning">${escapeHtml(warning)}</div>`
+      ).join('');
+    }
+  }
+
+  if (feedback) {
+    feedback.hidden = !state.feedback;
+    feedback.textContent = state.feedback;
+    feedback.classList.toggle('is-error', state.tone === 'error');
+    feedback.classList.toggle('is-ok', state.tone === 'ok');
+  }
+
+  const refused = state.plan.refused === true;
+  const completed = !refused && state.next >= state.plan.steps.length;
+  if (runAll) {
+    runAll.disabled = state.running || refused || completed;
+    runAll.hidden = refused;
+  }
+  if (runStep) {
+    runStep.disabled = state.running || refused || completed;
+    runStep.hidden = refused;
+    runStep.textContent = state.next === 0 ? '逐步执行' : (completed ? '已完成' : `下一步（${state.next + 1}/${state.plan.steps.length}）`);
+  }
+  if (cancel) {
+    cancel.disabled = state.running;
+    cancel.textContent = refused ? '关闭' : '取消';
+  }
+}
+
+async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
+  const state = multiPlan;
+  if (!state || state.running || state.plan.refused || !window.desktop) return;
+  if (state.next >= state.plan.steps.length) return;
+  state.running = true;
+  state.feedback = '';
+  state.tone = '';
+  renderMultiPlan();
+  try {
+    const result = await window.desktop.agent.plan.execute({
+      plan: state.plan,
+      startAt: state.next,
+      ...(mode === 'step' ? { maxSteps: 1 } : {})
+    });
+    const merged = new Map(state.results.map((item) => [item.index, item]));
+    for (const item of result.results ?? []) merged.set(item.index, item);
+    state.results = [...merged.values()].sort((left, right) => left.index - right.index);
+
+    if (result.refused) {
+      state.feedback = result.summary || '计划已拒绝';
+      state.tone = 'error';
+    } else if (result.cancelled) {
+      state.feedback = `${result.summary || '已取消'}（未执行写操作）`;
+      state.tone = 'error';
+    } else if (!result.ok) {
+      const failed = result.results?.find((item) => !item.ok);
+      state.next = typeof result.failedIndex === 'number' ? result.failedIndex : state.next;
+      state.feedback = failed
+        ? `第 ${failed.step} 步 ${failed.tool} 失败（${failed.code}）${failed.message ? `：${failed.message}` : ''}；后续步骤已停止`
+        : (result.summary || '计划执行失败');
+      if (result.undoHint) state.feedback += `；${result.undoHint}`;
+      state.tone = 'error';
+      chatFeedback(state.feedback, true);
+    } else {
+      const lastIndex = result.results?.reduce((max, item) => Math.max(max, item.index), -1) ?? -1;
+      state.next = Math.max(state.next, lastIndex + 1);
+      state.feedback = result.summary || `已完成 ${state.next}/${state.plan.steps.length} 步`;
+      if (result.undoHint) state.feedback += `；${result.undoHint}`;
+      state.tone = 'ok';
+      if (state.next >= state.plan.steps.length) chatFeedback('');
+    }
+  } catch (error) {
+    state.feedback = `计划执行失败：${errorMessage(error)}`;
+    state.tone = 'error';
+    chatFeedback(state.feedback, true);
+  } finally {
+    state.running = false;
+    renderMultiPlan();
+    void loadAudit();
+  }
+}
+
+function cancelMultiPlan(): void {
+  if (!multiPlan) return;
+  multiPlan.dismissed = true;
+  multiPlan.feedback = '';
+  multiPlan.tone = '';
+  renderMultiPlan();
 }
 
 /** 审计面板：最近 8 条 + 汇总，读不到时给中文原因，不静默空白。 */
@@ -469,6 +685,9 @@ async function testSettings(): Promise<void> {
 function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatSend')?.addEventListener('click', () => { void sendMessage(); });
   body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
+  body?.querySelector<HTMLButtonElement>('#agentPlanRunAll')?.addEventListener('click', () => { void runMultiPlan('all'); });
+  body?.querySelector<HTMLButtonElement>('#agentPlanRunStep')?.addEventListener('click', () => { void runMultiPlan('step'); });
+  body?.querySelector<HTMLButtonElement>('#agentPlanCancel')?.addEventListener('click', () => { cancelMultiPlan(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmSave')?.addEventListener('click', () => { void saveSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmTest')?.addEventListener('click', () => { void testSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditRefresh')?.addEventListener('click', () => { void loadAudit(); });

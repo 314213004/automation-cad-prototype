@@ -177,3 +177,29 @@
 .acp-audit-row .acp-pack-name{color:#cfd7dd;font-size:10px}
 .acp-audit-row .acp-pack-meta{margin-left:auto;color:#7f8a92;font-size:9px;text-align:right}
 .acp-audit-row.is-error .acp-pack-name{color:#ffc9c4}
+.acp-plan-card{margin-top:8px;padding:8px 9px;border:1px solid #3b444b;border-radius:4px;background:#1b1f23}
+.acp-plan-card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.acp-plan-card-title{color:#d6dde2;font:10px/1.4 var(--font-mono,monospace)}
+.acp-plan-list{display:flex;flex-direction:column;gap:5px;max-height:260px;overflow:auto}
+.acp-plan-step{display:flex;gap:7px;padding:5px 6px;border:1px solid #30373d;border-radius:3px;background:#20252a}
+.acp-plan-step.is-running{border-color:#8a6f35;background:#28251d}
+.acp-plan-step.is-done{border-color:#2a5b55;background:#1b2725}
+.acp-plan-step.is-fail{border-color:#6d3c3c;background:#332323}
+.acp-plan-step-icon{flex:0 0 18px;height:18px;border-radius:50%;background:#2a3137;color:#aeb8bf;font:10px/18px var(--font-mono,monospace);text-align:center}
+.acp-plan-step.is-done .acp-plan-step-icon{background:#2a5b55;color:#c9fff7}
+.acp-plan-step.is-fail .acp-plan-step-icon{background:#6d3c3c;color:#ffd7d2}
+.acp-plan-step.is-running .acp-plan-step-icon{background:#6b5a33;color:#f2dfaa}
+.acp-plan-step-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.acp-plan-step-head{display:flex;align-items:center;gap:6px;min-width:0}
+.acp-plan-step-head b{color:#cfd7dd;font:10px/1.4 var(--font-mono,monospace);font-weight:500}
+.acp-plan-io{margin-left:auto;color:#7f8a92;font-size:9px}
+.acp-plan-step-args{color:#93a0a9;font:9px/1.45 var(--font-mono,monospace);word-break:break-all}
+.acp-plan-step-why{color:#7f8a92;font-size:9px;line-height:1.5;word-break:break-word}
+.acp-plan-missing{color:#e8d49b;font-size:9px}
+.acp-plan-refused{color:#ffc9c4;font-size:9px;line-height:1.6;word-break:break-word}
+.acp-plan-warning{color:#e8d49b;font-size:9px;line-height:1.5}
+.acp-plan-feedback{margin-top:6px;padding:5px 7px;border-radius:3px;background:#23282d;color:#aeb8bf;font-size:9px;line-height:1.55;word-break:break-word}
+.acp-plan-feedback.is-error{background:#332323;color:#ffc9c4}
+.acp-plan-feedback.is-ok{background:#1b2725;color:#a9e8dc}
+.acp-plan-actions{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.acp-plan-actions .acp-btn{font-size:10px;padding:4px 9px}

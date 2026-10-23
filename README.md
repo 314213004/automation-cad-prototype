@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**647 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**674 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -151,11 +151,13 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 上下文裁剪 | 工程上下文分级降级（删工具描述 → 删工具 → 删最近操作 → 硬截断），默认 ≤2048 字节 | ✅ |
 | 审计 | 每次工具调用一行 NDJSON 写 `<userData>/agent-audit.jsonl`，`sk-`/`Bearer`/`token` 等凭据脱敏；`agent:audit:read` 只读接口 | ✅ |
 | 计划预览 | 侧栏输入时实时显示「只读 · 可离线」或「写操作 · 需联网确认」，写操作缺参数直接点名（如 `partId`）；预览只展示、不执行 | ✅ |
+| 多步规划 | `planner.ts` 离线规则：查件→放置→校验、BOM→成本→导出、导入→干涉、PLC 生成→模拟验证、设计包→上传；未知工具过滤 + warning，规则不命中/置信度 < 0.6 明确拒绝并给建议 | ✅ P7-C |
+| 多步执行 | 侧栏计划卡片（序号/工具/参数/原因）+「全部执行/逐步执行/取消」；只读直接跑，写步骤一次确认，任一步失败立即停止，逐项打勾/标红，写操作可提示 `undo_last` | ✅ P7-C |
 | 统一回执 | 在线模型与离线规则共用一张回执：通道 / 耗时 / 工具次数 / 失败数，离线额外注明只跑只读工具 | ✅ |
 | 审计面板 | 侧栏「审计」区展示最近 8 条（工具 · 成功/失败 · 来源 · 错误码）与汇总，可手动刷新 | ✅ |
 | 离线评估 | `desktop/eval/agent-cases.json` 46 条中文用例（16 指代 / 7 歧义 / 5 多步 / 5 超纲）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 12 个已实现工具 + 5 个规划工具、上下文注入、意图路由、审计、46 条中文评估集 | ✅ P7-A / P7-B 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 12 个已实现工具 + 5 个规划工具、上下文注入、意图路由、离线多步规划、审计、46 条中文评估集 | ✅ P7-A / P7-B / P7-C 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -219,7 +221,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（647 个）
+│   ├── test/                                 # node:test 单测与集成测试（674 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -247,7 +249,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 647 个单测（node:test）
+npm test          # 674 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```

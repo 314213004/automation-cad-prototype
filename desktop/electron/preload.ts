@@ -43,6 +43,9 @@ const desktopApi = {
       history: () => ipcRenderer.invoke('agent:chat:history'),
       clear: () => ipcRenderer.invoke('agent:chat:clear')
     },
+    plan: {
+      execute: (payload: unknown) => ipcRenderer.invoke('agent:plan:execute', payload)
+    },
     audit: {
       read: () => ipcRenderer.invoke('agent:audit:read')
     }

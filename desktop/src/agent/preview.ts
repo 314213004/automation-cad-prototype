@@ -178,7 +178,8 @@ const SOURCE_LABELS: Record<string, string> = {
   llm: '在线模型',
   offline: '离线规则',
   rpc: '本机 RPC',
-  mcp: 'MCP'
+  mcp: 'MCP',
+  plan: '多步计划'
 };
 
 export interface AuditRow {
