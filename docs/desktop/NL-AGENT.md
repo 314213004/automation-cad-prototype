@@ -36,7 +36,7 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（已实现 20 个：只读 10 + 写 10；另 3 个规划中）
+## 3. 工具清单（已实现 21 个：只读 11 + 写 10；另 3 个规划中）
 
 | 工具 | 类型 | 说明 |
 |---|---|---|
@@ -48,6 +48,7 @@
 | `get_bom` | 只读 | 当前装配体简化 BOM |
 | `get_project_context` | 只读 | 当前域 / 视图 / 选中对象 / 机型 / 底板 / 单位制 / 最近操作；缺失项返回 null |
 | `run_interference_check` | 只读 | 包围盒干涉初筛 |
+| `suggest_kinematics` | 只读 | 对已导入 STEP 装配自动识别运动件：按零件名/型号、装配层级、几何推断轴向、行程/角度、置信度、中文理由与 IO 点位；只刷新运动标注抽屉的建议列表，**从不写入标注**，采纳由用户逐条确认 |
 | `run_electrical_check` | 只读 | 线号 / 功率 / 截面 / 断路器校验 |
 | `run_cost_report` | 只读 | 按 BOM 与价格簿计算成本 |
 | `verify_plc_program` | 只读 | 预检 + 生成 + 内置模拟器跑联调序列，返回步骤/报警/失败原因；不落盘、不写 PLC |
@@ -203,12 +204,12 @@ executePlan(plan, deps) → {
 通用多步补充：含「然后 / 接着 / 之后 / 最后 / 并且 / 同时 / 再 / 并」的指令会逐句调用 `planTool()`；任何一句落空都整单拒绝，避免做一半。单句仍回落到 `planTool()`。
 
 工具清单（以 `tools.ts` 注册表为准）：
-- 只读 10：`list_components`、`search_components`、`search_docs`、`design_machine`、`get_bom`、`get_project_context`、`run_interference_check`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
+- 只读 11：`list_components`、`search_components`、`search_docs`、`design_machine`、`get_bom`、`get_project_context`、`run_interference_check`、`suggest_kinematics`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
 - 写 10：`apply_machine_design`、`import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last`
 - 规划中但未注册：`start_commission`、`diagnose_fault`、`sync_design_package`；未注册前不会进入可执行计划
 
 工具名与过滤：
-- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 20 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
+- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 21 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
 - 规划阶段逐条校验工具名；不存在的工具从步骤中移除并写入 `warnings`（例如 `忽略未注册工具 sync_design_package（第 1 步）`）。全部被过滤时 `refused:true`，不会执行空计划。
 - 不编造工具名；`sync_design_package` 注册后无需改规划规则即可自动纳入。
 
@@ -399,7 +400,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ### 8.6 上下文预算与成本（P7-M）
 
-目标：不让 20 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
+目标：不让 21 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
 
 **预算模型**（`desktop/src/agent/budget.ts`，纯函数）
 
@@ -466,7 +467,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ## 9. 质量评估
 
-固定 74 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；20 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。本轮新增 6 条：5 类工艺模板（锁螺丝/点胶/装配/检测/包装）+ 1 条信息不足。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
+固定 75 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；21 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。P10-3 新增 6 条：5 类工艺模板（锁螺丝/点胶/装配/检测/包装）+ 1 条信息不足；`kin01` 覆盖运动件自动识别。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
 
 在 `desktop/` 下运行：
 

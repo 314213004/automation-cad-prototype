@@ -8,11 +8,13 @@
 |----|------|------|------|
 | 纯逻辑单测 | `test/**/*.test.mjs` | `npm test`（`node --test`） | 不依赖 Electron |
 | CAD 解析 | `test/cad/step.test.mjs` | 同上 | 用 `test/fixtures/cube.stp`，断言 12 面 / 300³ mm |
+| 运动学自动识别 | `test/cad/kinematics-auto.test.mjs` | 同上 | 34 条：名称/型号/层级/几何各启发式、置信度分级、IO 点位建议、不自动应用、schema 往返；`test/fixtures/kinematics-assembly.stp`（`scripts/gen-kinematics-fixture.mjs` 生成）端到端 |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
 | 工具表 | `test/agent/tools.test.mjs` | 同上 | 20 工具、BOM 空数组、干涉截断、插入与撤销 |
 | 工具扩展 v1 | `test/agent/tools-v2.test.mjs` | 同上 | 上下文 null 字段、元件修改/移除、PLC 预检拦截不落盘、导出白名单/净化/覆盖、确认拒绝 |
 | 机型方案落盘 | `test/agent/apply-machine-design.test.mjs` | 同上 | brief/design 二选一、设计校验、id/点位冲突、overwrite、active 指针、BOM/PLC 联动、撤销、确认拒绝、路径净化（26 条） |
+| 机型几何 | `test/machine/geometry*.test.mjs`、`test/agent/apply-machine-geometry.test.mjs` | 同上 | 尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴元数据、BOM 对账、STL/glTF/sidecar 契约、three 动画、几何落盘/撤销/实体化回退（24 条） |
 | 底板放置 | `test/agent/place-component.test.mjs` | 同上 | 参数校验、AMBIGUOUS、NO_DIMENSIONS、越界/重叠告警、旋转/吸附、撤销、确认拒绝 |
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 20 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
@@ -22,6 +24,7 @@
 | 会话循环 | `test/agent/session.test.mjs` | 同上 | 0/1/2 次工具调用、超轮、失败回灌、确认拒绝、20 条历史上限 |
 | 执行体验 | `test/agent/ux.test.mjs` | 同上 | 六类错误码建议与未知码回落、耗时格式、参数掩码、进度事件、取消状态、审计筛选/CSV/200 条上限/完整 JSON 脱敏 |
 | 主动建议 | `test/agent/advisor.test.mjs` | 同上 | 每条规则命中/不命中、优先级、上限 3、空状态、会话内忽略不复活、why 数字、BOM 指纹 |
+| 主视口 3D | `test/orbit/*.test.mjs` | 同上 | 相机/标准视图数学、装配参数化与叠放链/校验、vm 执行原型 app.js 逐字比对轮廓与插入放置、树↔3D 映射、SVG 反算吸附、three 场景包围盒/高亮/拾取/干涉层（38 条） |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | PLC 代码生成 | `test/plcgen*.test.ts` | 同上 | 预检/变量表/ST/序列/安全/报警、生成 UI 与 zip 历史、mapping 模拟执行与 `verifyGenerated` |
@@ -36,6 +39,7 @@
 SMOKE_CAD_OK triangles=12 meshes=1
 SMOKE_WEBGL_FALLBACK_OK meshes=1 triangles=12 bounds=300.000 × 300.000 × 300.000 mm
 SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25
+SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0
 SMOKE_UI_OK stations=2 tags=8 packs=2 parts=9 overlay=1
 SMOKE_ELEC_LIB_OK parts=44 categories=12 symbols=34
 SMOKE_SYNC_UI_OK fields=8 apiKey=password enabled=checkbox
@@ -55,8 +59,10 @@ SMOKE_AGENT_TOOLS_OK tools=20 implemented=20
 SMOKE_AGENT_TOOLS_V2 tools=20
 SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1
 SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
-SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1
+SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
+SMOKE_AGENT_KB_OK docs=13 chunks=364 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
+SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
 SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0
@@ -91,7 +97,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 1110 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
+- ✅ 1228 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
 - ✅ smoke 含智能体 20 工具/机型方案合成与落盘/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出/本地知识检索、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立

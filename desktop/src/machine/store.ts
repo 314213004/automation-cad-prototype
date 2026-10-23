@@ -248,6 +248,46 @@ export function machineBomDraftPath(userDataRoot: string, machineId: string): st
   return join(machineDirectory(userDataRoot), sanitizeMachineId(machineId), 'bom-draft.csv');
 }
 
+/** 参数化几何产物目录：machine/<id>/（与 bom-draft.csv 同目录）。 */
+export function machineGeometryPaths(userDataRoot: string, machineId: string): {
+  json: string;
+  stl: string;
+  gltf: string;
+  sidecar: string;
+  solidsDir: string;
+} {
+  const dir = join(machineDirectory(userDataRoot), sanitizeMachineId(machineId));
+  return {
+    json: join(dir, 'geometry.json'),
+    stl: join(dir, 'model.stl'),
+    gltf: join(dir, 'model.gltf'),
+    sidecar: join(dir, 'sidecar-assembly.json'),
+    solidsDir: join(dir, 'solids')
+  };
+}
+
+/** 读取任意文件为 base64（用于撤销快照，兼容二进制 STL/STEP）；不存在返回 null。 */
+export function readBase64IfExists(path: string): string | null {
+  try {
+    return existsSync(path) ? readFileSync(path).toString('base64') : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeBytes(path: string, bytes: Uint8Array): void {
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, bytes);
+}
+
+export function restoreBase64(path: string, previous: string | null): void {
+  if (previous === null) {
+    rmSync(path, { force: true });
+    return;
+  }
+  writeBytes(path, Buffer.from(previous, 'base64'));
+}
+
 export function activeMachinePath(userDataRoot: string): string {
   return join(machineDirectory(userDataRoot), 'active.json');
 }

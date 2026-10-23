@@ -16,6 +16,7 @@ import {
 import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
 import { mapMachineBom } from '../machine/bom-map.ts';
 import { buildClarify } from '../machine/clarify.ts';
+import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
 
 export interface AgentTool {
   name: string;
@@ -51,6 +52,39 @@ const EMPTY_SCHEMA = {
   properties: {},
   additionalProperties: false
 };
+
+const SUGGEST_KINEMATICS_SCHEMA = {
+  type: 'object',
+  properties: {
+    includeLow: { type: 'boolean', description: '是否同时返回低置信度建议（默认 true）', default: true },
+    limit: { type: 'integer', minimum: 1, maximum: 30, description: '每档最多返回几条，1–30，默认 20', default: 20 }
+  },
+  additionalProperties: false
+};
+
+/** suggest_kinematics 输出给模型的单条建议：只留判断与复核需要的字段。 */
+export function compactKinematicsSuggestion(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value) || typeof value.id !== 'string') return null;
+  const num = (input: unknown): number => (typeof input === 'number' && Number.isFinite(input) ? input : 0);
+  const kind = value.kind === 'rotary' ? 'rotary' : 'linear';
+  const meshNames = Array.isArray(value.meshNames) ? value.meshNames.filter((name) => typeof name === 'string').slice(0, 6) : [];
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' ? value.name : '',
+    category: typeof value.category === 'string' ? value.category : '',
+    kind,
+    axis: `${num(value.direction) < 0 ? '-' : '+'}${typeof value.axis === 'string' ? value.axis.toUpperCase() : '?'}`,
+    ...(kind === 'rotary' ? { rangeDeg: num(value.rangeDeg) } : { travelMm: num(value.travelMm) }),
+    strokeSource: typeof value.strokeSource === 'string' ? value.strokeSource : 'none',
+    modelCode: typeof value.modelCode === 'string' ? value.modelCode : '',
+    station: typeof value.station === 'string' ? value.station : '',
+    point: typeof value.point === 'string' ? value.point : '',
+    confidence: Math.round(num(value.confidence) * 100) / 100,
+    level: value.level === 'high' ? 'high' : 'low',
+    reason: typeof value.reason === 'string' ? value.reason : '',
+    meshNames
+  };
+}
 
 const PLACE_COMPONENT_SCHEMA = {
   type: 'object',
@@ -196,7 +230,9 @@ const APPLY_MACHINE_DESIGN_SCHEMA = {
     name: { type: 'string', description: '可选，应用到工程后的机型名称' },
     overwrite: { type: 'boolean', description: '默认 false；同名机型文件存在时返回 FILE_EXISTS，true 才覆盖' },
     withBom: { type: 'boolean', description: '默认 true；把 bomDraft 追加到 BOM 草稿并写 bom-draft.csv' },
-    withPlc: { type: 'boolean', description: '默认 false；生成 exports/plc/<machineId>/io-map.csv' }
+    withPlc: { type: 'boolean', description: '默认 false；生成 exports/plc/<machineId>/io-map.csv' },
+    withGeometry: { type: 'boolean', description: '默认 true；生成参数化整机几何 machine/<id>/geometry.json、model.stl、model.gltf 与 sidecar-assembly.json' },
+    withSolids: { type: 'boolean', description: '默认 false；build123d 内核可用时逐块实体化并写 solids/part-N.step，不可用时回退 TS 网格并给 warning' }
   },
   additionalProperties: false
 };
@@ -562,7 +598,7 @@ export class AgentTools {
     this.add({
       name: 'design_machine',
       description:
-        '从中文机型需求合成可确认的机型方案：工艺、工位、执行机构、传感器、节拍瓶颈、功率估算与 BOM 草案。只读，不写文件、不改当前工程；几何仍由 MachineConfig 配置驱动。',
+        '从中文机型需求合成可确认的机型方案：工艺、工位、执行机构、传感器、节拍瓶颈、功率估算与 BOM 草案。只读，不写文件、不改当前工程；同时返回参数化整机几何摘要（布局、零件数、运动轴、外形包络 mm），几何为标准件外形、不含强度与干涉校核。',
       inputSchema: DESIGN_MACHINE_SCHEMA,
       handler: async (args) => {
         const briefText = getString(args.brief);
@@ -628,6 +664,7 @@ export class AgentTools {
               assumptions: design.assumptions
             },
             summary: summarizeMachineDesign(design),
+            geometry: summarizeGeometry(generateMachineGeometry(design.config)),
             needs: clarify.needs,
             question: clarify.question
           };
@@ -644,7 +681,7 @@ export class AgentTools {
     this.add({
       name: 'apply_machine_design',
       description:
-        '把机型方案写入 userData/machine/<id>.json 并把当前工程指向它；brief 与完整 design 二选一。需要用户确认，可用 undo_last 撤销。默认把 bomDraft 追加到 BOM 草稿（withBom=true），可选生成 PLC 点位映射 io-map.csv（withPlc=true）；成功后 3D 联调视图切到新配置。',
+        '把机型方案写入 userData/machine/<id>.json 并把当前工程指向它；brief 与完整 design 二选一。需要用户确认，可用 undo_last 撤销。默认把 bomDraft 追加到 BOM 草稿（withBom=true），可选生成 PLC 点位映射 io-map.csv（withPlc=true）；默认生成参数化整机几何（geometry.json / model.stl / model.gltf / sidecar-assembly.json，withGeometry=true），withSolids=true 时在 build123d 内核可用时实体化为 STEP；成功后 3D 联调视图切到新配置的真实几何。',
       inputSchema: APPLY_MACHINE_DESIGN_SCHEMA,
       handler: async (args) => {
         const brief = getString(args.brief);
@@ -661,7 +698,7 @@ export class AgentTools {
         if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
           return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
         }
-        for (const key of ['overwrite', 'withBom', 'withPlc'] as const) {
+        for (const key of ['overwrite', 'withBom', 'withPlc', 'withGeometry', 'withSolids'] as const) {
           if (args[key] !== undefined && args[key] !== null && typeof args[key] !== 'boolean') {
             return { ok: false, code: 'INVALID_ARGUMENT', message: `${key} 必须是布尔值` };
           }
@@ -673,7 +710,9 @@ export class AgentTools {
           ...(name ? { name } : {}),
           ...(args.overwrite === true ? { overwrite: true } : {}),
           ...(args.withBom !== undefined ? { withBom: args.withBom === true } : {}),
-          ...(args.withPlc !== undefined ? { withPlc: args.withPlc === true } : {})
+          ...(args.withPlc !== undefined ? { withPlc: args.withPlc === true } : {}),
+          ...(args.withGeometry !== undefined && args.withGeometry !== null ? { withGeometry: args.withGeometry === true } : {}),
+          ...(args.withSolids !== undefined && args.withSolids !== null ? { withSolids: args.withSolids === true } : {})
         });
         return result ? commandSuccess(result) : this.unavailable();
       }
@@ -718,6 +757,51 @@ export class AgentTools {
           ok: true,
           hits: Number(data.hits ?? items.length),
           items
+        };
+      }
+    });
+
+    this.add({
+      name: 'suggest_kinematics',
+      description:
+        '对当前导入的 STEP 装配做运动件自动识别（按零件名/型号、装配层级、几何关系推断轴向、行程、置信度与 IO 点位）。只读：只生成建议并刷新运动标注抽屉的建议列表，从不写入标注；采纳必须由用户在抽屉里逐条确认并保存。',
+      inputSchema: SUGGEST_KINEMATICS_SCHEMA,
+      handler: async (args) => {
+        if (args.includeLow !== undefined && typeof args.includeLow !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'includeLow 必须是布尔值' };
+        }
+        let limit = 20;
+        if (args.limit !== undefined) {
+          const value = getNumber(args.limit);
+          if (value === undefined || !Number.isInteger(value) || value < 1 || value > 30) {
+            return { ok: false, code: 'INVALID_ARGUMENT', message: 'limit 必须是 1–30 的整数' };
+          }
+          limit = value;
+        }
+        const result = await this.execute('suggest_kinematics');
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        const data = isRecord(result.data) ? result.data : {};
+        const meshes = Number(data.meshes ?? 0);
+        const compact = (list: unknown): Record<string, unknown>[] =>
+          (Array.isArray(list) ? list : [])
+            .map(compactKinematicsSuggestion)
+            .filter((item): item is Record<string, unknown> => item !== null);
+        const high = compact(data.suggestions);
+        const low = args.includeLow === false ? [] : compact(data.lowConfidence);
+        return {
+          ok: true,
+          sourceFile: typeof data.sourceFile === 'string' ? data.sourceFile : '',
+          meshes,
+          existingParts: Number(data.existingParts ?? 0),
+          summary: meshes === 0 ? '当前没有导入 CAD 模型，请先 import_cad 导入 STEP 装配' : String(data.summary ?? ''),
+          stats: isRecord(data.stats) ? data.stats : {},
+          suggestions: high.slice(0, limit),
+          lowConfidence: low.slice(0, limit),
+          truncated: high.length > limit || low.length > limit,
+          skipped: Array.isArray(data.skipped) ? data.skipped.slice(0, 10) : [],
+          applied: false,
+          note: '仅为建议，未写入标注；请在「运动标注」抽屉逐条采纳，校验通过后保存。'
         };
       }
     });

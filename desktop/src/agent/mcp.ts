@@ -34,6 +34,7 @@ const DESKTOP_REQUIRED_TOOLS = new Set([
   'get_bom',
   'get_project_context',
   'run_interference_check',
+  'suggest_kinematics',
   'run_cost_report',
   'export_cost_report'
 ]);

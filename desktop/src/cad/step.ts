@@ -1,4 +1,4 @@
-import occtimportjs, { type OcctModule } from 'occt-import-js';
+import occtimportjs, { type OcctModule, type OcctNode } from 'occt-import-js';
 import type { CadImportResult, CadMeshData } from '../shared/types';
 
 export interface ParseOcctOptions {
@@ -39,6 +39,29 @@ function toIndexArray(values: number[], vertexCount: number): Uint32Array | null
   const maxIndex = values.reduce((max, value) => Math.max(max, value), 0);
   const result = maxIndex > 65535 || vertexCount > 65535 ? new Uint32Array(values) : new Uint16Array(values);
   return new Uint32Array(result);
+}
+
+/**
+ * 从 occt 装配树为每个网格算出层级路径（根 → 父节点名）。
+ * 空名节点跳过；叶子节点名与网格同名时不重复计入。只含零件的子装配已被 occt 压平，路径只到其上一级。
+ */
+export function meshPathsFromRoot(root: OcctNode | undefined, meshNames: readonly string[]): (string[] | undefined)[] {
+  const paths: (string[] | undefined)[] = meshNames.map(() => undefined);
+  if (!root) return paths;
+  const walk = (node: OcctNode, ancestors: string[], depth: number): void => {
+    if (depth > 64) return;
+    const name = typeof node.name === 'string' ? node.name.trim() : '';
+    const here = name ? [...ancestors, name] : ancestors;
+    for (const index of Array.isArray(node.meshes) ? node.meshes : []) {
+      if (!Number.isInteger(index) || index < 0 || index >= paths.length) continue;
+      const meshName = (meshNames[index] ?? '').trim();
+      const trimmed = here.length > 0 && here[here.length - 1] === meshName ? here.slice(0, -1) : here;
+      paths[index] = [...trimmed];
+    }
+    for (const child of Array.isArray(node.children) ? node.children : []) walk(child, here, depth + 1);
+  };
+  walk(root, [], 0);
+  return paths;
 }
 
 export async function parseOcctBuffer(
@@ -82,6 +105,12 @@ export async function parseOcctBuffer(
       indices,
       ...(mesh.color ? { color: mesh.color } : {})
     };
+  });
+
+  const paths = meshPathsFromRoot(raw.root, meshes.map((mesh) => mesh.name));
+  meshes.forEach((mesh, index) => {
+    const path = paths[index];
+    if (path && path.length > 0) mesh.path = path;
   });
 
   const triangleCount = meshes.reduce((sum, mesh) => {

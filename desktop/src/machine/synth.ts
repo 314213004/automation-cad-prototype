@@ -1,7 +1,7 @@
 // 机型方案合成：纯函数。输入 MachineBrief，输出可直接喂给 createScene3D 的
 // MachineConfig，以及点位、节拍、功率、BOM 草案、警告与假设。
 //
-// 诚实边界：几何仍是配置驱动；功率来自固定估算表；节拍是工艺余量 + 机构动作
+// 诚实边界：本文件只产出配置；三维几何由 geometry.ts 按配置生成标准件外形；功率来自固定估算表；节拍是工艺余量 + 机构动作
 // 时间的粗略估算，不替代节拍分析、结构强度、干涉和真实运动学校核。
 
 import type { MachineConfig } from '../commission/machine-config.ts';
@@ -306,7 +306,7 @@ function buildSummary(design: MachineDesign): string {
     `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.estimatedSecondsPerPiece.toFixed(2)} 秒/件；瓶颈：${cycle.bottleneck}`,
     `功率：约 ${power.va} VA（固定表估算）`,
     `风险：${risk}`,
-    '说明：几何仍由机型配置驱动，功率与节拍均为估算，需人工确认。'
+    '说明：三维几何为按配置生成的标准件外形，功率与节拍均为估算，需人工确认。'
   ].join('\n');
   return text.length <= 600 ? text : `${text.slice(0, 597)}...`;
 }
@@ -323,7 +323,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const assumptions: string[] = [
     '功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。',
     '节拍按单工位串行动作加固定工艺余量估算，未计入上下料、通讯、人工干预与调试损失。',
-    '几何仍由 MachineConfig 配置驱动，不包含结构强度、干涉与真实运动学校核。'
+    '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
 
   if (process === 'unknown') {

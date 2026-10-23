@@ -655,6 +655,102 @@ function createWindow(): BrowserWindow {
           return;
         }
       }
+      const autoFixture = resolve(desktopRoot(), 'test', 'fixtures', 'kinematics-assembly.stp');
+      if (existsSync(fixture) && existsSync(autoFixture)) {
+        try {
+          const auto = await window.webContents.executeJavaScript(
+            `(async () => {
+              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const handle = window.AutomationCadKinematics;
+              if (!handle || typeof handle.suggestions !== 'function') return { error: '自动识别入口缺失' };
+              await window.AutomationCadViewer.importPath(${JSON.stringify(autoFixture)});
+              handle.open();
+              await wait(40);
+              const before = handle.state();
+              const result = handle.suggestions();
+              const cards = document.querySelectorAll('[data-kin-suggest-id]').length;
+              const lowCards = document.querySelectorAll('[data-kin-suggests-low] [data-kin-suggest-id]').length;
+              const cylinder = result.suggestions.find((item) => item.category === 'cylinder');
+              if (!cylinder) return { error: '未识别到气缸', high: result.suggestions.length, low: result.lowConfidence.length };
+              const partId = handle.acceptSuggestion(cylinder.id);
+              const accepted = handle.state();
+              handle.updatePart(partId, { point: 'Y0' });
+              const bound = handle.state();
+              await window.AutomationCadViewer.importPath(${JSON.stringify(fixture)});
+              await wait(20);
+              return {
+                meshes: before.meshes.length,
+                partsBefore: before.parts.length,
+                high: result.suggestions.length,
+                low: result.lowConfidence.length,
+                cards,
+                lowCards,
+                cylinderAxis: cylinder.axis,
+                cylinderTravel: cylinder.travelMm,
+                cylinderConfidence: cylinder.confidence,
+                acceptedParts: accepted.parts.length,
+                remainingHigh: accepted.suggestions.high,
+                boundErrors: bound.errors,
+                restoredMeshes: handle.state().meshes.length
+              };
+            })()`
+          ) as {
+            error?: string;
+            meshes: number;
+            partsBefore: number;
+            high: number;
+            low: number;
+            cards: number;
+            lowCards: number;
+            cylinderAxis: string;
+            cylinderTravel: number;
+            cylinderConfidence: number;
+            acceptedParts: number;
+            remainingHigh: number;
+            boundErrors: number;
+            restoredMeshes: number;
+          };
+          if (auto.error || auto.meshes !== 11 || auto.partsBefore !== 0 || auto.high !== 4 || auto.low !== 1 ||
+              auto.cards !== 5 || auto.lowCards !== 1 || auto.cylinderAxis !== 'x' || auto.cylinderTravel !== 50 ||
+              !(auto.cylinderConfidence >= 0.6) || auto.acceptedParts !== 1 || auto.remainingHigh !== 3 ||
+              auto.boundErrors !== 0 || auto.restoredMeshes !== 1) {
+            console.error('SMOKE_FAIL kinematics_auto', JSON.stringify(auto));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_KINEMATICS_AUTO_OK high=${auto.high} low=${auto.low} accepted=${auto.acceptedParts} autoApplied=${auto.partsBefore}`);
+          // Agent 工具 suggest_kinematics：经命令总线 → 渲染桥，只给建议，不改动件列表。
+          if (!commandBus) throw new Error('命令总线尚未就绪');
+          const partsBeforeAgent = await window.webContents.executeJavaScript(
+            `(async () => {
+              await window.AutomationCadViewer.importPath(${JSON.stringify(autoFixture)});
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              return window.AutomationCadKinematics.state().parts.length;
+            })()`
+          ) as number;
+          const agentKin = await commandBus.execute('suggest_kinematics', {});
+          const agentData = (agentKin.ok ? agentKin.data : {}) as { meshes?: number; suggestions?: unknown[]; lowConfidence?: unknown[] };
+          const partsAfterAgent = await window.webContents.executeJavaScript(
+            `(async () => {
+              const count = window.AutomationCadKinematics.state().parts.length;
+              await window.AutomationCadViewer.importPath(${JSON.stringify(fixture)});
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              return count;
+            })()`
+          ) as number;
+          if (!agentKin.ok || agentData.meshes !== 11 || agentData.suggestions?.length !== 4 ||
+              agentData.lowConfidence?.length !== 1 || partsAfterAgent !== partsBeforeAgent) {
+            console.error('SMOKE_FAIL agent_kinematics', JSON.stringify({ ok: agentKin.ok, agentData, partsBeforeAgent, partsAfterAgent }));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_AGENT_KINEMATICS_OK high=${agentData.suggestions.length} low=${agentData.lowConfidence.length} written=${partsAfterAgent - partsBeforeAgent}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL kinematics_auto_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+      }
       if (existsSync(fixture)) {
         try {
           const mech = await window.webContents.executeJavaScript(
@@ -1217,8 +1313,9 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 20 ||
+          summaries.length !== 21 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
+          !summaries.some((tool) => tool.name === 'suggest_kinematics') ||
           !summaries.some((tool) => tool.name === 'apply_machine_design') ||
           !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
@@ -1295,11 +1392,25 @@ function createWindow(): BrowserWindow {
           bomPath?: string;
           plcPath?: string;
           designPath?: string;
+          geometry?: {
+            layout?: string;
+            parts?: number;
+            movingAxes?: number;
+            envelopeMm?: number[];
+            stlPath?: string;
+            gltfPath?: string;
+            jsonPath?: string;
+            sidecarPath?: string;
+            sidecarChunks?: number;
+          };
           message?: string;
         };
         const appliedScene = await window.webContents.executeJavaScript(
           'window.__Commission3D?.stats?.()?.stations ?? -1'
         ) as number;
+        const appliedGeometry = await window.webContents.executeJavaScript(
+          '(() => { const s = window.__Commission3D?.stats?.(); return s ? { parts: s.geometryParts, layout: s.layout, envelope: s.envelopeMm } : null; })()'
+        ) as { parts?: number; layout?: string; envelope?: number[] } | null;
         if (
           !applied.ok ||
           applied.stations !== 3 ||
@@ -1312,6 +1423,23 @@ function createWindow(): BrowserWindow {
           appliedScene !== 3
         ) {
           console.error('SMOKE_FAIL machine_apply', JSON.stringify({ ...applied, appliedScene }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        const machineGeometry = applied.geometry;
+        if (
+          !machineGeometry ||
+          machineGeometry.layout !== 'dial' ||
+          !(Number(machineGeometry.parts) > 0) ||
+          machineGeometry.movingAxes !== 6 ||
+          !machineGeometry.stlPath || !existsSync(machineGeometry.stlPath) ||
+          !machineGeometry.gltfPath || !existsSync(machineGeometry.gltfPath) ||
+          !machineGeometry.jsonPath || !existsSync(machineGeometry.jsonPath) ||
+          !machineGeometry.sidecarPath || !existsSync(machineGeometry.sidecarPath) ||
+          appliedGeometry?.parts !== machineGeometry.parts ||
+          appliedGeometry?.layout !== 'dial'
+        ) {
+          console.error('SMOKE_FAIL machine_geometry', JSON.stringify({ geometry: machineGeometry, appliedGeometry }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
@@ -1328,7 +1456,13 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
+        if (existsSync(machineGeometry.stlPath)) {
+          console.error('SMOKE_FAIL machine_geometry_undo', JSON.stringify({ stlPath: machineGeometry.stlPath }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
         console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=5 undo=1`);
+        console.log(`SMOKE_MACHINE_GEOMETRY_OK layout=${machineGeometry.layout} parts=${machineGeometry.parts} axes=${machineGeometry.movingAxes} envelope=${(machineGeometry.envelopeMm ?? []).map((value) => Math.round(value)).join('x')} chunks=${machineGeometry.sidecarChunks} scene=${appliedGeometry?.parts}`);
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
           ok?: boolean;
@@ -2314,6 +2448,87 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        // 主视口 3D（35-orbit-view）：冒烟进程关闭了 WebGL，这里验证降级路径 + 模型/选择/属性联动。
+        const orbit = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const api = window.AutomationCadOrbit;
+            if (!api) return { error: 'AutomationCadOrbit 缺失' };
+            document.querySelector('.mode[data-mode="assembly"]')?.click();
+            await wait(50);
+            const stage = document.getElementById('stageAssembly');
+            const svg = document.getElementById('scene3d');
+            const s0 = api.state();
+            const fallback = s0.mode === 'fallback' && stage.dataset.orbit === 'fallback' &&
+              !document.querySelector('.orbit-canvas') && getComputedStyle(svg).visibility !== 'hidden' &&
+              svg.querySelectorAll('g.part').length >= 6 && api.setView('top') === false;
+            // 插入件坐标复刻：与原型 SVG 轮廓逐字比对
+            const C = Math.cos(Math.PI / 6);
+            const sil = (b) => 'M' + [[b.min[0], b.min[1], b.max[2]], [b.max[0], b.min[1], b.max[2]], [b.max[0], b.min[1], b.min[2]],
+              [b.max[0], b.max[1], b.min[2]], [b.min[0], b.max[1], b.min[2]], [b.min[0], b.max[1], b.max[2]]]
+              .map(([x, y, z]) => ((x - y) * C).toFixed(1) + ' ' + ((x + y) * 0.5 - z).toFixed(1)).join('L') + 'Z';
+            const insertedParts = s0.parts.filter((p) => /^ins\\d+$/.test(p.id));
+            const parity = insertedParts.length > 0 && insertedParts.every((p) =>
+              svg.querySelector('[data-outline="' + p.id + '"]')?.getAttribute('d') === sil(p.bbox));
+            // 3D → 树
+            api.select('rail');
+            await wait(30);
+            const row = document.querySelector('[data-panel="left"][data-for="assembly"] .tree-row.is-sel');
+            const pickOk = row?.dataset.node === 'rail' && api.state().selected.join(',') === 'rail';
+            // 树 → 3D（组节点展开）
+            document.querySelector('[data-panel="left"][data-for="assembly"] .tree-row[data-node="g-cyl"] .lbl')?.click();
+            await wait(30);
+            const groupSel = api.state().selected.slice().sort().join(',');
+            // 原型属性面板改缸径 → 3D 几何
+            api.select('cyl');
+            await wait(30);
+            const bore = document.querySelector('input[data-field="bore"][data-part="cyl"]');
+            bore.value = '40';
+            bore.dispatchEvent(new Event('input', { bubbles: true }));
+            await wait(400);
+            const s1 = api.state();
+            const sensor1 = s1.parts.find((p) => p.id === 'sensor').bbox.min[1];
+            // 选中别的零件后撤销：面板里没有缸径输入框，只能从 SVG 反算
+            api.select('rail');
+            await wait(30);
+            const undo = window.ProtoApi.undo();
+            await wait(80);
+            const s2 = api.state();
+            // 桌面版几何参数：底板加厚 → 上方零件沿叠放链抬高；非法值拒绝；恢复默认
+            const railZ0 = s2.parts.find((p) => p.id === 'rail').bbox.min[2];
+            const thick = api.setParam('base', 'thickness', 12);
+            const railZ1 = api.state().parts.find((p) => p.id === 'rail').bbox.min[2];
+            const bad = api.setParam('carriage', 'x', 500);
+            api.resetPart('base');
+            const railZ2 = api.state().parts.find((p) => p.id === 'rail').bbox.min[2];
+            const stressTab = Boolean(document.getElementById('cadStressRootTab'));
+            return {
+              fallback, reasons: s0.reasons.length, parity, inserted: insertedParts.length, pickOk, groupSel,
+              bore1: s1.bore, sensor1, undo: Boolean(undo && undo.ok), bore2: s2.bore, exact2: s2.boreExact,
+              railZ0, thick: thick.ok, railZ1, bad: bad.ok, badMsg: bad.message || '', railZ2,
+              hits: s2.interference.length, stressTab
+            };
+          })()`
+        ) as {
+          error?: string; fallback: boolean; reasons: number; parity: boolean; inserted: number; pickOk: boolean; groupSel: string;
+          bore1: number; sensor1: number; undo: boolean; bore2: number; exact2: boolean;
+          railZ0: number; thick: boolean; railZ1: number; bad: boolean; badMsg: string; railZ2: number; hits: number; stressTab: boolean;
+        };
+        if (orbit.error || !orbit.fallback || orbit.reasons < 1 || !orbit.parity || !orbit.pickOk ||
+            orbit.groupSel !== 'cyl,rod,sensor' || orbit.bore1 !== 40 || Math.abs(orbit.sensor1 - 49.8) > 1e-6 ||
+            !orbit.undo || orbit.bore2 !== 32 || !orbit.exact2 || orbit.railZ0 !== 8 || !orbit.thick || orbit.railZ1 !== 12 ||
+            orbit.bad || !orbit.badMsg.includes('脱出导轨') || orbit.railZ2 !== 8 || orbit.hits < 1 || !orbit.stressTab) {
+          console.error('SMOKE_FAIL orbit_view', JSON.stringify(orbit));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ORBIT_VIEW_OK mode=fallback parity=${orbit.inserted} pick=1 group=3 bore=40→32 stack=+4 hits=${orbit.hits}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL orbit_view_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
         const pricebook = validatePricebook(
           JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown
@@ -2664,7 +2879,15 @@ async function bootstrap(): Promise<void> {
     renderCostPdf: renderCostReportPdf,
     renderReportPdf: renderAssemblyReportPdf,
     exportsRoot: join(app.getPath('userData'), 'exports'),
-    userDataRoot: app.getPath('userData')
+    userDataRoot: app.getPath('userData'),
+    // 机型几何实体化：只在内核已就绪时调用，不为此隐式拉起 400 MB 的 Python 进程。
+    buildSolids: async (doc) => {
+      const manager = parametric;
+      if (!manager || manager.status().status !== 'ready') {
+        return { ok: false, code: 'UNAVAILABLE', message: '参数化建模内核未启动' };
+      }
+      return manager.build(doc);
+    }
   });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({

@@ -442,6 +442,17 @@ interface AgentBridgeBomRow {
   partId?: string;
 }
 
+interface AgentKinematicsSuggestBridgeResult {
+  sourceFile: string;
+  meshes: number;
+  existingParts: number;
+  summary: string;
+  stats: { meshes: number; classified: number; groups: number; high: number; low: number; skipped: number };
+  suggestions: import('./cad/kinematics-auto').KinematicsSuggestion[];
+  lowConfidence: import('./cad/kinematics-auto').KinematicsSuggestion[];
+  skipped: { name: string; reason: string }[];
+}
+
 interface AgentBridgeApi {
   ready(): boolean;
   getScene(): { parts: AgentBridgeScenePart[]; source: string | null } | AgentBridgeFailure;
@@ -541,6 +552,8 @@ interface AgentBridgeApi {
     suggestedName?: string;
   }>;
   runInterference(): { hits: number; items: { a: string; b: string; volume: number; severity: string }[] } | AgentBridgeFailure;
+  /** 运动件自动识别：只生成建议并刷新标注抽屉的建议列表，从不写入标注。 */
+  suggestKinematics(): AgentKinematicsSuggestBridgeResult | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
   exportCostFile(payload: {
     format: 'pdf' | 'csv';

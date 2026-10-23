@@ -4,6 +4,7 @@ import wasmAssetUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
 import { occtFormatForFile, parseOcctBuffer } from './cad/step';
 import { parseStandardCadBuffer } from './cad/loaders';
 import { CadViewer } from './cad/viewer';
+import { describeSuggestions } from './cad/kinematics-auto';
 import {
   initKinematicsUi,
   pointOptionsFromMachineConfig,
@@ -40,6 +41,7 @@ import { toCsv, toXlsx, type BomRow } from './export/bom';
 import { toDxf, type DxfShape } from './export/dxf';
 import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
+import { initOrbitView } from './orbit/ui';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -559,6 +561,7 @@ function ensureKinematicsUi(): KinematicsUiHandle {
     container,
     viewer: ensureViewer(),
     getPointOptions: () => pointOptionsFromMachineConfig(commission?.getMachineConfig() ?? null),
+    getGeometry: () => ensureViewer().getKinematicsGeometry(),
     notify: showNotice,
     onOpenChange: (open) => {
       document.getElementById('cadKinematicsToggle')?.classList.toggle('is-active', open);
@@ -1490,6 +1493,26 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    suggestKinematics: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const handle = ensureKinematicsUi();
+        const before = handle.state();
+        const result = handle.suggest();
+        return {
+          sourceFile: before.sourceFile,
+          meshes: before.meshes.length,
+          existingParts: before.parts.length,
+          summary: describeSuggestions(result),
+          stats: result.stats,
+          suggestions: result.suggestions,
+          lowConfidence: result.lowConfidence,
+          skipped: result.skipped.slice(0, 10).map((item) => ({ name: item.name, reason: item.reason }))
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
     importPath: async (path: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };
@@ -1596,6 +1619,12 @@ function init(): void {
   buildOverlay();
   initMechUi();
   injectStressTab();
+  try {
+    initOrbitView();
+  } catch (error) {
+    // 主视口 3D 注入失败时保留原型等轴测视图，不影响其他扩展。
+    console.warn('[orbit] 主视口 3D 初始化失败，保留等轴测视图', error);
+  }
   bindWindowEvents();
   Object.defineProperty(window, 'AutomationCadKinematics', {
     value: Object.freeze({
@@ -1612,7 +1641,11 @@ function init(): void {
       slide: (id: string, percent: number) => ensureKinematicsUi().slide(id, percent),
       save: (): boolean => ensureKinematicsUi().save(),
       getAnnotation: () => ensureKinematicsUi().getAnnotation(),
-      getValidation: () => ensureKinematicsUi().getValidation()
+      getValidation: () => ensureKinematicsUi().getValidation(),
+      suggest: () => ensureKinematicsUi().suggest(),
+      suggestions: () => ensureKinematicsUi().suggestions(),
+      acceptSuggestion: (id: string): string | null => ensureKinematicsUi().acceptSuggestion(id),
+      dismissSuggestion: (id: string): void => ensureKinematicsUi().dismissSuggestion(id)
     }),
     writable: false,
     configurable: false,

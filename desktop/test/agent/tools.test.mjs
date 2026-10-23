@@ -57,7 +57,7 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 20 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 21 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'apply_machine_design',
     'design_machine',
@@ -76,6 +76,7 @@ test('工具表为 20 个且不存在 NOT_IMPLEMENTED', () => {
     'run_plc_generate',
     'search_components',
     'search_docs',
+    'suggest_kinematics',
     'undo_last',
     'update_component',
     'verify_plc_program'

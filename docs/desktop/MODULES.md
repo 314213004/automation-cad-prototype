@@ -8,7 +8,8 @@
 |------|------|-----------|
 | 网页原型（根目录） | [PROTOTYPE.md](PROTOTYPE.md) | 视觉与交互基座，双击即开，桌面版直接加载 |
 | Electron 主进程 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md) | 窗口、菜单、IPC、Agent 启动、打包路径 |
-| CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
+| CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染、运动学标注层与自动识别建议（名称/型号 + 层级 + 几何，需逐条确认） |
+| 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
@@ -17,7 +18,7 @@
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
 | PLC 代码生成 | [desktop/src/plcgen/MODULE.md](../../desktop/src/plcgen/MODULE.md) | 全量预检、IO 变量表 CSV、五个基础块 + 自动序列/报警/安全 FC、mapping、确定性 11 文件汇总、生成面板、zip 导出与历史、内置模拟器 `simulate` / `verifyGenerated` |
 | 通电联调 | [desktop/src/commission/MODULE.md](../../desktop/src/commission/MODULE.md) | 6 步上电、3 条用例、序列执行与报告 |
-| 机型方案设计 | [MACHINE-DESIGN.md](MACHINE-DESIGN.md) | 中文需求抽取、`MachineConfig` 方案合成、点位/节拍/功率/BOM 估算、只读 `design_machine` 与写工具 `apply_machine_design`；落盘、active 指针、3D/BOM/PLC 联动与撤销 |
+| 机型方案设计 | [MACHINE-DESIGN.md](MACHINE-DESIGN.md) | 中文需求抽取、`MachineConfig` 方案合成、点位/节拍/功率/BOM 估算、只读 `design_machine` 与写工具 `apply_machine_design`；落盘、active 指针、3D/BOM/PLC 联动与撤销；`machine/geometry*.ts` 参数化整机几何（机架/底板/门架/气缸/夹爪/旋转台/传感器/光栅/输送线或转盘，mm）、STL/glTF 导出与 build123d 实体列表 |
 | 机型设计完整案例 | [MACHINE-DESIGN-DEMO.md](MACHINE-DESIGN-DEMO.md) | 六工位锁螺丝机真实解析/合成、节拍与功率计算、真实元件包 BOM 映射、19 行 PLC IO 与四张全流程截图 |
 | 机械校核 | [desktop/src/mech/MODULE.md](../../desktop/src/mech/MODULE.md) | 包围盒干涉初筛 + 气缸/悬臂梁/螺栓计算 |
 | 电气校验 | [desktop/src/elec/MODULE.md](../../desktop/src/elec/MODULE.md) | 线号合规、功率统计、导线截面与断路器配合、校验面板与 PDF |
@@ -72,7 +73,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 ## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 1141 个单测 + 完整 smoke 断言全绿
+- ✅ 1248 个单测 + 完整 smoke 断言全绿（含 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`）
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -96,8 +97,10 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 多轮与续跑（P7-L）：`src/agent/thread.ts` 维护 turn/意图/目标/已完成步骤/未确认操作；工程指纹（机型+BOM 行数+底板放置数+CAD）变化时提示「工程已变化，不要沿用旧结论」；`runPlan({resumeFrom})` 跳过已完成步骤，指纹变化拒绝续跑并列出差异；确认超时/取消进 `pendingConfirm`，用户拒绝不自动重试；`SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`
 - ✅ 执行效率（P7-N）：`dedupe.ts` 同轮 `(tool, canonicalArgs)` 合并、写工具永不合并、单轮 12 次上限返回 `TOO_MANY_TOOL_CALLS`；`parallel.ts` 无依赖只读默认 3 路并发、写工具屏障、参数依赖降级串行、失败不吞且结果按原顺序；`cache.ts` 对 `get_bom` / `get_project_context` / `list_components` 按工程指纹缓存 30 秒，写后清空，命中审计 `cacheHit:true` 且 UI 显示「已复用」；新增 33 条单测，`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`
 - ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
-- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 20（只读 10 + 写 10），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=362 query=D2 hits=1`
+- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录；BACKLOG 只留最近一轮，历史移入不入索引的 BACKLOG-HISTORY.md，单测守 5% 余量）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 21（只读 11 + 写 10，含运动件识别 `suggest_kinematics`），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=332 query=D2 hits=1`
 - ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
+- ✅ 迭代 34 机型参数化几何：纯函数 `generateMachineGeometry` 由 `MachineConfig` 生成带 mm 尺寸的整机（分度转盘 / 直线输送 / 单工位三种布局），运动件带轴向/行程/点位元数据；3D 联调改为渲染该几何并按 `MachineMotion` 驱动；`apply_machine_design` 默认落盘 geometry.json / model.stl / model.gltf / sidecar-assembly.json，`withSolids` 在 build123d 内核就绪时实体化为 STEP、否则回退 TS 网格；单测 24 条，`SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`
+- ✅ 主视口可旋转 3D（35-orbit-view）：`src/orbit/` 注入扩展替换原型装配/干涉视口的固定等轴测（原型零改动）；轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F）、树↔3D 选择同步、属性编辑（原型缸径/行程 + 桌面版尺寸/位置）沿叠放链改几何、干涉视图问题件高亮 + 剖切裁剪 + 包围盒初筛叠加；WebGL 不可用保留原型 SVG。38 条单测；`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径 `npm run check:orbit-webgl` → `ORBIT_WEBGL_OK`
 - ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；节拍目标 3.00 秒/件、估算 3.18 秒/件，如实记录未达标并给出 12 总工位建议；BOM 映射 11 行真实型号 + 1 行安全光栅待选型，电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 

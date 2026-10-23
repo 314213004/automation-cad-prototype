@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
@@ -32,20 +32,33 @@ import {
   buildMachineBomRows,
   machineBomDraftPath,
   machineDesignPath,
+  machineGeometryPaths,
   readActiveMachineDesign,
+  readBase64IfExists,
   readActivePointer,
   readStoredMachineDesign,
   readTextIfExists,
   renderMachineBomCsv,
+  restoreBase64,
   restoreText,
   sanitizeMachineId,
   validateMachineDesign,
   writeActivePointer,
+  writeBytes,
   writeText,
   type MachineBomRow,
   type StoredMachineDesign
 } from '../machine/store.ts';
 import { buildMachineIoMap } from '../machine/io-map.ts';
+import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
+import {
+  buildMachineSolids,
+  geometryToGltf,
+  geometryToSidecarAssemblies,
+  geometryToStl,
+  type SolidBuildResult
+} from '../machine/geometry-export.ts';
+import type { AssemblyDoc } from '../parametric/features.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -81,6 +94,8 @@ export interface CommandContext {
   exportsRoot?: string;
   /** 用户数据根目录（userData）；apply_machine_design 用。 */
   userDataRoot?: string;
+  /** build123d sidecar 实体化（主进程注入，内核未就绪时返回 ok:false）；apply_machine_design withSolids 用。 */
+  buildSolids?: (doc: AssemblyDoc) => Promise<SolidBuildResult>;
   /** HTML → PDF 字节（A3 横向装配报告）；export_files 的 pdf 用。 */
   renderReportPdf?: (html: string) => Promise<Uint8Array>;
   /** 可注入的时钟；测试用，缺省当前时间。 */
@@ -93,6 +108,7 @@ export interface CommandBusOptions {
   exportsRoot?: string;
   userDataRoot?: string;
   renderReportPdf?: (html: string) => Promise<Uint8Array>;
+  buildSolids?: (doc: AssemblyDoc) => Promise<SolidBuildResult>;
   now?: () => Date;
 }
 
@@ -137,6 +153,18 @@ interface InterferenceBridgeItem {
   severity: string;
 }
 
+/** 渲染层 suggestKinematics 的返回；建议对象原样透传，由 suggest_kinematics 工具压缩。 */
+interface KinematicsSuggestBridgeResult {
+  sourceFile?: string;
+  meshes?: number;
+  existingParts?: number;
+  summary?: string;
+  stats?: Record<string, number>;
+  suggestions: unknown[];
+  lowConfidence: unknown[];
+  skipped?: { name: string; reason: string }[];
+}
+
 interface InterferenceBridgeResult {
   hits: number;
   items: InterferenceBridgeItem[];
@@ -177,6 +205,7 @@ const BRIDGE_METHODS = new Set([
   'placeEnclosurePart',
   'removeEnclosurePart',
   'runInterference',
+  'suggestKinematics',
   'getPlcGenConfig',
   'importPath',
   'exportCostFile',
@@ -623,6 +652,17 @@ function registerReadCommands(bus: CommandBus): void {
         throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(rows, '读取 BOM 失败'));
       }
       return { ok: true, data: { rows, note: SIMPLE_BOM_NOTE } };
+    }
+  });
+
+  bus.register({
+    name: 'suggest_kinematics',
+    async run(_args, ctx) {
+      const result = await ctx.bridge.call<KinematicsSuggestBridgeResult>('suggestKinematics');
+      if (!result || isBridgeFailure(result) || !Array.isArray(result.suggestions) || !Array.isArray(result.lowConfidence)) {
+        throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(result, '运动件自动识别失败'));
+      }
+      return { ok: true, data: result };
     }
   });
 
@@ -1157,6 +1197,8 @@ interface MachineApplyUndoToken {
   previousConfig: StoredMachineDesign['config'] | null;
   batchId: string;
   withBom: boolean;
+  /** 几何产物撤销快照：路径 + 旧内容 base64（null 表示原先不存在）。 */
+  geometryFiles?: { path: string; previous: string | null }[];
 }
 
 function registerMachineApplyCommand(bus: CommandBus): void {
@@ -1178,6 +1220,11 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       const overwrite = optionalBoolean(args, 'overwrite', 'overwrite') === true;
       const withBom = optionalBoolean(args, 'withBom', 'withBom') ?? true;
       const withPlc = optionalBoolean(args, 'withPlc', 'withPlc') ?? false;
+      const withGeometry = optionalBoolean(args, 'withGeometry', 'withGeometry') ?? true;
+      const withSolids = optionalBoolean(args, 'withSolids', 'withSolids') ?? false;
+      if (withSolids && !withGeometry) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'withSolids 需要 withGeometry=true');
+      }
       if (!ctx.userDataRoot) {
         throw new CommandFailure('WRITE_FAILED', '用户数据目录未配置，无法写入机型方案');
       }
@@ -1305,6 +1352,82 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         }
       }
 
+      const geometryFiles: { path: string; previous: string | null }[] = [];
+      let geometryResult: Record<string, unknown> | undefined;
+      if (withGeometry) {
+        const paths = machineGeometryPaths(ctx.userDataRoot, machineId);
+        const snapshot = (path: string): void => {
+          if (!geometryFiles.some((entry) => entry.path === path)) {
+            geometryFiles.push({ path, previous: readBase64IfExists(path) });
+          }
+        };
+        try {
+          const geometry = generateMachineGeometry(normalized.config);
+          const bundle = geometryToSidecarAssemblies(geometry, { updatedAt: appliedAt });
+          for (const path of [paths.json, paths.stl, paths.gltf, paths.sidecar]) snapshot(path);
+          writeText(paths.json, `${JSON.stringify(geometry, null, 2)}\n`);
+          const stl = geometryToStl(geometry);
+          writeBytes(paths.stl, stl);
+          writeText(paths.gltf, JSON.stringify(geometryToGltf(geometry)));
+          writeText(paths.sidecar, `${JSON.stringify(bundle, null, 2)}\n`);
+          const summary = summarizeGeometry(geometry);
+          let solids: Record<string, unknown> | undefined;
+          if (withSolids) {
+            const report = await buildMachineSolids(bundle, ctx.buildSolids);
+            const stepPaths: string[] = [];
+            if (report.mode === 'solids') {
+              // 上一次 apply 可能留下更多分块的 part-N.step：先全部入撤销快照再清掉，
+              // 避免旧 STEP 混进本次整机（撤销时按快照逐个恢复）。
+              const stale = existsSync(paths.solidsDir)
+                ? readdirSync(paths.solidsDir).filter((name) => /^part-\d+\.step$/.test(name))
+                : [];
+              for (const name of stale) {
+                const stalePath = join(paths.solidsDir, name);
+                snapshot(stalePath);
+                rmSync(stalePath, { force: true });
+              }
+              report.stepFiles.forEach((source, index) => {
+                const target = join(paths.solidsDir, `part-${index + 1}.step`);
+                try {
+                  const bytes = readFileSync(source);
+                  snapshot(target);
+                  writeBytes(target, bytes);
+                  stepPaths.push(target);
+                } catch (error) {
+                  warnings.push(`STEP 文件复制失败：${error instanceof Error ? error.message : String(error)}`);
+                }
+              });
+              if (bundle.approximated.length > 0) {
+                const names = bundle.approximated.slice(0, 8).map((id) => geometry.parts.find((part) => part.id === id)?.name ?? id);
+                warnings.push(
+                  `STEP 实体化把 ${bundle.approximated.length} 个水平圆柱按等截面方棒近似（${names.join('、')}${bundle.approximated.length > 8 ? ' 等' : ''}）；STL/glTF 网格不受影响`
+                );
+              }
+            } else {
+              warnings.push(report.message);
+            }
+            solids = { mode: report.mode, chunks: report.chunks, built: report.built, stepPaths, message: report.message };
+          }
+          geometryResult = {
+            ...summary,
+            stlBytes: stl.byteLength,
+            sidecarChunks: bundle.chunks.length,
+            approximated: bundle.approximated.length,
+            approximatedIds: bundle.approximated,
+            jsonPath: paths.json,
+            stlPath: paths.stl,
+            gltfPath: paths.gltf,
+            sidecarPath: paths.sidecar,
+            ...(solids ? { solids } : {})
+          };
+          warnings.push(...geometry.warnings);
+        } catch (error) {
+          for (const entry of geometryFiles) restoreBase64(entry.path, entry.previous);
+          geometryFiles.length = 0;
+          warnings.push(`参数化几何生成失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+
       let sceneRefreshed = false;
       try {
         const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
@@ -1333,7 +1456,8 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         ...(bomPath !== undefined ? { bomPath } : {}),
         ...(withBom ? { bomText: bomText ?? null } : {}),
         ...(plcPath !== undefined ? { plcPath } : {}),
-        ...(withPlc ? { plcText: plcText ?? null } : {})
+        ...(withPlc ? { plcText: plcText ?? null } : {}),
+        ...(geometryFiles.length > 0 ? { geometryFiles } : {})
       };
 
       return {
@@ -1355,7 +1479,8 @@ function registerMachineApplyCommand(bus: CommandBus): void {
           ...(withPlc ? {
             plcPath,
             plc: { points: plcPoints }
-          } : {})
+          } : {}),
+          ...(geometryResult ? { geometry: geometryResult } : {})
         },
         undoToken
       };
@@ -1369,6 +1494,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       restoreText(undo.activeFile, undo.activeText);
       if (undo.bomPath) restoreText(undo.bomPath, undo.bomText ?? null);
       if (undo.plcPath) restoreText(undo.plcPath, undo.plcText ?? null);
+      for (const entry of undo.geometryFiles ?? []) restoreBase64(entry.path, entry.previous);
       if (undo.withBom) {
         try {
           await ctx.bridge.call('removeMachineBomRows', { batchId: undo.batchId });
@@ -1562,6 +1688,7 @@ export function createAgentCommandBus(
   if (options.exportsRoot) context.exportsRoot = options.exportsRoot;
   if (options.userDataRoot) context.userDataRoot = options.userDataRoot;
   if (options.renderReportPdf) context.renderReportPdf = options.renderReportPdf;
+  if (options.buildSolids) context.buildSolids = options.buildSolids;
   if (options.now) context.now = options.now;
   const bus = new CommandBus(context);
   registerInsertCommand(bus);
