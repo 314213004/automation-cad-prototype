@@ -138,7 +138,13 @@ interface ThreadState {
 - **续跑**：`runPlan(plan, { resumeFrom, previous/thread, currentContext })` 从 `resumeFrom` 起跳过 `completedSteps` 中已成功的步骤；指纹不同直接 `refused:true, stale:true`，返回 `changed[]` 与「请重跑前置步骤」，且不执行任何工具。主进程 `agent:plan:execute` 与对话共享同一个 `AgentThread`，UI 的「下一步」用 `startAt` 进入同一套指纹校验。
 - **确认中断**：确认回调超时 → `pendingConfirm.reason='timeout'`；确认等待被取消 → `'cancelled'`。下一轮系统提示优先要求「是否继续上次未确认的操作」，用户明确同意前不得执行。用户主动拒绝记 `USER_DENIED`，不写 `pendingConfirm`，下一轮明确「不要自动重试」。
 - **跨轮指代**：上一轮目标写成 `[target=kind:id:label]` 合成最近操作；用户说「刚才那个件 / 它」时，当前没有选中对象也能解析到上一轮目标，当前选中仍优先。
-- **验证**：`test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、指纹变化拒续跑、超时/拒绝区分、跨轮指代与「改型号→撤销→改数量」全流程；smoke 输出 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`。真实模型多轮评测见 `npm run eval:agent:multiturn`（6 场景 × 2–3 轮，结果写 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`）；本机未配置 `AGENT_LIVE_*`，评测结果为 SKIP，评测器本身用本地桩校验 6/6 场景、15/15 轮。
+- **验证**：`test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、指纹变化拒续跑、超时/拒绝区分、跨轮指代与「改型号→撤销→改数量」全流程；smoke 输出 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`。真实模型多轮评测见 `npm run eval:agent:multiturn`（6 场景 × 2–3 轮，结果写 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`）。
+
+**2026-10-23 真实多轮实测**（本机 LiteLLM bridge，`cn:deepseek-v4.1-flash`，密钥只从环境读）：**5/6 场景、13/15 轮通过，passRate=0.833 ≥ 0.8 过闸**，p50 8.2 s / p95 15.3 s。
+
+唯一失败场景 **MT04「拒绝后不自动重试」**：第 1 轮用户拒绝写操作后，第 2 轮模型仍再次调用 `update_component`。根因是拒绝状态没有跨轮继承——`ThreadState` 记录了 `pendingConfirm`，但没有记录「本会话内已被拒绝的工具 + 目标」，也就没有在下一轮把它作为不可自动重试的约束注入。修复项见 BACKLOG 本轮记录（P7-M）。
+
+（此前的「SKIP、桩内 6/6」记录保留在历史中，不作为验收依据。）
 
 ## 5. 意图分类与路由
 
