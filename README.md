@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**457 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**466 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -145,6 +145,9 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 离线规则路由 | 无模型/断网时按关键词规则判 7 类意图并只执行只读工具（写操作明确拒绝），`ctx` 上限 2 KB | ✅ |
 | 上下文裁剪 | 工程上下文分级降级（删工具描述 → 删工具 → 删最近操作 → 硬截断），默认 ≤2048 字节 | ✅ |
 | 审计 | 每次工具调用一行 NDJSON 写 `<userData>/agent-audit.jsonl`，`sk-`/`Bearer`/`token` 等凭据脱敏；`agent:audit:read` 只读接口 | ✅ |
+| 计划预览 | 侧栏输入时实时显示「只读 · 可离线」或「写操作 · 需联网确认」，写操作缺参数直接点名（如 `partId`）；预览只展示、不执行 | ✅ |
+| 统一回执 | 在线模型与离线规则共用一张回执：通道 / 耗时 / 工具次数 / 失败数，离线额外注明只跑只读工具 | ✅ |
+| 审计面板 | 侧栏「审计」区展示最近 8 条（工具 · 成功/失败 · 来源 · 错误码）与汇总，可手动刷新 | ✅ |
 | 自然语言完整方案 | 16 工具、上下文注入、意图路由、审计、40 条中文评估集 | 📄 方案，P7-A 已落地路由/上下文/审计（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
@@ -208,7 +211,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（457 个）
+│   ├── test/                                 # node:test 单测与集成测试（466 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -236,7 +239,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 457 个单测（node:test）
+npm test          # 466 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
@@ -251,7 +254,7 @@ smoke 覆盖并断言：
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
-- 智能体工具注册、渲染桥读写、对话面板字段；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`：7 类意图全覆盖、写计划不进入离线通道、上下文 ≤2 KB、审计 3 条且密钥不落原文）。
+- 智能体工具注册、渲染桥读写、对话面板字段；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`：7 类意图全覆盖、写计划不进入离线通道、上下文 ≤2 KB、审计 3 条且密钥不落原文）。
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`，最后 `SMOKE_OK`。
 
@@ -270,7 +273,7 @@ smoke 覆盖并断言：
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
 - **智能体对话的真实模型兼容性**只按 OpenAI 兼容协议验证，测试连接与工具调用使用本地假服务；各服务商差异需逐一验证。
-- **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理。
+- **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理；审计面板只列最近 8 条、无筛选与导出，回执不含 token 用量（网关未回传 usage）。
 - **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，但生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署状态待确认。
 - **原型侧的固有限制仍在**：3D 视口为固定等轴测示意投影，不支持真实几何求解；属性编辑只重算尺寸不改拓扑；插入件为示意占位体。桌面版的 CAD 查看是独立视图，不替代原型建模。
 

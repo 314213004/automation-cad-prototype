@@ -19,7 +19,8 @@ tools.ts（AgentTools + 10 个 AgentTool）
  ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
  │    ├─ context.ts → 工程上下文打包（≤2 KB 分级降级）
- │    └─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
+ │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
+ │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执 / 审计行）
 ```
 
 渲染层通过 `extension.ts` 暴露受控的 `window.__AgentBridge`，不暴露 DOM。主进程命令总线只允许调用白名单方法。
@@ -89,6 +90,26 @@ summarizeAudit(entries): { total, failed, tools, lastAt }
 - 上下文：`buildAgentContext` 超限时按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，`truncated/droppedTools/droppedRecent` 如实回报。
 - 审计：`session` 每次工具调用（含 `USER_DENIED`/参数非法/离线）回调 `audit`；`ipc.ts` 写 `userData/agent-audit.jsonl` 并暴露 `agent:audit:read`（最近 50 条 + 汇总）。写失败只回调 `onError`，不影响对话。
 
+## 侧栏只读问答 UI（P7-A-2）
+
+`ui.ts` 只做渲染，判定逻辑全在 `preview.ts`（纯函数，可直接单测）。
+
+```ts
+buildPlanPreview(text): {
+  tone: 'read'|'write'|'none'; title; detail; hint;
+  intent; intentLabel; tool: string|null; args; readOnly; offlineAllowed; missing: string[]
+}
+summarizeTurn(messages): { toolCalls, failures }        // 只数 role==='tool'
+buildReceipt({ mode:'online'|'offline', elapsedMs, toolCalls?, failures? }): { tone, modeLabel, text, note }
+describeAuditEntry(entry): { tone, title, meta }
+auditSummaryText(summary): string                        // 空审计 → 「暂无审计记录」
+```
+
+- 预览：输入框 `input` 事件即算，把结果写进 `#agentPlanPreview` 的 `data-tool / data-read-only / data-offline`，只展示不执行；写操作在提示里点名缺的参数（如 `partId`）。
+- 回执：`agent:chat:send` 返回 `mode` 与 `elapsedMs`（`AgentSession.mode()` 记录本轮是否降级），UI 用同一套字段渲染，离线是告警色而非错误色。
+- 审计面板：打开抽屉/发送后调 `window.desktop.agent.audit.read()`，展示最近 8 条与汇总；读取失败给中文原因，不静默空白。
+- 冒烟钉住三条：只读指令 `offline=1`、写指令 `offline=0` 且提示含 `partId`、预览前后场景零件数不变（预览不执行）。
+
 ## 命令总线与撤销
 
 - `execute(name, args)` 始终返回 `CommandResult`，异常被转换成中文错误，不向调用方抛。
@@ -152,7 +173,9 @@ window.__AgentBridge = {
 7. **渲染桥参数必须走 JSON 白名单**：不允许任意表达式拼接，避免 Agent 代码进入渲染进程。
 8. **意图关键词不要把单字塞进去**：`查` 会被「检查」误命中、`列` 会被「列举/列出」重复计分；用 `查一下/列一下/搜一下` 这类最短完整词，并让类别词按长度倒序剔除，否则「继电器」会把「热继电器」拆成「热」。
 9. **离线通道只能用 `planReadOnly`**：直接调 `planTool` 会把 `export_cost_report` 这类写工具在断网时执行掉；`READ_ONLY_TOOLS`/`WRITE_TOOLS` 两个集合之和必须等于工具总数（现有单测钉住）。
-10. **审计数据先脱敏再写**：`maskSecrets` 只处理文本，结构化参数必须走 `redactValue`（按字段名），否则 `{apiKey}` 会原样落盘；写文件失败要吞掉，不能让审计把对话打断。
+10. **预览绝不能顺手执行**：`buildPlanPreview` 只允许读 `router.ts` 的纯函数，不要为了「省一次点击」在预览里调命令总线——冒烟已钉住预览前后场景零件数不变。
+11. **回执的通道要由主进程给**：`mode` 从 `AgentSession.mode()` 取，别在渲染层用「回复文案里有没有『离线』」猜，否则离线失败回包会被误标成在线。
+12. **审计数据先脱敏再写**：`maskSecrets` 只处理文本，结构化参数必须走 `redactValue`（按字段名），否则 `{apiKey}` 会原样落盘；写文件失败要吞掉，不能让审计把对话打断。
 
 ## 进度
 
@@ -163,8 +186,9 @@ window.__AgentBridge = {
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
 - ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
-- ✅ 单测：全套 457/457；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
-- ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources；审计面板 UI
+- ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
+- ✅ 单测：全套 466/466；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources；40 条中文评估集与 `npm run eval:agent`
 
 ## 待办
 
