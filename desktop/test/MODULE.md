@@ -88,4 +88,4 @@ npm run build:ext
 1. 补损坏 CAD 文件、超大文件的真实渲染层导入异常用例。
 2. 增加 Windows 端的 smoke（GitHub Actions windows-latest 上跑 `--headless-smoke`）。
 3. 把 10 万面 STEP 纳入基准，设阈值（如 <5s）防回归。
-4. 服务端 `design-sync` 落地后，用本地 `material-flow-system` 测试库替换 mock 做端到端验证。
+4. ✅ 已用本地 `material-flow-backend` 临时库完成 `design-sync` 端到端验证（`cd desktop && npm run sync:e2e`）；生产联调仍待 D2。

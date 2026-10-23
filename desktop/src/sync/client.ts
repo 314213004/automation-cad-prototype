@@ -4,6 +4,7 @@ import type {
   DesignManifest,
   SyncConfig,
   SyncDiffResult,
+  SyncDownloadResult,
   SyncListResult,
   SyncPackageSummary,
   SyncResult
@@ -174,7 +175,12 @@ export class SyncClient {
       );
       const text = await safeText(response);
       if (response.status !== 200 && response.status !== 201) {
-        return { ok: false, message: statusMessage('上传设计包', response.status, text), stage: '上传' };
+        return {
+          ok: false,
+          message: statusMessage('上传设计包', response.status, text),
+          stage: '上传',
+          code: 'UPLOAD_FAILED'
+        };
       }
       let payload: unknown;
       try {
@@ -183,17 +189,28 @@ export class SyncClient {
         return {
           ok: false,
           message: `解析上传响应失败：${readableError(error)}`,
-          stage: '解析'
+          stage: '解析',
+          code: 'UPLOAD_PARSE_FAILED'
         };
       }
       if (!isRecord(payload)) {
-        return { ok: false, message: '解析上传响应失败：响应不是对象', stage: '解析' };
+        return {
+          ok: false,
+          message: '解析上传响应失败：响应不是对象',
+          stage: '解析',
+          code: 'UPLOAD_PARSE_FAILED'
+        };
       }
       const packageId = typeof payload.packageId === 'string' ? payload.packageId : '';
       const version = typeof payload.version === 'number' ? payload.version : undefined;
       const duplicated = response.status === 200 || payload.duplicated === true;
       if (!packageId) {
-        return { ok: false, message: '解析上传响应失败：缺少 packageId', stage: '解析' };
+        return {
+          ok: false,
+          message: '解析上传响应失败：缺少 packageId',
+          stage: '解析',
+          code: 'UPLOAD_PARSE_FAILED'
+        };
       }
       return {
         ok: true,
@@ -207,10 +224,16 @@ export class SyncClient {
         return {
           ok: false,
           message: timeoutMessage('上传设计包', this.timeoutMs),
-          stage: '上传'
+          stage: '上传',
+          code: 'UPLOAD_FAILED'
         };
       }
-      return { ok: false, message: networkMessage('上传设计包', error, this.timeoutMs), stage: '上传' };
+      return {
+        ok: false,
+        message: networkMessage('上传设计包', error, this.timeoutMs),
+        stage: '上传',
+        code: 'UPLOAD_FAILED'
+      };
     }
   }
 
@@ -232,11 +255,21 @@ export class SyncClient {
       );
       const text = await safeText(response);
       if (response.status !== 200) {
-        return { ok: false, message: statusMessage('读取设计包列表', response.status, text) };
+        return {
+          ok: false,
+          message: statusMessage('读取设计包列表', response.status, text),
+          stage: '列表',
+          code: 'LIST_FAILED'
+        };
       }
       const payload = parseJson(text);
       if (!isRecord(payload) || !Array.isArray(payload.items)) {
-        return { ok: false, message: '解析设计包列表失败：响应缺少 items 数组' };
+        return {
+          ok: false,
+          message: '解析设计包列表失败：响应缺少 items 数组',
+          stage: '列表',
+          code: 'LIST_PARSE_FAILED'
+        };
       }
       const items: SyncPackageSummary[] = [];
       payload.items.forEach((entry) => {
@@ -259,9 +292,19 @@ export class SyncClient {
       return { ok: true, items };
     } catch (error) {
       if (error instanceof SyncTimeoutError) {
-        return { ok: false, message: timeoutMessage('读取设计包列表', this.timeoutMs) };
+        return {
+          ok: false,
+          message: timeoutMessage('读取设计包列表', this.timeoutMs),
+          stage: '列表',
+          code: 'LIST_FAILED'
+        };
       }
-      return { ok: false, message: networkMessage('读取设计包列表', error, this.timeoutMs) };
+      return {
+        ok: false,
+        message: networkMessage('读取设计包列表', error, this.timeoutMs),
+        stage: '列表',
+        code: 'LIST_FAILED'
+      };
     }
   }
 
@@ -279,10 +322,22 @@ export class SyncClient {
       );
       const text = await safeText(response);
       if (response.status !== 200) {
-        return { ok: false, message: statusMessage('读取设计包差异', response.status, text) };
+        return {
+          ok: false,
+          message: statusMessage('读取设计包差异', response.status, text),
+          stage: '比对',
+          code: 'DIFF_FAILED'
+        };
       }
       const payload = parseJson(text);
-      if (!isRecord(payload)) return { ok: false, message: '解析差异响应失败：响应不是对象' };
+      if (!isRecord(payload)) {
+        return {
+          ok: false,
+          message: '解析差异响应失败：响应不是对象',
+          stage: '比对',
+          code: 'DIFF_PARSE_FAILED'
+        };
+      }
       const base = isRecord(payload.base) ? payload.base : {};
       const diff: DesignDiff = {
         base: {
@@ -299,9 +354,77 @@ export class SyncClient {
       return { ok: true, diff };
     } catch (error) {
       if (error instanceof SyncTimeoutError) {
-        return { ok: false, message: timeoutMessage('读取设计包差异', this.timeoutMs) };
+        return {
+          ok: false,
+          message: timeoutMessage('读取设计包差异', this.timeoutMs),
+          stage: '比对',
+          code: 'DIFF_FAILED'
+        };
       }
-      return { ok: false, message: networkMessage('读取设计包差异', error, this.timeoutMs) };
+      return {
+        ok: false,
+        message: networkMessage('读取设计包差异', error, this.timeoutMs),
+        stage: '比对',
+        code: 'DIFF_FAILED'
+      };
+    }
+  }
+
+  async downloadPackage(packageId: string): Promise<SyncDownloadResult> {
+    try {
+      requireConfig(this.config);
+      if (!packageId.trim()) {
+        return { ok: false, message: '请提供 packageId', stage: '下载', code: 'DOWNLOAD_FAILED' };
+      }
+      const response = await this.request(
+        this.url(`/api/v1/design-sync/packages/${encodeURIComponent(packageId)}/download`),
+        {
+          method: 'GET',
+          headers: { 'X-Design-Key': this.config.apiKey, Accept: 'application/zip' }
+        },
+        '下载设计包'
+      );
+      if (response.status !== 200) {
+        const body = await safeText(response);
+        return {
+          ok: false,
+          message: statusMessage('下载设计包', response.status, body),
+          stage: '下载',
+          code: 'DOWNLOAD_FAILED'
+        };
+      }
+      const zip = new Uint8Array(await response.arrayBuffer());
+      if (zip.byteLength === 0) {
+        return {
+          ok: false,
+          message: '下载设计包失败：服务端返回空文件',
+          stage: '下载',
+          code: 'DOWNLOAD_FAILED'
+        };
+      }
+      const etag = (response.headers.get('etag') ?? '').replace(/^"|"$/g, '');
+      return {
+        ok: true,
+        zip,
+        bytes: zip.byteLength,
+        sha256: sha256Hex(zip),
+        ...(etag ? { etag } : {})
+      };
+    } catch (error) {
+      if (error instanceof SyncTimeoutError) {
+        return {
+          ok: false,
+          message: timeoutMessage('下载设计包', this.timeoutMs),
+          stage: '下载',
+          code: 'DOWNLOAD_FAILED'
+        };
+      }
+      return {
+        ok: false,
+        message: networkMessage('下载设计包', error, this.timeoutMs),
+        stage: '下载',
+        code: 'DOWNLOAD_FAILED'
+      };
     }
   }
 }

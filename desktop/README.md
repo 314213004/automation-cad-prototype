@@ -105,7 +105,7 @@ curl -s http://127.0.0.1:7420/rpc \
 - 「测试连接」走 `GET /api/v1/devices/{deviceId}/drawings`（Bearer）；「立即同步」生成 PDF / GLB / DXF / BOM，主进程打 ZIP 后上传。
 - 上传请求带 `X-Design-Key` 与 `Idempotency-Key=<zip sha256>`；服务端返回 `200 + duplicated` 时 UI 明确提示命中幂等。
 - 配置存 `%APPDATA%/AutomationCAD/sync.json`（权限 600）；网络与文件操作只在主进程，且仅由 UI 点击触发，没有后台自动同步。
-- 真实后端尚未提供 `/api/v1/design-sync/*`；当前集成测试只连本地 mock，不会访问生产或本机 `:8000`。
+- 真实后端 0.22.0 已提供 `/api/v1/design-sync/*`；单测仍只连本地 mock，真实链路用 `npm run sync:e2e`（临时 DB，不访问生产）。
 
 实现细节见 [`src/sync/MODULE.md`](src/sync/MODULE.md)。
 

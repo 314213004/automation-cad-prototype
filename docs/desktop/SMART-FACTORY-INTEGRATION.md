@@ -3,7 +3,7 @@
 对象项目：`owlco001/material-flow-system`（GitHub / Gitee 同名，生产 `http://221.231.106.194:5556`，本机演示 `:8000`）。
 本文是给**智慧工厂侧**的改动说明（需求 #6），客户端实现见 `src/sync/`。
 
-> **客户端状态（2026-10-22）**：桌面端 P2-C 已完成，包含固定路径 ZIP（`manifest.json` / `bom.csv` / `report.pdf` / `model.glb` / `drawing.dxf`）、manifest SHA-256、`X-Design-Key` + `Idempotency-Key` 上传、15 秒超时中文错误、设置页与手动同步。服务端 `/api/v1/design-sync/*` 仍未实现，所以客户端集成测试只打本地 HTTP mock，**不会**请求生产 `221.231.106.194:5556` 或本机 `:8000`。本轮不改 `material-flow-system` 仓库。
+> **客户端状态（2026-10-23）**：桌面端 P2-C 已完成，包含固定路径 ZIP（`manifest.json` / `bom.csv` / `report.pdf` / `model.glb` / `drawing.dxf`）、manifest SHA-256、`X-Design-Key` + `Idempotency-Key` 上传、15 秒超时中文错误、设置页与手动同步。服务端 0.22.0 已实现 `/api/v1/design-sync/*`，本地临时 DB 端到端已跑通（见第六节）；生产实例 `221.231.106.194:5556` 从开发机不可达，部署状态仍待 D2 决策。
 
 ## 一、现状（已实现，可直接用）
 
@@ -120,3 +120,63 @@ GET /api/v1/design-sync/packages/{id}/download → zip 流
 - [ ] 200MB+ 包 → 413；解压总量超限 → 400
 - [ ] 绑定 DEVICE 后，`/api/v1/devices/{id}/drawings` 能查到新 PDF
 - [ ] diff 对 BOM 增/删/改各返回一条正确记录
+
+## 六、本地端到端验证（2026-10-23）
+
+### 一键运行
+
+```bash
+cd desktop
+npm run sync:e2e
+```
+
+前置条件：
+
+- 后端仓库位于 `/root/mf-main/material-flow-backend`（可用 `MATERIAL_FLOW_BACKEND=/path/to/repo` 覆盖），且 `.venv` 已安装 `uvicorn` / `fastapi`；
+- Node 22+（当前脚本直接用 Node 原生 TS 类型剥离导入 `src/sync/*.ts`）；
+- 本机 `8899` 端口空闲（可用 `SYNC_E2E_PORT` 覆盖）。
+
+### 脚本做了什么
+
+| 脚本 | 职责 |
+|------|------|
+| `scripts/sync-e2e.sh` | 启动/回收后端，准备独立临时 DB 与数据，管理员登录、建设备、生成密钥 |
+| `desktop/scripts/sync-e2e.mjs` | 用真实 `package.ts` / `client.ts` 跑完整客户端链路并写 JSON 日志 |
+
+后端启动方式为：
+
+```bash
+cd /root/mf-main/material-flow-backend
+MATERIAL_FLOW_DATA=/tmp/automation-cad-sync-e2e/data \
+MATERIAL_FLOW_UPLOADS=/tmp/automation-cad-sync-e2e/uploads \
+INITIAL_ADMIN_PASSWORD='SyncE2E@2026-init' \
+.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8899
+```
+
+脚本内不手写 SQL：测试机台 `DEV-TEST-01` 走 `POST /api/v1/devices`，`X-Design-Key` 走管理台 `POST /admin/design-packages/keys/create`（登录 + CSRF），与真实约束一致。首次管理员密码通过 `POST /api/v1/auth/change-password` 清除强制改密标记后，再重新登录。
+
+客户端链路依次断言：
+
+1. `buildDesignPackage` 打包 BOM + 最小 GLB fixture，得到固定 `zipSha256`；
+2. 上传成功，返回 `packageId` 且 `duplicated=false`；
+3. 原样重复上传，`duplicated=true` 且 `packageId` 不变；
+4. 列表包含该包与项目号；
+5. 上传改过 BOM 数量的第二版，`diff(against=latest)` 的 `bomChanged` 包含 `{no:2, field:'qty', from:2, to:5}`；
+6. 下载第一版 zip，字节数、SHA-256 与上传时一致，并校验服务端 `ETag`；
+7. 关闭后端再调用：返回中文错误、`stage:'上传'`、`code:'UPLOAD_FAILED'`（列表为 `LIST_FAILED`），不抛未捕获异常。
+
+成功时退出码 0；失败时退出码 1，并保留 `/tmp/automation-cad-sync-e2e` 下的后端日志与响应文件便于排查（`SYNC_E2E_KEEP=1` 可在成功时也保留）。JSON 日志固定写入 `docs/desktop/eval/sync-e2e.json`。
+
+### 实测输出
+
+```text
+SYNC_E2E_OK package=dsp_4f91342229f84bbc99dfef09e51257f6 dup=true diff=1 bytes=856
+```
+
+`docs/desktop/eval/sync-e2e.json` 中 9 项检查全部为 `ok:true`，覆盖上传、幂等、列表、第二版、diff、下载、断开后端、离线上传错误码与离线列表错误码。
+
+### 已知限制
+
+- 生产实例 `221.231.106.194:5556` 从开发机不可达，本节验证只证明 0.22.0 代码在本地临时库上可用，不代表生产已部署。
+- 端到端使用 loopback + 临时 SQLite + 最小 GLB 占位文件，不覆盖真实 CAD 几何、生产网络、反向代理/HTTPS 与密钥轮换。
+- 该脚本调用真实后端与真实文件系统，故意不纳入 `npm test`/`npm run smoke`；单测仍只打本地 mock。

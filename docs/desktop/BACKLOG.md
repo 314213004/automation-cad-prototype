@@ -33,8 +33,10 @@
 - 已知限制：冒烟环境无 GPU（走 WebGL 降级路径），实例化/LOD 的真实 FPS 尚未在有显卡的机器上实测；下一步可选做「渲染面板显示当前计划」与 GPU 实机 FPS 基准
 
 ### P5 智慧工厂服务端
-- 状态：⏸ 需老王确认是否动 material-flow 仓库
-- 内容：按 `docs/desktop/SMART-FACTORY-INTEGRATION.md` 实现 `/api/v1/design-sync/*`
+- 状态：✅ 本地端到端（`scripts/sync-e2e.sh` + `desktop/scripts/sync-e2e.mjs`）；生产部署仍待决策 D2
+- 已完成：material-flow-backend 0.22.0 的 `/api/v1/design-sync/*`（上传/幂等/列表/diff/下载/绑定）与本项目客户端 `src/sync/*` 在本地临时 DB 上贯通；`npm run sync:e2e` 覆盖打包 → 上传 → 重复上传 → 列表 → 第二版 diff → 下载校验 → 断开后端错误阶段
+- 实测：`SYNC_E2E_OK package=dsp_4f91342229f84bbc99dfef09e51257f6 dup=true diff=1 bytes=856`；JSON 日志 `docs/desktop/eval/sync-e2e.json`；`npm test` / `npm run smoke` 不包含 e2e
+- 限制：生产实例 `221.231.106.194:5556` 从开发机不可达，线上部署与真实网络/HTTPS 未验证
 
 ### P6 机台硬件成本自动统计
 - 状态：🔄 P6-1 ✅ 引擎完成（`a8c1e5f`）；P6-2 ✅ 面板与导出（`6d70ae7`）；P6-3 ✅ Agent 工具（`a66b26e`）；P6-4 ✅ Agent 落盘导出（`23cd284`）

@@ -165,7 +165,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 故障诊断 | 7 条规则 + 兜底，按置信度排序给出原因与处置 | ✅ |
 | PLC 程序生成 | P8-1～P8-4：全量预检 + IO 变量表 CSV + 五个基础块 + 自动序列/报警/安全 FC + `mapping.json`，固定 11 文件与逐文件 SHA-256；电气域「PLC 程序」面板（问题定位、文件树、200 行预览）、目标平台/命名前缀、导出 zip（含 CRC）与最近 10 次生成历史；内置模拟器按 `mapping.json` 执行联调序列（行程时间 / `timeScale` / `TimeoutTime` / SafeStop / 传感器矛盾），面板「模拟验证」与 Agent 只读工具 `verify_plc_program` 共用 `verifyGenerated` | ✅ 桌面（生成 + 模拟验证） |
 | 智慧工厂 | demo（2 工位 / 8 点位）、OPC UA、MQTT 三适配器 + 实时值面板 | ✅ demo 实测 |
-| 设计包同步 | manifest / SHA-256 幂等、`X-Design-Key`、版本 diff、手动上传、失败阶段可区分 | ✅ 客户端（后端 0.22.0 已实现） |
+| 设计包同步 | manifest / SHA-256 幂等、`X-Design-Key`、版本 diff、手动上传、失败阶段可区分 | ✅ 本地端到端（后端 0.22.0） |
 
 ### 智能体
 
@@ -219,6 +219,8 @@ npm start
 ```
 
 构建过一次之后，日常只需 `cd desktop` + `npm start`。Linux 开发机可用 `npm run smoke`（xvfb + `--headless-smoke`）验证主流程。
+
+本地验证设计同步全链路（需 `/root/mf-main/material-flow-backend` 的 `.venv`）：`cd desktop && npm run sync:e2e`。脚本会起临时后端，跑通打包 → 上传 → 幂等 → 列表 → diff → 下载 → 断连错误，日志写 `docs/desktop/eval/sync-e2e.json`。
 
 ### 方式三：把桌面能力接给外部 Agent
 
@@ -279,6 +281,7 @@ npm start
 cd desktop
 npm test          # 674 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
+npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
 
@@ -313,7 +316,7 @@ smoke 覆盖并断言：
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
 - **智能体对话的真实模型兼容性**只按 OpenAI 兼容协议验证，测试连接与工具调用使用本地假服务；各服务商差异需逐一验证。
 - **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理；审计面板只列最近 8 条、无筛选与导出，回执不含 token 用量（网关未回传 usage）。
-- **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，但生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署状态待确认。
+- **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，本地临时 DB 端到端已通过（`npm run sync:e2e`）；生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署仍待 D2 决策。
 - **原型侧的固有限制仍在**：3D 视口为固定等轴测示意投影，不支持真实几何求解；属性编辑只重算尺寸不改拓扑；插入件为示意占位体。桌面版的 CAD 查看是独立视图，不替代原型建模。
 
 ## 文档索引

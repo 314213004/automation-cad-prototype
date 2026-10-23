@@ -1,0 +1,54 @@
+{
+  "generatedAt": "2026-10-23T06:55:06.011Z",
+  "ok": true,
+  "baseUrl": "http://127.0.0.1:8899",
+  "deviceId": "DEV-TEST-01",
+  "projectId": "asm-sync-e2e",
+  "checks": [
+    {
+      "name": "upload-v1",
+      "ok": true
+    },
+    {
+      "name": "upload-duplicate",
+      "ok": true
+    },
+    {
+      "name": "list-contains-package",
+      "ok": true
+    },
+    {
+      "name": "upload-v2",
+      "ok": true
+    },
+    {
+      "name": "diff-bom-qty",
+      "ok": true
+    },
+    {
+      "name": "download-bytes-sha256",
+      "ok": true
+    },
+    {
+      "name": "backend-disconnect",
+      "ok": true
+    },
+    {
+      "name": "offline-upload-error-code",
+      "ok": true
+    },
+    {
+      "name": "offline-list-error-code",
+      "ok": true
+    }
+  ],
+  "summary": {
+    "packageId": "dsp_4f91342229f84bbc99dfef09e51257f6",
+    "version": 1,
+    "duplicated": true,
+    "diffChanges": 1,
+    "bytes": 856,
+    "sha256": "98d1bd66a024fa8f2376dfa6598fb3de781710bba15e155d3b750ed0612ca2f0"
+  },
+  "error": null
+}

@@ -47,7 +47,7 @@ export interface SyncUploadPayload {
   bom: DesignBomRow[];
 }
 
-export type SyncStage = '打包' | '连接' | '上传' | '解析';
+export type SyncStage = '打包' | '连接' | '上传' | '解析' | '列表' | '比对' | '下载';
 
 export interface SyncResult {
   ok: boolean;
@@ -56,6 +56,8 @@ export interface SyncResult {
   duplicated?: boolean;
   message?: string;
   stage?: SyncStage;
+  /** 阶段错误码，例如 UPLOAD_FAILED；成功时不返回。 */
+  code?: string;
 }
 
 export interface SyncPackageSummary {
@@ -79,11 +81,15 @@ export interface DesignDiff {
 
 export type SyncListResult =
   | { ok: true; items: SyncPackageSummary[] }
-  | { ok: false; message: string };
+  | { ok: false; message: string; stage?: SyncStage; code?: string };
 
 export type SyncDiffResult =
   | { ok: true; diff: DesignDiff }
-  | { ok: false; message: string };
+  | { ok: false; message: string; stage?: SyncStage; code?: string };
+
+export type SyncDownloadResult =
+  | { ok: true; zip: Uint8Array; bytes: number; sha256: string; etag?: string }
+  | { ok: false; message: string; stage?: SyncStage; code?: string };
 
 /** 给 UI 的配置视图，绝不包含明文 apiKey。 */
 export interface SyncPublicConfig {
