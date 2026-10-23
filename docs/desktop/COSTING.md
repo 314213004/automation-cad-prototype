@@ -1,6 +1,6 @@
 # 机台硬件成本自动统计 · 设计方案
 
-状态：P6-1 引擎 ✅、P6-2 面板与导出 ✅、P6-3 Agent 工具 ✅（2026-10-23）
+状态：P6-1 引擎 ✅、P6-2 面板与导出 ✅、P6-3 Agent 工具 ✅、P6-4 Agent 落盘导出 ✅（2026-10-23，D8-B）
 目标：从已有 BOM / 底板布置 / PLC 配置自动算出每台机台的硬件成本，单价可追溯、可覆盖、可导出。
 
 ## 1. 原则
@@ -117,10 +117,24 @@ interface CostReport {
 
 自然语言「这台机台硬件成本多少」→ 模型调用该工具 → 用 `summary` 与 `totals` 复述，缺价时说明还需要哪些物料号。
 
+## 4.3 Agent 导出 `export_cost_report`（P6-4，D8-B）
+
+「一句话出报价单」的写工具。与 `run_cost_report` 共用 `computeCostReport` 的取数与计算，不复制引擎逻辑。
+
+- **入参**：`format`（必填，`pdf` / `csv`）、`fileName?`（可选，不含扩展名）、`overwrite?`（可选，默认 `false`）、`bom?` / `pricebook?` / `placements?` / `plate?` / `plc?` / `options?` / `overrides?` / `wireSection?` / `now?`（同 `run_cost_report`）
+- **落盘目录**：`<userData>/exports/`（Windows 通常为 `%APPDATA%/AutomationCAD/exports/`）。目录固定，不接受调用方传入任意绝对路径，也不弹系统保存对话框。
+- **命名**：默认 `成本报告-<项目名或 device_no>-<yyyyMMdd-HHmm>.<扩展名>`；项目名取当前 CAD 文件名，取不到时回落「机台」。`fileName` 会去掉 `/\:*?"<>|`、控制字符与首尾空白/点，最终文件名（含扩展名）≤80 字符；空则使用默认名。
+- **扩展名**：按 `format` 强制为 `.pdf` / `.csv`，`fileName` 里带的旧扩展名会被替换。
+- **冲突**：`overwrite=false` 时自动追加 ` (1)`、` (2)`…；`overwrite=true` 直接覆盖。
+- **渲染**：PDF 用 `renderCostReportHtml` 生成 A4 纵向 HTML，再复用主进程 `printToPDF` 管线；CSV 用 `costReportCsv`，保留 UTF-8 BOM。
+- **返回**：`{ ok:true, path, bytes, format, lines, grand }`；失败为中文 `{ ok:false, code, message }`，导出相关错误码为 `DENIED` / `WRITE_FAILED` / `UNSUPPORTED_FORMAT`（缺 BOM、价格簿不可用等沿用 `run_cost_report` 的可操作错误码）。
+- **确认**：`session.ts` 的 `MUTATING_TOOLS` 包含 `export_cost_report`，应用内对话执行前走现有 `confirmWrite`；MCP 写工具清单同步包含。
+- **隐私**：回执只返回 `exports/` 下的落盘路径；错误信息保留可操作原因，不输出 token 等内容。
+
 ## 5. 与其他模块的关系
 
 - **BOM 导出**：`export/bom.ts` 增加 `unitPrice/subtotal` 两列（有价时），保持原有列不变
-- **Agent**：`run_cost_report` 已实现（只读，返回 `CostReport` 窄摘要），自然语言「这台机台硬件成本多少」直接调用
+- **Agent**：`run_cost_report` 只读返回 `CostReport` 窄摘要；`export_cost_report` 进一步落盘 PDF/CSV（写工具，需确认），自然语言「这台机台硬件成本多少」→「导出一份 PDF 报价单」可直接串联
 - **智慧工厂同步**：manifest 增加可选 `cost: { grand, currency, pricedAt }`，服务端可落库做采购参考（需对方确认字段，先在文档标注「待对接」）
 - **底板画布**：布置变化后成本面板显示「布置已变更，需重算」提示，不自动重算以免误改报价
 
@@ -132,9 +146,10 @@ interface CostReport {
 
 ## 7. 验收（P6-3 实测）
 
-- 单测 43 条引擎/价格簿 + 14 条报告（HTML/CSV）+ 12 条 Agent 工具（入参校验/场景 BOM/示例价/截断/命令透传），全套 `npm test` **413/413**
+- 单测 43 条引擎/价格簿 + 14 条报告（HTML/CSV）+ 12 条 Agent 工具 + 26 条导出（文件名净化/扩展名/冲突/目录限定/BOM/PDF 输入/命令分支/确认），全套 `npm test` **439/439**
 - smoke：`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`（引擎 fixture）
 - smoke：`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`（命令总线 → 工具层，与引擎数字一致）
+- smoke：`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`（假桥接直接调命令，不弹窗，文件名已净化）
 - smoke：`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`（面板：打开 → 载入价格簿 → 计算 → 9 卡 6 行 → A4 PDF 落盘；内置价格簿 IPC 返回 `exampleItems=4`）
 - 报告、面板、Agent 三处数字同源（同一次 `computeCost` 结果对象），都断言合计 `1398.64`
 - 性能：500 行 BOM < 50 ms（引擎单测已覆盖）
@@ -144,4 +159,5 @@ interface CostReport {
 - P6-1：价格簿格式 + 校验 + 计算引擎 + 单测（无 UI）
 - P6-2：成本面板 + CSV/PDF 导出 + BOM 增列
 - P6-3：✅ Agent 工具 `run_cost_report`（2026-10-23）
-- P6-4：与智慧工厂采购价字段对接（需对方确认）
+- P6-4：✅ Agent 落盘导出 `export_cost_report`（PDF/CSV，D8-B，2026-10-23）
+- P6-5：与智慧工厂采购价字段对接（需对方确认）

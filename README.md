@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**413 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**439 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -78,7 +78,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 ![智能体面板：对话、工具、模型设置](docs/desktop/screenshots/09-agent.png)
 
-*智能体面板：自上而下是对话与工具调用区、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、9 个工具、token 文件路径）。写操作执行前会弹出二次确认。*
+*智能体面板：自上而下是对话与工具调用区、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、10 个工具、token 文件路径）。写操作执行前会弹出二次确认。*
 
 ### 智慧工厂同步设置
 
@@ -110,7 +110,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | **底板布置画布** | 毫米坐标 SVG、底板尺寸可设、1mm 吸附、两条 35mm 导轨、重叠标红、利用率统计、JSON 导出与刷新恢复 | ✅ 桌面 |
 | **电气合规校验** | 线号（缺号 / 格式 / 同网重复 / 跨网重号 / 相线电位不符 / 跳号）、功率统计（kW / kVA / 分相电流 / 不平衡度 / 主断路器与进线截面建议 / 24V 余量）、导线截面 vs 载流量；A3 PDF 报告 | ✅ 桌面 |
 | **参数化建模（P9-2）** | build123d sidecar：按需启动 / 随机端口与令牌 / 10 分钟空闲退出 / 崩溃重启一次 / 不可用降级只读；特征树校验与 `compileOps` 为纯函数 | ✅ 生命周期与 IPC |
-| **硬件成本统计** | 价格簿（阶梯价 / 来源 / 更新日期 / 示例价自动排除）+ 纯函数引擎：BOM × 阶梯价 + 底板推算线缆 / 端子 / 导轨 / 线槽 + 人工 + 税 / 加成 / 运费；缺价单列「待询价」；成本面板（9 张统计卡 + 明细表 + 缺价告警）导出 A4 PDF 与 UTF-8 BOM 的 CSV；Agent 工具 `run_cost_report` 只读返回同一份报告摘要 | ✅ 引擎 + 面板 + 导出 + Agent 工具 |
+| **硬件成本统计** | 价格簿（阶梯价 / 来源 / 更新日期 / 示例价自动排除）+ 纯函数引擎：BOM × 阶梯价 + 底板推算线缆 / 端子 / 导轨 / 线槽 + 人工 + 税 / 加成 / 运费；缺价单列「待询价」；成本面板（9 张统计卡 + 明细表 + 缺价告警）导出 A4 PDF 与 UTF-8 BOM 的 CSV；Agent 工具 `run_cost_report` 只读返回同一份报告摘要，`export_cost_report` 按一句话把 PDF/CSV 落到 `userData/exports/` | ✅ 引擎 + 面板 + 导出 + Agent 问答/落盘 |
 
 ### CAD 与数据
 
@@ -138,11 +138,11 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 | 能力 | 内容 | 状态 |
 |------|------|------|
-| 工具集 | `list_components` / `search_components` / `import_cad` / `get_bom` / `run_interference_check` / `insert_component` / `run_electrical_check` / `run_cost_report` / `undo_last`（9 个） | ✅ |
+| 工具集 | `list_components` / `search_components` / `import_cad` / `get_bom` / `run_interference_check` / `insert_component` / `run_electrical_check` / `run_cost_report` / `export_cost_report` / `undo_last`（10 个；导出为写工具，走二次确认） | ✅ |
 | JSON-RPC | `127.0.0.1:7420`，Bearer token（userData 下 `agent-token`），仅监听本机 | ✅ |
 | MCP stdio | 复用同一工具注册表；写工具经桌面 RPC 代理，桌面未启动时明确返回 `DESKTOP_NOT_RUNNING` | ✅ |
 | 应用内对话 | OpenAI 兼容接口、工具调用循环、写操作二次确认、密钥仅本机进程 | ✅ |
-| 自然语言完整方案 | 15 工具、上下文注入、意图路由、审计、40 条中文评估集 | 📄 方案（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 16 工具、上下文注入、意图路由、审计、40 条中文评估集 | 📄 方案（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -205,7 +205,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（413 个）
+│   ├── test/                                 # node:test 单测与集成测试（439 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -233,7 +233,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 413 个单测（node:test）
+npm test          # 439 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
@@ -247,7 +247,7 @@ smoke 覆盖并断言：
 - 参数化 sidecar（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `test/fixtures/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`；
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
-- 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
+- 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
 - 智能体工具注册、渲染桥读写、对话面板字段。
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`，最后 `SMOKE_OK`。
@@ -259,7 +259,7 @@ smoke 覆盖并断言：
 - **安装包未签名**：无代码签名证书，Win11 SmartScreen 首次会提示。
 - **OPC UA 只支持 SecurityPolicy=None**，未接真实 PLC；MQTT 未连真实 broker；Modbus 未连真机（仿真器已实测）。
 - **价格簿尚无真实报价**：内置价格簿只含明确标注「示例，需替换」的条目，引擎会自动排除示例价；真实成本需导入企业价格表后才能用于报价。
-- **成本面板的 BOM 需手工导入**：面板接受 BOM JSON（或由上层注入 `__CostBomProvider`），尚未把 CAD 模型零件名自动映射到元器件物料号（映射口径待定，见 BACKLOG D7）；Agent 工具 `run_cost_report` 未传 `bom` 时回落到当前场景 BOM，场景零件没有物料号，会全部计入「缺物料号」而不会按 0 计价；CSV 导出在桌面版走系统保存对话框。
+- **成本面板的 BOM 需手工导入**：面板接受 BOM JSON（或由上层注入 `__CostBomProvider`），尚未把 CAD 模型零件名自动映射到元器件物料号（映射口径待定，见 BACKLOG D7）；Agent 工具 `run_cost_report` 未传 `bom` 时回落到当前场景 BOM，场景零件没有物料号，会全部计入「缺物料号」而不会按 0 计价。Agent 导出工具 `export_cost_report` 固定写 `<userData>/exports/`（Windows 通常为 `%APPDATA%/AutomationCAD/exports/`），不接受任意绝对路径、不弹系统保存对话框；面板里的 CSV 仍走系统保存对话框。
 - **运动学标注需人工指定**：STEP 不含运动学，动件 / 轴 / 行程 / 点位由人标注；未标注时联调回退到机型配置。
 - **参数化建模尚未接入产品**：内核已选定 build123d 并完成 sidecar 验证（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)），桌面端尚未接特征树 UI。
 - **PLC 程序自动生成尚未实现**：方案见 [PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)，首期输出 IEC 61131-3 ST + IO 变量表，不做厂商专有工程文件。
@@ -281,7 +281,7 @@ smoke 覆盖并断言：
 | [docs/desktop/REQUIREMENTS.md](docs/desktop/REQUIREMENTS.md) | 需求来源与验收口径 |
 | [docs/desktop/PHASE2.md](docs/desktop/PHASE2.md) | 二期需求拆分（干涉/受力/PLC/联调/导出/同步） |
 | [docs/desktop/COSTING.md](docs/desktop/COSTING.md) | 硬件成本统计：价格簿格式、计算口径、验收 |
-| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、15 个工具、安全、评估集 |
+| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、16 个工具、安全、评估集 |
 | [docs/desktop/PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md) | 参数化建模：build123d 选型、sidecar 契约、特征树与分期 |
 | [docs/desktop/PARAMETRIC-CAD-SPIKE.md](docs/desktop/PARAMETRIC-CAD-SPIKE.md) | CadQuery / build123d / replicad 三方案实测对比 |
 | [docs/desktop/PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md) | 设计完成后自动生成 PLC 程序（ST + IO 表 + 预检） |

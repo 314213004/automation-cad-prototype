@@ -36,20 +36,21 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（现有 9 + 新增 6）
+## 3. 工具清单（16 个：现有 10 + 规划新增 6）
 
-现有：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`run_electrical_check`、`run_cost_report`、`undo_last`
+现有：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`run_electrical_check`、`run_cost_report`、`export_cost_report`、`undo_last`
 
-新增：
+规划新增 6 个：
 | 工具 | 类型 | 说明 |
 |---|---|---|
 | `get_project_context` | 只读 | 当前机型、域、视图、选中对象、底板尺寸、单位制 |
 | `place_component` | 写 | 在底板/原理图指定位置放元件（含吸附与冲突返回） |
-| `run_cost_report` | 只读 | ✅ 已实现（`src/cost/agent.ts`）：硬件成本统计，见 COSTING.md 4.2 |
 | `export_files` | 写 | 导出 PDF/DXF/GLB/BOM，返回文件路径 |
 | `start_commission` | 写 | 启动联调序列（需确认） |
 | `diagnose_fault` | 只读 | 按当前点位/报警码给故障建议 |
 | `sync_design_package` | 写 | 打包并上传设计包（需确认 + 明文展示 deviceId/baseUrl） |
+
+已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。
 
 每个工具：JSON Schema 入参、结构化返回、`error.code` 可读中文、幂等键（写操作）。
 
@@ -80,7 +81,7 @@
 
 ## 6. 安全与权限
 
-- **写操作分级**：只读默认放行；影响文档的写操作需确认；影响对外系统（上传、下发 PLC）需二次确认并显示目标地址
+- **写操作分级**：只读默认放行；影响文档或本地文件的写操作需确认（`import_cad`、`insert_component`、`undo_last`、`export_cost_report`，其中导出只写 `userData/exports/` 且不弹保存对话框）；影响对外系统（上传、下发 PLC）需二次确认并显示目标地址
 - **路径白名单**：仅项目工作区与用户数据目录
 - **审计**：每次工具调用写 `agent-audit.jsonl`（时间、工具、参数摘要、结果码），可在设置页查看/导出
 - **敏感信息**：`X-Design-Key` 等凭据不出现在日志与回执里，只显示掩码
