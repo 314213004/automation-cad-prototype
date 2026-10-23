@@ -785,6 +785,14 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    getPlcGenConfig: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        return commission?.getMachineConfig() ?? null;
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
     insertComponent: (part: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (!part || typeof part !== 'object') return { ok: false, message: '零件参数不合法' };

@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**598 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**619 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -82,7 +82,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 ![智能体面板：对话、工具、模型设置](docs/desktop/screenshots/09-agent.png)
 
-*智能体面板：自上而下是对话与工具调用区、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、11 个工具、token 文件路径）。写操作执行前会弹出二次确认。*
+*智能体面板：自上而下是对话与工具调用区、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、12 个工具、token 文件路径）。写操作执行前会弹出二次确认。*
 
 ### 智慧工厂同步设置
 
@@ -135,7 +135,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 通电联调 | 上电序列 + 用例，逐步 / 一键执行，导出 PDF 章节 | ✅ 仿真验证 |
 | 3D 联动 | 机型配置驱动（4 工位 / 12 执行机构 / 16 传感器）+ 运动学标注优先 | ✅ |
 | 故障诊断 | 7 条规则 + 兜底，按置信度排序给出原因与处置 | ✅ |
-| PLC 程序生成 | P8-3：全量预检 + IO 变量表 CSV + 五个基础块 + 自动序列/报警/安全 FC + `mapping.json`，固定 11 文件与逐文件 SHA-256；电气域「PLC 程序」面板（问题定位、文件树、200 行预览）、目标平台/命名前缀、导出 zip（含 CRC）与最近 10 次生成历史 | ✅ 桌面（UI + 导出） |
+| PLC 程序生成 | P8-1～P8-4：全量预检 + IO 变量表 CSV + 五个基础块 + 自动序列/报警/安全 FC + `mapping.json`，固定 11 文件与逐文件 SHA-256；电气域「PLC 程序」面板（问题定位、文件树、200 行预览）、目标平台/命名前缀、导出 zip（含 CRC）与最近 10 次生成历史；内置模拟器按 `mapping.json` 执行联调序列（行程时间 / `timeScale` / `TimeoutTime` / SafeStop / 传感器矛盾），面板「模拟验证」与 Agent 只读工具 `verify_plc_program` 共用 `verifyGenerated` | ✅ 桌面（生成 + 模拟验证） |
 | 智慧工厂 | demo（2 工位 / 8 点位）、OPC UA、MQTT 三适配器 + 实时值面板 | ✅ demo 实测 |
 | 设计包同步 | manifest / SHA-256 幂等、`X-Design-Key`、版本 diff、手动上传、失败阶段可区分 | ✅ 客户端（后端 0.22.0 已实现） |
 
@@ -143,7 +143,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 | 能力 | 内容 | 状态 |
 |------|------|------|
-| 工具集 | `list_components` / `search_components` / `import_cad` / `get_bom` / `run_interference_check` / `insert_component` / `place_component` / `run_electrical_check` / `run_cost_report` / `export_cost_report` / `undo_last`（11 个：只读 6 + 写 5；写操作走二次确认） | ✅ |
+| 工具集 | `list_components` / `search_components` / `import_cad` / `get_bom` / `run_interference_check` / `insert_component` / `place_component` / `run_electrical_check` / `run_cost_report` / `verify_plc_program` / `export_cost_report` / `undo_last`（12 个：只读 7 + 写 5；写操作走二次确认） | ✅ |
 | JSON-RPC | `127.0.0.1:7420`，Bearer token（userData 下 `agent-token`），仅监听本机 | ✅ |
 | MCP stdio | 复用同一工具注册表；写工具经桌面 RPC 代理，桌面未启动时明确返回 `DESKTOP_NOT_RUNNING` | ✅ |
 | 应用内对话 | OpenAI 兼容接口、工具调用循环、写操作二次确认、密钥仅本机进程 | ✅ |
@@ -155,7 +155,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 审计面板 | 侧栏「审计」区展示最近 8 条（工具 · 成功/失败 · 来源 · 错误码）与汇总，可手动刷新 | ✅ |
 | 离线评估 | `desktop/eval/agent-cases.json` 46 条中文用例（16 指代 / 7 歧义 / 5 多步 / 5 超纲）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 11 个已实现工具 + 5 个规划工具、上下文注入、意图路由、审计、46 条中文评估集 | ✅ P7-A / P7-B 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 12 个已实现工具 + 5 个规划工具、上下文注入、意图路由、审计、46 条中文评估集 | ✅ P7-A / P7-B 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -219,7 +219,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（598 个）
+│   ├── test/                                 # node:test 单测与集成测试（619 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -247,7 +247,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 598 个单测（node:test）
+npm test          # 619 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
@@ -258,12 +258,12 @@ smoke 覆盖并断言：
 - 运动学标注（`SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25`）；
 - 干涉、受力、导出的计算与文件写出；
 - PLC 点位、上电序列、用例；
-- PLC 代码生成（`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）：五个基础块、11 文件汇总、自动序列/安全/报警 FC 与确定性校验；UI 从电气域入口打开、预检、生成、历史与 zip 落盘全链路；
+- PLC 代码生成（`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）：五个基础块、11 文件汇总、自动序列/安全/报警 FC 与确定性校验；内置模拟器按 mapping 跑 6 步联调（0 报警）；UI 从电气域入口打开、预检、生成、模拟验证、历史与 zip 落盘全链路；
 - 参数化 sidecar 与特征树 UI（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `desktop/scripts/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`；不设环境变量时输出 `SMOKE_PARAMETRIC_UI_SKIP`；
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
-- 智能体工具注册、渲染桥读写、对话面板字段；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`：7 类意图全覆盖、写计划不进入离线通道、上下文 ≤2 KB、审计 3 条且密钥不落原文）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）。
+- 智能体工具注册、渲染桥读写、对话面板字段；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`：7 类意图全覆盖、写计划不进入离线通道、上下文 ≤2 KB、审计 3 条且密钥不落原文）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）。
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`，最后 `SMOKE_OK`。
 
@@ -277,7 +277,7 @@ smoke 覆盖并断言：
 - **成本面板的 BOM 需手工导入**：面板接受 BOM JSON（或由上层注入 `__CostBomProvider`），尚未把 CAD 模型零件名自动映射到元器件物料号（映射口径待定，见 BACKLOG D7）；Agent 工具 `run_cost_report` 未传 `bom` 时回落到当前场景 BOM，场景零件没有物料号，会全部计入「缺物料号」而不会按 0 计价。Agent 导出工具 `export_cost_report` 固定写 `<userData>/exports/`（Windows 通常为 `%APPDATA%/AutomationCAD/exports/`），不接受任意绝对路径、不弹系统保存对话框；面板里的 CSV 仍走系统保存对话框。
 - **运动学标注需人工指定**：STEP 不含运动学，动件 / 轴 / 行程 / 点位由人标注；未标注时联调回退到机型配置。
 - **参数化建模已完成 P9-3 单件特征树**：右侧抽屉可编辑 box / holes / slot / fillet / cylinder，自动重建后载入 sidecar 返回的 STL 并叠加旧模型（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)）。仍需 Python sidecar 运行时；草图约束（P9-4）、多实体装配与 BOM/成本联动（P9-5）未做。
-- **PLC 程序自动生成完成 P8-1～P8-3**：预检、IO 变量表、五个基础块、自动序列/报警/安全 FC、`mapping.json`、生成 UI、zip 导出与最近 10 次历史已落地（[PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)）；模拟器联调自检仍在 P8-4，不生成厂商专有工程文件。
+- **PLC 程序自动生成完成 P8-1～P8-4**：预检、IO 变量表、五个基础块、自动序列/报警/安全 FC、`mapping.json`、生成 UI、zip 导出、最近 10 次历史，以及内置模拟器执行联调序列（超时/SafeStop/传感器矛盾）已落地（[PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)）；仍不生成厂商专有工程文件。
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
@@ -297,7 +297,7 @@ smoke 覆盖并断言：
 | [docs/desktop/REQUIREMENTS.md](docs/desktop/REQUIREMENTS.md) | 需求来源与验收口径 |
 | [docs/desktop/PHASE2.md](docs/desktop/PHASE2.md) | 二期需求拆分（干涉/受力/PLC/联调/导出/同步） |
 | [docs/desktop/COSTING.md](docs/desktop/COSTING.md) | 硬件成本统计：价格簿格式、计算口径、验收 |
-| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、11 个已实现工具、写操作分级、安全、评估集 |
+| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、12 个已实现工具、写操作分级、安全、评估集 |
 | [docs/desktop/PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md) | 参数化建模：build123d 选型、sidecar 契约、特征树与分期 |
 | [docs/desktop/PARAMETRIC-CAD-SPIKE.md](docs/desktop/PARAMETRIC-CAD-SPIKE.md) | CadQuery / build123d / replicad 三方案实测对比 |
 | [docs/desktop/PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md) | 设计完成后自动生成 PLC 程序（ST + IO 表 + 预检） |

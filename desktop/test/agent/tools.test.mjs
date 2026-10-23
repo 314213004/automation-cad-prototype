@@ -57,7 +57,7 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 11 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 12 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'export_cost_report',
     'get_bom',
@@ -69,7 +69,8 @@ test('工具表为 11 个且不存在 NOT_IMPLEMENTED', () => {
     'run_electrical_check',
     'run_interference_check',
     'search_components',
-    'undo_last'
+    'undo_last',
+    'verify_plc_program'
   ]);
   for (const tool of tools.list()) {
     assert.doesNotMatch(JSON.stringify(tool), /NOT_IMPLEMENTED|尚未实现|未实现/);

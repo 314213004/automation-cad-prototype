@@ -9,6 +9,7 @@ import { buildEntryButton, ensurePanelStyles, errorMessage, escapeHtml, notify }
 import { precheck } from './precheck.ts';
 import { buildTags } from './tags.ts';
 import { generateProject, type GenerateProjectSuccess, type ProjectStats } from './generate.ts';
+import { summarizeVerification, verifyGenerated, type VerifyResult } from './verify.ts';
 import {
   createHistoryEntry,
   mergePlcHistory,
@@ -48,6 +49,7 @@ interface PanelNodes {
   target: HTMLSelectElement;
   prefix: HTMLInputElement;
   precheck: HTMLButtonElement;
+  simulate: HTMLButtonElement;
   generate: HTMLButtonElement;
   status: HTMLElement;
   issueCount: HTMLElement;
@@ -82,6 +84,7 @@ let selectedFile: string | null = null;
 let viewingHistory = false;
 let history: PlcHistoryEntry[] = [];
 let generating = false;
+let lastVerify: VerifyResult | null = null;
 let highlightedActuatorId = '';
 
 function injectStyles(): void {
@@ -135,6 +138,7 @@ function refreshActionButtons(): void {
     generating
   });
   nodes.precheck.disabled = !config || generating;
+  nodes.simulate.disabled = !config || generating;
   nodes.exportZip.disabled = lastFiles.length === 0 || viewingHistory;
   nodes.copyAll.disabled = lastFiles.length === 0;
   nodes.openDir.disabled = false;
@@ -422,6 +426,48 @@ async function loadHistory(): Promise<void> {
   renderHistory();
 }
 
+async function runSimulate(): Promise<VerifyResult | null> {
+  if (!config || generating) return null;
+  generating = true;
+  refreshActionButtons();
+  nodes?.simulate.classList.add('is-busy');
+  setStatus('正在预检、生成并模拟执行联调序列…', 'idle');
+  try {
+    const result = verifyGenerated(config, {
+      target: currentTarget(),
+      namePrefix: currentPrefix(),
+      sequenceTimeoutMs: 5000
+    });
+    lastVerify = result;
+    if (result.precheck.errors.length > 0) {
+      lastPrecheck = result.precheck;
+      renderPrecheck();
+    }
+    const summary = summarizeVerification(result);
+    if (result.ok) {
+      const message = `模拟验证通过：${summary.passed}/${summary.steps} 步 · ${summary.elapsedMs} ms · 报警 ${summary.alarms.length}`;
+      setStatus(message, 'ok');
+      notify(message);
+    } else {
+      const reason = summary.failure?.reason
+        ?? result.errors[0]?.message
+        ?? `预检 ${result.precheck.errors.length} 个错误`;
+      const message = `模拟验证失败：${reason}`;
+      setStatus(message, 'error');
+      notify(message, true);
+    }
+    return result;
+  } catch (error) {
+    setStatus(`模拟验证失败：${errorMessage(error)}`, 'error');
+    notify(`模拟验证失败：${errorMessage(error)}`, true);
+    return null;
+  } finally {
+    generating = false;
+    nodes?.simulate.classList.remove('is-busy');
+    refreshActionButtons();
+  }
+}
+
 async function runGenerate(): Promise<GenerateProjectSuccess | null> {
   if (!config || generating) return null;
   if (!lastPrecheck) await runPrecheck();
@@ -564,6 +610,7 @@ function open(): void {
 
   config = resolveConfig();
   lastPrecheck = null;
+  lastVerify = null;
   lastFiles = [];
   lastStats = null;
   lastGeneratedAt = '';
@@ -620,6 +667,7 @@ function buildOverlay(): void {
         </div>
         <div class="plc-actions">
           <button type="button" class="plc-btn" id="plcPrecheck">预检</button>
+          <button type="button" class="plc-btn" id="plcSimulate" disabled>模拟验证</button>
           <button type="button" class="plc-btn plc-btn-primary" id="plcGenerate" disabled>生成</button>
         </div>
         <div class="plc-status" id="plcStatus"></div>
@@ -670,6 +718,7 @@ function buildOverlay(): void {
     target: query<HTMLSelectElement>('#plcTarget'),
     prefix: query<HTMLInputElement>('#plcPrefix'),
     precheck: query<HTMLButtonElement>('#plcPrecheck'),
+    simulate: query<HTMLButtonElement>('#plcSimulate'),
     generate: query<HTMLButtonElement>('#plcGenerate'),
     status: query('#plcStatus'),
     issueCount: query('#plcIssueCount'),
@@ -691,6 +740,7 @@ function buildOverlay(): void {
 
   query<HTMLButtonElement>('#plcClose').addEventListener('click', close);
   nodes.precheck.addEventListener('click', () => void runPrecheck());
+  nodes.simulate.addEventListener('click', () => void runSimulate());
   nodes.generate.addEventListener('click', () => void runGenerate());
   nodes.exportZip.addEventListener('click', () => {
     void exportZip().catch((error: unknown) => notify(`导出失败：${errorMessage(error)}`, true));
@@ -711,6 +761,7 @@ function invalidateGeneration(): void {
   if (lastFiles.length === 0) return;
   lastFiles = [];
   lastStats = null;
+  lastVerify = null;
   exportPath = '';
   viewingHistory = false;
   if (nodes) {
@@ -763,6 +814,7 @@ export function initPlcGenUi(uiOptions: PlcGenUiOptions = {}): void {
     close,
     hasConfig: () => Boolean(config),
     precheck: runPrecheck,
+    simulate: runSimulate,
     generate: runGenerate,
     exportZip,
     openExportDir,
@@ -773,6 +825,10 @@ export function initPlcGenUi(uiOptions: PlcGenUiOptions = {}): void {
       open: Boolean(nodes && !nodes.overlay.hidden),
       hasConfig: Boolean(config),
       generateDisabled: nodes ? nodes.generate.disabled : true,
+      simulateDisabled: nodes ? nodes.simulate.disabled : true,
+      verifyOk: lastVerify ? lastVerify.ok : null,
+      verifySteps: lastVerify?.simulation?.steps.length ?? 0,
+      verifyAlarms: lastVerify?.simulation?.alarms.length ?? 0,
       files: lastFiles.length,
       treeRows: lastFiles.length > 0 ? buildFileTree(lastFiles).length : 0,
       history: history.length,

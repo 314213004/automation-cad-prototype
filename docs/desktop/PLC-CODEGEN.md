@@ -1,6 +1,6 @@
 # 设计完成后自动生成 PLC 程序 · 设计方案
 
-状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2 ✅ 已实现（自动序列 / 报警 / 安全 FC + 汇总生成）；P8-3 ✅ 已实现（生成 UI + 文件树 + zip 导出 + 历史）；P8-4～P8-5 待做
+状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2 ✅ 已实现（自动序列 / 报警 / 安全 FC + 汇总生成）；P8-3 ✅ 已实现（生成 UI + 文件树 + zip 导出 + 历史）；P8-4 ✅ 已实现（内置模拟器执行生成序列，生成即验证）；P8-5 可选（TIA Openness）
 目标：电气设计定稿（选型 + IO 表 + 动作顺序）后，一键生成**可直接导入 PLC 工程**的程序骨架与变量表，把「画完图再手工敲程序」变成「设计即程序」。
 
 ## 1. 输入（全部来自已有模块）
@@ -74,9 +74,10 @@ plc/
 ## 5. 质量与验证
 
 - **静态自检**（生成器内部）：变量声明完整、地址唯一、无空块、无未使用变量（仅告警）、ST 语法用 `st-parser`（或自写轻量词法）解析通过
-- **逻辑自检**：用内置 PLC 模拟器（已有 `desktop/src/plc/` Modbus 模拟器）加载生成的 IO 映射，跑一遍联调序列，断言每步到位 —— 生成即验证
-- **单测**：≥18 条（气缸时序、超时、互锁、状态机转移、安全复位、确定性输出、预检各类错误）
-- **smoke**：`SMOKE_PLC_GEN_OK files=9 vars=24 steps=6 errors=0`
+- **逻辑自检（P8-4）**：`simulate` 读取生成结果里的 `mapping.json`，把输出动作映射到内存点位，按执行机构行程时间模拟到位传感器，用生成程序里的 `TimeoutTime` 判超时，跑完整联调序列 —— 生成即验证；纯函数、可注入 `timeScale`，不依赖真实 PLC
+- **安全路径**：急停/安全门触发立即 `SafeStop`、复位全部输出，后续步标记为跳过并只记一条安全报警；伸出/缩回到位同时为 1 记 `SENSOR_CONFLICT`
+- **单测**：P8-4 新增 21 条（正常 6 步、第 3 步超时、急停/门中止、传感器矛盾、`timeScale`、空序列、预检拦截、确定性、Agent 工具与当前机型桥接）
+- **smoke**：`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`
 
 ## 6. 二期：厂商工程文件
 
@@ -97,10 +98,10 @@ plc/
 
 ## 8. 验收（首期）
 
-- 用 demo 机型（4 工位 / 12 执行机构 / 16 传感器）生成 9 个文件，预检 0 错误
+- 用 demo 机型（4 工位 / 12 执行机构 / 16 传感器）生成 11 个文件，预检 0 错误
 - 生成的 ST 通过语法解析，变量表与 IO 表逐条一致
 - 同一输入连续生成 3 次，文件 sha256 完全一致
-- 内置模拟器跑通 6 步联调序列，无超时
+- 内置模拟器按生成程序的 `mapping.json` / `TimeoutTime` 跑通 6 步联调序列，无报警
 - 不修改用户手写文件：输出目录已存在时提示覆盖/另存，默认另存带时间戳
 
 ## 9. 分期
@@ -108,7 +109,7 @@ plc/
 - P8-1：预检器 + 变量表 + 气缸/夹爪/轴 FB + 单测（无 UI）
 - P8-2：自动序列 FC + 报警/安全 FC + 确定性校验
 - P8-3：生成 UI + 导出 zip + 历史记录
-- P8-4：模拟器联调自检 + 设计包上传集成
+- P8-4：内置模拟器联调自检（`simulate` / `verifyGenerated` / Agent 工具 / 面板按钮）
 - P8-5（可选）：TIA Openness 导出
 
 ## 10. P8-1 实现记录（2026-10-23）
@@ -243,3 +244,32 @@ plc/
 - `npm test`：**577/577**，新增 `desktop/test/plcgen-p83.test.ts` **21 条**：纯 JS SHA-256、文件树、200 行截断、UTF-8 字节、按钮禁用、问题定位、复制包、历史去重/上限/解析顺序、目录命名/冲突、ZIP 条目与 CRC + `unzip -t`、路径穿越、目标平台不影响 ST、预检拦截。
 - `npm run smoke`：新增 `SMOKE_PLCGEN_UI_OK files=11 history=1`（无机型配置时输出 `SMOKE_PLCGEN_UI_SKIP no_machine_config`）；导出目录与 zip 均经 `existsSync` 断言，zip 另用 `unzip -t` 人工复核通过。
 - P8-3 边界：仍不生成厂商专用工程文件；模拟器加载生成程序跑联调序列留给 P8-4。
+
+## 13. P8-4 实现记录（2026-10-23）
+
+状态：✅ 完成。新增 `desktop/src/plcgen/simulate.ts`、`verify.ts`，把 Agent 只读工具 `verify_plc_program` 与电气域面板「模拟验证」接到同一条验证链路。
+
+### 模拟执行口径
+
+- 输入 `{ project, config }`：`project` 至少含 `files`，模拟器从 `mapping.json` 读取 `points[]` 与 `sequence[]`；不重新解释 ST 文本。
+- 输出动作：mapping 的 `points[]` 把原始点位（如 `Y0`）绑定到变量名，模拟器按该绑定维护输出状态；最终输出按 mapping 中的输出点顺序写入 `finalOutputs`。
+- 行程时间：气缸按执行机构绑定的前两路传感器模拟伸出/缩回，夹爪与旋转轴按第一路传感器模拟动作/复位；默认 `durationMs` 为 400 ms。
+- 超时：使用 `mapping.sequence[].timeoutMs`（由生成器写入的 `TimeoutTime`），到期条件未满足即失败，`SimStep.reason` 指明步号、名称与超时值。
+- 安全：`safetyTripAtStep` / `safetyTripPoint` 可在第 N 步前注入急停或安全门触发；若步序显式断开安全输入也立即 `SafeStop`。触发后全部输出复位，当前步失败、后续步以「安全停止后跳过」记录，`alarms` 只保留一条 `SAFE_STOP:*`。
+- 传感器矛盾：同一执行机构前两路到位同时为 1 时记 `SENSOR_CONFLICT:*`；可由双输出同时置位或 `sensorConflictAtStep` 注入触发。
+- 确定性：使用虚拟时钟，不读真实时间；`timeScale` 默认 1，2 表示行程与等待时间减半；同一输入重复调用结果 `deepEqual`。
+- 空序列：生成成功但 `steps=[]`、`ok=true`、`elapsedMs=0`，所有输出保持复位。
+
+### 门禁与调用方
+
+- `verifyGenerated(config, options)`：先 `precheck`；有 error 直接返回 `stage='precheck'`，不生成文件、不进入模拟。预检通过后依次 `generateProject` → `simulate`，返回 `{ ok, stage, precheck, stats, simulation, errors, warnings }`。
+- `summarizeVerification`：只回 `steps/passed/alarms/elapsedMs/failure/finalOutputs`，避免把 11 个文件正文塞进 Agent 上下文。
+- Agent 工具 `verify_plc_program`：只读，支持显式 `config` 或读取桌面当前机型；不落盘、不连接/写入真实 PLC。
+- UI：电气域「PLC 程序」面板新增「模拟验证」按钮；点击后调用 `verifyGenerated`，与 Agent 只读工具共用同一条验证链路。
+
+### 验证证据
+
+- `npx tsc --noEmit`：通过。
+- `npm test`：**619/619**，新增 `desktop/test/plcgen-p84.test.ts` **21 条**：正常 6 步全通、第 3 步超时、急停/安全门中止、步序断开安全输入、传感器矛盾（按步注入与双输出）、`timeScale`、空序列、重复模拟确定性、预检拦截、已有工程直接验证、Agent 工具注册、只读路由与当前机型桥接。
+- `npm run smoke`：新增 `SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`；UI 冒烟同时断言「模拟验证」按钮存在且 `verifyOk=true`。
+- P8-4 边界：模拟器只覆盖生成程序的动作/等待/超时/安全/传感器语义，不执行任意 ST；仍未生成厂商专有工程文件。

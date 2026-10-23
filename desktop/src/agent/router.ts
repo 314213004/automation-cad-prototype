@@ -192,14 +192,15 @@ export interface ToolPlan {
   why: string;
 }
 
-/** 目前注册的 11 个工具里，只读 6 个、写操作 5 个。 */
+/** 目前注册的 12 个工具里，只读 7 个、写操作 5 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
   'get_bom',
   'run_interference_check',
   'run_electrical_check',
-  'run_cost_report'
+  'run_cost_report',
+  'verify_plc_program'
 ]);
 
 export const WRITE_TOOLS = new Set([
@@ -410,6 +411,15 @@ function isBareReferencePriceQuery(text: string, category: string | null): boole
 export function planTool(text: string): ToolPlan | null {
   const value = (text ?? '').trim();
   if (!value) return null;
+  if (/(?:验证|模拟|自检).*(?:plc|程序)|(?:plc|程序).*(?:验证|模拟|自检)/i.test(value)) {
+    return {
+      tool: 'verify_plc_program',
+      args: {},
+      readOnly: true,
+      missing: [],
+      why: '先预检再生成，并用内置模拟器跑联调序列（不落盘、不写 PLC）'
+    };
+  }
   const match = routeIntent(value);
   if (match.intent === 'out_of_scope') return null;
   // 联调/同步工具尚未注册：规则层只能明确说「暂不支持」，不能降级成搜索元件。

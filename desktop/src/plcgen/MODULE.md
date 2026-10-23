@@ -1,6 +1,6 @@
 # 模块：PLC 代码生成（src/plcgen/）
 
-职责：在电气设计定稿后做生成前预检，并产出 IO 变量表、IEC 61131-3 ST 基础块、自动序列/报警/安全 FC 与映射表；P8-3 起提供电气域生成面板、zip 导出与生成历史。核心生成逻辑仍为可单测纯函数。
+职责：在电气设计定稿后做生成前预检，并产出 IO 变量表、IEC 61131-3 ST 基础块、自动序列/报警/安全 FC 与映射表；P8-3 起提供电气域生成面板、zip 导出与生成历史；P8-4 起用内置模拟器执行生成序列，做到「生成即验证」。核心生成与模拟逻辑均为可单测纯函数。
 
 ## 文件
 
@@ -13,6 +13,8 @@
 | `safety.ts` | `generateSafety(config)`：`FC_Safety.st`，急停/安全门/光栅常闭串联、SafeStop 锁存、Reset 上升沿解除、输出复位 |
 | `alarms.ts` | `generateAlarms(config)`：`FC_Alarms.st`，超时/传感器矛盾/安全触发汇总到 `AlarmWord`，`FirstFault` 首故障锁存 |
 | `generate.ts` | `generateProject(input)`：预检拦截 + 固定 11 文件顺序 + `mapping.json` / `README.md` / 每文件 SHA-256 |
+| `simulate.ts` | `simulate({ project, config })`：读 `mapping.json`，按输出映射与执行机构行程时间模拟传感器，按生成 `timeoutMs` 判超时；`SafeStop` 中止、传感器矛盾报警、`timeScale` 加速；纯函数虚拟时钟 |
+| `verify.ts` | `verifyGenerated(config/options)`：预检 → 生成 → 模拟；`summarizeVerification` 输出 Agent/UI 窄摘要，不落盘、不写 PLC |
 | `hash.ts` | 同步纯 JS SHA-256（不依赖 `node:crypto`），生成器同时供主进程与渲染层使用 |
 | `symbols.ts` | 点位 / 地址 / 变量名 ↔ `"DB_IO".<变量>` 的稳定映射 |
 | `io.ts` | `X0/Y0` 与 `I0.0/Q0.0` 地址归一化、IO 收集与命名辅助 |
@@ -20,7 +22,7 @@
 | `view-model.ts` | 面板纯数据层：文件树、200 行预览、按钮禁用、问题定位、统计文案、复制包 |
 | `export.ts` | `planPlcExportDirectory`：`<机型>-<yyyyMMdd-HHmm>`、同名 `-2` 递增，复用 `src/shared/filename.ts` |
 | `history.ts` | 最近 10 次历史：按 inputHash 去重、新→旧、解析/合并纯函数 |
-| `ui.ts` | 电气域顶栏「PLC 程序」全屏面板；`window.__PlcGenPanel` 供冒烟与命令式调用 |
+| `ui.ts` | 电气域顶栏「PLC 程序」全屏面板；预检 / 生成 / 模拟验证 / 导出；`window.__PlcGenPanel` 供冒烟与命令式调用 |
 | `plcgen.css` | 面板样式（三栏：配置/预检、文件树、预览；底部历史与操作） |
 
 ## 关键约定
@@ -35,17 +37,21 @@
 8. **目标平台不污染 ST**：`target` / `namePrefix` 只写 README 与导出命名；计算 `inputHash` 前剥离，切换目标时除 README 外逐字节一致。
 9. **导出路径只有一份规则**：文件名净化来自 `src/shared/filename.ts`（成本导出同样使用），ZIP 路径校验与写入集中在 `src/shared/zip.ts`。
 10. **历史去重口径**：同一 `inputHash` 只保留最新一条；上限 10，存储于 `<userData>/plc-gen-history.json`。
+11. **模拟器只认 mapping**：`simulate` 从 `mapping.json` 的 `points/sequence` 取点位映射与 `timeoutMs`，不解析任意 ST，也不产生真实 IO。
+12. **模拟是纯函数**：使用虚拟时钟与 `timeScale`，不读墙钟；超时/`SafeStop` 后当前步失败、后续步记为跳过，重复调用结果一致。
+13. **验证不落盘**：`verifyGenerated` / Agent 工具 `verify_plc_program` 只返回摘要，不写 zip、不写历史、不连接 PLC。
 
 ## 进度与验证
 
 - ✅ P8-1：预检 + 变量表 + `FB_Cylinder` / `FB_Gripper` / `FB_RotaryAxis` / `DB_IO` / `OB1_Main`
 - ✅ P8-2：`FC_AutoSequence` / `FC_Alarms` / `FC_Safety` + `mapping.json` + 11 文件汇总与逐文件 SHA-256
 - ✅ P8-3：`ui.ts` 预检面板 + 问题定位 + 文件树/预览 + 导出 zip + 最近 10 次历史；`SMOKE_PLCGEN_UI_OK files=11 history=1`
-- ✅ 88 条 plcgen 单测（P8-1 35 + P8-2 32 + P8-3 21）；全套 577/577；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`
-- ⏳ P8-4：模拟器加载生成程序并跑联调序列自检；P8-5（可选）：TIA Openness
+- ✅ P8-4：`simulate.ts` + `verify.ts`；面板「模拟验证」与 Agent 只读工具 `verify_plc_program` 共用 `verifyGenerated`；`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`
+- ✅ 109 条 plcgen 单测（P8-1 35 + P8-2 32 + P8-3 21 + P8-4 21）；全套 619/619；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`
+- ⏳ P8-5（可选）：TIA Openness
 
 ## 待办
 
-1. P8-4 用内置模拟器加载生成程序并跑通联调序列。
-2. 按真实 PLC 模块样本扩充 BOM 点数解析规则（当前支持显式字段与 `16DI/16DO`、`N 点` 文本）。
+1. 按真实 PLC 模块样本扩充 BOM 点数解析规则（当前支持显式字段与 `16DI/16DO`、`N 点` 文本）。
+2. 模拟器补充旋转轴角度/夹爪开合的多传感器与故障注入样例。
 3. P8-5 可选：`io-tags.tia.xml` 与 TIA Openness 导出。

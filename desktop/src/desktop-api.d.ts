@@ -288,6 +288,7 @@ interface AgentBridgeApi {
   getScene(): { parts: AgentBridgeScenePart[]; source: string | null } | AgentBridgeFailure;
   getSelection(): { name: string; bbox: number[] } | AgentBridgeFailure | null;
   getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
+  getPlcGenConfig(): import('./plcgen/types').PlcGenConfig | AgentBridgeFailure | null;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
@@ -527,6 +528,7 @@ interface Window {
     close(): void;
     hasConfig(): boolean;
     precheck(): Promise<import('./plcgen/types').PrecheckResult | null>;
+    simulate(): Promise<import('./plcgen/verify').VerifyResult | null>;
     generate(): Promise<import('./plcgen/generate').GenerateProjectSuccess | null>;
     exportZip(): Promise<{ ok: boolean; path?: string; zipPath?: string; message?: string }>;
     openExportDir(): Promise<void>;
@@ -537,6 +539,10 @@ interface Window {
       open: boolean;
       hasConfig: boolean;
       generateDisabled: boolean;
+      simulateDisabled?: boolean;
+      verifyOk?: boolean | null;
+      verifySteps?: number;
+      verifyAlarms?: number;
       files: number;
       treeRows: number;
       history: number;

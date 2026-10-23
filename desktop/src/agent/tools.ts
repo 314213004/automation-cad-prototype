@@ -2,6 +2,8 @@ import type { PackRegistry } from '../packs/registry';
 import type { ComponentPart } from '../shared/types';
 import type { CommandResult } from './commands';
 import { resolvePartReference } from './placement.ts';
+import type { PlcGenConfig } from '../plcgen/types.ts';
+import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
 
 export interface AgentTool {
   name: string;
@@ -141,6 +143,31 @@ const ELEC_CHECK_SCHEMA = {
   },
   additionalProperties: false
 };
+
+const VERIFY_PLC_PROGRAM_SCHEMA = {
+  type: 'object',
+  properties: {
+    config: {
+      type: 'object',
+      description: '机型 + PLC 配置（stations/actuators/sensors/safety/sequence）；缺省读取桌面当前机型'
+    },
+    timeScale: { type: 'number', description: '模拟加速倍率，默认 1；2 表示行程与等待时间减半' },
+    safetyTripAtStep: { type: 'integer', description: '可选，在第 N 步开始前注入急停/安全门触发（1 起）' },
+    sensorConflictAtStep: { type: 'integer', description: '可选，在第 N 步开始前注入传感器矛盾' }
+  },
+  additionalProperties: false
+};
+
+function verifyOptions(args: Record<string, unknown>): VerifyOptions {
+  const options: VerifyOptions = {};
+  const timeScale = getNumber(args.timeScale);
+  if (timeScale !== undefined) options.timeScale = timeScale;
+  for (const key of ['safetyTripAtStep', 'sensorConflictAtStep'] as const) {
+    const value = args[key];
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) options[key] = value;
+  }
+  return options;
+}
 
 const COST_REPORT_SCHEMA = {
   type: 'object',
@@ -494,6 +521,33 @@ export class AgentTools {
       handler: async (args) => {
         const result = await this.execute('export_cost_report', args);
         return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'verify_plc_program',
+      description:
+        '只读验证当前（或显式传入的）机型 PLC 生成程序：先跑预检，再生成 11 个文件并在内置模拟器执行联调序列，返回步骤、报警、耗时与失败原因。不落盘、不连接/写入真实 PLC。',
+      inputSchema: VERIFY_PLC_PROGRAM_SCHEMA,
+      handler: async (args) => {
+        const config = isRecord(args.config) ? args.config as unknown as PlcGenConfig : null;
+        const options = verifyOptions(args);
+        if (config) {
+          try {
+            return summarizeVerification(verifyGenerated(config, options));
+          } catch (error) {
+            return {
+              ok: false,
+              code: 'VERIFY_FAILED',
+              message: error instanceof Error ? error.message : String(error)
+            };
+          }
+        }
+        const commandArgs: Record<string, unknown> = { ...options };
+        const result = await this.execute('verify_plc_program', commandArgs);
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        return result.data;
       }
     });
 

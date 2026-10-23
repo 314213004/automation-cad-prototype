@@ -36,7 +36,7 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（已实现 11 个：只读 6 + 写 5；规划新增 5 个）
+## 3. 工具清单（已实现 12 个：只读 7 + 写 5；规划新增 5 个）
 
 | 工具 | 类型 | 说明 |
 |---|---|---|
@@ -46,6 +46,7 @@
 | `run_interference_check` | 只读 | 包围盒干涉初筛 |
 | `run_electrical_check` | 只读 | 线号 / 功率 / 截面 / 断路器校验 |
 | `run_cost_report` | 只读 | 按 BOM 与价格簿计算成本 |
+| `verify_plc_program` | 只读 | 预检 + 生成 + 内置模拟器跑联调序列，返回步骤/报警/失败原因；不落盘、不写 PLC |
 | `import_cad` | 写 | 导入 CAD 文件（需确认） |
 | `insert_component` | 写 | 插入装配体占位件（需确认，可撤销） |
 | `place_component` | 写 | 底板指定坐标放置（旋转 / 导轨吸附；越界/重叠只告警；需确认，可撤销） |
@@ -61,7 +62,7 @@
 | `diagnose_fault` | 只读 | 按当前点位/报警码给故障建议 |
 | `sync_design_package` | 写 | 打包并上传设计包（需确认 + 明文展示 deviceId/baseUrl） |
 
-已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。
+已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。PLC 模拟验证：`verify_plc_program`（只读，复用 `verifyGenerated`，见 PLC-CODEGEN.md 13）。
 
 每个工具：JSON Schema 入参、结构化返回、`error.code` 可读中文、幂等键（写操作）。
 
@@ -69,7 +70,7 @@
 
 | 级别 | 范围 | 约束 |
 |---|---|---|
-| 只读 | 6 个查询/计算工具 | 可离线直接执行，不产生副作用 |
+| 只读 | 7 个查询/计算/验证工具 | 可离线直接执行，不产生副作用 |
 | W1 可撤销装配写 | `insert_component`、`place_component` | 执行前二次确认；成功后写入撤销栈，`undo_last` 回滚并返回 `removed` id |
 | W2 文件写 | `import_cad`、`export_cost_report` | 执行前二次确认；固定路径/格式，不接受任意写入路径 |
 | W3 外部副作用 | 规划的 `start_commission` / `sync_design_package` | 除二次确认外，还需明文展示目标地址与机台编号 |
@@ -176,11 +177,11 @@ EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 598/598，其中放置类 21 条（`test/agent/place-component.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 598/598）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 619/619，其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 619/619）
 - 评估集与回归 —— ✅ P7-A-3 + P7-B：46 条中文用例 + 离线规则基线，`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（46/46 意图、46/46 工具、20/20 参数、5/5 超纲拒绝、5/5 多步）
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 待补：写操作的逐步确认 UI（当前仍是一次性弹窗）

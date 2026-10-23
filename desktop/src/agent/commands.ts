@@ -12,6 +12,8 @@ import {
   type Wire
 } from '../elec/check.ts';
 import { runCostTool, CostToolError } from '../cost/agent.ts';
+import type { PlcGenConfig } from '../plcgen/types.ts';
+import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
 import {
   buildCostExport,
   CostExportError,
@@ -134,6 +136,7 @@ const BRIDGE_METHODS = new Set([
   'placeEnclosurePart',
   'removeEnclosurePart',
   'runInterference',
+  'getPlcGenConfig',
   'importPath',
   'exportCostFile'
 ]);
@@ -680,6 +683,43 @@ function registerCostCommand(bus: CommandBus): void {
   });
 }
 
+function verifyOptionsFromArgs(args: Record<string, unknown>): VerifyOptions {
+  const options: VerifyOptions = {};
+  const timeScale = numberOf(args.timeScale, 'timeScale');
+  if (timeScale !== undefined && timeScale > 0) options.timeScale = timeScale;
+  for (const key of ['safetyTripAtStep', 'sensorConflictAtStep'] as const) {
+    const raw = args[key];
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) options[key] = raw;
+  }
+  return options;
+}
+
+function registerPlcVerifyCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'verify_plc_program',
+    async run(args, ctx) {
+      let config: PlcGenConfig | null = null;
+      if (isRecord(args.config)) {
+        config = args.config as unknown as PlcGenConfig;
+      } else {
+        const current = await ctx.bridge.call<unknown>('getPlcGenConfig');
+        if (isRecord(current) && isBridgeFailure(current)) {
+          throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(current, '读取当前 PLC 机型配置失败'));
+        }
+        if (!isRecord(current)) {
+          throw new CommandFailure('NO_CONFIG', '桌面当前没有可验证的 PLC 机型配置；请先完成机型/联调配置');
+        }
+        config = current as unknown as PlcGenConfig;
+      }
+      try {
+        return { ok: true, data: summarizeVerification(verifyGenerated(config, verifyOptionsFromArgs(args))) };
+      } catch (error) {
+        throw new CommandFailure('VERIFY_FAILED', error instanceof Error ? error.message : String(error));
+      }
+    }
+  });
+}
+
 function registerCostExportCommand(bus: CommandBus): void {
   bus.register({
     name: 'export_cost_report',
@@ -766,6 +806,7 @@ export function createAgentCommandBus(
   registerElectricalCheckCommand(bus);
   registerCostCommand(bus);
   registerCostExportCommand(bus);
+  registerPlcVerifyCommand(bus);
   return bus;
 }
 

@@ -7,6 +7,8 @@ export * from './sequence.ts';
 export * from './safety.ts';
 export * from './alarms.ts';
 export * from './generate.ts';
+export * from './simulate.ts';
+export * from './verify.ts';
 export * from './export.ts';
 export * from './history.ts';
 export * from './view-model.ts';

@@ -19,6 +19,7 @@ import { planExportName } from '../src/cost/export';
 import { demoMachineConfig } from '../src/commission/machine-config';
 import { generateSt } from '../src/plcgen/st';
 import { generateProject } from '../src/plcgen/generate';
+import { verifyGenerated } from '../src/plcgen/verify';
 import { ParametricManager } from './parametric.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
@@ -259,6 +260,35 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_PLCGEN_SEQ_OK files=${project.stats.files} steps=${project.stats.steps}`);
+
+        const simConfig = {
+          ...projectConfig,
+          sequence: [
+            { id: 'sim-1', name: '上料气缸伸出', action: 'set', point: 'Y0', condition: 'X0', timeoutMs: 2000 },
+            { id: 'sim-2', name: '压装气缸伸出', action: 'set', point: 'Y1', condition: 'X4', timeoutMs: 2000 },
+            { id: 'sim-3', name: '锁付气缸伸出', action: 'set', point: 'Y2', condition: 'X8', timeoutMs: 2000 },
+            { id: 'sim-4', name: '下料气缸伸出', action: 'set', point: 'Y3', condition: 'X12', timeoutMs: 2000 },
+            { id: 'sim-5', name: '上料夹爪夹紧', action: 'set', point: 'Y8', condition: 'X1', timeoutMs: 2000 },
+            { id: 'sim-6', name: '压装夹爪夹紧', action: 'set', point: 'Y9', condition: 'X5', timeoutMs: 2000 }
+          ]
+        };
+        const verified = verifyGenerated(simConfig);
+        if (
+          !verified.ok ||
+          verified.simulation?.steps.length !== 6 ||
+          verified.simulation.alarms.length !== 0
+        ) {
+          console.error('SMOKE_FAIL plcgen_sim', JSON.stringify({
+            ok: verified.ok,
+            stage: verified.stage,
+            steps: verified.simulation?.steps.length ?? 0,
+            alarms: verified.simulation?.alarms ?? [],
+            errors: verified.errors
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PLCGEN_SIM_OK steps=${verified.simulation.steps.length} ok=1 alarms=${verified.simulation.alarms.length}`);
       } catch (error) {
         console.error('SMOKE_FAIL plcgen_exception', error);
         setTimeout(() => app.exit(1), 100);
@@ -315,6 +345,8 @@ function createWindow(): BrowserWindow {
             await panel.generate();
             await wait(40);
             const after = panel.uiState();
+            const verify = await panel.simulate();
+            const simulateButton = Boolean(document.getElementById('plcSimulate'));
             const exported = await panel.exportZip();
             await wait(20);
             return {
@@ -325,6 +357,8 @@ function createWindow(): BrowserWindow {
               treeRows: after.treeRows,
               previewPath: after.previewPath,
               stats: after.stats,
+              simulateButton,
+              verifyOk: verify ? verify.ok : null,
               exportOk: exported.ok,
               exportPath: exported.path || '',
               zipPath: exported.zipPath || ''
@@ -340,6 +374,8 @@ function createWindow(): BrowserWindow {
           treeRows?: number;
           previewPath?: string | null;
           stats?: string;
+          simulateButton?: boolean;
+          verifyOk?: boolean | null;
           exportOk?: boolean;
           exportPath?: string;
           zipPath?: string;
@@ -359,6 +395,8 @@ function createWindow(): BrowserWindow {
           (plcUi.treeRows ?? 0) < 12 ||
           plcUi.previewPath !== 'README.md' ||
           !plcUi.stats?.includes('11 个文件 · 变量') ||
+          plcUi.simulateButton !== true ||
+          plcUi.verifyOk !== true ||
           !plcUi.exportOk ||
           !plcUi.exportPath || !existsSync(plcUi.exportPath) ||
           !plcUi.zipPath || !existsSync(plcUi.zipPath)
@@ -1047,11 +1085,12 @@ function createWindow(): BrowserWindow {
       try {
         const summaries = agentTools?.summaries() ?? [];
         if (
-          summaries.length !== 11 ||
+          summaries.length !== 12 ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
           !summaries.some((tool) => tool.name === 'export_cost_report') ||
-          !summaries.some((tool) => tool.name === 'place_component')
+          !summaries.some((tool) => tool.name === 'place_component') ||
+          !summaries.some((tool) => tool.name === 'verify_plc_program')
         ) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);
@@ -1069,11 +1108,12 @@ function createWindow(): BrowserWindow {
               ready: bridge.ready() === true,
               scene: Array.isArray(scene?.parts) ? 1 : 0,
               bom: Array.isArray(bom) ? 1 : 0,
+              plc: typeof bridge.getPlcGenConfig === 'function' && bridge.getPlcGenConfig() ? 1 : 0,
               error: (scene && scene.message) || (bom && bom.message) || ''
             };
           })()`
-        ) as { ready: boolean; scene: number; bom: number; error?: string };
-        if (!bridgeState.ready || bridgeState.scene !== 1 || bridgeState.bom !== 1) {
+        ) as { ready: boolean; scene: number; bom: number; plc: number; error?: string };
+        if (!bridgeState.ready || bridgeState.scene !== 1 || bridgeState.bom !== 1 || bridgeState.plc !== 1) {
           console.error('SMOKE_FAIL agent_bridge', JSON.stringify(bridgeState));
           setTimeout(() => app.exit(1), 100);
           return;
