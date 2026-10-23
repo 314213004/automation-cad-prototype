@@ -24,6 +24,12 @@ export interface AgentAuditRecord {
   repairs?: string[];
   /** 策略事件命中的用户原短语（如 BYPASS_ATTEMPT）。 */
   phrase?: string;
+  /** 本轮模型请求的输入/输出 tokens；端点回传时 estimated=false。 */
+  promptTokens?: number;
+  completionTokens?: number;
+  estimated?: boolean;
+  /** search_docs 命中的文档来源数（docs 注入）。 */
+  docsSources?: number;
 }
 
 export interface AgentAuditEntry extends AgentAuditRecord {
@@ -79,6 +85,16 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
       ? { repairs: record.repairs.map((item) => maskSecrets(item)) }
       : {}),
     ...(record.phrase ? { phrase: maskSecrets(record.phrase) } : {}),
+    ...(typeof record.promptTokens === 'number' && Number.isFinite(record.promptTokens) && record.promptTokens >= 0
+      ? { promptTokens: Math.trunc(record.promptTokens) }
+      : {}),
+    ...(typeof record.completionTokens === 'number' && Number.isFinite(record.completionTokens) && record.completionTokens >= 0
+      ? { completionTokens: Math.trunc(record.completionTokens) }
+      : {}),
+    ...(typeof record.estimated === 'boolean' ? { estimated: record.estimated } : {}),
+    ...(typeof record.docsSources === 'number' && Number.isInteger(record.docsSources) && record.docsSources >= 0
+      ? { docsSources: record.docsSources }
+      : {}),
     ...(record.message ? { message: maskSecrets(record.message) } : {}),
     ...(record.args ? { args: redactValue(record.args) as Record<string, unknown> } : {})
   };

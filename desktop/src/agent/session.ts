@@ -1,6 +1,6 @@
 import type { CommandResult } from './commands.ts';
 import type { AgentCommandExecutor } from './tools.ts';
-import type { LlmClient, LlmMessage, LlmToolCall } from './llm.ts';
+import type { LlmChatResponse, LlmClient, LlmMessage, LlmToolCall } from './llm.ts';
 import type { AgentAuditRecord } from './audit.ts';
 import { describePlan, planReadOnly, routeIntent } from './router.ts';
 import {
@@ -10,6 +10,21 @@ import {
 } from './context.ts';
 import { AgentMemory, summarizeToolCall } from './memory.ts';
 import { serializeToolResult } from './trim.ts';
+import {
+  addTokenUsage,
+  DEFAULT_SECTION_CAPS,
+  DEFAULT_TOTAL_BUDGET,
+  emptyTokenUsage,
+  estimateCostView,
+  estimateTokens,
+  pack,
+  type BudgetDrop,
+  type BudgetOptions,
+  type CostView,
+  type PackedBudget,
+  type PricingBook,
+  type TokenUsage
+} from './budget.ts';
 import { DATA_POLICY_PROMPT, guardToolResult } from './guard.ts';
 import { repairToolCall } from './repair.ts';
 import { buildFallbackReply, buildRetryPrompt } from './retry.ts';
@@ -55,6 +70,12 @@ export interface AgentSessionOptions {
   toolSchemas?: Record<string, unknown> | ((name: string) => unknown);
   /** 多轮状态存储；主进程让对话与计划共享同一个实例。 */
   thread?: AgentThread;
+  /** 模型名，用于价格表匹配与侧栏成本展示。 */
+  model?: string;
+  /** 模型价格表；未传时成本显示「—」。 */
+  pricing?: PricingBook | null;
+  /** 上下文预算档位；默认总量 12k tokens。 */
+  budget?: BudgetOptions;
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
@@ -76,6 +97,33 @@ export interface AgentRunOptions {
 
 /** 最近一次回复的通道：在线模型 / 离线规则。UI 用它显示统一回执。 */
 export type AgentReplyMode = 'online' | 'offline';
+
+export interface AgentUsageSnapshot {
+  model: string;
+  turn: TokenUsage;
+  session: TokenUsage;
+  cost: {
+    turn: CostView;
+    session: CostView;
+  };
+  /** 最近一次装包结果（system/selection/memory/docs 段）。 */
+  budget?: {
+    used: number;
+    dropped: BudgetDrop[];
+  };
+}
+
+export function emptyAgentUsage(model = ''): AgentUsageSnapshot {
+  return {
+    model: model || 'unknown',
+    turn: emptyTokenUsage(),
+    session: emptyTokenUsage(),
+    cost: {
+      turn: { known: false, currency: 'CNY', amount: null, display: '—' },
+      session: { known: false, currency: 'CNY', amount: null, display: '—' }
+    }
+  };
+}
 
 const MUTATING_TOOLS = new Set([
   'import_cad',
@@ -171,6 +219,13 @@ function failedTool(code: string, message: string): Record<string, unknown> {
   return { ok: false, error: { code, message } };
 }
 
+function docsSourceCount(result: unknown): number | undefined {
+  if (!isRecord(result)) return undefined;
+  const data = isRecord(result.data) ? result.data : result;
+  const hits = Array.isArray(data.hits) ? data.hits : Array.isArray(result.hits) ? result.hits : null;
+  return hits ? hits.length : undefined;
+}
+
 type PreparedToolCalls =
   | { ok: true; calls: LlmToolCall[]; repairs: string[] }
   | { ok: false; reason: string; repairs: string[] };
@@ -186,6 +241,9 @@ export class AgentSession {
   private readonly contextProvider: AgentSessionOptions['contextProvider'];
   private readonly toolSchemas: AgentSessionOptions['toolSchemas'];
   private readonly thread: AgentThread;
+  private readonly model: string;
+  private readonly pricing: PricingBook | null;
+  private readonly budget: BudgetOptions;
   private readonly memory = new AgentMemory();
   private threadPrevious: ThreadState | null = null;
   private pendingConfirm: PendingConfirm | undefined;
@@ -195,6 +253,10 @@ export class AgentSession {
   private turnContext: AgentContext = emptyAgentContext();
   private bypassIntent: BypassIntent | null = null;
   private readonly deniedWriteTools = new Set<string>();
+  private turnUsage: TokenUsage = emptyTokenUsage();
+  private sessionUsage: TokenUsage = emptyTokenUsage();
+  private lastRequestUsage: TokenUsage | null = null;
+  private lastBudget: PackedBudget | null = null;
 
   constructor(options: AgentSessionOptions) {
     this.llm = options.llm;
@@ -207,16 +269,95 @@ export class AgentSession {
     this.contextProvider = options.contextProvider;
     this.toolSchemas = options.toolSchemas;
     this.thread = options.thread ?? new AgentThread();
+    this.model = options.model?.trim() ?? '';
+    this.pricing = options.pricing ?? null;
+    this.budget = options.budget ?? {};
   }
 
   private recordAudit(record: AgentAuditRecord): void {
     if (!this.audit) return;
+    const request = this.lastRequestUsage;
+    const withTokens: AgentAuditRecord = record.source === 'llm' && request
+      ? {
+          ...record,
+          promptTokens: record.promptTokens ?? request.promptTokens,
+          completionTokens: record.completionTokens ?? request.completionTokens,
+          estimated: record.estimated ?? request.estimated
+        }
+      : record;
     try {
-      this.audit(record);
+      this.audit(withTokens);
     } catch (error) {
       // 审计失败不阻断对话，但必须留下可诊断的告警。
       console.warn('[agent] 审计写入失败', error);
     }
+  }
+
+  /** 最近一次/本会话的 token 与估算费用；IPC 直接透传给侧栏。 */
+  usage(): AgentUsageSnapshot {
+    const turn = { ...this.turnUsage };
+    const session = { ...this.sessionUsage };
+    return {
+      model: this.model || 'unknown',
+      turn,
+      session,
+      cost: {
+        turn: estimateCostView(this.pricing, this.model, turn.promptTokens, turn.completionTokens),
+        session: estimateCostView(this.pricing, this.model, session.promptTokens, session.completionTokens)
+      },
+      ...(this.lastBudget
+        ? { budget: { used: this.lastBudget.used, dropped: this.lastBudget.dropped.slice() } }
+        : {})
+    };
+  }
+
+  /** 最近一次系统上下文装包结果（供诊断/冒烟读取）。 */
+  budgetSnapshot(): PackedBudget | null {
+    return this.lastBudget;
+  }
+
+  private estimatePromptTokens(messages: LlmMessage[]): number {
+    const history = messages.map((message) => {
+      const calls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+      return `${message.role}\n${message.content ?? ''}\n${calls}`;
+    }).join('\n');
+    let schemaText = '';
+    if (this.toolSchemas) {
+      if (typeof this.toolSchemas === 'function') {
+        schemaText = '';
+      } else {
+        try {
+          schemaText = JSON.stringify(this.toolSchemas);
+        } catch {
+          schemaText = '';
+        }
+      }
+    }
+    return estimateTokens(history) + estimateTokens(schemaText);
+  }
+
+  private recordLlmUsage(messages: LlmMessage[], response: LlmChatResponse): void {
+    const real = response.usage;
+    const prompt = real?.promptTokens ?? this.estimatePromptTokens(messages);
+    const completionText = `${response.content}\n${JSON.stringify(response.toolCalls)}`;
+    const completion = real?.completionTokens ?? estimateTokens(completionText);
+    const estimated = real?.promptTokens === undefined || real?.completionTokens === undefined;
+    const usage: TokenUsage = {
+      promptTokens: Math.max(0, Math.trunc(prompt)),
+      completionTokens: Math.max(0, Math.trunc(completion)),
+      totalTokens: Math.max(0, Math.trunc(prompt)) + Math.max(0, Math.trunc(completion)),
+      estimated,
+      requests: 1
+    };
+    this.turnUsage = addTokenUsage(this.turnUsage, usage);
+    this.sessionUsage = addTokenUsage(this.sessionUsage, usage);
+    this.lastRequestUsage = usage;
+  }
+
+  private async callLlm(messages: LlmMessage[], signal?: AbortSignal): Promise<LlmChatResponse> {
+    const response = await withAbort(this.llm.chat(messages), signal);
+    this.recordLlmUsage(messages, response);
+    return response;
   }
 
   history(): LlmMessage[] {
@@ -237,6 +378,10 @@ export class AgentSession {
     this.threadPrevious = null;
     this.pendingConfirm = undefined;
     this.turnContextReady = false;
+    this.turnUsage = emptyTokenUsage();
+    this.sessionUsage = emptyTokenUsage();
+    this.lastRequestUsage = null;
+    this.lastBudget = null;
   }
 
   /** 供 UI / IPC / 测试读取的上一轮状态快照；只读拷贝。 */
@@ -260,16 +405,51 @@ export class AgentSession {
     const packed = serializeAgentContext(this.turnContext);
     const memory = this.memory.prompt();
     const thread = formatThreadContext(this.threadPrevious, this.turnContextReady ? this.turnContext : null);
-    return {
-      role: 'system',
-      content: [SYSTEM_PROMPT, thread, packed.text, memory].filter(Boolean).join('\n\n')
+    const budgeted = pack({
+      system: SYSTEM_PROMPT,
+      selection: [thread, packed.text].filter(Boolean).join('\n\n'),
+      memory
+    }, this.budget);
+    this.lastBudget = budgeted;
+    return { role: 'system', content: budgeted.text };
+  }
+
+  private messageTokenText(message: LlmMessage): string {
+    const calls = message.tool_calls ? JSON.stringify(message.tool_calls) : '';
+    return `${message.role}\n${message.content ?? ''}\n${calls}`;
+  }
+
+  /** 历史按「用户轮次」成组丢弃，避免拆散 assistant/tool 协议对。 */
+  private budgetedMessages(): LlmMessage[] {
+    const cap = Math.max(200, Math.trunc(this.budget.caps?.history ?? DEFAULT_SECTION_CAPS.history));
+    const total = Math.max(1, Math.trunc(this.budget.total ?? DEFAULT_TOTAL_BUDGET));
+    const groups: LlmMessage[][] = [];
+    for (const message of this.messages) {
+      if (message.role === 'user' || groups.length === 0) groups.push([]);
+      groups[groups.length - 1]!.push(message);
+    }
+    const render = (): LlmMessage[] => groups.flat().map((message) => ({
+      ...message,
+      ...(message.tool_calls
+        ? { tool_calls: message.tool_calls.map((call) => ({ ...call, function: { ...call.function } })) }
+        : {})
+    }));
+    const over = (): boolean => {
+      const history = render();
+      const historyText = history.map((message) => this.messageTokenText(message)).join('\n');
+      const systemText = this.lastBudget?.text ?? '';
+      const systemTokens = estimateTokens(systemText);
+      const historyTokens = estimateTokens(historyText);
+      return historyTokens > cap || systemTokens + historyTokens > total;
     };
+    while (groups.length > 1 && over()) groups.shift();
+    return render();
   }
 
   private context(): LlmMessage[] {
     return [
       this.systemPrompt(),
-      ...this.messages.map((message) => ({ ...message }))
+      ...this.budgetedMessages()
     ];
   }
 
@@ -402,7 +582,12 @@ export class AgentSession {
       source: 'chat'
     });
 
-    const finish = (ok: boolean, code: string, message?: string): void => {
+    const finish = (
+      ok: boolean,
+      code: string,
+      message?: string,
+      extras: { docsSources?: number } = {}
+    ): void => {
       const elapsedMs = Math.max(0, Date.now() - startedAt);
       this.recordAudit({
         tool: name,
@@ -411,7 +596,8 @@ export class AgentSession {
         args,
         elapsedMs,
         ...(code !== 'OK' ? { code } : {}),
-        ...(message ? { message } : {})
+        ...(message ? { message } : {}),
+        ...(extras.docsSources !== undefined ? { docsSources: extras.docsSources } : {})
       });
       this.emitProgress(context.onProgress, {
         runId: context.runId,
@@ -529,7 +715,13 @@ export class AgentSession {
       );
       this.memory.record(summarizeToolCall(name, args, result));
       const code = result.ok ? 'OK' : (result.error?.code ?? 'COMMAND_FAILED');
-      finish(result.ok, code, result.ok ? undefined : result.error?.message);
+      const sources = name === 'search_docs' ? docsSourceCount(result) : undefined;
+      finish(
+        result.ok,
+        code,
+        result.ok ? undefined : result.error?.message,
+        sources !== undefined ? { docsSources: sources } : {}
+      );
 
       if (name === 'run_interference_check' && result.ok && isRecord(result.data) && Array.isArray(result.data.items)) {
         return {
@@ -673,6 +865,8 @@ export class AgentSession {
     this.bypassIntent = detectBypassIntent(text);
     this.deniedWriteTools.clear();
     this.replyMode = 'online';
+    this.turnUsage = emptyTokenUsage();
+    this.lastRequestUsage = null;
     this.turnContext = emptyAgentContext();
     this.turnContextReady = false;
     if (this.contextProvider) {
@@ -719,7 +913,7 @@ export class AgentSession {
       if (options.signal?.aborted) throw new AgentCancelledError(completed);
       let response;
       try {
-        response = await withAbort(this.llm.chat(this.context()), options.signal);
+        response = await this.callLlm(this.context(), options.signal);
       } catch (error) {
         if (error instanceof AgentAborted || options.signal?.aborted) throw new AgentCancelledError(completed);
         const offline = await this.runOffline(text, { ...options, runId }, completed);
@@ -768,7 +962,7 @@ export class AgentSession {
         retryUsed = true;
         let retryResponse;
         try {
-          retryResponse = await withAbort(this.llm.chat(this.retryContext(reason, originalCalls)), options.signal);
+          retryResponse = await this.callLlm(this.retryContext(reason, originalCalls), options.signal);
         } catch (error) {
           if (error instanceof AgentAborted || options.signal?.aborted) throw new AgentCancelledError(completed);
           const offline = await this.runOffline(text, { ...options, runId }, completed);

@@ -59,6 +59,7 @@ import {
 } from './recipes.ts';
 import { unwrapToolResultData } from './guard.ts';
 import { parseFallbackCandidates } from './retry.ts';
+import { formatTokenCount } from './budget.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -106,6 +107,7 @@ let activeRunId = '';
 let advisorSuggestions: AdvisorSuggestion[] = [];
 const ignoredAdvisorIds = new Set<string>();
 let advisorRefreshSeq = 0;
+let usageState: DesktopAgentUsage | null = null;
 
 interface LiveProgress {
   key: string;
@@ -324,6 +326,23 @@ function renderShell(): void {
       <span class="acp-note" id="agentAuditSummary"></span>
     </div>
     <div class="acp-note" id="agentAuditHint">审计只记录工具名、结果、耗时与脱敏后的参数；最多显示最近 200 条。</div>
+
+    <div class="acp-section-title">上下文成本 <b id="agentUsageModel">—</b></div>
+    <div class="acp-usage" id="agentUsage">
+      <div class="acp-usage-row">
+        <span>本轮</span>
+        <b id="agentTurnTokens">—</b>
+        <span class="acp-usage-cost" id="agentTurnCost">—</span>
+      </div>
+      <div class="acp-usage-meta" id="agentTurnUsageMeta">输入 — · 输出 —</div>
+      <div class="acp-usage-row">
+        <span>本会话</span>
+        <b id="agentSessionTokens">—</b>
+        <span class="acp-usage-cost" id="agentSessionCost">—</span>
+      </div>
+      <div class="acp-usage-meta" id="agentSessionUsageMeta">输入 — · 输出 —</div>
+      <div class="acp-note" id="agentUsageNote">端点回传 usage 时为真实值；缺失时标注「估算」。未知模型费用显示 —。</div>
+    </div>
   `;
 
   bindControls();
@@ -333,6 +352,7 @@ function renderShell(): void {
   renderRecipe();
   renderAudit();
   renderAdvisor();
+  renderUsage();
   updateBusyState();
 }
 
@@ -1447,6 +1467,32 @@ function lastTurnMessages(): Array<{ role: string; content?: string | null }> {
   return messages.slice(start).map((message) => ({ role: message.role, content: message.content }));
 }
 
+function renderUsage(): void {
+  const usage = usageState;
+  const model = body?.querySelector<HTMLElement>('#agentUsageModel');
+  if (model) model.textContent = usage?.model && usage.model !== 'unknown' ? usage.model : '—';
+  const setText = (id: string, text: string): void => {
+    const element = body?.querySelector<HTMLElement>(`#${id}`);
+    if (element) element.textContent = text;
+  };
+  if (!usage) {
+    setText('agentTurnTokens', '—');
+    setText('agentTurnCost', '—');
+    setText('agentSessionTokens', '—');
+    setText('agentSessionCost', '—');
+    setText('agentTurnUsageMeta', '输入 — · 输出 —');
+    setText('agentSessionUsageMeta', '输入 — · 输出 —');
+    return;
+  }
+  const estimated = usage.turn.estimated ? ' · 估算' : '';
+  setText('agentTurnTokens', `${formatTokenCount(usage.turn.totalTokens)} tokens${estimated}`);
+  setText('agentTurnCost', usage.cost.turn.display);
+  setText('agentTurnUsageMeta', `输入 ${formatTokenCount(usage.turn.promptTokens)} · 输出 ${formatTokenCount(usage.turn.completionTokens)} · ${usage.turn.requests} 次请求`);
+  setText('agentSessionTokens', `${formatTokenCount(usage.session.totalTokens)} tokens`);
+  setText('agentSessionCost', usage.cost.session.display);
+  setText('agentSessionUsageMeta', `输入 ${formatTokenCount(usage.session.promptTokens)} · 输出 ${formatTokenCount(usage.session.completionTokens)} · ${usage.session.requests} 次请求`);
+}
+
 async function sendMessage(): Promise<void> {
   if (!body || thinking || multiPlan?.running || recipeUi.running) return;
   const input = fieldElement('agentChatInput');
@@ -1467,6 +1513,8 @@ async function sendMessage(): Promise<void> {
   try {
     const result = await window.desktop.agent.chat.send(text);
     messages = Array.isArray(result.messages) ? result.messages : messages;
+    if (result.tokens) usageState = result.tokens;
+    renderUsage();
     if (result.ok) {
       const turn = summarizeTurn(lastTurnMessages());
       lastReceipt = buildReceipt({
@@ -1502,7 +1550,9 @@ async function clearMessages(): Promise<void> {
     const result = await window.desktop.agent.chat.clear();
     messages = Array.isArray(result.messages) ? result.messages : [];
     lastReceipt = null;
+    usageState = null;
     renderMessages();
+    renderUsage();
     chatFeedback('');
   } catch (error) {
     chatFeedback(`清空失败：${errorMessage(error)}`, true);

@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
-| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、侧栏问答/建议/计划/流程卡片 UI |
+| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、侧栏问答/建议/计划/流程卡片 UI |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -88,6 +88,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ P7-J Agent 工具调用纠错：`repair.ts` 纯函数剥离围栏/解释文字、修单引号/尾逗号/注释、单位数字与字符串布尔/整数、截断补全（限 3 层）、未知字段删除、`partId` 从选中对象回填；修复后必须过 schema，首个错误给中文路径（如「参数 qty 应为整数，收到 "3 个"」），非法值不猜。`retry.ts` 首次失败带原因重试 1 次，仍失败回落两条可点击候选；审计新增 `retries/reason/repairs`；LLM 客户端默认 `response_format=json_object` 并在端点不支持时自动降级。`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`
 - ✅ 会话安全策略：`policy.ts` 的 `detectBypassIntent` / `sanitizeConfirmationClaims` / `checkExportTargetPath`；`AgentSession.executeTool` 对写工具强制确认、拒绝后同名写工具本轮短路并审计 `BYPASS_ATTEMPT`；导出只接受纯文件名，绝对路径/盘符/UNC/`../` 返回 `TARGET_PATH_UNSUPPORTED`，`allowSanitize=true` 才净化落盘并标记 `sanitized:true`；`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`
 - ✅ 多轮与续跑（P7-L）：`src/agent/thread.ts` 维护 turn/意图/目标/已完成步骤/未确认操作；工程指纹（机型+BOM 行数+底板放置数+CAD）变化时提示「工程已变化，不要沿用旧结论」；`runPlan({resumeFrom})` 跳过已完成步骤，指纹变化拒绝续跑并列出差异；确认超时/取消进 `pendingConfirm`，用户拒绝不自动重试；`SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`
+- ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 12 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；新工具 `search_docs`（只读，工具数 17 → 18），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=12 chunks=309 query=D2 hits=1`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 

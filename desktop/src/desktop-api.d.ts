@@ -226,6 +226,37 @@ interface DesktopAgentChatMessage {
   name?: string;
 }
 
+interface DesktopAgentTokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  /** 端点未回传 usage 时为 true（按字符数估算）。 */
+  estimated: boolean;
+  requests: number;
+}
+
+interface DesktopAgentCostView {
+  known: boolean;
+  currency: string;
+  amount: number | null;
+  /** 已知模型 "¥0.0000"，未知模型 "—"。 */
+  display: string;
+}
+
+interface DesktopAgentUsage {
+  model: string;
+  turn: DesktopAgentTokenUsage;
+  session: DesktopAgentTokenUsage;
+  cost: {
+    turn: DesktopAgentCostView;
+    session: DesktopAgentCostView;
+  };
+  budget?: {
+    used: number;
+    dropped: Array<{ section: string; reason: string; code: string }>;
+  };
+}
+
 interface DesktopAgentChatResult {
   ok: boolean;
   reply?: string;
@@ -235,6 +266,8 @@ interface DesktopAgentChatResult {
   /** 本轮走的通道：在线模型 / 离线规则（P7-A-2 统一回执） */
   mode?: 'online' | 'offline';
   elapsedMs?: number;
+  /** 本轮/本会话 tokens 与估算费用。 */
+  tokens?: DesktopAgentUsage;
   messages: DesktopAgentChatMessage[];
 }
 

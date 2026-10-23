@@ -24,6 +24,7 @@ import {
 } from '../src/agent/context';
 import { resolveReference } from '../src/agent/reference';
 import { trimListResult } from '../src/agent/trim';
+import { estimateTokens, pack } from '../src/agent/budget';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
 import { BYPASS_CONFIRMATION_NOTICE, detectBypassIntent } from '../src/agent/policy';
@@ -1656,6 +1657,43 @@ function createWindow(): BrowserWindow {
         }
         console.log('SMOKE_AGENT_CONTEXT_OK selection=1 recent=3');
 
+        // 上下文预算：长列表先首尾收敛、history 先丢、system 永不裁。
+        const budgetPayload = {
+          system: '你是 AutomationCAD 的桌面智能体。所有写操作必须先确认。',
+          selection: '选中：QF1（iC65N-C16-1P）\n机型：烟包机 · 4 工位',
+          memory: '最近工具调用：get_bom → OK',
+          docs: Array.from({ length: 24 }, (_unused, index) => `doc-${index}: 文档摘要 ${'说明'.repeat(18)}`),
+          toolResults: Array.from({ length: 36 }, (_unused, index) => `tool-${index}: ${'结果'.repeat(22)}`),
+          history: Array.from({ length: 40 }, (_unused, index) => `turn-${index}: 历史消息 ${'上下文'.repeat(16)}`)
+        };
+        const budgeted = pack(budgetPayload, {
+          total: 420,
+          caps: { history: 160, docs: 140, toolResults: 180 },
+          listHead: 5,
+          listTail: 5
+        });
+        const budgetSampleTokens = estimateTokens(`${'中文上下文'.repeat(20)}${'token budget '.repeat(20)}`);
+        const budgetHasSystem = budgeted.text.includes('所有写操作必须先确认');
+        const budgetDropSections = budgeted.dropped.map((entry) => entry.section);
+        if (
+          budgeted.used > 420 ||
+          !budgetHasSystem ||
+          budgeted.dropped.length === 0 ||
+          budgetDropSections.indexOf('history') === -1 ||
+          budgeted.docsSources < 0 ||
+          budgetSampleTokens <= 0
+        ) {
+          console.error('SMOKE_FAIL agent_budget', JSON.stringify({
+            used: budgeted.used,
+            docsSources: budgeted.docsSources,
+            system: budgetHasSystem,
+            dropped: budgeted.dropped
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_BUDGET_OK used=${budgeted.used} dropped=${budgeted.dropped.length} tokens=${budgetSampleTokens}`);
+
         // P7-L：多轮状态、续跑跳过、工程变化拒续跑（3 轮状态写入）。
         const threadSmoke = new AgentThread();
         threadSmoke.write({
@@ -1727,8 +1765,8 @@ function createWindow(): BrowserWindow {
 
         const auditPath = join(app.getPath('userData'), 'agent-audit-smoke.jsonl');
         const auditLog = createAuditLog({ write: (line) => appendFileSync(auditPath, `${line}\n`, 'utf8') });
-        auditLog.record({ tool: 'run_cost_report', ok: true, source: 'offline', args: { bom: [], apiKey: 'sk-live-abcdef123456' } });
-        auditLog.record({ tool: 'search_components', ok: false, code: 'NO_RESULT', source: 'llm', args: { q: '接触器' } });
+        auditLog.record({ tool: 'run_cost_report', ok: true, source: 'offline', args: { bom: [], apiKey: 'sk-live-abcdef123456' }, docsSources: 2 });
+        auditLog.record({ tool: 'search_components', ok: false, code: 'NO_RESULT', source: 'llm', args: { q: '接触器' }, promptTokens: 120, completionTokens: 34, estimated: false });
         auditLog.record({ tool: 'export_cost_report', ok: true, source: 'llm', args: { format: 'csv', token: 'tp-9f8e7d6c5b4a' } });
         const auditRaw = readFileSync(auditPath, 'utf8');
         const auditEntries = parseAuditLines(auditRaw);

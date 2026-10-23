@@ -22,13 +22,14 @@ import type { AgentTools } from '../src/agent/tools.ts';
 import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
-import { AgentCancelledError, AgentSession } from '../src/agent/session.ts';
+import { AgentCancelledError, AgentSession, emptyAgentUsage } from '../src/agent/session.ts';
 import { BYPASS_CONFIRMATION_NOTICE } from '../src/agent/policy.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import type { AgentPlan, PlanStep } from '../src/agent/planner.ts';
 import { AgentThread, runPlan } from '../src/agent/thread.ts';
 import { runRecipe, type RecipeContext, type RecipeProgressEvent } from '../src/agent/recipes.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
+import { DEFAULT_PRICING } from '../src/agent/pricing.ts';
 import { AUDIT_DISPLAY_LIMIT, limitAuditEntries } from '../src/agent/audit-view.ts';
 import type { AgentProgressEvent } from '../src/agent/feedback.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
@@ -740,6 +741,8 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       bus,
       maxIterations: config.maxIterations,
       thread,
+      model: config.model,
+      pricing: DEFAULT_PRICING,
       toolSchemas: Object.fromEntries(tools.summaries().map((tool) => [tool.name, tool.inputSchema])),
       audit: (record) => audit.record(record),
       contextProvider: async () => {
@@ -1133,10 +1136,10 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
 
   ipcMain.handle('agent:chat:send', async (event, text: unknown) => {
     if (typeof text !== 'string' || !text.trim()) {
-      return { ok: false, message: '请输入要发送给智能体的内容', messages: session?.history() ?? [] };
+      return { ok: false, message: '请输入要发送给智能体的内容', tokens: session?.usage() ?? emptyAgentUsage(), messages: session?.history() ?? [] };
     }
     if (text.length > 20_000) {
-      return { ok: false, message: '消息过长，请控制在 20000 字以内', messages: session?.history() ?? [] };
+      return { ok: false, message: '消息过长，请控制在 20000 字以内', tokens: session?.usage() ?? emptyAgentUsage(), messages: session?.history() ?? [] };
     }
     try {
       const current = getSession();
@@ -1158,6 +1161,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         reply,
         mode: current.mode(),
         elapsedMs: Math.max(0, Date.now() - started),
+        tokens: current.usage(),
         messages: current.history()
       };
     } catch (error) {
@@ -1171,12 +1175,14 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
           message: error.message,
           completedSteps: error.completedSteps,
           elapsedMs: 0,
+          tokens: session?.usage() ?? emptyAgentUsage(),
           messages: session?.history() ?? []
         };
       }
       return {
         ok: false,
         message: error instanceof Error ? error.message : String(error),
+        tokens: session?.usage() ?? emptyAgentUsage(),
         messages: session?.history() ?? []
       };
     }

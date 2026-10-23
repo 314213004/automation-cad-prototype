@@ -389,6 +389,27 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 测试与冒烟：`desktop/test/agent/repair.test.mjs` 39 条覆盖围栏/废话/单引号/尾逗号/注释/单位/布尔/整数/多工具串/截断成功与失败/schema 中文路径/禁止猜测/selection 回填/未知字段/重试成功/重试回落/审计；LLM 三条覆盖 response_format 与降级。冒烟新增 `SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`。
 
+### 8.6 上下文预算与成本（P7-M）
+
+目标：不让 18 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
+
+**预算模型**（`desktop/src/agent/budget.ts`，纯函数）
+
+- `estimateTokens(text)`：CJK 字符按 **1 token ≈ 1.6 字符**，其他字符按 **4 字符 ≈ 1 token**，向上取整；用于预算与回落估算，端点回传 usage 时以真实值为准。
+- 档位：`system / selection / memory / docs / toolResults / history`。默认总量 **12k tokens**，单档默认 `4000 / 1500 / 1200 / 2500 / 5000 / 3000`，都可通过 `BudgetOptions` 配置。
+- `pack(payload, options)` 返回 `{text, used, dropped, sections, docsSources}`。裁剪优先级：**history < docs < toolResults**；`system` 策略段**永不裁剪**，即使自身超过总量也只追加 `system_protected` 原因。
+- 超限顺序：先收敛长列表（保留**首尾各 5 条 + total**，插入「已省略 N 条，共 M 条」），再丢最旧的 history，最后才移除 docs 与 toolResults；每条 `dropped` 都带 `section + code + 可读中文原因`。
+- 会话接入：`session.ts` 每轮把 `SYSTEM_PROMPT + 工程上下文 + thread + memory` 装包为系统段；历史消息按「用户轮次」成组裁剪，避免拆散 assistant/tool 协议对；`trim.ts` 仍负责单条工具结果的首轮 10 KB 收敛。
+
+**成本可见性**
+
+- `llm.ts` 解析端点 `usage.prompt_tokens / completion_tokens`；缺失时 `session.ts` 按消息 + 工具 schema / 回复 + tool_calls 估算，并在快照中标记 `estimated:true`。
+- 会话维护本轮与本会话累计：`promptTokens / completionTokens / totalTokens / requests / estimated`；取消或失败也返回已发生的用量。
+- 价格唯一来源 `desktop/src/agent/pricing.json`：`currency`、`unit`（默认 1000，即元/千 tokens）与 `models.{name}.{input,output}`；支持最长前缀匹配（`gpt-4o-mini-2026-01`）。已知模型按输入/输出分别计价，默认零价显示 `¥0.0000`；**未知模型显示 `—`**，不猜价格。
+- 侧栏底部「上下文成本」显示本轮 / 本会话 tokens、输入输出拆分与估算费用；端点缺 usage 时明确标「估算」。
+- 审计行新增 `promptTokens / completionTokens / estimated / docsSources`；`search_docs` 命中时 `docsSources` 记录实际来源数，便于回答「这句结论引用了哪些文档」。
+- 冒烟：`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`；单测 `desktop/test/agent/budget.test.mjs` 21 条，覆盖估算误差、优先级、system 保留、首尾截断、usage 回落、费用格式化、未知模型与审计字段。
+
 ## 9. 质量评估
 
 固定 61 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；18 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。

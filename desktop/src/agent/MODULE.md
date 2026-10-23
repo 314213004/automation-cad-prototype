@@ -192,6 +192,37 @@ AgentMemory.record / entries / prompt / clear
 
 冒烟：`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`。单测在 `test/agent/context-memory-trim.test.mjs`（28 条）。
 
+## 上下文预算与成本可见性（P7-M）
+
+`budget.ts` 是纯函数模块，不读文件、不碰 DOM：
+
+```ts
+estimateTokens(text): number              // 中文 1.6 字符/token，其他 4 字符/token
+truncateToTokens(text, limit, suffix?)    // 完整码点边界内截断
+pack(payload, options?): {
+  text; used; dropped[{section, code, reason}]; sections; docsSources
+}
+```
+
+装包档位与默认上限：`system 4000 / selection 1500 / memory 1200 / docs 2500 / toolResults 5000 / history 3000`，总量默认 `12000`，均可通过 `{total, caps, listHead, listTail}` 覆盖。
+
+裁剪规则：
+
+1. 单档超限：长列表先保留首尾各 5 条 + `total`；仍超则按 token 截断。`system` 不参与。
+2. 总量超限：先收敛 docs / toolResults 长列表，再按 `history → docs → toolResults → memory → selection` 丢弃。
+3. `system` 永不裁剪；若自身超总量，只追加 `system_protected` 原因，`used` 可能高于 `total`。
+4. `dropped` 每条都有 `section`、`code` 与中文 `reason`，可直接显示给用户。
+
+成本口径：
+
+- `llm.ts` 的 `LlmChatResponse.usage` 接收 `prompt_tokens / completion_tokens`；`session.ts` 缺失时用消息 + 工具 schema、回复 + tool_calls 估算，`estimated:true`。
+- `session.usage()` 返回 `{model, turn, session, cost:{turn,session}, budget?}`；取消/失败也保留已发生用量。`clear()` 同时清零本会话累计。
+- 价格表 `pricing.json`（`{currency, unit, models}`）经 `pricing.ts` 的 `normalizePricing` 读取；`budget.ts` 的 `estimateCostView` 做最长前缀匹配与格式化，未知模型 `display:'—'`。
+- 审计 `AgentAuditRecord` 新增 `promptTokens / completionTokens / estimated / docsSources`；`search_docs` 结果里的 `hits` 数量会写入 `docsSources`。
+- 侧栏 `ui.ts` 底部「上下文成本」渲染本轮/本会话 tokens、输入输出拆分与费用，并标注「估算」。
+
+测试：`desktop/test/agent/budget.test.mjs` 21 条；冒烟 `SMOKE_AGENT_BUDGET_OK used=… dropped=… tokens=…`。
+
 ## 多轮状态与续跑（P7-L）
 
 `thread.ts` 是无 IO 的纯状态层 + `runPlan` 包装器；`session.ts` 每轮开始读取、结束写入。
@@ -482,6 +513,7 @@ parseFallbackCandidates(text): string[]
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
 - ✅ 离线规则路由（7 类意图）+ 历史工具清单上下文裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ P7-L 多轮状态与续跑：`thread.ts` 记录上一轮意图/目标/完成步骤/未确认操作，工程指纹变化拒续跑，确认超时进 pendingConfirm；28 条单测 + `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`；多轮评测脚本 6 场景阈值 0.8
+- ✅ P7-M 上下文预算与成本可见性：`budget.ts` 六档装包（默认 12k）+ 长列表首尾 5/total + history 优先丢弃 + system 永不裁；usage 真实值/估算回落；`pricing.json` 费用与侧栏展示；审计 tokens/docsSources；21 条单测 + `SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消

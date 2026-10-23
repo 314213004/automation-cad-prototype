@@ -3,6 +3,16 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 上下文预算与成本可见性（P7-M，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **983/983**（962 + 21）、`npm run smoke` 新增 `SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`、`npm run eval:agent` 通过；不 push。
+- A. 预算模型：新增 `desktop/src/agent/budget.ts`（纯函数）——`estimateTokens`（中文 1.6 字符 / token、其他 4 字符 / token，向上取整）、六档 `system / selection / memory / docs / toolResults / history`（默认总量 12k，可配单档上限）、`pack(payload, options)` 返回 `{text, used, dropped, sections, docsSources}`。
+- B. 裁剪顺序：单档超限先保留长列表首尾各 5 条 + `total`；总量超限先收敛 docs / toolResults 长列表，再按 `history → docs → toolResults → memory → selection` 丢弃；`system` 永不裁剪（超总量只记 `system_protected`），每条 `dropped` 带中文原因。`session.ts` 用六档装包系统上下文，并按用户轮次成组裁剪模型历史，避免拆散 assistant/tool 协议对。
+- C. 成本可见性：`llm.ts` 解析端点 `usage.prompt_tokens / completion_tokens`；缺失时会话按消息 + 工具 schema / 回复 + tool_calls 估算并标 `estimated:true`；`usage()` 返回本轮/本会话 `promptTokens / completionTokens / totalTokens / requests / estimated` 与费用。新增 `pricing.json`（元/1k tokens，`currency/unit/models`）与 `pricing.ts`，`estimateCostView` 支持精确/最长前缀匹配，未知模型显示 `—`。
+- D. UI / 审计：侧栏底部新增「上下文成本」，显示本轮/本会话 tokens、输入输出拆分与费用，估算态有标注；审计行新增 `promptTokens / completionTokens / estimated / docsSources`，`search_docs` 命中时记录实际来源数。
+- E. 测试：新增 `desktop/test/agent/budget.test.mjs` 21 条，覆盖估算误差、装包不超预算、history < docs < toolResults 优先级、system 保留、长列表首尾截断、裁剪原因可读、usage 缺失回落估算、真实 usage 累计、费用格式化、未知模型 `—`、审计 tokens/docsSources。冒烟新增 `SMOKE_AGENT_BUDGET_OK used=… dropped=… tokens=…`。
+- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.6；`README.md`、`docs/desktop/MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
+
 ## Agent 多轮上下文与中断续跑（P7-L，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` 962/962、`npm run smoke` 新增 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`；`npm run eval:agent` 通过；多轮真实模型评测无凭据 SKIP（结果文件已写；本地桩校验 6/6 场景、15/15 轮）。不 push。

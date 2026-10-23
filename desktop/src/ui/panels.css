@@ -297,3 +297,10 @@
 .acp-recipe-summary.is-error{background:#332323;color:#ffc9c4}
 .acp-recipe-completed{margin-top:5px;color:#9fb0ba;font:9px/1.7 var(--font-mono,monospace);word-break:break-word}
 .acp-recipe-report{margin:6px 0 0;padding:6px 7px;border:1px solid #30373d;border-radius:3px;background:#161a1e;color:#aeb8bf;font:9px/1.6 var(--font-mono,monospace);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}
+
+/* Agent 上下文预算与成本可见性 */
+.acp-usage{margin:6px 0 2px;padding:7px 8px;border:1px solid #343a40;border-radius:4px;background:#1b1e21}
+.acp-usage-row{display:flex;align-items:baseline;gap:8px;color:#9aa8a5;font-size:10px;line-height:1.6}
+.acp-usage-row b{color:#e4efec;font:11px/1.5 var(--font-mono,monospace)}
+.acp-usage-cost{margin-left:auto;color:#6fcfbf;font:10px/1.5 var(--font-mono,monospace);white-space:nowrap}
+.acp-usage-meta{margin:0 0 4px;color:#7f8a92;font:9px/1.5 var(--font-mono,monospace);word-break:break-word}

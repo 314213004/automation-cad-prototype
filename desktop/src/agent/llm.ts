@@ -20,9 +20,17 @@ export interface LlmMessage {
   name?: string;
 }
 
+export interface LlmUsage {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+}
+
 export interface LlmChatResponse {
   content: string;
   toolCalls: LlmToolCall[];
+  /** 端点回传的 usage；部分兼容端点不回传，由会话层回落为估算。 */
+  usage?: LlmUsage;
 }
 
 export interface LlmClient {
@@ -84,6 +92,24 @@ export function toOpenAiTools(tools: AgentToolSummary[]): Array<Record<string, u
       parameters: tool.inputSchema
     }
   }));
+}
+
+function usageNumber(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.trunc(number) : undefined;
+}
+
+function parseUsage(value: unknown): LlmUsage | undefined {
+  if (!isRecord(value)) return undefined;
+  const promptTokens = usageNumber(value.prompt_tokens ?? value.promptTokens);
+  const completionTokens = usageNumber(value.completion_tokens ?? value.completionTokens);
+  const totalTokens = usageNumber(value.total_tokens ?? value.totalTokens);
+  if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) return undefined;
+  return {
+    ...(promptTokens !== undefined ? { promptTokens } : {}),
+    ...(completionTokens !== undefined ? { completionTokens } : {}),
+    ...(totalTokens !== undefined ? { totalTokens } : {})
+  };
 }
 
 function parseToolCalls(message: Record<string, unknown>): LlmToolCall[] {
@@ -208,9 +234,11 @@ export class OpenAiCompatibleClient implements LlmClient {
       throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应字段不存在：choices');
     }
     const message = isRecord(payload.choices[0].message) ? payload.choices[0].message : {};
+    const usage = parseUsage(payload.usage);
     return {
       content: contentText(message.content).trim(),
-      toolCalls: parseToolCalls(message)
+      toolCalls: parseToolCalls(message),
+      ...(usage ? { usage } : {})
     };
   }
 

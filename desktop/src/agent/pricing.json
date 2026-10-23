@@ -1,0 +1,12 @@
+{
+  "currency": "CNY",
+  "unit": 1000,
+  "models": {
+    "deepseek-v4.1-flash": { "input": 0, "output": 0 },
+    "deepseek-chat": { "input": 0.001, "output": 0.002 },
+    "deepseek-reasoner": { "input": 0.001, "output": 0.002 },
+    "gpt-4o-mini": { "input": 0.001, "output": 0.002 },
+    "gpt-4o": { "input": 0.01, "output": 0.03 },
+    "qwen-plus": { "input": 0.0008, "output": 0.002 }
+  }
+}
