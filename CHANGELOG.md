@@ -4,9 +4,22 @@
 
 ## [0.3.0] - 2026-10-23
 
-> 本次只做版本号、变更记录与汇报材料同步；**未发布安装包**。构建需老王通知后手动触发，不随本次提交打包、不触发 CI、不打 tag。
+> 已发布：GitHub Release `v0.3.0`，Windows 安装包 `AutomationCAD-Setup-0.3.0.exe`（NSIS，未签名，129 MB），由 `windows-build` 手动触发在 `windows-latest` 上构建（1248 单测 / 0 失败）。
 
-> 说明：能力条目均附真实提交号；版本号、本文件与汇报材料属于本次发版准备改动，尚未提交，因此不附提交号。
+> 说明：能力条目均附真实提交号；本次发版追加的整机 3D 能力见下方「Added · 整机 3D」。
+
+### Added · 整机 3D（迭代 34–36，PR #4）
+
+- 机型方案生成参数化整机几何：`machine/geometry.ts` 由 `MachineConfig` 生成 mm 级整机（机架、工位、气缸、夹爪、转台、传感器、光栅、输送线）与运动轴元数据，导出 STL / glTF / build123d sidecar 清单，STEP 由内核实体化（`bd5adc1`）。
+- 主视图可旋转 three.js 3D：`src/orbit/` 注入扩展提供旋转/缩放/平移、六向标准视图、透视↔正交、剖切、树↔3D 双向选择与属性实时改几何，无 WebGL 时回退原型 SVG，原型 `index.html` / `app.js` / `styles.css` 零改动（`5fb16f9`）。
+- STEP 装配体运动件自动识别：按零件名/型号、装配层级与几何推断轴向、行程、置信度与中文理由，只出建议、逐条采纳才写标注（`bcef010`）。
+- Agent 只读工具 `suggest_kinematics`（工具数 20 → 21），命令 → 渲染桥 → 标注抽屉，`applied=false` 从不写标注（`310f164`）。
+- KB 容量治理：BACKLOG 历史归档不入索引，`kb.json` 约 408 KB → 363 KB，新增「索引留 ≥5% 余量」守卫（`310f164`）。
+
+### Fixed · 合并前复查
+
+- STEP 实体化把水平圆柱按等截面方棒近似时写中文 warning 点名零件并透出 `approximatedIds`；`solids/` 上一次遗留的 `part-N.step` 先入撤销快照再清理（`192983e`）。
+- Windows CI 上 4 条平台脆弱断言（文件名时间戳写死 `+08:00`、`/tmp` 路径、sidecar 脚本分隔符正则）改为时区/分隔符无关（`823caf4`）。
 
 ### Added
 

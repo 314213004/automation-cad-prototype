@@ -7,7 +7,7 @@
 - 测试：**1248/1248 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9 + Agent `suggest_kinematics` 9 + KB 余量守卫 1 + STEP 分块清理/近似件透出 1；沙箱需 `TZ=Asia/Shanghai`）。
 - 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
-- 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
+- 最近发布：`v0.3.0` NSIS `AutomationCAD-Setup-0.3.0.exe`（129 MB，未签名，Windows runner 1248 单测 0 失败）；上一版 `v0.2.0`。
 
 ## 验证记录（本轮真实执行）
 
