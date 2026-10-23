@@ -52,7 +52,7 @@ SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16 ticks=.
 SMOKE_DIAGNOSE_OK codes=1
 SMOKE_AGENT_TOOLS_OK tools=18 implemented=18
 SMOKE_AGENT_TOOLS_V2 tools=18
-SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1
+SMOKE_AGENT_KB_OK docs=12 chunks=302 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
@@ -60,6 +60,9 @@ SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0
 SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555
 SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1
 SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap
+SMOKE_AGENT_REPAIR_OK cases=10 repaired=7
+SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1
+SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。

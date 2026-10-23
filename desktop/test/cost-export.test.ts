@@ -355,6 +355,7 @@ test('命令 export_cost_report：CSV 成功分支写出净化后的文件名', 
     ...costCase,
     format: 'csv',
     fileName: '报价/单:2026*',
+    allowSanitize: true,
     pricebook: fixture,
     now: NOW
   });
@@ -363,6 +364,7 @@ test('命令 export_cost_report：CSV 成功分支写出净化后的文件名', 
   assert.equal(data.format, 'csv');
   assert.equal(data.lines, 6);
   assert.equal(data.grand, 1398.64);
+  assert.equal(data.sanitized, true);
   assert.ok(Number(data.bytes) > 0);
   assert.equal(basename(String(data.path)), '报价单2026.csv');
   assert.equal(calls.at(-1)?.method, 'exportCostFile');

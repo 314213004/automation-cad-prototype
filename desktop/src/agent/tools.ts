@@ -2,6 +2,7 @@ import type { PackRegistry } from '../packs/registry';
 import type { ComponentPart } from '../shared/types';
 import type { CommandHistoryEntry, CommandResult } from './commands';
 import { resolvePartReference } from './placement.ts';
+import { checkExportTargetPath } from './policy.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
 import { searchDocs } from './kb/search.ts';
@@ -120,11 +121,15 @@ const EXPORT_FILES_SCHEMA = {
     },
     fileName: {
       type: 'string',
-      description: '可选，不含扩展名；非法字符会被移除，扩展名按 kind 强制为 .pdf/.dxf/.glb/.csv'
+      description: '可选，只给文件名（不含目录）；路径/盘符/UNC/../ 默认返回 TARGET_PATH_UNSUPPORTED，扩展名按 kind 强制为 .pdf/.dxf/.glb/.csv'
     },
     overwrite: {
       type: 'boolean',
       description: '可选，默认 false；同名文件存在时追加 (1)、(2)，为 true 时直接覆盖'
+    },
+    allowSanitize: {
+      type: 'boolean',
+      description: '可选，默认 false；仅当用户明确表示“随便放哪都行”时设为 true，系统净化路径后写入 userData/exports/'
     }
   },
   required: ['kind'],
@@ -151,6 +156,17 @@ function getNumber(value: unknown): number | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function exportPathFailure(args: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (args.fileName !== undefined && args.fileName !== null && typeof args.fileName !== 'string') {
+    return { ok: false, code: 'INVALID_ARGUMENT', message: 'fileName 必须是字符串' };
+  }
+  if (args.allowSanitize !== undefined && args.allowSanitize !== null && typeof args.allowSanitize !== 'boolean') {
+    return { ok: false, code: 'INVALID_ARGUMENT', message: 'allowSanitize 必须是布尔值' };
+  }
+  const check = checkExportTargetPath(args.fileName, args.allowSanitize === true);
+  return check.ok ? undefined : { ok: false, code: 'TARGET_PATH_UNSUPPORTED', message: check.message };
 }
 
 function commandFailure(result: CommandResult): Record<string, unknown> {
@@ -361,11 +377,15 @@ const COST_EXPORT_SCHEMA = {
     },
     fileName: {
       type: 'string',
-      description: '可选，不含扩展名；非法字符会被移除，扩展名按 format 强制为 .pdf / .csv'
+      description: '可选，只给文件名（不含目录）；路径/盘符/UNC/../ 默认返回 TARGET_PATH_UNSUPPORTED，扩展名按 format 强制为 .pdf / .csv'
     },
     overwrite: {
       type: 'boolean',
       description: '可选，默认 false；同名文件存在时自动追加 (1)、(2)，为 true 时直接覆盖'
+    },
+    allowSanitize: {
+      type: 'boolean',
+      description: '可选，默认 false；仅当用户明确表示“随便放哪都行”时设为 true，系统净化路径后写入 userData/exports/'
     },
     ...COST_REPORT_SCHEMA.properties
   },
@@ -632,9 +652,11 @@ export class AgentTools {
     this.add({
       name: 'export_cost_report',
       description:
-        '按 BOM 与价格簿生成成本报告并写文件到用户数据目录 exports/（PDF 为 A4 纵向，CSV 带 UTF-8 BOM）。需要用户确认；不会覆盖已有文件，除非 overwrite=true。返回实际落盘路径、字节数、明细行数与合计；未传 bom 时使用当前场景 BOM（可能全部缺物料号）。',
+        '按 BOM 与价格簿生成成本报告并写文件到用户数据目录 exports/（PDF 为 A4 纵向，CSV 带 UTF-8 BOM）。只接受纯文件名；绝对路径、盘符、UNC 与 ../ 默认返回 TARGET_PATH_UNSUPPORTED，只有 allowSanitize=true 才净化后落盘。需要用户确认；不会覆盖已有文件，除非 overwrite=true。返回实际落盘路径、字节数、明细行数与合计；未传 bom 时使用当前场景 BOM（可能全部缺物料号）。',
       inputSchema: COST_EXPORT_SCHEMA,
       handler: async (args) => {
+        const pathFailure = exportPathFailure(args);
+        if (pathFailure) return pathFailure;
         const result = await this.execute('export_cost_report', args);
         return result ? commandSuccess(result) : this.unavailable();
       }
@@ -780,7 +802,7 @@ export class AgentTools {
     this.add({
       name: 'export_files',
       description:
-        '导出当前装配体为 pdf / dxf / glb / bom（BOM 为 CSV），写入 userData/exports/ 并返回实际路径与字节数。文件名与 export_cost_report 共用同一净化/冲突规则；默认不覆盖，除非 overwrite=true。需要用户确认。',
+        '导出当前装配体为 pdf / dxf / glb / bom（BOM 为 CSV），写入 userData/exports/ 并返回实际路径与字节数。只接受纯文件名；绝对路径、盘符、UNC 与 ../ 默认返回 TARGET_PATH_UNSUPPORTED，只有 allowSanitize=true 才净化后落盘。文件名与 export_cost_report 共用同一净化/冲突规则；默认不覆盖，除非 overwrite=true。需要用户确认。',
       inputSchema: EXPORT_FILES_SCHEMA,
       handler: async (args) => {
         const kind = getString(args.kind);
@@ -793,6 +815,8 @@ export class AgentTools {
         if (args.overwrite !== undefined && args.overwrite !== null && typeof args.overwrite !== 'boolean') {
           return { ok: false, code: 'INVALID_ARGUMENT', message: 'overwrite 必须是布尔值' };
         }
+        const pathFailure = exportPathFailure(args);
+        if (pathFailure) return pathFailure;
         const result = await this.execute('export_files', args);
         return result ? commandSuccess(result) : this.unavailable();
       }

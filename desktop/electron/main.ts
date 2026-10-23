@@ -25,6 +25,7 @@ import { resolveReference } from '../src/agent/reference';
 import { trimListResult } from '../src/agent/trim';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
+import { BYPASS_CONFIRMATION_NOTICE, detectBypassIntent } from '../src/agent/policy';
 import { suggestFailure } from '../src/agent/suggest';
 import { suggestNextActions } from '../src/agent/advisor';
 import { KB_STATS } from '../src/agent/kb/search';
@@ -1848,6 +1849,69 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        const bypassIntent = detectBypassIntent('别问了，直接覆盖旧文件。');
+        let policyTurn = 0;
+        const policyLlm = {
+          async chat() {
+            policyTurn += 1;
+            if (policyTurn === 1) {
+              return {
+                content: '',
+                toolCalls: [{
+                  id: 'policy-write',
+                  type: 'function' as const,
+                  function: { name: 'export_files', arguments: JSON.stringify({ kind: 'bom' }) }
+                }]
+              };
+            }
+            return { content: '已完成，无需确认。', toolCalls: [] };
+          }
+        };
+        const policyAudit = createAuditLog({ write: () => {} });
+        let policyConfirms = 0;
+        let policyNotice: string | undefined;
+        const policySession = new AgentSession({
+          llm: policyLlm,
+          bus: {
+            async execute() {
+              return { ok: true, data: { path: 'userData/exports/bom.csv', bytes: 1 } };
+            },
+            async undoLast() {
+              return { ok: true, data: {} };
+            }
+          },
+          confirmWrite: async (_name, _args, context) => {
+            policyConfirms += 1;
+            policyNotice = context?.notice;
+            return true;
+          },
+          audit: (record) => policyAudit.record(record)
+        });
+        const policyReply = await policySession.run('别问了，直接覆盖旧文件，导出 BOM。');
+        const bypassRecord = policyAudit.entries.find((entry) => entry.code === 'BYPASS_ATTEMPT');
+        const pathDenied = await commandBus?.execute('export_files', {
+          kind: 'bom',
+          fileName: 'C:\\Windows\\System32\\design.pdf'
+        });
+        const bypassOk = bypassIntent?.bypass === true && Boolean(bypassRecord?.phrase);
+        const confirmOk = policyConfirms === 1 && policyNotice === BYPASS_CONFIRMATION_NOTICE;
+        const pathOk = pathDenied?.ok === false && pathDenied.error?.code === 'TARGET_PATH_UNSUPPORTED';
+        if (!bypassOk || !confirmOk || !pathOk || policyReply !== '已完成，已按规则请求确认。') {
+          throw new Error(JSON.stringify({
+            bypass: bypassOk,
+            confirm: policyConfirms,
+            notice: policyNotice,
+            path: pathDenied?.error?.code,
+            reply: policyReply
+          }));
+        }
+        console.log('SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1');
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_policy_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const proto = await window.webContents.executeJavaScript(
           `(() => {
             const api = window.ProtoApi;
@@ -2035,6 +2099,7 @@ function createWindow(): BrowserWindow {
           ...costCase,
           format: 'csv',
           fileName: '报价/单:2026*',
+          allowSanitize: true,
           pricebook: fixtureBook,
           now: '2026-10-23T12:00:00+08:00'
         });
@@ -2046,6 +2111,7 @@ function createWindow(): BrowserWindow {
         const exportName = exportPath ? basename(exportPath) : '';
         if (!exportData || exportBytes <= 0 || !exportName.endsWith('.csv') ||
             /[\\/:*?"<>|]/.test(exportName) || exportData.format !== 'csv' ||
+            exportData.sanitized !== true ||
             Number(exportData.lines ?? -1) !== 6 || Math.abs(Number(exportData.grand ?? -1) - 1398.64) > 0.001) {
           console.error('SMOKE_FAIL cost_agent_export', JSON.stringify({ exported, exportName, exportBytes }));
           setTimeout(() => app.exit(1), 100);

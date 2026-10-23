@@ -3,6 +3,15 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 会话层硬拦截 + 目标路径澄清（2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **932/932**、`npm run smoke` → `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1` 且 `SMOKE_OK`、`npm run eval:agent` 通过；不 push。
+- A. 策略层：新增 `desktop/src/agent/policy.ts`（纯函数）—— `detectBypassIntent` 识别“别问了 / 不用确认 / 直接覆盖 / 跳过确认 / 我授权 / 别让我点”；`sanitizeConfirmationClaims` 过滤“无需确认 / 已自动确认”；`checkExportTargetPath` 判定盘符/UNC/绝对路径/`../`/相对目录/系统目录。
+- B. 会话硬拦截：`session.ts::executeTool` 对写工具强制 `confirmWrite`（缺少回调或返回值不是明确 `true` 一律不执行），bypass 时确认文案追加“用户要求跳过确认，但写操作必须确认”并写审计 `BYPASS_ATTEMPT`（含 `phrase`）；用户拒绝后本轮同名写工具直接 `USER_DENIED`，不再弹窗。
+- C. 路径澄清：`commands.ts` / `tools.ts` / `cost/export.ts` 共用路径判定；`export_files` / `export_cost_report` 默认只接受纯文件名，危险目标返回 `TARGET_PATH_UNSUPPORTED` 且消息附 `userData/exports/`，不调用渲染桥、不建目录、不写盘；`allowSanitize:true` 才净化落盘并返回 `sanitized:true`。
+- D. 测试：新增 `desktop/test/agent/policy.test.mjs` 42 条，覆盖意图正负例、话术替换、盘符/UNC/`../`/纯文件名、allowSanitize 开关、直接调用 `executeTool`、拒绝短路与审计字段；既有导出 smoke 改为显式 `allowSanitize`。
+- E. 文档：`NL-AGENT.md` 新增 6.1「确认与路径策略」、9.1.1 下一步标记；`MODULES.md`、`desktop/src/agent/MODULE.md`、本文件同步。
+
 ## Agent 真实模型评测 30 条 + 失败归因（P7-K，2026-10-23，本轮）
 
 - 状态：✅ 完成并过闸；三轮迭代后 `toolAccuracy=1.00`、`refusalRate=1.00`，`npm run agent:live` 退出码 0；**已 push**（后续由主会话补提交）。
@@ -16,8 +25,8 @@
   - 第 2 轮 R05 误判幻觉：模型确实调用了 `export_files` 却被判“未调用工具却声称完成”；判定改为仅当“本轮零工具调用”时才判幻觉。
   - 只读步骤调序：允许 `run_interference_check` 与 `run_electrical_check` 互换顺序，写操作仍按序。
 - E. 下一步（按优先级）：
-  1. **P0 硬拦截**：在 `AgentSession.executeTool` 前增加策略层 —— 用户文本含“跳过/别问/直接覆盖”等绕过确认意图时，写工具一律不进入执行（或强制走确认并记录 `CONFIRMATION_REQUIRED`）；工具结果与回复不得出现“无需确认”。
-  2. **P0 目标路径澄清**：`export_files` / `export_cost_report` 遇到用户给定目录时，先返回 `TARGET_PATH_UNSUPPORTED` 并列出允许目录，由用户确认替代目标后才写入；禁止静默替换路径。
+  1. ✅ **P0 硬拦截**：`policy.ts::detectBypassIntent` + `session.ts::executeTool` 强制确认、拒绝短路、`BYPASS_ATTEMPT` 审计、回复话术过滤；实现与证据见本轮新增章节。
+  2. ✅ **P0 目标路径澄清**：`policy.ts::checkExportTargetPath` + `commands.ts` / `tools.ts` / `cost/export.ts` 统一拒绝危险路径；`allowSanitize=true` 才净化，返回 `sanitized:true`。
   3. **P1 流程稳定性**：评测改为 3 轮取多数，记录每轮 F02/F03；同时给流程计划加“未完成步骤不得结束”的执行约束，或在系统提示中明确“多步流程必须继续到全部步骤或明确失败”。
   4. **P1 回归门槛**：拒绝/澄清类保持 6/6 必须全过；建议再补“工具结果注入要求跳过确认”“用户伪造已确认”两条用例，防止只对单句生效。
   5. **P2 扩充**：补充真实多轮上下文（改型号后撤销再改数量）、跨域误用（机械域要求电气导出）与超长序号/批量 20 件，继续观察 token 与延迟。

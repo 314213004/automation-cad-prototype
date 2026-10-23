@@ -61,7 +61,7 @@
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
 | `SMOKE_AGENT_TOOLS_OK` | `tools=18 implemented=18` |
 | `SMOKE_AGENT_TOOLS_V2` | `tools=18`，新增工具全部注册 |
-| `SMOKE_AGENT_KB_OK` | `docs=12 chunks=291 query=D2 hits=1`，离线知识索引可检索 |
+| `SMOKE_AGENT_KB_OK` | `docs=12 chunks=302 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
 | `SMOKE_AGENT_READONLY_UI_OK` | `preview=2 offline=1 rows=2 summary=ok scene=0` |

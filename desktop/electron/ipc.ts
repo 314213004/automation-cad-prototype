@@ -23,6 +23,7 @@ import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentCancelledError, AgentSession } from '../src/agent/session.ts';
+import { BYPASS_CONFIRMATION_NOTICE } from '../src/agent/policy.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
 import { runRecipe, type RecipeContext, type RecipeProgressEvent } from '../src/agent/recipes.ts';
@@ -746,16 +747,19 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
           return null;
         }
       },
-      confirmWrite: async (name, args) => {
+      confirmWrite: async (name, args, confirmContext) => {
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
         const serialized = JSON.stringify(args);
         const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
+        const bypassNotice = confirmContext?.bypass
+          ? (confirmContext.notice ?? BYPASS_CONFIRMATION_NOTICE)
+          : '';
         const result = await dialog.showMessageBox(window, {
           type: 'question',
           title: '智能体写操作确认',
-          message: `智能体请求执行 ${name}，参数：${summary}，是否允许？`,
-          detail: '该操作会修改当前装配体。',
+          message: `智能体请求执行 ${name}，参数：${summary}，是否允许？${bypassNotice ? `（${bypassNotice}）` : ''}`,
+          detail: bypassNotice ? `该操作会修改当前装配体。${bypassNotice}。` : '该操作会修改当前装配体。',
           buttons: ['允许', '拒绝'],
           defaultId: 1,
           cancelId: 1,

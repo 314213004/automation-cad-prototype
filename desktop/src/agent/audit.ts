@@ -22,6 +22,8 @@ export interface AgentAuditRecord {
   reason?: string;
   /** 实际应用的参数修复项，按发生顺序。 */
   repairs?: string[];
+  /** 策略事件命中的用户原短语（如 BYPASS_ATTEMPT）。 */
+  phrase?: string;
 }
 
 export interface AgentAuditEntry extends AgentAuditRecord {
@@ -76,6 +78,7 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
     ...(Array.isArray(record.repairs) && record.repairs.length > 0
       ? { repairs: record.repairs.map((item) => maskSecrets(item)) }
       : {}),
+    ...(record.phrase ? { phrase: maskSecrets(record.phrase) } : {}),
     ...(record.message ? { message: maskSecrets(record.message) } : {}),
     ...(record.args ? { args: redactValue(record.args) as Record<string, unknown> } : {})
   };

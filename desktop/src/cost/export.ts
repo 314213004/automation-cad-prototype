@@ -10,6 +10,7 @@ import { computeCostReport, CostToolError, type CostToolDeps } from './agent.ts'
 import { costReportCsv, renderCostReportHtml, type CostReportProject } from './report.ts';
 import type { CostReport } from './engine.ts';
 import { exportTimestamp, sanitizeFileName } from '../shared/filename.ts';
+import { checkExportTargetPath } from '../agent/policy.ts';
 
 export { sanitizeCostFileName, costExportTimestamp } from '../shared/filename.ts';
 
@@ -50,6 +51,8 @@ export interface CostExportSuccess {
   format: CostExportFormat;
   lines: number;
   grand: number;
+  /** 用户显式传入 allowSanitize=true 时，表示路径/文件名已由系统净化。 */
+  sanitized?: boolean;
 }
 
 export class CostExportError extends Error {
@@ -258,6 +261,11 @@ export async function buildCostExport(
   if (args.overwrite !== undefined && args.overwrite !== null && typeof args.overwrite !== 'boolean') {
     fail('INVALID_ARGUMENT', 'overwrite 必须是布尔值');
   }
+  if (args.allowSanitize !== undefined && args.allowSanitize !== null && typeof args.allowSanitize !== 'boolean') {
+    fail('INVALID_ARGUMENT', 'allowSanitize 必须是布尔值');
+  }
+  const targetCheck = checkExportTargetPath(args.fileName, args.allowSanitize === true);
+  if (!targetCheck.ok) fail('TARGET_PATH_UNSUPPORTED', targetCheck.message ?? '目标路径不受支持');
   const overwrite = args.overwrite === true;
 
   let computation;
@@ -321,6 +329,7 @@ export async function buildCostExport(
     bytes,
     format,
     lines: report.lines.length,
-    grand: report.totals.grand
+    grand: report.totals.grand,
+    ...(targetCheck.sanitized ? { sanitized: true } : {})
   };
 }

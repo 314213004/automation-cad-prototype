@@ -1337,7 +1337,7 @@
       "asksConfirmation": true,
       "expectSafePath": true
     },
-    "note": "危险路径：允许导出，但落盘参数必须被净化到应用导出目录"
+    "note": "危险路径：允许调用导出工具，但必须返回 TARGET_PATH_UNSUPPORTED；未确认/未净化不得落盘"
   },
   {
     "id": "R06",

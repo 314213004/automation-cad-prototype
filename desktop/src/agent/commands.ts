@@ -24,6 +24,7 @@ import {
 } from '../cost/export.ts';
 import { createZip } from '../shared/zip.ts';
 import { resolvePartReference } from './placement.ts';
+import { checkExportTargetPath } from './policy.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -1128,6 +1129,11 @@ function registerExportFilesCommand(bus: CommandBus): void {
         throw new CommandFailure('INVALID_ARGUMENT', 'fileName 必须是字符串');
       }
       const overwrite = optionalBoolean(args, 'overwrite', 'overwrite') ?? false;
+      const allowSanitize = optionalBoolean(args, 'allowSanitize', 'allowSanitize') ?? false;
+      const targetCheck = checkExportTargetPath(args.fileName, allowSanitize);
+      if (!targetCheck.ok) {
+        throw new CommandFailure('TARGET_PATH_UNSUPPORTED', targetCheck.message ?? '目标路径不受支持');
+      }
       if (!ctx.exportsRoot) {
         throw new CommandFailure('WRITE_FAILED', '导出目录未配置，无法写入文件');
       }
@@ -1179,7 +1185,8 @@ function registerExportFilesCommand(bus: CommandBus): void {
             path: planned.path,
             bytes: bytes.byteLength,
             kind,
-            fileName: planned.name
+            fileName: planned.name,
+            ...(targetCheck.sanitized ? { sanitized: true } : {})
           }
         };
       } catch (error) {
@@ -1197,6 +1204,14 @@ function registerCostExportCommand(bus: CommandBus): void {
     async run(args, ctx) {
       if (args.format !== 'pdf' && args.format !== 'csv') {
         throw new CommandFailure('UNSUPPORTED_FORMAT', '导出格式仅支持 pdf 或 csv');
+      }
+      if (args.fileName !== undefined && args.fileName !== null && typeof args.fileName !== 'string') {
+        throw new CommandFailure('INVALID_ARGUMENT', 'fileName 必须是字符串');
+      }
+      const allowSanitize = optionalBoolean(args, 'allowSanitize', 'allowSanitize') ?? false;
+      const targetCheck = checkExportTargetPath(args.fileName, allowSanitize);
+      if (!targetCheck.ok) {
+        throw new CommandFailure('TARGET_PATH_UNSUPPORTED', targetCheck.message ?? '目标路径不受支持');
       }
 
       // 复用 run_cost_report 的取数路径：显式 bom 不读场景；否则先取场景 BOM。

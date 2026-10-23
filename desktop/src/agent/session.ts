@@ -14,6 +14,12 @@ import { DATA_POLICY_PROMPT, guardToolResult } from './guard.ts';
 import { repairToolCall } from './repair.ts';
 import { buildFallbackReply, buildRetryPrompt } from './retry.ts';
 import {
+  BYPASS_CONFIRMATION_NOTICE,
+  detectBypassIntent,
+  sanitizeConfirmationClaims,
+  type BypassIntent
+} from './policy.ts';
+import {
   cancellationText,
   summarizeArguments,
   type AgentProgressEvent,
@@ -23,7 +29,11 @@ import {
 export interface AgentSessionOptions {
   llm: LlmClient;
   bus: AgentCommandExecutor;
-  confirmWrite(name: string, args: Record<string, unknown>): Promise<boolean>;
+  confirmWrite(
+    name: string,
+    args: Record<string, unknown>,
+    context?: ConfirmWriteContext
+  ): Promise<boolean>;
   maxIterations?: number;
   historyLimit?: number;
   /** 审计回调：主进程写 agent-audit.jsonl；不传则不记录。 */
@@ -37,6 +47,14 @@ export interface AgentSessionOptions {
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
+
+export interface ConfirmWriteContext {
+  /** 本轮用户文本命中了绕过确认意图；写工具仍必须由用户确认。 */
+  bypass: boolean;
+  phrase?: string;
+  /** 供确认弹窗追加的固定文案。 */
+  notice?: string;
+}
 
 export interface AgentRunOptions {
   signal?: AbortSignal;
@@ -160,6 +178,8 @@ export class AgentSession {
   private messages: LlmMessage[] = [];
   private replyMode: AgentReplyMode = 'online';
   private turnContext: AgentContext = emptyAgentContext();
+  private bypassIntent: BypassIntent | null = null;
+  private readonly deniedWriteTools = new Set<string>();
 
   constructor(options: AgentSessionOptions) {
     this.llm = options.llm;
@@ -194,6 +214,8 @@ export class AgentSession {
     this.messages = [];
     this.replyMode = 'online';
     this.turnContext = emptyAgentContext();
+    this.bypassIntent = null;
+    this.deniedWriteTools.clear();
     this.memory.clear();
   }
 
@@ -267,7 +289,7 @@ export class AgentSession {
   }
 
   private respondFallback(userText: string, reason: string): string {
-    const reply = buildFallbackReply(reason, userText);
+    const reply = sanitizeConfirmationClaims(buildFallbackReply(reason, userText));
     this.push({ role: 'assistant', content: reply });
     return reply;
   }
@@ -394,9 +416,42 @@ export class AgentSession {
     try {
       throwIfAborted(context.signal);
       if (MUTATING_TOOLS.has(name)) {
+        // 硬边界：无论用户文本、模型输出或调用路径如何，写工具必须先拿到明确确认。
+        if (this.deniedWriteTools.has(name)) {
+          const message = `本轮已拒绝 ${name}，后续同名写操作不再重复弹窗`;
+          this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
+          finish(false, 'USER_DENIED', message);
+          return { ok: false, code: 'USER_DENIED', message };
+        }
+        if (typeof this.confirmWrite !== 'function') {
+          const message = '写操作缺少确认回调，已拒绝执行';
+          this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'CONFIRMATION_REQUIRED' }));
+          finish(false, 'CONFIRMATION_REQUIRED', message);
+          return { ok: false, code: 'CONFIRMATION_REQUIRED', message };
+        }
+
+        const bypass = this.bypassIntent;
+        if (bypass) {
+          this.recordAudit({
+            tool: name,
+            ok: false,
+            code: 'BYPASS_ATTEMPT',
+            source: 'llm',
+            args,
+            phrase: bypass.phrase,
+            message: `检测到绕过确认意图「${bypass.phrase}」；仍强制请求确认`
+          });
+        }
+
         let allowed = false;
         try {
-          allowed = await withAbort(this.confirmWrite(name, args), context.signal);
+          allowed = await withAbort(
+            this.confirmWrite(name, args, {
+              bypass: bypass !== null,
+              ...(bypass ? { phrase: bypass.phrase, notice: BYPASS_CONFIRMATION_NOTICE } : {})
+            }),
+            context.signal
+          );
         } catch (error) {
           if (error instanceof AgentAborted) {
             finish(false, 'CANCELLED', '已取消');
@@ -407,7 +462,8 @@ export class AgentSession {
           finish(false, 'USER_DENIED', message);
           return { ok: false, code: 'USER_DENIED', message };
         }
-        if (!allowed) {
+        if (allowed !== true) {
+          this.deniedWriteTools.add(name);
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
           finish(false, 'USER_DENIED', '用户拒绝执行该工具');
           return { ok: false, code: 'USER_DENIED', message: '用户拒绝执行该工具' };
@@ -462,6 +518,11 @@ export class AgentSession {
     if (!this.offlineFallback) return null;
     const plan = planReadOnly(text, this.turnContext);
     if (!plan) return null;
+    if (MUTATING_TOOLS.has(plan.tool)) {
+      const reply = '当前模型不可用，写操作必须联网并经用户确认，未执行。';
+      this.push({ role: 'assistant', content: reply });
+      return reply;
+    }
     const startedAt = Date.now();
     const runId = options.runId ?? 'offline';
     const argsSummary = summarizeArguments(plan.args);
@@ -560,6 +621,8 @@ export class AgentSession {
     if (!text) throw new Error('请输入要发送给智能体的内容');
     const runId = options.runId ?? `chat-${Date.now()}`;
     const completed: CompletedStep[] = [];
+    this.bypassIntent = detectBypassIntent(text);
+    this.deniedWriteTools.clear();
     this.replyMode = 'online';
     this.turnContext = emptyAgentContext();
     if (this.contextProvider) {
@@ -582,13 +645,14 @@ export class AgentSession {
         const offline = await this.runOffline(text, { ...options, runId }, completed);
         if (offline) {
           this.replyMode = 'offline';
-          this.push({ role: 'assistant', content: offline });
-          return offline;
+          const reply = sanitizeConfirmationClaims(offline);
+          this.push({ role: 'assistant', content: reply });
+          return reply;
         }
         throw error;
       }
       if (response.toolCalls.length === 0) {
-        const reply = response.content.trim();
+        const reply = sanitizeConfirmationClaims(response.content.trim());
         this.push({ role: 'assistant', content: reply });
         return reply;
       }
@@ -630,13 +694,14 @@ export class AgentSession {
           const offline = await this.runOffline(text, { ...options, runId }, completed);
           if (offline) {
             this.replyMode = 'offline';
-            this.push({ role: 'assistant', content: offline });
-            return offline;
+            const reply = sanitizeConfirmationClaims(offline);
+            this.push({ role: 'assistant', content: reply });
+            return reply;
           }
           throw error;
         }
         if (retryResponse.toolCalls.length === 0) {
-          const reply = retryResponse.content.trim();
+          const reply = sanitizeConfirmationClaims(retryResponse.content.trim());
           if (reply) {
             this.recordAudit({
               tool: toolNames,
@@ -704,7 +769,7 @@ export class AgentSession {
 
       this.push({
         role: 'assistant',
-        content: response.content.trim() || null,
+        content: sanitizeConfirmationClaims(response.content.trim()) || null,
         tool_calls: calls.map((call) => ({
           ...call,
           function: { ...call.function }
@@ -732,7 +797,7 @@ export class AgentSession {
       if (options.signal?.aborted) throw new AgentCancelledError(completed);
     }
 
-    const reply = `已达到最大工具调用轮数（${this.maxIterations}），请缩小任务范围`;
+    const reply = sanitizeConfirmationClaims(`已达到最大工具调用轮数（${this.maxIterations}），请缩小任务范围`);
     this.push({ role: 'assistant', content: reply });
     return reply;
   }

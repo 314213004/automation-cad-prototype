@@ -363,9 +363,14 @@ test('export_files fileName 非字符串返回 INVALID_ARGUMENT', async () => {
   assert.equal(result.code, 'INVALID_ARGUMENT');
 });
 
-test('export_files BOM 走同一净化函数并强制 .csv', async () => {
-  const result = await tools.call('export_files', { kind: 'bom', fileName: '../报价/单:2026*' });
+test('export_files allowSanitize=true 时净化路径并强制 .csv', async () => {
+  const result = await tools.call('export_files', {
+    kind: 'bom',
+    fileName: '../报价/单:2026*',
+    allowSanitize: true
+  });
   assert.equal(result.ok, true);
+  assert.equal(result.sanitized, true);
   assert.ok(result.path.startsWith(join(sandbox, 'exports') + sep));
   assert.match(result.fileName, /\.csv$/);
   assert.doesNotMatch(result.fileName, /[/\\:*?"<>|]/);

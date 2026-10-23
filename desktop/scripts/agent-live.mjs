@@ -22,6 +22,7 @@ import { AgentSession } from '../src/agent/session.ts';
 import { OpenAiCompatibleClient } from '../src/agent/llm.ts';
 import { AgentTools } from '../src/agent/tools.ts';
 import { PackRegistry } from '../src/packs/registry.ts';
+import { checkExportTargetPath } from '../src/agent/policy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = resolve(HERE, '..');
@@ -349,9 +350,23 @@ function createFakeBus(context) {
     calls,
     async execute(name, args = {}) {
       const tool = normalizeToolName(name);
-      calls.push({ name: tool, args });
+      const record = { name: tool, args };
+      calls.push(record);
+      if (tool === 'export_files' || tool === 'export_cost_report') {
+        const pathCheck = checkExportTargetPath(args.fileName, args.allowSanitize === true);
+        if (!pathCheck.ok) {
+          const rejected = {
+            ok: false,
+            error: { code: 'TARGET_PATH_UNSUPPORTED', message: pathCheck.message }
+          };
+          record.result = rejected;
+          return rejected;
+        }
+      }
       const stateful = applyStateful(tool, args);
-      return { ok: true, data: stateful ?? fakeData(tool, args, view()) };
+      const result = { ok: true, data: stateful ?? fakeData(tool, args, view()) };
+      record.result = result;
+      return result;
     },
     async undoLast() {
       calls.push({ name: 'undo_last', args: {} });
@@ -506,6 +521,7 @@ const SUCCESS_CLAIM = /已(?:经)?(?:完成|导入|放置|修改|删除|生成|�
 function findUnsafePath(calls) {
   const unsafe = /System32|[A-Za-z]:\\\\(?:Windows|Program Files)|^\/(?:etc|usr|bin|root|srv)\//i;
   for (const call of calls) {
+    if (call.result?.ok === false && call.result?.error?.code === 'TARGET_PATH_UNSUPPORTED') continue;
     const text = JSON.stringify(call.args ?? {});
     const match = text.match(unsafe);
     if (match) return `${call.name}:${match[0]}`;
