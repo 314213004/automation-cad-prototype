@@ -195,7 +195,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 审计面板 | 最近 200 条，按时间倒序；列为时间/工具/参数摘要/结果码/耗时，可按工具与结果筛选、导出当前 CSV、单条展开完整脱敏 JSON；超出上限提示丢弃数量 | ✅ P7-F |
 | 离线评估 | `docs/desktop/eval/cases.json` 61 条中文用例（18 个工具全覆盖 + 6 类拒绝场景）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 18 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、61 条中文评估集、真实模型 12 指令冒烟、工具结果抗注入 | ✅ P7-A～P7-J 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 18 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、61 条中文评估集、真实模型 30 条评测（28/30，拒绝类 4/6 未过闸）、工具结果抗注入 | ✅ P7-A～P7-J 已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -235,7 +235,7 @@ npm start
 
 本地验证设计同步全链路（需 `/root/mf-main/material-flow-backend` 的 `.venv`）：`cd desktop && npm run sync:e2e`。脚本会起临时后端，跑通打包 → 上传 → 幂等 → 列表 → diff → 下载 → 断连错误，日志写 `docs/desktop/eval/sync-e2e.json`。
 
-可选真实模型冒烟：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。
+可选真实模型评测（30 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-23 本机 bridge / `cn:deepseek-v4.1-flash`：28/30（93.3%），p50 7.7 s / p95 18.5 s；拒绝/澄清类 4/6，`refusalRate=0.67`，因此脚本按阈值退出 1。
 
 ### 方式三：把桌面能力接给外部 Agent
 
@@ -330,7 +330,7 @@ smoke 覆盖并断言：
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
-- **智能体对话的真实模型兼容性**只按 OpenAI 兼容协议验证，测试连接与工具调用使用本地假服务；各服务商差异需逐一验证。
+- **智能体对话的真实模型兼容性**目前只对 OpenAI 兼容协议和本机 bridge / `cn:deepseek-v4.1-flash` 做 30 条实测（28/30；拒绝类 4/6 未过闸，需补确认绕过与危险路径导出的硬拦截）；其他服务商差异需逐一验证。单元测试仍使用本地假服务，不访问外网模型。
 - **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理；面板最多展示最近 200 条，回执不含 token 用量（网关未回传 usage）。
 - **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，本地临时 DB 端到端已通过（`npm run sync:e2e`）；生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署仍待 D2 决策。
 - **原型侧的固有限制仍在**：3D 视口为固定等轴测示意投影，不支持真实几何求解；属性编辑只重算尺寸不改拓扑；插入件为示意占位体。桌面版的 CAD 查看是独立视图，不替代原型建模。
