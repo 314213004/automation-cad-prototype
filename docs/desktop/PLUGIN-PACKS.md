@@ -35,6 +35,8 @@
   "vendor": "施耐德",
   "symbol": "km1",
   "specs": { "额定电流": "18 A（AC-3）", "线圈电压": "220 V AC" },
+  "dims": { "w": 45, "h": 77, "d": 86, "source": "施耐德 LC1D 系列样本 官方" },
+  "railMount": true,
   "asset": "assets/LC1D18M7C.stp",
   "thumbnail": "assets/LC1D18M7C.png",
   "price": 168
@@ -49,9 +51,16 @@
 | `vendor` | ⬜ | 厂商 |
 | `symbol` | ⬜ | 原理图符号键（见下表），缺省表示「暂无符号」，只能查看/选型不能放图 |
 | `specs` | ⬜ | 键值参数，值只能是字符串或数字 |
+| `dims` | ⬜ | 本体外形 `{w,h,d}`，单位 mm；三项必须为有限正数 |
+| `dims.source` | 补录必填 | 官方文档写 `"<厂商> <文档名/型号> 官方"`；推定写 `"同系列推定：<参照型号>"` |
+| `dims.estimated` | 推定必填 | 仅推定条目写 `true`，不得用于官方明确尺寸 |
+| `railMount` | ⬜ | 是否 35 mm DIN 导轨安装，布尔值 |
+| `moduleWidth` | ⬜ | 模数宽（mm）；导轨件应为 9 mm 的整数倍，面板开孔件按既有约定可存开孔直径 |
 | `asset` | ⬜ | 3D 模型相对路径（STEP/GLB） |
 | `thumbnail` | ⬜ | 缩略图相对路径 |
 | `price` | ⬜ | 数字，仅用于估算（仓库内置包不写价格） |
+
+尺寸只允许两种来源：厂商样本/PDS 的明确数值，或**同系列同壳架**的官方尺寸推定。推定必须在 `dims.source` 写参照型号并设 `dims.estimated: true`；不得跨厂商借尺寸，查不到就留空。
 
 ## 2. 原理图符号键（当前 12 个）
 

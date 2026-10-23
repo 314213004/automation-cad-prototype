@@ -19,7 +19,7 @@ interface DesktopPackInfo {
 
 interface DesktopComponentPart {
   symbol?: string;
-  dims?: { w: number; h: number; d: number };
+  dims?: { w: number; h: number; d: number; source?: string; estimated?: true };
   railMount?: boolean;
   moduleWidth?: number;
   id: string;

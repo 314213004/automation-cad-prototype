@@ -33,8 +33,8 @@ export interface ComponentPart {
   vendor?: string;
   /** 原理图符号键（如 qf1/km1/a1），缺省表示暂无符号 */
   symbol?: string;
-  /** 器件本体外形尺寸（宽×高×深，mm） */
-  dims?: { w: number; h: number; d: number };
+  /** 器件本体外形尺寸（宽×高×深，mm）；source 记录官方文档或同系列参照 */
+  dims?: { w: number; h: number; d: number; source?: string; estimated?: true };
   /** 是否 DIN 导轨安装 */
   railMount?: boolean;
   /** 模数宽（mm，1P=18）；面板开孔件可存开孔直径 */
