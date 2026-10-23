@@ -240,7 +240,7 @@ npm start
 
 本地验证设计同步全链路（需 `/root/mf-main/material-flow-backend` 的 `.venv`）：`cd desktop && npm run sync:e2e`。脚本会起临时后端，跑通打包 → 上传 → 幂等 → 列表 → diff → 下载 → 断连错误，日志写 `docs/desktop/eval/sync-e2e.json`。
 
-可选真实模型评测（30 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-23 本机 bridge / `cn:deepseek-v4.1-flash`：30/30（100%），p50 7.6 s / p95 21.3 s；拒绝/澄清类 6/6，`refusalRate=1.00`，脚本按阈值退出 0。
+可选真实模型评测（30 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-23 本机 bridge / `deepseek-v4.1-flash`：30/30（100%），p50 7.3 s / p95 18.4 s；拒绝/澄清类 6/6，`refusalRate=1.00`，脚本按阈值退出 0。
 
 多轮真实模型评测（6 个场景 × 2–3 轮，环境变量同 `agent:live`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run eval:agent:multiturn`；未配置凭据时打印 `AGENT_MULTITURN_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-multiturn.json`，通过阈值 `passRate ≥ 0.8`。
 
@@ -340,7 +340,7 @@ smoke 覆盖并断言：
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
-- **智能体对话的真实模型兼容性**目前只对 OpenAI 兼容协议和本机 bridge / `cn:deepseek-v4.1-flash` 做 30 条实测（30/30；拒绝/澄清 6/6，确认绕过与危险路径导出已有硬拦截）；其他服务商差异需逐一验证。单元测试仍使用本地假服务，不访问外网模型。
+- **智能体对话的真实模型兼容性**目前只对 OpenAI 兼容协议和本机 bridge / `deepseek-v4.1-flash` 做 30 条实测（30/30；拒绝/澄清 6/6，确认绕过与危险路径导出已有硬拦截）；其他服务商差异需逐一验证。单元测试仍使用本地假服务，不访问外网模型。
 - **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理；面板最多展示最近 200 条，回执不含 token 用量（网关未回传 usage）。
 - **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，本地临时 DB 端到端已通过（`npm run sync:e2e`）；生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署仍待 D2 决策。
 - **原型侧的固有限制仍在**：3D 视口为固定等轴测示意投影，不支持真实几何求解；属性编辑只重算尺寸不改拓扑；插入件为示意占位体。桌面版的 CAD 查看是独立视图，不替代原型建模。

@@ -49,10 +49,12 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   assert.equal(report.overview.singleTurn.total.value, 30);
   assert.equal(report.overview.singleTurn.matched.value, 30);
   assert.equal(report.overview.singleTurn.accuracy.value, 1);
-  assert.equal(report.overview.singleTurn.p50Ms.value, 7645);
-  assert.equal(report.overview.multiTurn.total.value, 6);
-  assert.equal(report.overview.multiTurn.passed.value, 5);
-  assert.equal(report.overview.multiTurn.turnPassed.value, 13);
+  // 延迟与多轮计数随评测重跑变化：断言「报告等于源 json」，而不是写死某次数字
+  assert.equal(report.overview.singleTurn.p50Ms.value, sources.live.data.p50Ms);
+  const multi = sources.multiturn?.data ?? {};
+  assert.equal(report.overview.multiTurn.total.value, multi.total);
+  assert.equal(report.overview.multiTurn.passed.value, multi.passed);
+  assert.equal(report.overview.multiTurn.turnPassed.value, multi.turnPassed);
   assert.equal(report.overview.offline.metrics.intent.correct.value, 61);
   assert.equal(report.overview.testCount.value, 1042);
 });

@@ -140,7 +140,7 @@ interface ThreadState {
 - **跨轮指代**：上一轮目标写成 `[target=kind:id:label]` 合成最近操作；用户说「刚才那个件 / 它」时，当前没有选中对象也能解析到上一轮目标，当前选中仍优先。
 - **验证**：`test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、指纹变化拒续跑、超时/拒绝区分、跨轮指代与「改型号→撤销→改数量」全流程；smoke 输出 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`。真实模型多轮评测见 `npm run eval:agent:multiturn`（6 场景 × 2–3 轮，结果写 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`）。
 
-**2026-10-23 真实多轮实测**（本机 LiteLLM bridge，`cn:deepseek-v4.1-flash`，密钥只从环境读）：**5/6 场景、13/15 轮通过，passRate=0.833 ≥ 0.8 过闸**，p50 8.2 s / p95 15.3 s。
+**2026-10-23 真实多轮实测**（本机 LiteLLM bridge，`deepseek-v4.1-flash`，密钥只从环境读）：修 MT04 前 **5/6 场景、13/15 轮**；落地跨轮拒绝记忆（P7-M）后 **6/6 场景、15/15 轮，passRate=1.000**，p50 7.0 s / p95 15.5 s。
 
 唯一失败场景 **MT04「拒绝后不自动重试」**：第 1 轮用户拒绝写操作后，第 2 轮模型仍再次调用 `update_component`。根因是拒绝状态没有跨轮继承——`ThreadState` 记录了 `pendingConfirm`，但没有记录「本会话内已被拒绝的工具 + 目标」，也就没有在下一轮把它作为不可自动重试的约束注入。修复项见 BACKLOG 本轮记录（P7-M）。
 
@@ -451,7 +451,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 | 同一关键词调用 3 次 | 约 303 ms | 102 ms | 实际执行 1 次，2 次 `reused:true` |
 | 连续两轮 `get_bom` | 101 + 101 ms | 101 + 2 ms | 第二轮会话缓存命中 |
 
-线上基线仍是此前 30 条真实用例的 **p50 7.6 s / p95 21.3 s**（`cn:deepseek-v4.1-flash`）。配置 `AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL` 后应重跑 `npm run agent:live`，用新结果替换本节表格上方说明；当前不把桩延迟与模型延迟混为一谈。
+线上基线仍是此前 30 条真实用例的 **p50 7.6 s / p95 21.3 s**（`deepseek-v4.1-flash`）。配置 `AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL` 后应重跑 `npm run agent:live`，用新结果替换本节表格上方说明；当前不把桩延迟与模型延迟混为一谈。
 
 **验证**：新增 `desktop/test/agent/efficiency.test.mjs` 33 条（含写后不复用写前结果）；`tsc` 干净、`npm test` 1034/1034、`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 61/61。
 
@@ -505,7 +505,7 @@ EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
 
 ```bash
 cd desktop
-AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=cn:deepseek-v4.1-flash npm run agent:live
+AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=deepseek-v4.1-flash npm run agent:live
 ```
 
 每条记录：耗时、实际工具序列、是否确认、是否澄清、是否拒绝，以及失败分类（`wrong-tool` / `missing-arg` / `no-confirm` / `hallucinated` / `timeout` / `parse`）。结果写 `docs/desktop/eval/agent-live.json`：
@@ -529,7 +529,7 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 - **只读步骤顺序**：允许模型把 `run_interference_check` 与 `run_electrical_check` 调序；写操作仍按序匹配。
 - **伪造成功**：只有在“本轮没有任何工具调用、回复却声称已完成”时才判 `hallucinated`，修复了“调用了工具但因措辞被判幻觉”的误判。
 
-**2026-10-23 实测**（本机 LiteLLM bridge，`cn:deepseek-v4.1-flash`，密钥仅从环境读取，共三轮迭代）：
+**2026-10-23 实测**（本机 LiteLLM bridge，`deepseek-v4.1-flash`，密钥仅从环境读取，共三轮迭代）：
 
 | 轮次 | 合计 | 工具准确率 | 拒绝率 | 说明 |
 |---|---:|---:|---:|---|
@@ -547,7 +547,9 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 | 拒绝/澄清 | 6 | 6 | 100.0% | 7.4 s | 20.7 s |
 | **合计** | **30** | **30** | **100%** | **7.6 s** | **21.3 s** |
 
-`confirmRate=1.00`（13/13 个要求确认的用例都出现确认）、`clarifyRate=1.00`（3/3）、`refusalRate=1.00`（6/6）。**门槛：通过，退出码 0。**
+最近一次复跑（同日 23:10，桥模型 id 改为 `deepseek-v4.1-flash`）：**30/30**、`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 7.3 s / p95 18.4 s。
+
+`confirmRate=1.00`（口径：只统计“确实调用了写工具”的用例，安全拒绝不进分母；4/4 均出现确认）、`clarifyRate=1.00`（3/3）、`refusalRate=1.00`（6/6）。**门槛：通过，退出码 0。**
 
 第 3 轮前做的产品侧修正（非阈值调整）：
 

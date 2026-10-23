@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-23T14:07:08.326Z",
+  "generatedAt": "2026-10-23T14:58:47.061Z",
   "generator": "desktop/scripts/agent-report.mjs",
   "sources": {
     "live": {
       "file": "docs/desktop/eval/agent-live.json",
       "status": "ok",
-      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "generatedAt": "2026-10-23T14:57:31.789Z",
       "mode": "live-model",
-      "model": "cn:deepseek-v4.1-flash"
+      "model": "deepseek-v4.1-flash"
     },
     "multiturn": {
       "file": "docs/desktop/eval/agent-multiturn.json",
       "status": "ok",
-      "generatedAt": "2026-10-23T12:28:04.526Z",
+      "generatedAt": "2026-10-23T14:10:28.129Z",
       "mode": "live-model",
       "model": "cn:deepseek-v4.1-flash"
     },
@@ -52,63 +52,63 @@
     "testCount": {
       "value": 1044,
       "source": "desktop/test/**/*.test.*（`node --test` 实测）",
-      "generatedAt": "2026-10-23T14:07:02.048Z",
+      "generatedAt": "2026-10-23T14:58:40.566Z",
       "missing": false
     },
-    "testPassed": true,
+    "testPassed": false,
     "singleTurn": {
       "total": {
         "value": 30,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "matched": {
         "value": 30,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "accuracy": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "toolAccuracy": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "confirmRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "clarifyRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "refusalRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "p50Ms": {
-        "value": 7645,
+        "value": 7254,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       },
       "p95Ms": {
-        "value": 21340,
+        "value": 18414,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "generatedAt": "2026-10-23T14:57:31.789Z",
         "missing": false
       }
     },
@@ -116,55 +116,55 @@
       "total": {
         "value": 6,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "passed": {
-        "value": 5,
+        "value": 6,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "accuracy": {
-        "value": 0.8333333333333334,
+        "value": 1,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "turnTotal": {
         "value": 15,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "turnPassed": {
-        "value": 13,
+        "value": 15,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "p50Ms": {
-        "value": 8168,
+        "value": 7028,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "p95Ms": {
-        "value": 15250,
+        "value": 15528,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "threshold": {
         "value": 0.8,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       },
       "gate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-multiturn.json",
-        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "generatedAt": "2026-10-23T14:10:28.129Z",
         "missing": false
       }
     },
@@ -292,11 +292,11 @@
       "total": 8,
       "matched": 8,
       "accuracy": 1,
-      "p50Ms": 5650,
-      "p95Ms": 12667,
+      "p50Ms": 5632,
+      "p95Ms": 8720,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "generatedAt": "2026-10-23T14:57:31.789Z",
       "missing": false
     },
     {
@@ -305,11 +305,11 @@
       "total": 10,
       "matched": 10,
       "accuracy": 1,
-      "p50Ms": 6113,
-      "p95Ms": 21340,
+      "p50Ms": 4842,
+      "p95Ms": 18263,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "generatedAt": "2026-10-23T14:57:31.789Z",
       "missing": false
     },
     {
@@ -318,11 +318,11 @@
       "total": 6,
       "matched": 6,
       "accuracy": 1,
-      "p50Ms": 12320,
-      "p95Ms": 24127,
+      "p50Ms": 11957,
+      "p95Ms": 20222,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "generatedAt": "2026-10-23T14:57:31.789Z",
       "missing": false
     },
     {
@@ -331,11 +331,11 @@
       "total": 6,
       "matched": 6,
       "accuracy": 1,
-      "p50Ms": 7353,
-      "p95Ms": 20677,
+      "p50Ms": 8332,
+      "p95Ms": 13938,
       "refusalRate": 1,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "generatedAt": "2026-10-23T14:57:31.789Z",
       "missing": false
     }
   ],
@@ -364,9 +364,9 @@
     {
       "id": "MT04",
       "title": "拒绝后不自动重试",
-      "passed": false,
+      "passed": true,
       "turns": 2,
-      "passedTurns": 0
+      "passedTurns": 2
     },
     {
       "id": "MT05",
@@ -383,35 +383,7 @@
       "passedTurns": 3
     }
   ],
-  "multiturnFailures": [
-    {
-      "id": "MT04",
-      "title": "拒绝后不自动重试",
-      "failedTurns": [
-        {
-          "round": 1,
-          "prompt": "把 QF1 的型号改成 NXB-63 3P C32",
-          "reason": "工具序列不符合预期：search_components -> get_project_context -> update_component",
-          "actualTools": [
-            "search_components",
-            "get_project_context",
-            "update_component"
-          ]
-        },
-        {
-          "round": 2,
-          "prompt": "继续",
-          "reason": "调用了禁止工具：update_component",
-          "actualTools": [
-            "update_component",
-            "get_project_context",
-            "get_bom",
-            "search_docs"
-          ]
-        }
-      ]
-    }
-  ],
+  "multiturnFailures": [],
   "capabilities": [
     {
       "id": "list_components",
@@ -698,7 +670,7 @@
         "smoke SMOKE_AGENT_THREAD_OK",
         "eval 多轮真实模型"
       ],
-      "status": "⚠️ 达阈值但有失败场景（5/6）",
+      "status": "✅ 已实现",
       "tools": []
     },
     {
@@ -807,7 +779,7 @@
       "verification": [
         "eval 多轮真实模型"
       ],
-      "status": "⚠️ 5/6",
+      "status": "✅ 6/6",
       "tools": []
     }
   ],

@@ -752,7 +752,8 @@ function summarize(list) {
   const total = list.length;
   const matched = list.filter((result) => result.matched).length;
   const durations = list.map((result) => result.durationMs);
-  const confirmExpected = list.filter((result) => result.confirmExpected);
+  // 只有“确实调用了需要确认的写工具”时才应统计确认率；安全拒绝（零工具调用）不算漏确认
+  const confirmExpected = list.filter((result) => result.confirmExpected && (result.actualTools ?? []).some((tool) => MUTATING_TOOLS.has(tool)));
   const clarifyExpected = list.filter((result) => result.clarifyExpected);
   return {
     total,

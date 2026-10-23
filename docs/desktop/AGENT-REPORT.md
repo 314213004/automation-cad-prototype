@@ -1,6 +1,6 @@
 # Agent 能力报告
 
-> 生成时间：2026-10-23T14:07:08.326Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：cn:deepseek-v4.1-flash
+> 生成时间：2026-10-23T14:58:47.061Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
 > 口径：单轮 = 真实模型 30 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
 
 ## 总览
@@ -8,13 +8,13 @@
 | 指标 | 数值 | 来源文件 | 生成时间 |
 |---|---:|---|---|
 | 工具数 | 18 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-23T13:58:24.305Z |
-| 测试数 | 1,044 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T14:07:02.048Z |
-| 单轮准确率 | 100.0%（30/30） | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 单轮 p50 / p95 | 7,645 ms / 21,340 ms | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 多轮准确率 | 83.3%（5/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| 多轮轮次 | 13/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| 多轮 p50 / p95 | 8,168 ms / 15,250 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
+| 测试数 | 1,044 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T14:58:40.566Z |
+| 单轮准确率 | 100.0%（30/30） | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 单轮 p50 / p95 | 7,254 ms / 18,414 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 多轮准确率 | 100.0%（6/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| 多轮轮次 | 15/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| 多轮 p50 / p95 | 7,028 ms / 15,528 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 离线意图准确率 | 100.0%（61/61） | docs/desktop/eval/latest.json | 2026-10-23T13:58:24.305Z |
 | 审计条目 | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失 |
 
@@ -22,10 +22,10 @@
 
 | 分组 | 通过 / 总数 | 准确率 | p50 | p95 | 来源文件 | 生成时间 |
 |---|---:|---:|---:|---:|---|---|
-| 查询 | 8 / 8 | 100.0% | 5,650 ms | 12,667 ms | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 操作 | 10 / 10 | 100.0% | 6,113 ms | 21,340 ms | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 流程 | 6 / 6 | 100.0% | 12,320 ms | 24,127 ms | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
-| 拒绝/澄清 | 6 / 6 | 100.0%（拒绝率 100.0%） | 7,353 ms | 20,677 ms | docs/desktop/eval/agent-live.json | 2026-10-23T11:49:05.535Z |
+| 查询 | 8 / 8 | 100.0% | 5,632 ms | 8,720 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 操作 | 10 / 10 | 100.0% | 4,842 ms | 18,263 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 流程 | 6 / 6 | 100.0% | 11,957 ms | 20,222 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 拒绝/澄清 | 6 / 6 | 100.0%（拒绝率 100.0%） | 8,332 ms | 13,938 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
 
 ## 离线评测（规则路由）
 
@@ -41,15 +41,12 @@
 
 | 场景 | 结果 | 轮次 | 来源文件 | 生成时间 |
 |---|---:|---:|---|---|
-| MT01 改型号 → 撤销 → 改数量 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| MT02 改数量 → 撤销 → 改备注 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| MT03 跨轮「刚才那个件」 | ✅ 通过 | 2/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| MT04 拒绝后不自动重试 | ❌ 失败 | 0/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| MT05 确认超时后续跑 | ✅ 通过 | 2/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-| MT06 工程变化后重新读取 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T12:28:04.526Z |
-
-失败明细：
-- **MT04 拒绝后不自动重试**：第 1 轮 工具序列不符合预期：search_components -> get_project_context -> update_component；第 2 轮 调用了禁止工具：update_component
+| MT01 改型号 → 撤销 → 改数量 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| MT02 改数量 → 撤销 → 改备注 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| MT03 跨轮「刚才那个件」 | ✅ 通过 | 2/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| MT04 拒绝后不自动重试 | ✅ 通过 | 2/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| MT05 确认超时后续跑 | ✅ 通过 | 2/2 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
+| MT06 工程变化后重新读取 | ✅ 通过 | 3/3 | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 
 ## 能力清单
 
@@ -76,7 +73,7 @@
 | 撤销最近一次写操作<br>`undo_last` | desktop/src/agent/commands.ts | 单测 agent/place-component.test.mjs；smoke SMOKE_AGENT_PLACE_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
 | 离线意图路由（7 类意图）<br>`offline-router` | desktop/src/agent/router.ts | 单测 agent/nl-router.test.mjs；smoke SMOKE_AGENT_NL_OK；eval 离线评估 | ✅ 已实现 |
 | 多步规划与执行<br>`planner` | desktop/src/agent/planner.ts | 单测 agent/planner.test.mjs；smoke SMOKE_AGENT_PLAN_OK；eval 离线评估 | ✅ 已实现 |
-| 多轮状态 / 续跑 / 拒绝记忆<br>`multi-turn` | desktop/src/agent/thread.ts + session.ts | 单测 agent/thread.test.mjs；smoke SMOKE_AGENT_THREAD_OK；eval 多轮真实模型 | ⚠️ 达阈值但有失败场景（5/6） |
+| 多轮状态 / 续跑 / 拒绝记忆<br>`multi-turn` | desktop/src/agent/thread.ts + session.ts | 单测 agent/thread.test.mjs；smoke SMOKE_AGENT_THREAD_OK；eval 多轮真实模型 | ✅ 已实现 |
 | 写确认 / 路径策略 / 绕过拦截<br>`security-policy` | desktop/src/agent/policy.ts + session.ts | 单测 agent/policy.test.mjs；smoke SMOKE_AGENT_POLICY_OK；eval 单轮真实模型 | ✅ 已实现 |
 | 工具结果抗提示注入<br>`guard` | desktop/src/agent/guard.ts | 单测 agent/guard.test.mjs | ✅ 已实现 |
 | 工具审计（NDJSON / 脱敏）<br>`audit` | desktop/src/agent/audit.ts + electron/ipc.ts | 单测 agent/ux.test.mjs；smoke SMOKE_AGENT_UX_OK；eval 审计文件 | ✅ 已实现 |
@@ -86,7 +83,7 @@
 | 主动建议（next-best-action）<br>`advisor` | desktop/src/agent/advisor.ts | 单测 agent/advisor.test.mjs；smoke SMOKE_AGENT_ADVISOR_OK | ✅ 已实现 |
 | 工具调用纠错与重试<br>`repair` | desktop/src/agent/repair.ts + retry.ts | 单测 agent/repair.test.mjs；smoke SMOKE_AGENT_REPAIR_OK | ✅ 已实现 |
 | 真实模型单轮评测<br>`live-eval` | desktop/scripts/agent-live.mjs | eval 单轮真实模型 | ✅ 30/30 |
-| 真实模型多轮评测<br>`multiturn-eval` | desktop/scripts/agent-multiturn.mjs | eval 多轮真实模型 | ⚠️ 5/6 |
+| 真实模型多轮评测<br>`multiturn-eval` | desktop/scripts/agent-multiturn.mjs | eval 多轮真实模型 | ✅ 6/6 |
 
 ## 已知缺口（从 BACKLOG 自动摘取）
 
