@@ -58,12 +58,12 @@ const INTENT_PRIORITY: Record<Exclude<IntentKind, 'out_of_scope'>, number> = {
 const RULES: IntentRule[] = [
   {
     intent: 'modify',
-    strong: ['插入', '放置', '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '替换', '导入'],
+    strong: ['插入', '放置', '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '换成', '换掉', '替换', '导入'],
     normal: ['放一个', '放两个', '加一个', '添加', '修改', '改成', '改一下', '移走']
   },
   {
     intent: 'generate',
-    strong: ['出图', '导出', '生成报告', '生成BOM', '生成 BOM', '报价单'],
+    strong: ['出图', '导出', '生成', '出一份', '出份', '生成报告', '生成BOM', '生成 BOM', '报价单'],
     normal: ['报告', 'pdf', 'PDF', 'csv', 'CSV', 'excel', '打印', '出一份', '出份']
   },
   {
@@ -79,7 +79,7 @@ const RULES: IntentRule[] = [
   {
     intent: 'compute',
     strong: ['成本', '多少钱', '报价', '干涉', '电气校验', '载流量', '不平衡度', '余量'],
-    normal: ['计算', '算一下', '算算', '够不够', '合规', '校验', '检查', '统计', '功率', '费用', '总价', '合计']
+    normal: ['计算', '算一下', '算一遍', '重算', '算算', '够不够', '合规', '校验', '检查', '统计', '功率', '费用', '总价', '合计']
   },
   {
     intent: 'query',
@@ -118,13 +118,40 @@ function scoreRules(text: string): Array<{ intent: Exclude<IntentKind, 'out_of_s
   });
 }
 
+/**
+ * 把「先查…再算…」拆成有序子句。只认明确连接词，避免把普通顿号/逗号拆坏；
+ * 空子句（例如句首的「再」）会被丢掉。
+ */
+export function splitInstructionSteps(text: string): string[] {
+  const normalized = (text ?? '').trim();
+  if (!normalized) return [];
+  return normalized
+    .split(/(?:然后|接着|之后|最后|并且|同时|再|并)/)
+    .map((part) =>
+      part
+        .trim()
+        .replace(/^[，,、；;:：]+|[，,、；;:：]+$/g, '')
+        .replace(/^(?:先|再|然后|接着|之后|最后|并且|同时|并)/, '')
+        .trim()
+    )
+    .filter(Boolean);
+}
+
 /** 规则分类：取分最高者，同分按写操作优先，全 0 判为超纲。 */
 export function routeIntent(text: string): IntentMatch {
   const normalized = (text ?? '').trim();
   if (!normalized) {
     return { intent: 'out_of_scope', confidence: 'low', score: 0, hits: [], reason: '输入为空' };
   }
-  const scored = scoreRules(normalized).filter((entry) => entry.score > 0);
+  // 多步指令以最后一步的目标分类：「读 BOM 然后做干涉」应算计算而不是查询。
+  const steps = splitInstructionSteps(normalized);
+  const lastStep = steps.length > 1 ? steps[steps.length - 1]! : normalized;
+  let scored = scoreRules(lastStep).filter((entry) => entry.score > 0);
+  // 「刚才那个 BOM 再读一遍」里的「再」是重做副词，不是新的子任务；
+  // 最后一段无可识别意图时回退到整句，避免拆坏原本能判的指令。
+  if (scored.length === 0 && lastStep !== normalized) {
+    scored = scoreRules(normalized).filter((entry) => entry.score > 0);
+  }
   if (scored.length === 0) {
     return {
       intent: 'out_of_scope',
@@ -267,6 +294,15 @@ const STOPWORDS = [
   '所有',
   '全部',
   '一共',
+  '当前',
+  '机台',
+  '整机',
+  '设备',
+  '柜子',
+  '柜内',
+  '工位',
+  '里',
+  '里面',
   '一个',
   '两个',
   '几个',
@@ -284,6 +320,26 @@ const STOPWORDS = [
 
 const LIST_VERBS = ['有哪些', '列出', '列举', '所有', '全部', '清单', '显示'];
 
+/** 指代词只用于消解上下文，不能当成元件搜索词。 */
+const REFERENCE_WORDS = [
+  '左边第二个',
+  '右边第二个',
+  '左边那个',
+  '右边那个',
+  '刚才那个',
+  '刚才的',
+  '这个',
+  '那个',
+  '这台',
+  '那台',
+  '它',
+  '他',
+  '她'
+];
+
+const REFERENCE_PATTERN = /(左边第二个|右边第二个|左边那个|右边那个|刚才那个|这个|那个|这台|那台|它)/;
+const DOMAIN_NOUNS = /(机台|整机|项目|设备|柜子|工位|全部|所有|当前|BOM|物料|成本|报价|费用|总价|合计|电气|线号|载流量|干涉|装配|元件|器件)/i;
+
 function matchCategory(text: string): string | null {
   // 长词优先，避免「继电器」抢走「热继电器」「安全继电器」。
   const keys = Object.keys(CATEGORY_SYNONYMS).sort((left, right) => right.length - left.length);
@@ -298,6 +354,9 @@ export function extractQuery(text: string): string {
   let value = (text ?? '').trim();
   for (const prefix of POLITE_PREFIXES) {
     if (value.startsWith(prefix)) value = value.slice(prefix.length).trim();
+  }
+  for (const reference of [...REFERENCE_WORDS].sort((left, right) => right.length - left.length)) {
+    value = value.split(reference).join(' ');
   }
   for (const verb of QUERY_VERBS) value = value.split(verb).join(' ');
   for (const word of STOPWORDS) value = value.split(word).join(' ');
@@ -315,6 +374,23 @@ function exportFormat(text: string): 'pdf' | 'csv' {
   return /csv|excel|表格/i.test(text) ? 'csv' : 'pdf';
 }
 
+function extractPartId(text: string): string | null {
+  const match = text.match(/(?:partId|物料号|物料编号|物料\s*号)\s*[:：=]?\s*([A-Za-z0-9][A-Za-z0-9_.-]*)/i);
+  return match?.[1] ?? null;
+}
+
+function extractCadPath(text: string): string | null {
+  const match = text.match(/[A-Za-z]:\\[^\s，。；;]+/);
+  return match?.[0] ?? null;
+}
+
+/** 只有指代、没有工程对象/领域词的报价请求应先追问，不能拿「那个东西」去搜元件。 */
+function isBareReferencePriceQuery(text: string, category: string | null): boolean {
+  if (!REFERENCE_PATTERN.test(text)) return false;
+  if (category || DOMAIN_NOUNS.test(text)) return false;
+  return /(多少钱|价格|费用|报价|成本|总价|合计)/.test(text);
+}
+
 /**
  * 把中文指令映射成一个工具计划。
  * 返回 null 表示「没有任何工具能接住」，调用方应如实说做不了。
@@ -324,9 +400,20 @@ export function planTool(text: string): ToolPlan | null {
   if (!value) return null;
   const match = routeIntent(value);
   if (match.intent === 'out_of_scope') return null;
+  // 联调/同步工具尚未注册：规则层只能明确说「暂不支持」，不能降级成搜索元件。
+  if (match.intent === 'commission' || match.intent === 'sync') return null;
+
+  const category = matchCategory(value);
+
+  if (/(撤销|撤消)/.test(value)) {
+    return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '撤销最近一次写操作' };
+  }
+  if (/(删掉|删除)/.test(value)) {
+    return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '删除能力暂由撤销最近一次写操作承接（需确认）' };
+  }
 
   // 写操作优先判断：宁可多要一次确认，也不能把写当成只读。
-  if (/导出/.test(value) && /(成本|报价|费用|报告)/.test(value)) {
+  if (/(导出|生成|出一份|出份|打印)/.test(value) && /(成本|报价|费用|报告|报表|报价单)/.test(value)) {
     return {
       tool: 'export_cost_report',
       args: { format: exportFormat(value) },
@@ -335,25 +422,24 @@ export function planTool(text: string): ToolPlan | null {
       why: `生成并落盘 ${exportFormat(value).toUpperCase()} 成本报告（写入 userData/exports/，需确认）`
     };
   }
-  if (/(插入|放一个|放置|添加)/.test(value)) {
-    return {
-      tool: 'insert_component',
-      args: {},
-      readOnly: false,
-      missing: ['partId'],
-      why: '插入占位件属于写操作，需要先确定物料号并二次确认'
-    };
-  }
-  if (/(撤销|撤消)/.test(value)) {
-    return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '撤销最近一次写操作' };
-  }
   if (/(导入|打开).*(step|stp|iges|stl|obj|glb)/i.test(value)) {
+    const path = extractCadPath(value);
     return {
       tool: 'import_cad',
-      args: {},
+      args: path ? { path } : {},
       readOnly: false,
-      missing: ['path'],
-      why: '导入 CAD 需要本机文件绝对路径'
+      missing: path ? [] : ['path'],
+      why: path ? `导入 CAD 文件 ${path}（需确认）` : '导入 CAD 需要本机文件绝对路径'
+    };
+  }
+  if (/(插入|放一个|放置|添加)/.test(value)) {
+    const partId = extractPartId(value);
+    return {
+      tool: 'insert_component',
+      args: partId ? { partId } : {},
+      readOnly: false,
+      missing: partId ? [] : ['partId'],
+      why: partId ? `插入物料 ${partId} 的占位件（需确认）` : '插入占位件属于写操作，需要先确定物料号并二次确认'
     };
   }
 
@@ -377,6 +463,7 @@ export function planTool(text: string): ToolPlan | null {
     };
   }
   if (/(成本|报价|多少钱|费用|总价|合计)/.test(value)) {
+    if (isBareReferencePriceQuery(value, category)) return null;
     return {
       tool: 'run_cost_report',
       args: {},
@@ -395,9 +482,12 @@ export function planTool(text: string): ToolPlan | null {
     };
   }
 
-  const category = matchCategory(value);
   const query = extractQuery(value);
   const wantsList = LIST_VERBS.some((verb) => value.includes(verb));
+
+  // 只读兜底只属于查询意图。计算/修改/生成没有命中具体工具时应明确返回 null，
+  // 否则「再算一遍」「把它改一下」会被错误落到元件搜索。
+  if (match.intent !== 'query') return null;
 
   if (category && (wantsList || !query)) {
     return {
@@ -427,6 +517,22 @@ export function planTool(text: string): ToolPlan | null {
     };
   }
   return null;
+}
+
+/** 多步计划：按明确连接词拆句，任何一步落空都不执行，避免「做一半」。 */
+export function planToolSequence(text: string): ToolPlan[] | null {
+  const segments = splitInstructionSteps(text);
+  if (segments.length <= 1) {
+    const plan = planTool(text);
+    return plan ? [plan] : null;
+  }
+  const plans: ToolPlan[] = [];
+  for (const segment of segments) {
+    const plan = planTool(segment);
+    if (!plan) return null;
+    plans.push(plan);
+  }
+  return plans;
 }
 
 /** 离线通道专用：只有只读计划才允许自动执行。 */

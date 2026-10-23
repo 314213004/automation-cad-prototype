@@ -188,7 +188,8 @@ window.__AgentBridge = {
 - ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ 单测：全套 466/466；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
-- ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources；40 条中文评估集与 `npm run eval:agent`
+- ✅ P7-A-3：40 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
+- ⏳ 更多可撤销写操作（属性修改、删除节点）、MCP resources、写操作逐步确认 UI；联调/同步工具注册后补充真实工具用例
 
 ## 待办
 

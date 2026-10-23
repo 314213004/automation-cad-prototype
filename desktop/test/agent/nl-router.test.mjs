@@ -8,6 +8,7 @@ import {
   extractQuery,
   planReadOnly,
   planTool,
+  planToolSequence,
   routeIntent
 } from '../../src/agent/router.ts';
 import { CONTEXT_BYTE_LIMIT, buildAgentContext, byteLength } from '../../src/agent/context.ts';
@@ -86,6 +87,42 @@ test('超纲指令不产生计划', () => {
     assert.equal(planReadOnly(text), null);
     assert.equal(planTool(text), null);
   }
+});
+
+test('指代词不进入搜索词，歧义指令不猜工具', () => {
+  assert.deepEqual(planReadOnly('左边第二个空开是什么型号')?.args, { category: '断路器' });
+  assert.deepEqual(planReadOnly('这台机台有几个气缸')?.args, { category: '气缸' });
+  assert.equal(extractQuery('刚才那个接触器'), '');
+
+  for (const text of ['把它改一下', '查一下那个', '左边那个换掉', '再算一遍', '那个东西多少钱']) {
+    assert.equal(planTool(text), null, `${text} 应追问而不是调用工具`);
+  }
+});
+
+test('联调/同步未注册工具时不误落到元件搜索', () => {
+  for (const text of ['上电跑一遍联调序列', '查一下当前报警并给故障诊断', '把设计包同步到智慧工厂', '上传设计包并查看版本对比']) {
+    assert.equal(planTool(text), null, `${text} 不应产生工具计划`);
+  }
+});
+
+test('多步指令按顺序规划，任一步缺失则整单不执行', () => {
+  const steps = planToolSequence('先查一下 SMC 气缸，再算一下整机成本');
+  assert.deepEqual(steps?.map((step) => step.tool), ['search_components', 'run_cost_report']);
+  assert.deepEqual(steps?.[0]?.args, { q: 'SMC', category: '气缸' });
+
+  const writeSteps = planToolSequence('查一下 SMC 气缸并插入到 2 号工位');
+  assert.deepEqual(writeSteps?.map((step) => step.tool), ['search_components', 'insert_component']);
+  assert.equal(writeSteps?.[1]?.missing.includes('partId'), true);
+
+  assert.equal(planToolSequence('读一下当前 BOM，然后讲个笑话'), null);
+});
+
+test('写操作参数抽取：物料号与 CAD 路径', () => {
+  assert.deepEqual(planTool('插入物料号 LC1D09 的接触器')?.args, { partId: 'LC1D09' });
+  assert.equal(planTool('插入一个气缸')?.missing.includes('partId'), true);
+  assert.deepEqual(planTool('导入 step 文件 D:\\fixtures\\station.step')?.args, {
+    path: 'D:\\fixtures\\station.step'
+  });
 });
 
 test('计划描述为中文且写操作有标注', () => {

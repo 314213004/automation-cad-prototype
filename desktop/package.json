@@ -10,6 +10,7 @@
     "build:ext": "tsc --noEmit && vite build && node scripts/build-electron.mjs && node scripts/build-mcp.mjs",
     "start": "electron .",
     "test": "node --test",
+    "eval:agent": "node eval/run-eval.mjs",
     "bench:render": "node scripts/bench-render-plan.mjs",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
     "dist:win": "electron-builder --win nsis --x64",

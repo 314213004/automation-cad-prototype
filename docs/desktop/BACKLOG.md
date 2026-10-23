@@ -51,7 +51,7 @@
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
 ### P7 自然语言交互 Agent
-- 状态：🔄 P7-A 前两段 ✅（`424711c` 离线规则路由 + 上下文裁剪 + 审计；`b3b9aee` 侧栏只读问答 UI）；40 条中文评估集待做
+- 状态：✅ P7-A 完成（`424711c` 离线规则路由 + 上下文裁剪 + 审计；`b3b9aee` 侧栏只读问答 UI；P7-A-3 40 条中文评估集 + `npm run eval:agent`，提交号待补）
 - 已完成（P7-A-1，`424711c`）：
   - `src/agent/router.ts`：7 类意图关键词计分（写操作同分优先）、`planTool` 中文→工具+参数、`planReadOnly` 只读白名单、类别同义词按长度倒序（热继电器不被继电器吃掉）、`extractQuery` 去客套/动词/疑问词
   - `src/agent/context.ts`：`buildAgentContext` 默认 ≤2048 字节，降级顺序「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」，回报 `bytes/truncated/droppedTools/droppedRecent`
@@ -66,7 +66,12 @@
   - `preload.ts` / `desktop-api.d.ts`：新增 `agent.audit.read()`
   - `main.ts`：新增 `SMOKE_AGENT_READONLY_UI_OK` —— 只读样例 `offline=1`、写样例 `offline=0` 且提示含 `partId`、预览前后场景零件数不变、审计面板读到 2 条
 - 实测（P7-A-2）：`tsc --noEmit` 通过；`npm test` **466/466**（新增 9 条，覆盖预览只读/写/超纲、本轮工具统计、回执在线/离线/异常耗时、审计行与汇总、会话 mode 的在线/离线/清空/写指令不降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_AGENT_TOOLS_OK tools=10`、成本四条断言全绿、`SMOKE_OK`
-- 下一步：P7-A-3 —— 40 条中文评估集 + `npm run eval:agent`（规则路由先跑基线，再对比模型路径）；随后写操作的逐步确认 UI
+- 已完成（P7-A-3，提交号待补）：
+  - `desktop/eval/agent-cases.json`：40 条中文用例，覆盖 7 类意图；16 条指代、5 条歧义、5 条多步、5 条超纲；工具名全部来自 `tools.ts` 注册表
+  - `desktop/eval/run-eval.mjs`：离线规则回归，统计意图准确率 / 工具选择率 / 参数抽取率 / 超纲拒绝率 / 多步完成率，输出表格并写 `docs/desktop/eval/latest.json`（时间戳、版本、逐条明细）；低于阈值退出码 1
+  - `src/agent/router.ts`：修复指代词被当搜索词、联调/同步误落元件搜索、歧义句乱调工具；新增 `splitInstructionSteps` / `planToolSequence` 多步规划，写操作参数支持 `partId` 与 CAD 路径抽取
+  - 实测：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（40/40 意图、40/40 工具、14/14 参数、5/5 超纲拒绝、5/5 多步）；`npx tsc --noEmit` 通过；`npm test` 470/470
+- 下一步：P7-B —— 写操作的逐步确认 UI（当前仍为一次性弹窗）；联调/同步工具注册后把 `tool: null` 用例替换为真实工具
 - 验收（A 期）：`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3` + `SMOKE_AGENT_READONLY_UI_OK`，误写率 0（写计划不进入离线通道、预览不执行，均有单测/冒烟钉住）
 
 ### P8 设计完成后自动生成 PLC 程序

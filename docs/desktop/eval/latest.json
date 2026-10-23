@@ -1,0 +1,1109 @@
+{
+  "generatedAt": "2026-10-23T04:50:38.531Z",
+  "version": "0.2.0",
+  "mode": "offline-rules",
+  "dataset": {
+    "path": "desktop/eval/agent-cases.json",
+    "count": 40,
+    "references": 16,
+    "ambiguous": 5,
+    "multiStep": 5,
+    "outOfScope": 5
+  },
+  "thresholds": {
+    "intent": 0.9,
+    "tools": 0.85,
+    "params": 0.9,
+    "refused": 1,
+    "multiStep": 0.8
+  },
+  "passed": true,
+  "metrics": {
+    "intent": {
+      "correct": 40,
+      "total": 40,
+      "rate": 1
+    },
+    "tools": {
+      "correct": 40,
+      "total": 40,
+      "rate": 1
+    },
+    "params": {
+      "correct": 14,
+      "total": 14,
+      "rate": 1
+    },
+    "refused": {
+      "correct": 5,
+      "total": 5,
+      "rate": 1
+    },
+    "multiStep": {
+      "correct": 5,
+      "total": 5,
+      "rate": 1
+    }
+  },
+  "cases": [
+    {
+      "id": "q01",
+      "input": "这台机台有几个气缸？",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代当前机台；规则层回落为气缸类别清单，不把“这台机台”当搜索词。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "list_components"
+      ],
+      "actualTools": [
+        "list_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "list_components",
+          "args": {
+            "category": "气缸"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q03",
+      "input": "找型号 CJ2B10-10D 的气缸",
+      "tags": [],
+      "note": "参数抽取：型号 + 类别。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_components"
+      ],
+      "actualTools": [
+        "search_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "CJ2B10-10D",
+            "category": "气缸"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q04",
+      "input": "读一下当前 BOM，然后查一下 24V 开关电源",
+      "tags": [
+        "multi_step"
+      ],
+      "note": "两步查询：先读 BOM，再搜电源；任一步落空都不应执行。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "get_bom",
+        "search_components"
+      ],
+      "actualTools": [
+        "get_bom",
+        "search_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_bom",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        },
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "24V",
+            "category": "开关电源"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q05",
+      "input": "刚才那个 BOM 再读一遍",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代上一轮 BOM；“再”是重做副词，不应误拆成新任务。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "get_bom"
+      ],
+      "actualTools": [
+        "get_bom"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_bom",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q06",
+      "input": "左边第二个空开是什么型号",
+      "tags": [
+        "reference"
+      ],
+      "note": "位置指代 + 类别同义词（空开→断路器），指代词不能进入 q。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "list_components"
+      ],
+      "actualTools": [
+        "list_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "list_components",
+          "args": {
+            "category": "断路器"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q08",
+      "input": "这个柜子里的热继电器有哪些",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代柜子；长类别词优先，不能落到“继电器”。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "list_components"
+      ],
+      "actualTools": [
+        "list_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "list_components",
+          "args": {
+            "category": "热继电器"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c01",
+      "input": "这台机台成本多少",
+      "tags": [
+        "reference"
+      ],
+      "note": "整机成本，不带 BOM 参数时由工具回落当前场景。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_cost_report"
+      ],
+      "actualTools": [
+        "run_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_cost_report",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c02",
+      "input": "刚才那个成本再算一遍",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代上一轮成本结果并重算。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_cost_report"
+      ],
+      "actualTools": [
+        "run_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_cost_report",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c04",
+      "input": "先查左边第二个气缸和底座有没有干涉，再做电气校验",
+      "tags": [
+        "reference",
+        "multi_step"
+      ],
+      "note": "位置指代 + 两步计算：干涉后电气校验。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_interference_check",
+        "run_electrical_check"
+      ],
+      "actualTools": [
+        "run_interference_check",
+        "run_electrical_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_interference_check",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        },
+        {
+          "tool": "run_electrical_check",
+          "args": {},
+          "readOnly": true,
+          "missing": [
+            "wires",
+            "loads"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c06",
+      "input": "这个柜子的线号载流量合规吗",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代柜子；线号/载流量属电气校验，不能被当成元件搜索。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_electrical_check"
+      ],
+      "actualTools": [
+        "run_electrical_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_electrical_check",
+          "args": {},
+          "readOnly": true,
+          "missing": [
+            "wires",
+            "loads"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c07",
+      "input": "先查一下 SMC 气缸，再算一下整机成本",
+      "tags": [
+        "multi_step"
+      ],
+      "note": "查件后算成本；最终意图按末步“计算”归属。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "search_components",
+        "run_cost_report"
+      ],
+      "actualTools": [
+        "search_components",
+        "run_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "SMC",
+            "category": "气缸"
+          },
+          "readOnly": true,
+          "missing": []
+        },
+        {
+          "tool": "run_cost_report",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "c08",
+      "input": "查一下 3 号工位的干涉",
+      "tags": [],
+      "note": "工位限定当前工具暂不入参，但工具选择必须正确。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_interference_check"
+      ],
+      "actualTools": [
+        "run_interference_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_interference_check",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "m01",
+      "input": "插入物料号 LC1D09 的接触器",
+      "tags": [],
+      "note": "参数抽取：物料号；写操作必须走确认。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "insert_component"
+      ],
+      "actualTools": [
+        "insert_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "insert_component",
+          "args": {
+            "partId": "LC1D09"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "m02",
+      "input": "查一下 SMC 气缸并插入到 2 号工位",
+      "tags": [
+        "multi_step"
+      ],
+      "note": "先查后插；插入缺 partId 时应在确认前点名缺参。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "search_components",
+        "insert_component"
+      ],
+      "actualTools": [
+        "search_components",
+        "insert_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "SMC",
+            "category": "气缸"
+          },
+          "readOnly": true,
+          "missing": []
+        },
+        {
+          "tool": "insert_component",
+          "args": {},
+          "readOnly": false,
+          "missing": [
+            "partId"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "m04",
+      "input": "把这个接触器删掉",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代当前选中接触器；尚无独立删除工具，由撤销承接。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "undo_last"
+      ],
+      "actualTools": [
+        "undo_last"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "undo_last",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "m05",
+      "input": "导入 step 文件 D:\\fixtures\\station.step",
+      "tags": [],
+      "note": "参数抽取：Windows 绝对路径；仍属需确认的写操作。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "import_cad"
+      ],
+      "actualTools": [
+        "import_cad"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "import_cad",
+          "args": {
+            "path": "D:\\fixtures\\station.step"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "m06",
+      "input": "撤销刚才那个插入",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代上一次插入；撤销判断必须优先于插入关键词。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "undo_last"
+      ],
+      "actualTools": [
+        "undo_last"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "undo_last",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "g01",
+      "input": "导出一份 CSV 报价单",
+      "tags": [],
+      "note": "参数抽取：CSV 格式。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "csv"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "g02",
+      "input": "把成本报告导出成 PDF",
+      "tags": [],
+      "note": "默认 PDF。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "pdf"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "g03",
+      "input": "生成一份 Excel 成本报表",
+      "tags": [],
+      "note": "Excel/表格映射为 CSV；生成类动词不能被成本关键词抢走意图。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "csv"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "g04",
+      "input": "读一下当前 BOM，然后导出一份 PDF 报价单",
+      "tags": [
+        "multi_step"
+      ],
+      "note": "读 BOM 后导出；最终意图按末步“生成”归属。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "get_bom",
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "get_bom",
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_bom",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        },
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "pdf"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "g05",
+      "input": "把刚才那个报价导出为 Excel 表格",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代上一轮报价；Excel 映射 CSV。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "csv"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "cm01",
+      "input": "上电跑一遍联调序列",
+      "tags": [],
+      "note": "联调工具尚未注册，规则应明确不支持，不能误调 search_components。",
+      "expectedIntent": "commission",
+      "actualIntent": "commission",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "cm02",
+      "input": "查一下当前报警并给故障诊断",
+      "tags": [],
+      "note": "故障诊断工具尚未注册，应拒绝而不是猜。",
+      "expectedIntent": "commission",
+      "actualIntent": "commission",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "cm03",
+      "input": "把 3 号工位切到手动模式",
+      "tags": [],
+      "note": "模式切换属于联调，当前无对应工具。",
+      "expectedIntent": "commission",
+      "actualIntent": "commission",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "cm04",
+      "input": "联调时 3 号工位没动作，帮我诊断",
+      "tags": [],
+      "note": "现场诊断类请求，当前无工具可接。",
+      "expectedIntent": "commission",
+      "actualIntent": "commission",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "s01",
+      "input": "把设计包同步到智慧工厂",
+      "tags": [],
+      "note": "同步工具尚未注册，应明确不支持。",
+      "expectedIntent": "sync",
+      "actualIntent": "sync",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "s02",
+      "input": "上传设计包并查看版本对比",
+      "tags": [],
+      "note": "上传/版本对比尚无 Agent 工具。",
+      "expectedIntent": "sync",
+      "actualIntent": "sync",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "s03",
+      "input": "把当前版本推送到云端服务器",
+      "tags": [],
+      "note": "同义表述：推送/云端/服务器。",
+      "expectedIntent": "sync",
+      "actualIntent": "sync",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "s04",
+      "input": "同步刚才那个设计包",
+      "tags": [
+        "reference"
+      ],
+      "note": "指代上一轮设计包；工具未注册时仍应拒绝。",
+      "expectedIntent": "sync",
+      "actualIntent": "sync",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "a01",
+      "input": "把它改一下",
+      "tags": [
+        "reference",
+        "ambiguous"
+      ],
+      "note": "歧义：对象与改法都不明确，应追问，不能猜写操作。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "a02",
+      "input": "查一下那个",
+      "tags": [
+        "reference",
+        "ambiguous"
+      ],
+      "note": "歧义：没有可查询对象。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "a03",
+      "input": "左边那个换掉",
+      "tags": [
+        "reference",
+        "ambiguous"
+      ],
+      "note": "歧义：未说明替换成什么，不能直接执行。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "a04",
+      "input": "再算一遍",
+      "tags": [
+        "ambiguous"
+      ],
+      "note": "歧义：没有上一轮计算上下文，不能落到元件搜索。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "a05",
+      "input": "那个东西多少钱",
+      "tags": [
+        "reference",
+        "ambiguous"
+      ],
+      "note": "歧义：只有指代、没有工程对象，应追问。",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "o01",
+      "input": "今天天气怎么样",
+      "tags": [
+        "out_of_scope"
+      ],
+      "note": "非工程问题，应明确拒绝。",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "o02",
+      "input": "帮我把年终总结写一下",
+      "tags": [
+        "out_of_scope"
+      ],
+      "note": "办公写作不属于 CAD 智能体范围。",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "o03",
+      "input": "讲个笑话",
+      "tags": [
+        "out_of_scope"
+      ],
+      "note": "闲聊，应拒绝。",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "o04",
+      "input": "帮我订一张去上海的机票",
+      "tags": [
+        "out_of_scope"
+      ],
+      "note": "外部订票，应拒绝。",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "o05",
+      "input": "打开浏览器访问 example.com",
+      "tags": [
+        "out_of_scope"
+      ],
+      "note": "不允许 Agent 操作浏览器/任意网络，应拒绝。",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    }
+  ]
+}
