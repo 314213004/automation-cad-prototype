@@ -1,0 +1,12 @@
+{
+  "name": "automationcad-sketch-spike",
+  "private": true,
+  "type": "module",
+  "description": "P9-4 2D constraint solver spike (not part of the desktop build)",
+  "scripts": {
+    "solve": "node solve-planegcs.mjs"
+  },
+  "dependencies": {
+    "@salusoft89/planegcs": "1.3.0"
+  }
+}

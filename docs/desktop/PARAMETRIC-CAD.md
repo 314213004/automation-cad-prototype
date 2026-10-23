@@ -128,8 +128,10 @@ interface FeatureDoc {
 - **P9-1**：sidecar + 契约 + 特征树纯函数（本方案 + `spike/build123d/app.py` 已验证：建模 50 ms、STEP 11 ms、回读一致）
 - **P9-2**：主进程生命周期管理 + preload/IPC + 降级路径
 - **P9-3**：特征树 UI + 参数编辑 + 自动重建 + 导出
-- **P9-4**：草图与约束（可选，接 jsketcher 或自建 2D 约束求解）
+- **P9-4**：草图与约束（前置调研完成；推荐接 `@salusoft89/planegcs`，见 [SKETCH-SPIKE.md](SKETCH-SPIKE.md)）
 - **P9-5**：装配（多实体）与 BOM/成本的联动
+
+> **P9-4 前置调研已完成，见 [SKETCH-SPIKE.md](SKETCH-SPIKE.md)。** 结论：推荐 LGPL-2.1 的 planegcs WASM（矩形 + 水平/竖直 + 宽 120 / 高 80 实测残差 0、自由度 0、热求解约 0.3 ms）；jsketcher 因许可与分发形态不推荐。求解顶点 → build123d `Polyline` → `make_face` → `extrude` 已用 0.13.0 实跑验证。本轮不接入产品代码。
 
 ## 10. 后续换内核的代价
 

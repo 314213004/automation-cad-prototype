@@ -1,0 +1,92 @@
+{
+  "library": "@salusoft89/planegcs@1.3.0",
+  "constraints": {
+    "rectangle": "p1-p2-p3-p4, p1 fixed at origin",
+    "rows": [
+      "horizontal(p1,p2)",
+      "vertical(p1,p4)",
+      "vertical(p2,p3)",
+      "horizontal(p4,p3)",
+      "width p1-p2 = 120",
+      "height p2-p3 = 80"
+    ]
+  },
+  "startVertices": [
+    [
+      0,
+      0
+    ],
+    [
+      117,
+      3
+    ],
+    [
+      123.5,
+      77
+    ],
+    [
+      -2,
+      82.5
+    ]
+  ],
+  "status": 0,
+  "statusName": "Success",
+  "dof": 0,
+  "vertices": [
+    [
+      0,
+      0
+    ],
+    [
+      120,
+      0
+    ],
+    [
+      120,
+      80
+    ],
+    [
+      0,
+      80
+    ]
+  ],
+  "residuals": [
+    {
+      "id": "c1",
+      "name": "horizontal(p1,p2)",
+      "value": 0
+    },
+    {
+      "id": "c2",
+      "name": "vertical(p1,p4)",
+      "value": 0
+    },
+    {
+      "id": "c3",
+      "name": "vertical(p2,p3)",
+      "value": 0
+    },
+    {
+      "id": "c4",
+      "name": "horizontal(p4,p3)",
+      "value": 0
+    },
+    {
+      "id": "c5",
+      "name": "width(p1,p2)=120",
+      "value": 0
+    },
+    {
+      "id": "c6",
+      "name": "height(p2,p3)=80",
+      "value": 0
+    }
+  ],
+  "maxAbsResidual": 0,
+  "timingsMs": {
+    "init": 16.09,
+    "firstSolve": 7.716,
+    "warmBuildAndSolveMedian": 0.301,
+    "warmBuildAndSolveP95": 0.393
+  }
+}

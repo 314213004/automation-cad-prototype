@@ -6,9 +6,12 @@
 - `cadquery/app.py` — sidecar 原型（标准库 HTTP + Bearer，`/health`、`/build`）
 - `build123d/app.py` — 选定内核的 sidecar 原型（`/health`、`/build`，端口 7412）
 - `replicad/bench.mjs` — OCCT WASM 同件基准
+- `sketch/` — P9-4 2D 约束求解 spike（planegcs 实测 + build123d `Polyline → extrude` 衔接），结论见 [SKETCH-SPIKE.md](../docs/desktop/SKETCH-SPIKE.md)
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install cadquery
 .venv/bin/python spike/cadquery/spike.py
 .venv/bin/python spike/cadquery/app.py --port 7411 --token dev-token
+
+cd spike/sketch && npm install && npm run solve
 ```

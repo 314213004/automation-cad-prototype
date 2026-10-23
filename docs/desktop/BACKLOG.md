@@ -127,10 +127,10 @@
 - P8-4 边界：模拟器只执行生成程序的动作/等待/超时/安全/传感器语义，不解析任意 ST；仍不生成厂商专有工程文件
 
 ### P9 参数化建模（build123d 内核）
-- 状态：🔄 P9-1 / P9-2 / P9-3 / P9-5 已完成；P9-4 草图约束待做
+- 状态：🔄 P9-1 / P9-2 / P9-3 / P9-5 已完成；P9-4 草图约束前置调研完成，实施待排期
 - 实测：建模 25–50 ms、STEP 8–11 ms、回读体积/面数一致、常驻 424 MB、冷启动 2.3 s
 - 方案：[PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；对比：[PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
-- 分期：P9-1 ✅ sidecar+契约（`spike/build123d/app.py`）→ P9-2 ✅ 主进程生命周期/IPC（`9eda660`，388/388、`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`）→ P9-3 ✅ 特征树 UI / 参数编辑 / 防抖重建 / STEP+STL 导出 → P9-4 草图约束 → P9-5 ✅ 多实体装配 + BOM/成本联动
+- 分期：P9-1 ✅ sidecar+契约（`spike/build123d/app.py`）→ P9-2 ✅ 主进程生命周期/IPC（`9eda660`，388/388、`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`）→ P9-3 ✅ 特征树 UI / 参数编辑 / 防抖重建 / STEP+STL 导出 → P9-4 ⏳ 草图约束（前置调研完成）→ P9-5 ✅ 多实体装配 + BOM/成本联动
 - 已完成（P9-3）：`src/parametric/model.ts`（编辑/防抖/分桶/序列化/包围盒，18 条单测）、`src/parametric/ui.ts`（与运动学二选一的抽屉、按类型参数表单、校验失败禁重建）、`cad/viewer.ts`（STL 载入 + 旧模型幽灵层 + 特征包围盒高亮）、`extension.ts` 挂载与 `AutomationCadParametric` 调试入口；`localStorage: automationcad.parametric.v1` 按 `sourceFile` 分桶（无来源 `untitled`）；JSON 保存走 `desktop.exportFile`
 - 实测（P9-3）：`npx tsc --noEmit` 通过；`npm test` **524/524**；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`、`SMOKE_OK`
 - 坑：假内核脚本不能放 `test/` 下（`node --test` 会把 `test/fixtures/*.mjs` 也当测试跑，挂 276 s），已移到 `desktop/scripts/fake-parametric-sidecar.mjs`
@@ -138,6 +138,7 @@
 - 已完成（P9-5）：`features.ts` 增加 `PartInstance/AssemblyDoc`、旧文档自动包装、实体级校验与 `compileOps` 双形态；`bom.ts` 合并 partId/未映射名称并生成 UTF-8 BOM CSV 与成本入参；`ui.ts` 装配实体区、BOM 预览、导出 BOM/送成本；`app.py` 可选 `instances`，独立建模后按 X/Y/Z/RZ 放置并合并，返回 `stats.solids` 与每实体体积；假内核支持两实体 smoke
 - 实测（P9-5）：`npx tsc --noEmit` 通过；`npm test` **647/647**（新增 `parametric-assembly.test.ts` 25 条 + sidecar 装配 3 条）；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3`
 - P9-5 边界：BOM 只按实体汇总、不拆特征明细；`partId` 需人工填写；装配为静态多实体合并，不做配合约束/自由度求解（P9-4）
+- P9-4 前置调研（2026-10-23）：推荐 `@salusoft89/planegcs@1.3.0`（LGPL-2.1、WASM、Node 可跑）；矩形 + 水平/竖直 + 宽 120 / 高 80 实测 `Success`、`dof=0`、残差 0，热求解中位数 0.30 ms，安装增量 878 KiB；jsketcher 因自定义许可要求修改回授且无 npm 包不推荐；顶点 → build123d `Polyline` → `extrude` 实跑体积 76,800 mm³。详见 [SKETCH-SPIKE.md](SKETCH-SPIKE.md)。本轮不接入产品代码
 
 ### P10 产品截图更新（本轮，2026-10-23）
 - 状态：✅ 已完成
