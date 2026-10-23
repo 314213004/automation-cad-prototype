@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 运动学自动识别建议（36-auto-kinematics，2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1166/1166**（1132 + 新增 34，需 `TZ=Asia/Shanghai`，见下）、`npm run smoke` 新增 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`（共 60 行 SMOKE_*，2 个既有预期 `_SKIP` 为参数化 sidecar 未配置）；不 push、不打包。
+- A. 识别引擎：新增 `desktop/src/cad/kinematics-auto.ts`（纯函数）。三类证据：① 名称/型号——中英文关键词（气缸/cylinder、滑台/slide、夹爪/gripper、旋转/rotary、丝杆/ballscrew、导轨/rail、伺服/motor）与厂商型号（SMC CDJ2/CQ2/MGP/MXQ/MHZ2/MSQ/CRB、AirTAC TN/MAL/SDA、HIWIN MGN/HGR/HGH、SFU）；② 装配层级——同型号/系列归组、父装配名带类别时子件继承型号与工位、通用名件（`finger_L` / `活塞杆`）按同组相接并入；③ 几何——顶点 PCA 主轴、细长/扁平度、回转体判断，气缸活塞杆与缸体同轴 → 沿缸轴直线（伸出方向取外露侧），导轨 + 滑块 → 沿导轨长轴，旋转台 → 台面法向转轴，夹爪 → 两指连线。
+- B. 输出：每条建议含轴类型、真实方向向量 + 最近主轴/偏角、行程（型号 `MGPM20-50`→50 mm 优先，样本表其次，几何估算再次，取不到为 0 待填）、缩回位（以模型当前位置为 0 mm）、置信度、中文理由、IO 点位建议（工位/编号/类型/型号/名称相似度打分，≥ 0.5 才推荐，如 `ST1-EXT-A1`；占用点位不推荐、两条建议不抢同一点位）。高置信度（≥ 0.6）与低置信度分开返回；伺服电机固定只进低置信度。
+- C. 确认流程：标注抽屉新增「自动识别建议」区，导入后自动识别一次、可「识别动件」重跑；高置信度卡片 + 折叠的低置信度列表，逐条「采纳 / 忽略」。**从不自动写入**：采纳只把该条加入动件列表，仍走既有 `validateDraft` / `checkKinematics`，无点位或行程为 0 时照常报错、禁止保存；需用户点「保存标注」才落盘。标注 JSON schema、校验规则均未改动。
+- D. 数据通路：`CadMeshData.path`（可选）由 `step.ts::meshPathsFromRoot` 从 occt `root` 填充；`CadViewer.getKinematicsGeometry()` 提供网格 + 路径 + 顶点；`window.AutomationCadKinematics` 新增 `suggest / suggestions / acceptSuggestion / dismissSuggestion`。
+- E. 测试：新增 `desktop/test/cad/kinematics-auto.test.mjs` 34 条（每条启发式各有用例：型号行程、关键词/角色、误判防护、样本表、导轨系列、工位号、PCA/回转体/包围盒退化、主轴吸附、同轴/外露/不同轴/偏轴、层级继承、导轨/丝杆/旋转台/滑台/夹爪、低置信度分组、点位评分/占用/不抢、无 IO 表不编造、不自动应用、schema 往返、确定性、occt 路径），含合成 STEP 夹具端到端（4 高 + 1 低，采纳 3 条有点位建议后校验通过，再采纳无点位导轨被现有校验拦截）。夹具 `desktop/test/fixtures/kinematics-assembly.stp`（64 KB）由 `desktop/scripts/gen-kinematics-fixture.mjs` 生成（FACETED_BREP，16 棱柱近似圆柱）。
+- F. 环境说明：本机 sandbox 默认 TZ=UTC 时，既有 `test/cost-export.test.ts` 两条用例（文件名时间戳按 Asia/Shanghai 断言）在改动前就失败；按项目时区 `TZ=Asia/Shanghai npm test` 全绿，未改测试。文档改动后已 `npm run kb:build` 重建离线知识索引（13 docs / 359 chunks）。
+- 边界：① 识别全靠启发式，命名不规范（如「零件17」）且几何不典型的机构识别不到，只会进跳过/漏报；② occt-import-js 会把只含零件的子装配压平到上一级，子装配名里的型号会丢失，需叶子名自带型号（或父装配下有多级层级）；③ 标注层只支持 ±X/±Y/±Z，斜向运动取最近主轴并降置信度；④ 夹爪只给一根手指（同一点位不能绑两个动件），对侧手指需人工处理；⑤ 缩回位一律按模型当前位置，模型画在伸出状态时只提示不纠正；⑥ 样本表只覆盖 MHZ2 行程与 MSQ 180°，其他型号无表时按几何/默认值并注明；⑦ 未新增 Agent 工具 `suggest_kinematics`（可选项，避免与并行分支在工具数/评测集上冲突，留待合并后补）。
+
 ## 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测（P10-3，2026-10-24，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1132/1132**（1110 + 新增 22）、`npm run smoke` 新增 `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`npm run eval:agent` **74/74（1.00）**、`npm run agent:live` **36/36**；不 push。
@@ -338,7 +349,7 @@
 
 ## 已知问题（记录，不阻塞）
 
-1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决中；STEP 不含运动学，任意装配体仍需标注层。
+1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决；STEP 不含运动学，任意装配体仍需标注层。36-auto-kinematics 起可按名称/型号/层级/几何自动给出标注**建议**（需逐条确认），但识别是启发式：命名不规范或几何不典型的机构仍需人工标注，斜向运动只能取最近主轴，夹爪对侧手指、缩回位与无型号行程仍需人工确认。
 2. **尺寸数据覆盖不全**：已补至 244/371（16 条同系列推定），仍缺 127 条；缺失元件在底板画布上按「未标注尺寸」处理，需人工补。
 3. **OPC UA 仅 SecurityPolicy=None**：接真实 PLC 前必须加证书与 Basic256Sha256（Issue #3）。
 4. **无代码签名**：Win11 SmartScreen 会拦一次；发行前需证书。

@@ -1,5 +1,6 @@
 // 运动学标注 UI：把 STEP 网格人工绑定到轴/行程/点位，并用滑块预览。
-// 边界：这里不做机构识别；纯函数只做数据整形、校验与姿态解算，便于单测。
+// 边界：机构识别在 kinematics-auto.ts，这里只展示「建议」并在用户逐条点「采纳」后加入动件列表；
+// 采纳后仍需「保存标注」，校验规则与人工标注完全相同。纯函数只做数据整形、校验与姿态解算，便于单测。
 
 import {
   axisPose,
@@ -14,6 +15,15 @@ import {
   type KinematicsRole
 } from './kinematics.ts';
 import type { CadViewer } from './viewer';
+import {
+  acceptSuggestions,
+  CATEGORY_LABELS,
+  describeSuggestions,
+  suggestKinematics,
+  type AutoKinMesh,
+  type KinematicsSuggestion,
+  type SuggestResult
+} from './kinematics-auto.ts';
 import type { MachineConfig } from '../commission/machine-config.ts';
 
 export const KINEMATICS_STORAGE_KEY = 'automationcad.kinematics.v1';
@@ -552,6 +562,8 @@ export interface KinematicsUiOptions {
   onOpenChange?: (open: boolean) => void;
   storage?: StorageLike;
   notify?: (message: string, error?: boolean) => void;
+  /** 自动识别用几何（网格 + 装配路径 + 顶点）；缺省时不显示识别结果。 */
+  getGeometry?: () => readonly AutoKinMesh[];
 }
 
 export interface KinematicsUiState {
@@ -563,6 +575,8 @@ export interface KinematicsUiState {
   errors: number;
   warnings: number;
   ok: boolean;
+  /** 待确认的自动识别建议（高 / 低置信度）。 */
+  suggestions: { high: number; low: number; skipped: number };
 }
 
 export interface KinematicsUiHandle {
@@ -577,6 +591,13 @@ export interface KinematicsUiHandle {
   slide(id: string, percent: number): SlidePose | null;
   save(): boolean;
   state(): KinematicsUiState;
+  /** 重新识别并刷新建议列表；只展示，不写入动件。 */
+  suggest(): SuggestResult;
+  /** 当前建议（含已忽略/已采纳后的剩余项）。 */
+  suggestions(): SuggestResult;
+  /** 用户确认采纳一条建议：加入动件列表（未保存），返回新动件 id；找不到返回 null。 */
+  acceptSuggestion(id: string): string | null;
+  dismissSuggestion(id: string): void;
 }
 
 function escapeHtml(value: string): string {
@@ -623,6 +644,13 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
   let selected = new Set<number>();
   const slides = new Map<string, number>();
   let validation: DraftValidation = validateDraft([], { meshes: [] });
+  const emptySuggest = (): SuggestResult => ({
+    suggestions: [],
+    lowConfidence: [],
+    skipped: [],
+    stats: { meshes: 0, classified: 0, groups: 0, high: 0, low: 0, skipped: 0 }
+  });
+  let suggestResult: SuggestResult = emptySuggest();
 
   container.classList.add('cad-kinematics-drawer');
   container.innerHTML = `
@@ -642,6 +670,18 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
           <button type="button" class="cad-btn cad-btn-primary" data-kin-add disabled>设为动件</button>
           <button type="button" class="cad-btn" data-kin-clear>清空选择</button>
         </div>
+      </section>
+      <section class="cad-kin-section" data-kin-suggest-section>
+        <div class="cad-kin-section-head"><span>自动识别建议</span><b data-kin-suggest-count>0</b></div>
+        <div class="cad-kin-actions">
+          <button type="button" class="cad-btn" data-kin-suggest>识别动件</button>
+        </div>
+        <div class="cad-kin-hint cad-kin-suggest-note" data-kin-suggest-note>建议不会自动写入：逐条「采纳」后进入动件列表，仍需校验通过并保存。</div>
+        <div class="cad-kin-suggests" data-kin-suggests></div>
+        <details class="cad-kin-suggest-low" data-kin-suggest-low hidden>
+          <summary>低置信度建议 <b data-kin-suggest-low-count>0</b></summary>
+          <div class="cad-kin-suggests" data-kin-suggests-low></div>
+        </details>
       </section>
       <section class="cad-kin-section">
         <div class="cad-kin-section-head"><span>动件列表</span><b data-kin-part-count>0</b></div>
@@ -675,6 +715,12 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
   const addButton = query<HTMLButtonElement>('[data-kin-add]');
   const saveButton = query<HTMLButtonElement>('[data-kin-save]');
   const fileInput = query<HTMLInputElement>('[data-kin-file]');
+  const suggestCount = query<HTMLElement>('[data-kin-suggest-count]');
+  const suggestNote = query<HTMLElement>('[data-kin-suggest-note]');
+  const suggestList = query<HTMLElement>('[data-kin-suggests]');
+  const suggestLow = query<HTMLDetailsElement>('[data-kin-suggest-low]');
+  const suggestLowCount = query<HTMLElement>('[data-kin-suggest-low-count]');
+  const suggestLowList = query<HTMLElement>('[data-kin-suggests-low]');
 
   const notify = (message: string, error = false): void => options.notify?.(message, error);
 
@@ -802,9 +848,78 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
     for (const part of parts) applyPose(part, slides.get(part.id) ?? 0);
   };
 
+  const suggestionCard = (item: KinematicsSuggestion): string => {
+    const motion =
+      item.kind === 'rotary'
+        ? `旋转 · 绕 ${item.direction < 0 ? '-' : '+'}${item.axis.toUpperCase()} · ${item.rangeDeg}°`
+        : `直线 · ${item.direction < 0 ? '-' : '+'}${item.axis.toUpperCase()} · 行程 ${item.travelMm > 0 ? `${item.travelMm} mm` : '待填写'} · 缩回 ${item.retractedMm} mm`;
+    const vector = item.directionVector.map((value) => value.toFixed(2)).join(', ');
+    return `<article class="cad-kin-suggest" data-kin-suggest-id="${escapeHtml(item.id)}" data-level="${item.level}">
+      <header class="cad-kin-suggest-head">
+        <b>${escapeHtml(item.name)}</b>
+        <span class="cad-kin-suggest-conf" title="置信度">${Math.round(item.confidence * 100)}%</span>
+      </header>
+      <div class="cad-kin-meta">${escapeHtml(CATEGORY_LABELS[item.category])} · ${escapeHtml(motion)} · 方向 (${vector})</div>
+      <div class="cad-kin-meta">动件网格：${escapeHtml(item.meshNames.join('、'))} · 点位：${escapeHtml(item.point || '未匹配')}</div>
+      <p class="cad-kin-suggest-reason">${escapeHtml(item.reason)}</p>
+      <div class="cad-kin-actions">
+        <button type="button" class="cad-btn cad-btn-primary" data-kin-accept>采纳</button>
+        <button type="button" class="cad-btn" data-kin-dismiss>忽略</button>
+      </div>
+    </article>`;
+  };
+
+  const renderSuggestions = (): void => {
+    const high = suggestResult.suggestions;
+    const low = suggestResult.lowConfidence;
+    suggestCount.textContent = String(high.length + low.length);
+    suggestList.innerHTML =
+      high.length === 0
+        ? `<div class="cad-kin-empty">${options.getGeometry ? (meshes.length === 0 ? '导入 STEP 装配体后会自动识别气缸、滑台、夹爪、旋转台、导轨等动件。' : '没有高置信度建议。') : '当前环境未提供几何数据，无法自动识别。'}</div>`
+        : high.map(suggestionCard).join('');
+    suggestLow.hidden = low.length === 0;
+    suggestLowCount.textContent = String(low.length);
+    suggestLowList.innerHTML = low.map(suggestionCard).join('');
+    suggestNote.textContent =
+      high.length + low.length > 0
+        ? `${describeSuggestions(suggestResult)}。采纳后进入动件列表，仍需校验通过并保存。`
+        : '建议不会自动写入：逐条「采纳」后进入动件列表，仍需校验通过并保存。';
+  };
+
+  const runSuggest = (): SuggestResult => {
+    const geometry = options.getGeometry?.() ?? [];
+    suggestResult =
+      geometry.length === 0 ? emptySuggest() : suggestKinematics(geometry, { pointOptions: pointOptions(), existingParts: parts });
+    renderSuggestions();
+    return suggestResult;
+  };
+
+  const dropSuggestion = (id: string): void => {
+    suggestResult = {
+      ...suggestResult,
+      suggestions: suggestResult.suggestions.filter((item) => item.id !== id),
+      lowConfidence: suggestResult.lowConfidence.filter((item) => item.id !== id)
+    };
+    suggestResult.stats = { ...suggestResult.stats, high: suggestResult.suggestions.length, low: suggestResult.lowConfidence.length };
+  };
+
+  const acceptSuggestion = (id: string): string | null => {
+    const pool = [...suggestResult.suggestions, ...suggestResult.lowConfidence];
+    const geometry = options.getGeometry?.() ?? meshes;
+    const result = acceptSuggestions(parts, pool, [id], geometry, { pointOptions: pointOptions() });
+    if (result.accepted.length === 0) return null;
+    const added = result.parts[result.parts.length - 1]!;
+    parts.push(added);
+    dropSuggestion(id);
+    renderAll();
+    notify(`已采纳建议「${added.name}」，校验通过后请点「保存标注」`);
+    return added.id;
+  };
+
   const renderAll = (): void => {
     sourceLabel.textContent = sourceFile || '未加载文件';
     renderMeshes();
+    renderSuggestions();
     renderParts();
     refreshValidation();
   };
@@ -925,6 +1040,28 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
     options.onOpenChange?.(false);
   });
   saveButton.addEventListener('click', save);
+  query<HTMLButtonElement>('[data-kin-suggest]').addEventListener('click', () => {
+    const result = runSuggest();
+    notify(describeSuggestions(result));
+  });
+  const onSuggestClick = (event: Event): void => {
+    const target = event.target as HTMLElement;
+    const card = target.closest<HTMLElement>('[data-kin-suggest-id]');
+    const id = card?.dataset.kinSuggestId;
+    if (!id) return;
+    if (target.closest('[data-kin-accept]')) {
+      try {
+        acceptSuggestion(id);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : String(error), true);
+      }
+    } else if (target.closest('[data-kin-dismiss]')) {
+      dropSuggestion(id);
+      renderSuggestions();
+    }
+  };
+  suggestList.addEventListener('click', onSuggestClick);
+  suggestLowList.addEventListener('click', onSuggestClick);
   query<HTMLButtonElement>('[data-kin-export]').addEventListener('click', () => {
     const blob = new Blob([serializeAnnotation(annotation())], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1030,6 +1167,16 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
       slides.clear();
       const saved = store?.get(sourceFile) ?? null;
       parts = saved ? saved.parts.map(clonePart) : [];
+      suggestResult = emptySuggest();
+      if (options.getGeometry && meshes.length > 0) {
+        try {
+          runSuggest();
+        } catch (error) {
+          // 识别失败只影响建议列表，不影响人工标注
+          console.warn('[kinematics] 自动识别失败', error);
+          suggestResult = emptySuggest();
+        }
+      }
       renderAll();
     },
     getAnnotation: annotation,
@@ -1056,8 +1203,20 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
         parts: parts.map(clonePart),
         errors: validation.errors.length,
         warnings: validation.warnings.length,
-        ok: validation.ok
+        ok: validation.ok,
+        suggestions: {
+          high: suggestResult.suggestions.length,
+          low: suggestResult.lowConfidence.length,
+          skipped: suggestResult.skipped.length
+        }
       };
+    },
+    suggest: runSuggest,
+    suggestions: () => suggestResult,
+    acceptSuggestion,
+    dismissSuggestion(id: string): void {
+      dropSuggestion(id);
+      renderSuggestions();
     }
   };
 

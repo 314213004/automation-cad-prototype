@@ -4,6 +4,8 @@ export interface CadMeshData {
   normals: Float32Array | null;
   indices: Uint32Array | null;
   color?: [number, number, number];
+  /** 装配层级路径（根 → 父节点名，不含网格自身名）；STEP/IGES 有层级时才有。 */
+  path?: string[];
 }
 
 export interface CadImportResult {
