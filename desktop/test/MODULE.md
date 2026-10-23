@@ -8,6 +8,7 @@
 |----|------|------|------|
 | 纯逻辑单测 | `test/**/*.test.mjs` | `npm test`（`node --test`） | 不依赖 Electron |
 | CAD 解析 | `test/cad/step.test.mjs` | 同上 | 用 `test/fixtures/cube.stp`，断言 12 面 / 300³ mm |
+| 运动学自动识别 | `test/cad/kinematics-auto.test.mjs` | 同上 | 34 条：名称/型号/层级/几何各启发式、置信度分级、IO 点位建议、不自动应用、schema 往返；`test/fixtures/kinematics-assembly.stp`（`scripts/gen-kinematics-fixture.mjs` 生成）端到端 |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
 | 工具表 | `test/agent/tools.test.mjs` | 同上 | 20 工具、BOM 空数组、干涉截断、插入与撤销 |
@@ -38,6 +39,7 @@
 SMOKE_CAD_OK triangles=12 meshes=1
 SMOKE_WEBGL_FALLBACK_OK meshes=1 triangles=12 bounds=300.000 × 300.000 × 300.000 mm
 SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25
+SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0
 SMOKE_UI_OK stations=2 tags=8 packs=2 parts=9 overlay=1
 SMOKE_ELEC_LIB_OK parts=44 categories=12 symbols=34
 SMOKE_SYNC_UI_OK fields=8 apiKey=password enabled=checkbox

@@ -9,9 +9,17 @@ declare module 'occt-import-js' {
     index: { array: number[] };
   }
 
+  export interface OcctNode {
+    name: string;
+    meshes: number[];
+    children: OcctNode[];
+  }
+
   export interface OcctImportResult {
     success: boolean;
     meshes: OcctMesh[];
+    /** 装配层级；只含零件的子装配会被 occt-import-js 压平到上一级。 */
+    root?: OcctNode;
   }
 
   export interface OcctModule {

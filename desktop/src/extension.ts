@@ -458,6 +458,7 @@ function ensureKinematicsUi(): KinematicsUiHandle {
     container,
     viewer: ensureViewer(),
     getPointOptions: () => pointOptionsFromMachineConfig(commission?.getMachineConfig() ?? null),
+    getGeometry: () => ensureViewer().getKinematicsGeometry(),
     notify: showNotice,
     onOpenChange: (open) => {
       document.getElementById('cadKinematicsToggle')?.classList.toggle('is-active', open);
@@ -1517,7 +1518,11 @@ function init(): void {
       slide: (id: string, percent: number) => ensureKinematicsUi().slide(id, percent),
       save: (): boolean => ensureKinematicsUi().save(),
       getAnnotation: () => ensureKinematicsUi().getAnnotation(),
-      getValidation: () => ensureKinematicsUi().getValidation()
+      getValidation: () => ensureKinematicsUi().getValidation(),
+      suggest: () => ensureKinematicsUi().suggest(),
+      suggestions: () => ensureKinematicsUi().suggestions(),
+      acceptSuggestion: (id: string): string | null => ensureKinematicsUi().acceptSuggestion(id),
+      dismissSuggestion: (id: string): void => ensureKinematicsUi().dismissSuggestion(id)
     }),
     writable: false,
     configurable: false,

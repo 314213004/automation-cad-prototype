@@ -627,6 +627,76 @@ function createWindow(): BrowserWindow {
           return;
         }
       }
+      const autoFixture = resolve(desktopRoot(), 'test', 'fixtures', 'kinematics-assembly.stp');
+      if (existsSync(fixture) && existsSync(autoFixture)) {
+        try {
+          const auto = await window.webContents.executeJavaScript(
+            `(async () => {
+              const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+              const handle = window.AutomationCadKinematics;
+              if (!handle || typeof handle.suggestions !== 'function') return { error: '自动识别入口缺失' };
+              await window.AutomationCadViewer.importPath(${JSON.stringify(autoFixture)});
+              handle.open();
+              await wait(40);
+              const before = handle.state();
+              const result = handle.suggestions();
+              const cards = document.querySelectorAll('[data-kin-suggest-id]').length;
+              const lowCards = document.querySelectorAll('[data-kin-suggests-low] [data-kin-suggest-id]').length;
+              const cylinder = result.suggestions.find((item) => item.category === 'cylinder');
+              if (!cylinder) return { error: '未识别到气缸', high: result.suggestions.length, low: result.lowConfidence.length };
+              const partId = handle.acceptSuggestion(cylinder.id);
+              const accepted = handle.state();
+              handle.updatePart(partId, { point: 'Y0' });
+              const bound = handle.state();
+              await window.AutomationCadViewer.importPath(${JSON.stringify(fixture)});
+              await wait(20);
+              return {
+                meshes: before.meshes.length,
+                partsBefore: before.parts.length,
+                high: result.suggestions.length,
+                low: result.lowConfidence.length,
+                cards,
+                lowCards,
+                cylinderAxis: cylinder.axis,
+                cylinderTravel: cylinder.travelMm,
+                cylinderConfidence: cylinder.confidence,
+                acceptedParts: accepted.parts.length,
+                remainingHigh: accepted.suggestions.high,
+                boundErrors: bound.errors,
+                restoredMeshes: handle.state().meshes.length
+              };
+            })()`
+          ) as {
+            error?: string;
+            meshes: number;
+            partsBefore: number;
+            high: number;
+            low: number;
+            cards: number;
+            lowCards: number;
+            cylinderAxis: string;
+            cylinderTravel: number;
+            cylinderConfidence: number;
+            acceptedParts: number;
+            remainingHigh: number;
+            boundErrors: number;
+            restoredMeshes: number;
+          };
+          if (auto.error || auto.meshes !== 11 || auto.partsBefore !== 0 || auto.high !== 4 || auto.low !== 1 ||
+              auto.cards !== 5 || auto.lowCards !== 1 || auto.cylinderAxis !== 'x' || auto.cylinderTravel !== 50 ||
+              !(auto.cylinderConfidence >= 0.6) || auto.acceptedParts !== 1 || auto.remainingHigh !== 3 ||
+              auto.boundErrors !== 0 || auto.restoredMeshes !== 1) {
+            console.error('SMOKE_FAIL kinematics_auto', JSON.stringify(auto));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_KINEMATICS_AUTO_OK high=${auto.high} low=${auto.low} accepted=${auto.acceptedParts} autoApplied=${auto.partsBefore}`);
+        } catch (error) {
+          console.error('SMOKE_FAIL kinematics_auto_exception', error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+      }
       if (existsSync(fixture)) {
         try {
           const mech = await window.webContents.executeJavaScript(

@@ -261,6 +261,20 @@
 .cad-kin-reset{height:22px;padding:0 6px;border:1px solid #414850;border-radius:2px;background:#2a2f34;color:#b8c0c7;font-size:8px}
 .cad-kin-reset:hover{background:#343a40;color:#fff}
 .cad-kin-issues{display:flex;flex-direction:column;gap:4px}
+.cad-kin-suggest-note{padding:5px 0 6px}
+.cad-kin-suggests{display:flex;flex-direction:column;gap:6px}
+.cad-kin-suggest{border:1px solid #2f5752;border-left:2px solid #14b8a6;border-radius:4px;background:#1f2a2a;padding:6px 8px}
+.cad-kin-suggest[data-level="low"]{border-color:#4a4636;border-left-color:#c5a86b;background:#26251f}
+.cad-kin-suggest-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.cad-kin-suggest-head b{font-size:10px;font-weight:600;color:#e2e7ea;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-kin-suggest-conf{flex:0 0 auto;font:9px/1 var(--font-mono,monospace);color:#8ee0d4;background:#17191c;border:1px solid #343a40;border-radius:9px;padding:2px 6px}
+.cad-kin-suggest[data-level="low"] .cad-kin-suggest-conf{color:#e8d49b}
+.cad-kin-suggest .cad-kin-meta{padding:3px 0 0;white-space:normal}
+.cad-kin-suggest-reason{margin:4px 0 0;color:#aab4bb;font-size:9px;line-height:1.55;word-break:break-word}
+.cad-kin-suggest-low{margin-top:6px}
+.cad-kin-suggest-low summary{cursor:pointer;color:#86919a;font-size:9px;padding:3px 0}
+.cad-kin-suggest-low summary b{font:9px/1 var(--font-mono,monospace);color:#c5a86b}
+.cad-kin-suggest-low[hidden]{display:none !important}
 .cad-kin-issue{display:grid;grid-template-columns:32px minmax(0,1fr);gap:5px;padding:5px 7px;border:1px solid #5d3838;border-left:2px solid #f04438;border-radius:3px;background:#2d2020;font-size:9px;line-height:1.5}
 .cad-kin-issue[data-level="warning"]{border-color:#5c4c2d;border-left-color:#e8b84a;background:#292720}
 .cad-kin-issue b{color:#ffc9c4;font-weight:600}

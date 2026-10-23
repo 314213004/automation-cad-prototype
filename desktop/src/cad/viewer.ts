@@ -47,6 +47,11 @@ export interface CadKinematicsMesh {
   size: [number, number, number];
 }
 
+export interface CadKinematicsGeometry extends CadKinematicsMesh {
+  path?: string[];
+  positions: Float32Array;
+}
+
 export interface CadKinematicsPose {
   offset: [number, number, number];
   rotationRad: number;
@@ -823,6 +828,24 @@ export class CadViewer {
         size: [size.x, size.y, size.z]
       };
     });
+  }
+
+  /**
+   * 运动学自动识别的数据源：在 getKinematicsMeshes 基础上附带装配路径与原始顶点（世界坐标、只读引用，不拷贝）。
+   * 智能体占位件（无几何意义）不参与识别。
+   */
+  getKinematicsGeometry(): CadKinematicsGeometry[] {
+    const infos = this.getKinematicsMeshes();
+    const datas: CadMeshData[] =
+      this.parts.length === 0 && this.importedResult ? this.importedResult.meshes : this.parts.map((part) => part.data);
+    const out: CadKinematicsGeometry[] = [];
+    infos.forEach((info, index) => {
+      const data = datas[index];
+      const placeholder = this.parts[index]?.mesh.userData.placeholder === true;
+      if (!data || placeholder) return;
+      out.push({ ...info, ...(data.path ? { path: [...data.path] } : {}), positions: data.positions });
+    });
+    return out;
   }
 
   /** 按动件姿态移动/旋转网格；pivot 为合并包围盒中心。 */
