@@ -3,7 +3,13 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
-## 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测（P10-3，2026-10-24，本轮）
+## 迭代 34：机型方案生成真实三维几何（34-machine-geometry，2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1156/1156**（1132 + 24；沙箱默认 UTC 需 `TZ=Asia/Shanghai`，否则 `cost-export.test.ts` 两条既有时间断言失败，与本轮无关）、`npm run smoke`（xvfb-run）新增 `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`、`SMOKE_OK`；`SMOKE_PARAMETRIC_SIDECAR_SKIP`（无 Python）；不 push。
+- 内容：纯函数 `machine/geometry.ts` 生成 mm 级整机（机架、底板 + 门架、气缸缩回位、夹爪张开位、旋转台、传感器、光栅、输送线/分度转盘）与运动轴元数据；`geometry-export.ts` 出 STL / glTF / build123d `AssemblyDoc` 分块与实体化回退；`geometry-three.ts` 接入 `createScene3D` 替换占位方块；`apply_machine_design` 新增 `withGeometry`（默认 true）/ `withSolids`，`design_machine` 返回几何摘要；单测 24 条；文档同步，`kb:build` 重建。
+- 边界：标准件外形，不做强度/干涉/选型，无紧固件/钣金/气路/电柜与上下料机构；转盘分度、输送线驱动未接点位；STEP 只经 sidecar，水平圆柱为等截面方棒；xvfb 下 WebGL 被 blocklist，冒烟只证场景构建与零件数一致，需 Windows 实机目测。
+
+## 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测（P10-3，2026-10-24）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1132/1132**（1110 + 新增 22）、`npm run smoke` 新增 `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`npm run eval:agent` **74/74（1.00）**、`npm run agent:live` **36/36**；不 push。
 - A. 工艺模板：新增 `desktop/src/machine/templates.ts`，导出可直接读取的 `TEMPLATES`（5 类）。锁螺丝每工位 1 旋转轴 + 1 夹爪 + 1 接近；点胶 1 旋转轴（三轴模组占位）+ 1 压力；装配 1 压装气缸 + 1 夹爪 + 2 接近；检测 1 旋转轴（相机位占位）+ 1 光电 + 1 安全光栅；包装 1 推料气缸 + 1 吸盘（夹爪）+ 1 光电。每类含 `stations / actuators / sensors / cycleRange / rationale`，未知工艺使用内部通用模板。
@@ -338,7 +344,7 @@
 
 ## 已知问题（记录，不阻塞）
 
-1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决中；STEP 不含运动学，任意装配体仍需标注层。
+1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决中；STEP 不含运动学，任意装配体仍需标注层。迭代 34 起机型方案的 3D 改为参数化整机几何，但仍是标准件外形，不是结构设计。
 2. **尺寸数据覆盖不全**：已补至 244/371（16 条同系列推定），仍缺 127 条；缺失元件在底板画布上按「未标注尺寸」处理，需人工补。
 3. **OPC UA 仅 SecurityPolicy=None**：接真实 PLC 前必须加证书与 Basic256Sha256（Issue #3）。
 4. **无代码签名**：Win11 SmartScreen 会拦一次；发行前需证书。

@@ -22,7 +22,7 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 无 WebGL 时显示「当前环境不支持 WebGL，无法显示 3D 模型」降级面板，并展示解析统计；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
 - 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
-- 智能体注册表为 20 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`），渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=355 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
+- 智能体注册表为 20 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`），渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1` / `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=360 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
 
 ## MCP（stdio）接入
 
