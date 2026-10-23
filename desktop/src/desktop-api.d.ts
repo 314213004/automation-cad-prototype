@@ -369,6 +369,7 @@ interface DesktopAgentAuditEntry {
   args?: Record<string, unknown>;
   message?: string;
   elapsedMs?: number;
+  cacheHit?: boolean;
 }
 
 interface DesktopAgentAuditResult {
@@ -417,6 +418,7 @@ interface DesktopAgentProgressEvent {
   code?: string;
   message?: string;
   source?: 'chat' | 'plan' | 'recipe';
+  cacheHit?: boolean;
 }
 
 interface AgentBridgeFailure {

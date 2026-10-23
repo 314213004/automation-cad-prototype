@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 执行效率：去重 / 并行 / 缓存（P7-N，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1034/1034**（1001 + 新增 33）、`npm run smoke` 新增 `SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 100%（61/61）；`npm run agent:live` 因无凭据 `AGENT_LIVE_SKIP`，未伪造端到端 p50/p95；不 push。
+- A. 同轮去重：新增 `desktop/src/agent/dedupe.ts`（纯函数 + 小状态）——`canonicalArgs` 键排序、空白压缩、数字字符串归一；`TurnCallDeduper` 按 `(tool, canonicalArgs)` 复用同轮结果并标 `reused:true`；写工具永不合并；单轮上限默认 12，超出返回 `TOO_MANY_TOOL_CALLS` 并提示拆轮。
+- B. 只读并行：新增 `desktop/src/agent/parallel.ts`——`planExecutionBatches` 把连续无依赖只读批并发（默认 3，可配），写工具单独成批形成屏障；`$0` / `${1}` / `{{0.data}}` 等占位符触发依赖降级串行；`runReadOnlyBatch` 固定 worker 池，失败不取消已发出调用，结果按原序返回。
+- C. 会话缓存：新增 `desktop/src/agent/cache.ts`——`get_bom` / `get_project_context` / `list_components` 按 `(tool, 规范化参数, projectFingerprint)` 缓存 30 s；只缓存成功结果；写工具执行前后清空；指纹变化删旧条目；不跨会话、不落盘。
+- D. 审计 / UI：`AgentAuditRecord.cacheHit` 落 NDJSON；`AgentProgressEvent.cacheHit` 进入进度卡，工具卡与审计行显示「已复用」。
+- E. 实测：本机合成桩延迟 100 ms/工具——两次只读分两轮 211 ms → 同响应 102 ms（并发 2）；三次同关键词 303 ms → 102 ms（执行 1 + 复用 2）；两轮 `get_bom` 101+101 ms → 101+2 ms（缓存命中）。真实模型基线仍为 p50 7.6 s / p95 21.3 s，待有凭据后重跑 `agent:live` 更新。
+- F. 测试：新增 `desktop/test/agent/efficiency.test.mjs` 31 条，覆盖参数规范化、重复合并、参数差异不合并、写不合并、12 次上限、保序、并发度、依赖降级、写屏障、失败不吞、缓存命中/失效/TTL、指纹变化、跨会话隔离、审计 `cacheHit`。
+- G. 文档：`docs/desktop/NL-AGENT.md` 新增 8.7；`README.md`、`docs/desktop/MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
+
 ## Agent 上下文预算与成本可见性（P7-M，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **983/983**（962 + 21）、`npm run smoke` 新增 `SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`、`npm run eval:agent` 通过；不 push。

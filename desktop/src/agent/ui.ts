@@ -100,7 +100,7 @@ let auditFilterTool = '';
 let auditFilterResult: AuditResultFilter = 'all';
 let progressSteps: LiveProgress[] = [];
 let progressTimer = 0;
-let progressMetrics = new Map<string, { elapsedMs: number; ok: boolean; code: string }>();
+let progressMetrics = new Map<string, { elapsedMs: number; ok: boolean; code: string; cacheHit: boolean }>();
 let cancelRequested = false;
 let disposeProgress: (() => void) | null = null;
 let activeRunId = '';
@@ -121,6 +121,7 @@ interface LiveProgress {
   ok?: boolean;
   code?: string;
   message?: string;
+  cacheHit?: boolean;
 }
 
 interface MultiPlanState {
@@ -470,7 +471,7 @@ function renderToolCard(call: DesktopAgentToolCall, result: DesktopAgentChatMess
     status = outcome.ok ? '成功' : '失败';
     tone = outcome.ok ? 'is-ok' : 'is-error';
     detail = outcome.detail;
-    meta = `参数：${argumentsSummary(call.function.arguments)} · 耗时 ${formatDuration(metrics?.elapsedMs)} · 结果码 ${outcome.code}`;
+    meta = `参数：${argumentsSummary(call.function.arguments)} · 耗时 ${formatDuration(metrics?.elapsedMs)} · 结果码 ${outcome.code}${metrics?.cacheHit ? ' · 已复用' : ''}`;
     if (!outcome.ok) {
       advice = failureSuggestionHtml({
         tool: call.function.name,
@@ -530,7 +531,8 @@ function applyProgress(event: DesktopAgentProgressEvent): void {
     ...(event.elapsedMs !== undefined ? { elapsedMs: event.elapsedMs } : {}),
     ...(event.ok !== undefined ? { ok: event.ok } : {}),
     ...(event.code ? { code: event.code } : {}),
-    ...(event.message ? { message: event.message } : {})
+    ...(event.message ? { message: event.message } : {}),
+    ...(event.cacheHit === true ? { cacheHit: true } : {})
   };
   if (existing) Object.assign(existing, next);
   else progressSteps.push(next);
@@ -538,7 +540,8 @@ function applyProgress(event: DesktopAgentProgressEvent): void {
     progressMetrics.set(event.callId, {
       elapsedMs: event.elapsedMs ?? 0,
       ok: event.ok === true,
-      code: event.code ?? (event.ok ? 'OK' : 'FAILED')
+      code: event.code ?? (event.ok ? 'OK' : 'FAILED'),
+      cacheHit: event.cacheHit === true
     });
   }
   if (event.source === 'recipe') {
@@ -588,7 +591,7 @@ function renderProgress(): void {
         <span class="acp-progress-icon">${cancelled ? '!' : ok ? '✓' : '×'}</span>
         <span class="acp-progress-title">${escapeHtml(cancelled
           ? `${step.tool} · 已取消 · 耗时 ${formatDuration(step.elapsedMs)}`
-          : stepResultText({ tool: step.tool, ok, elapsedMs: step.elapsedMs, ...(step.code ? { code: step.code } : {}) }))}</span>
+          : `${stepResultText({ tool: step.tool, ok, elapsedMs: step.elapsedMs, ...(step.code ? { code: step.code } : {}) })}${step.cacheHit ? ' · 已复用' : ''}`)}</span>
       </div>
       <div class="acp-progress-args">参数：${escapeHtml(step.argsSummary)}</div>
       ${step.message ? `<div class="acp-progress-message">${escapeHtml(step.message)}</div>` : ''}
@@ -1391,7 +1394,7 @@ function renderAudit(): void {
         <span class="acp-audit-time">${escapeHtml(timeText(entry.at))}</span>
         <span class="acp-audit-tool">${escapeHtml(entry.tool)}</span>
         <span class="acp-audit-args">${escapeHtml(auditArgsText(entry))}</span>
-        <span class="acp-audit-code">${escapeHtml(code)}</span>
+        <span class="acp-audit-code">${escapeHtml(code)}${entry.cacheHit ? ' · 已复用' : ''}</span>
         <span class="acp-audit-elapsed">${escapeHtml(formatDuration(entry.elapsedMs))}</span>
       </summary>
       <pre class="acp-audit-json">${escapeHtml(auditEntryJson(entry))}</pre>

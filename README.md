@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**983 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性 / 工厂的 headless smoke
+- 质量基线：**1034 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存） / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -183,6 +183,8 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 会话记忆 | 最近 5 次工具调用摘要（工具名 / 关键参数 / 结果码）追加到系统提示末尾，滚动丢弃，不落盘、不上传 | ✅ P7-E |
 | 结果裁剪 | 列表 >20 条保留前 20 + `total` + `truncated:true`；长文本按 2 KB 截断；单个工具结果进入模型前硬上限 10 KB | ✅ P7-E |
 | 上下文预算 | `budget.ts` 纯函数按 system / selection / memory / docs / toolResults / history 六档装包，默认总量 12k tokens 可配；超限先保留列表首尾各 5 条 + total，再丢最旧 history，最后才动 docs / toolResults；system 策略段永不裁剪，`dropped` 带可读原因 | ✅ P7-M |
+| 执行效率 | 同轮相同 `(tool, canonicalArgs)` 只执行一次并标 `reused:true`；写工具永不合并；单轮上限 12 次，超出 `TOO_MANY_TOOL_CALLS`。一次响应内的无依赖只读工具默认 3 路并发，写工具作为屏障；参数引用前序结果时自动降级串行，失败不吞、结果按原顺序回灌 | ✅ P7-N |
+| 结果缓存 | `get_bom` / `get_project_context` / `list_components` 按工程指纹缓存 30 秒；任何写工具执行后清空；命中审计写 `cacheHit:true`，进度与审计显示「已复用」；仅会话内存，不落盘、不跨会话 | ✅ P7-N |
 | Token 与费用 | 端点回传 usage 时记录真实 `promptTokens / completionTokens`，缺失时按中文 1.6 字符、英文 4 字符估算并标 `estimated:true`；侧栏底部显示本轮 / 本会话 tokens 与费用（`pricing.json`，元/千 tokens，未知模型 `—`）；审计行带 tokens 与 `docsSources` | ✅ P7-M |
 | 审计 | 每次工具调用一行 NDJSON 写 `<userData>/agent-audit.jsonl`，记录结果码与耗时，`sk-`/`Bearer`/`token` 等凭据脱敏；`agent:audit:read` 只读接口 | ✅ |
 | 计划预览 | 侧栏输入时实时显示「只读 · 可离线」或「写操作 · 需联网确认」，写操作缺参数直接点名（如 `partId`）；预览只展示、不执行 | ✅ |
@@ -270,7 +272,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（830 个）
+│   ├── test/                                 # node:test 单测与集成测试（1034 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -298,7 +300,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 962 个单测（node:test）
+npm test          # 1034 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run kb:build  # 从 docs/desktop/*.md + 截图 + 元件分类重建 kb.json

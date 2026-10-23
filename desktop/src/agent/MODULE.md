@@ -19,6 +19,9 @@ tools.ts（AgentTools + 18 个 AgentTool）
  ├─ llm-config.ts  → userData/agent-llm.json（600，UI 只读掩码）
  ├─ llm.ts         → OpenAI 兼容 /chat/completions + tools
  ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）+ 多轮状态注入
+ ├─ dedupe.ts      → 同轮 (tool, canonicalArgs) 去重 / 写不合并 / 单轮 12 次上限
+ ├─ parallel.ts    → 只读批并发（默认 3）/ 依赖降级串行 / 写屏障 / 保序结果
+ ├─ cache.ts       → 会话内 30 s 结果缓存（BOM / 上下文 / 元件列表）
  ├─ thread.ts      → ThreadState / 工程指纹 / completedSteps / pendingConfirm / runPlan 续跑
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
  │    ├─ planner.ts → 多步规划 plan() + 顺序执行 executePlan()（P7-C）
@@ -222,6 +225,29 @@ pack(payload, options?): {
 - 侧栏 `ui.ts` 底部「上下文成本」渲染本轮/本会话 tokens、输入输出拆分与费用，并标注「估算」。
 
 测试：`desktop/test/agent/budget.test.mjs` 21 条；冒烟 `SMOKE_AGENT_BUDGET_OK used=… dropped=… tokens=…`。
+
+## 执行效率：去重 / 并行 / 缓存（P7-N）
+
+三个模块都不碰 DOM；`dedupe.ts` / `parallel.ts` 是纯函数或纯状态，`cache.ts` 只有内存 Map：
+
+```ts
+canonicalArgs(args): string                    // 键排序 + 空白压缩 + 数字字符串归一
+new TurnCallDeduper({maxCalls, isWrite}).plan(inputs)
+  // → {action:'execute'|'reuse'|'overflow', duplicateOf?, result?, key}
+planExecutionBatches(steps): ExecutionBatch[]  // read-only 并发 / write 屏障 / dependency 串行
+runReadOnlyBatch(items, execute, {concurrency})
+  // → {results 按原序, maxConcurrency, failed}
+new ToolResultCache({ttlMs, now}).get/set/invalidateAfterWrite
+```
+
+- **去重键**：`canonicalArgs` 递归排序对象键、去首尾空白并压缩连续空白、纯数字字符串归一；`" 1.0 "` 与 `"1"` 等价，普通型号字符串保持原样。
+- **账本生命周期**：`TurnCallDeduper` 在每次 `AgentSession.run()` 开始时清空；同轮跨模型迭代仍复用首次结果。写工具不进入账本，每次独立确认。
+- **上限**：`toolCallLimit` 默认 12；第 13 次起走 `synthetic` 结果，错误码 `TOO_MANY_TOOL_CALLS`，审计与 UI 都保留本次调用记录。
+- **并行边界**：只有 `READ_ONLY_TOOLS` 且参数无显式前序占位符时并发；写工具单独成批，同一响应内写后的只读步骤逐个串行。依赖占位符示例：`$0`、`${1}`、`{{0.data}}`、`{{step0...}}`。
+- **失败语义**：`runReadOnlyBatch` 用固定 worker 取任务，单条失败只记录该条，其他已发出调用继续完成；`AgentSession` 按原调用下标回灌 tool 消息。
+- **缓存**：`get_bom / get_project_context / list_components`，TTL 30 s，键含 `projectFingerprint`；只缓存成功结果，写工具前后均 `invalidateAfterWrite`。缓存实例属于 `AgentSession`，`clear()` 清空会话历史时也应清缓存（当前会话对象销毁即释放）。
+- **审计 / UI**：命中复用走 `finish(..., {cacheHit:true})`，`AgentAuditRecord.cacheHit` 落 NDJSON；`AgentProgressEvent.cacheHit` 驱动进度卡与工具卡显示「已复用」。
+- **验证**：`test/agent/efficiency.test.mjs` 29 条；smoke `SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`。本机桩延迟（100 ms/工具）：两次只读 211 ms → 102 ms；三次重复 303 ms → 102 ms；两轮 BOM 101+101 ms → 101+2 ms。
 
 ## 多轮状态与续跑（P7-L）
 
@@ -513,11 +539,12 @@ parseFallbackCandidates(text): string[]
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
 - ✅ 离线规则路由（7 类意图）+ 历史工具清单上下文裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ P7-L 多轮状态与续跑：`thread.ts` 记录上一轮意图/目标/完成步骤/未确认操作，工程指纹变化拒续跑，确认超时进 pendingConfirm；28 条单测 + `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`；多轮评测脚本 6 场景阈值 0.8
+- ✅ P7-N 执行效率：`dedupe.ts` 同轮去重 + 写不合并 + 单轮 12 次上限；`parallel.ts` 只读 3 路并发 + 依赖降级 + 写屏障 + 保序失败；`cache.ts` 三工具按工程指纹缓存 30 s + 写后失效 + `cacheHit` 审计/UI；33 条单测 + `SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`
 - ✅ P7-M 上下文预算与成本可见性：`budget.ts` 六档装包（默认 12k）+ 长列表首尾 5/total + history 优先丢弃 + system 永不裁；usage 真实值/估算回落；`pricing.json` 费用与侧栏展示；审计 tokens/docsSources；21 条单测 + `SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 962/962（新增 `policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=18 implemented=18`、`SMOKE_AGENT_TOOLS_V2 tools=18`、`SMOKE_AGENT_KB_OK docs=12 chunks=309 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 1034/1034（新增 `policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=18 implemented=18`、`SMOKE_AGENT_TOOLS_V2 tools=18`、`SMOKE_AGENT_KB_OK docs=12 chunks=309 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 61 条，覆盖 18 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新

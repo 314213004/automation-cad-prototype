@@ -38,6 +38,8 @@ export interface AgentAuditRecord {
   estimated?: boolean;
   /** search_docs 命中的文档来源数（docs 注入）。 */
   docsSources?: number;
+  /** 本次调用复用了同轮去重或会话 TTL 缓存的结果，未真正执行工具。 */
+  cacheHit?: boolean;
 }
 
 export interface AgentAuditEntry extends AgentAuditRecord {
@@ -107,6 +109,7 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
     ...(typeof record.docsSources === 'number' && Number.isInteger(record.docsSources) && record.docsSources >= 0
       ? { docsSources: record.docsSources }
       : {}),
+    ...(record.cacheHit === true ? { cacheHit: true } : {}),
     ...(record.message ? { message: maskSecrets(record.message) } : {}),
     ...(record.args ? { args: redactValue(record.args) as Record<string, unknown> } : {})
   };

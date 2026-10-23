@@ -39,6 +39,8 @@ export interface AgentProgressEvent {
   code?: string;
   message?: string;
   source?: 'chat' | 'plan' | 'recipe';
+  /** 结果复用了同轮去重或会话缓存，UI 显示「已复用」。 */
+  cacheHit?: boolean;
 }
 
 export const LONG_STEP_MS = 10_000;

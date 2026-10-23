@@ -2,13 +2,13 @@ import type { CommandResult } from './commands.ts';
 import type { AgentCommandExecutor } from './tools.ts';
 import type { LlmChatResponse, LlmClient, LlmMessage, LlmToolCall } from './llm.ts';
 import type { AgentAuditRecord } from './audit.ts';
-import { describePlan, planReadOnly, routeIntent } from './router.ts';
+import { describePlan, planReadOnly, routeIntent, READ_ONLY_TOOLS } from './router.ts';
 import {
   emptyAgentContext,
   serializeAgentContext,
   type AgentContext
 } from './context.ts';
-import { AgentMemory, summarizeToolCall } from './memory.ts';
+import { AgentMemory, resultCode, summarizeToolCall } from './memory.ts';
 import { serializeToolResult } from './trim.ts';
 import {
   addTokenUsage,
@@ -41,6 +41,18 @@ import {
   type AgentProgressEvent,
   type CompletedStep
 } from './feedback.ts';
+import {
+  DEFAULT_MAX_TOOL_CALLS_PER_TURN,
+  TurnCallDeduper,
+  type DedupeDecision
+} from './dedupe.ts';
+import {
+  DEFAULT_PARALLEL_CONCURRENCY,
+  planExecutionBatches,
+  runReadOnlyBatch,
+  type BatchStep
+} from './parallel.ts';
+import { DEFAULT_RESULT_CACHE_TTL_MS, ToolResultCache } from './cache.ts';
 import {
   AgentThread,
   augmentContextWithThreadReference,
@@ -83,6 +95,14 @@ export interface AgentSessionOptions {
   pricing?: PricingBook | null;
   /** 上下文预算档位；默认总量 12k tokens。 */
   budget?: BudgetOptions;
+  /** 单轮工具调用上限；默认 12。 */
+  toolCallLimit?: number;
+  /** 只读工具并发度；默认 3。 */
+  parallelConcurrency?: number;
+  /** 会话结果缓存 TTL；默认 30 秒。 */
+  cacheTtlMs?: number;
+  /** 可注入时钟，供缓存 TTL 测试。 */
+  now?: () => number;
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
@@ -104,6 +124,16 @@ export interface AgentRunOptions {
 
 /** 最近一次回复的通道：在线模型 / 离线规则。UI 用它显示统一回执。 */
 export type AgentReplyMode = 'online' | 'offline';
+
+export interface AgentEfficiencySnapshot {
+  toolCalls: number;
+  executed: number;
+  reused: number;
+  overflows: number;
+  cacheHits: number;
+  parallelBatches: number;
+  maxConcurrency: number;
+}
 
 export interface AgentUsageSnapshot {
   model: string;
@@ -146,6 +176,21 @@ const MUTATING_TOOLS = new Set([
 const COMMAND_ALIASES: Record<string, string> = {
   run_interference_check: 'run_interference'
 };
+
+function markReusedResult(
+  result: unknown,
+  source: 'dedupe' | 'cache'
+): Record<string, unknown> {
+  const base = isRecord(result)
+    ? { ...result }
+    : { ok: true, data: result };
+  return {
+    ...base,
+    reused: true,
+    reuseSource: source,
+    ...(source === 'cache' ? { cacheHit: true } : {})
+  };
+}
 
 class AgentAborted extends Error {
   constructor() {
@@ -251,7 +296,14 @@ export class AgentSession {
   private readonly model: string;
   private readonly pricing: PricingBook | null;
   private readonly budget: BudgetOptions;
+  private readonly dedupe: TurnCallDeduper;
+  private readonly cache: ToolResultCache;
+  private readonly parallelConcurrency: number;
+  private readonly toolCallLimit: number;
   private readonly memory = new AgentMemory();
+  private parallelBatches = 0;
+  private maxParallelConcurrency = 0;
+  private cacheHits = 0;
   private threadPrevious: ThreadState | null = null;
   private pendingConfirm: PendingConfirm | undefined;
   private denials: ThreadDenial[] = [];
@@ -282,6 +334,19 @@ export class AgentSession {
     this.model = options.model?.trim() ?? '';
     this.pricing = options.pricing ?? null;
     this.budget = options.budget ?? {};
+    this.toolCallLimit = Math.max(1, Math.trunc(options.toolCallLimit ?? DEFAULT_MAX_TOOL_CALLS_PER_TURN));
+    this.dedupe = new TurnCallDeduper({
+      maxCalls: this.toolCallLimit,
+      isWrite: (tool) => !READ_ONLY_TOOLS.has(tool)
+    });
+    this.cache = new ToolResultCache({
+      ttlMs: options.cacheTtlMs ?? DEFAULT_RESULT_CACHE_TTL_MS,
+      ...(options.now ? { now: options.now } : {})
+    });
+    this.parallelConcurrency = Math.max(
+      1,
+      Math.trunc(options.parallelConcurrency ?? DEFAULT_PARALLEL_CONCURRENCY)
+    );
   }
 
   private recordAudit(record: AgentAuditRecord): void {
@@ -324,6 +389,17 @@ export class AgentSession {
   /** 最近一次系统上下文装包结果（供诊断/冒烟读取）。 */
   budgetSnapshot(): PackedBudget | null {
     return this.lastBudget;
+  }
+
+  /** 本轮执行效率快照：去重、缓存与并行度，供诊断/冒烟读取。 */
+  efficiency(): AgentEfficiencySnapshot {
+    const stats = this.dedupe.stats();
+    return {
+      ...stats,
+      cacheHits: this.cacheHits,
+      parallelBatches: this.parallelBatches,
+      maxConcurrency: this.maxParallelConcurrency
+    };
   }
 
   private estimatePromptTokens(messages: LlmMessage[]): number {
@@ -384,6 +460,11 @@ export class AgentSession {
     this.bypassIntent = null;
     this.deniedWriteTools.clear();
     this.memory.clear();
+    this.dedupe.clear();
+    this.cache.clear();
+    this.parallelBatches = 0;
+    this.maxParallelConcurrency = 0;
+    this.cacheHits = 0;
     this.thread.clear();
     this.threadPrevious = null;
     this.pendingConfirm = undefined;
@@ -562,13 +643,27 @@ export class AgentSession {
       completed: CompletedStep[];
       signal?: AbortSignal;
       onProgress?: AgentRunOptions['onProgress'];
-    }
+    },
+    options: {
+      args?: Record<string, unknown>;
+      synthetic?: {
+        result: unknown;
+        code: string;
+        message?: string;
+        cacheHit?: boolean;
+        reuse?: 'dedupe' | 'cache';
+      };
+    } = {}
   ): Promise<unknown> {
     const name = call.function.name;
     const startedAt = Date.now();
     let args: Record<string, unknown> = {};
     try {
-      args = parseArguments(call.function.arguments);
+      if (options.synthetic) {
+        args = options.args ? { ...options.args } : {};
+      } else {
+        args = options.args ? { ...options.args } : parseArguments(call.function.arguments);
+      }
     } catch (error) {
       this.emitProgress(context.onProgress, {
         runId: context.runId,
@@ -634,6 +729,7 @@ export class AgentSession {
         denialReason?: DenialReason;
         deniedTurnId?: string;
         consent?: boolean;
+        cacheHit?: boolean;
       } = {}
     ): void => {
       const elapsedMs = Math.max(0, Date.now() - startedAt);
@@ -649,7 +745,8 @@ export class AgentSession {
         ...(extras.target ? { target: extras.target } : {}),
         ...(extras.denialReason ? { denialReason: extras.denialReason } : {}),
         ...(extras.deniedTurnId ? { deniedTurnId: extras.deniedTurnId } : {}),
-        ...(extras.consent !== undefined ? { consent: extras.consent } : {})
+        ...(extras.consent !== undefined ? { consent: extras.consent } : {}),
+        ...(extras.cacheHit === true ? { cacheHit: true } : {})
       });
       this.emitProgress(context.onProgress, {
         runId: context.runId,
@@ -664,7 +761,8 @@ export class AgentSession {
         ok,
         code,
         ...(message ? { message } : {}),
-        source: 'chat'
+        source: 'chat',
+        ...(extras.cacheHit === true ? { cacheHit: true } : {})
       });
       if (code !== 'CANCELLED') {
         context.completed.push({
@@ -680,6 +778,22 @@ export class AgentSession {
 
     try {
       throwIfAborted(context.signal);
+      if (options.synthetic) {
+        const synthetic = options.synthetic;
+        const result = synthetic.reuse
+          ? markReusedResult(synthetic.result, synthetic.reuse)
+          : synthetic.result;
+        const code = synthetic.code;
+        if (synthetic.cacheHit) this.cacheHits += 1;
+        this.memory.record(summarizeToolCall(name, args, result));
+        finish(
+          code === 'OK',
+          code,
+          synthetic.message,
+          synthetic.cacheHit ? { cacheHit: true } : {}
+        );
+        return result;
+      }
       if (MUTATING_TOOLS.has(name)) {
         // 硬边界：无论用户文本、模型输出或调用路径如何，写工具必须先拿到明确确认。
         const priorDenial = findDenial(this.denials, name, denialKey);
@@ -817,12 +931,14 @@ export class AgentSession {
         throw new AgentCancelledError(context.completed, name, false);
       }
       const command = COMMAND_ALIASES[name] ?? name;
+      if (MUTATING_TOOLS.has(name)) this.cache.invalidateAfterWrite(name);
       const result = await withAbort(
         name === 'undo_last'
           ? this.bus.undoLast(context.signal)
           : this.bus.execute(command, args, context.signal),
         context.signal
       );
+      if (MUTATING_TOOLS.has(name)) this.cache.invalidateAfterWrite(name);
       this.memory.record(summarizeToolCall(name, args, result));
       const code = result.ok ? 'OK' : (result.error?.code ?? 'COMMAND_FAILED');
       const policyDenial = !result.ok && (code === 'TARGET_PATH_UNSUPPORTED' || code === 'POLICY_DENIED')
@@ -863,6 +979,256 @@ export class AgentSession {
       this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'TOOL_EXECUTION_FAILED' }));
       finish(false, 'TOOL_EXECUTION_FAILED', message);
       return failedTool('TOOL_EXECUTION_FAILED', message);
+    }
+  }
+
+  private async executeToolBatch(
+    calls: readonly LlmToolCall[],
+    context: {
+      runId: string;
+      completed: CompletedStep[];
+      signal?: AbortSignal;
+      onProgress?: AgentRunOptions['onProgress'];
+    }
+  ): Promise<unknown[]> {
+    const prepared = calls.map((call) => {
+      try {
+        return { call, args: parseArguments(call.function.arguments), valid: true as const };
+      } catch {
+        return {
+          call,
+          args: {} as Record<string, unknown>,
+          valid: false as const,
+          key: `invalid:${call.id}:${call.function.arguments}`
+        };
+      }
+    });
+    const results = new Array<unknown>(calls.length);
+    let start = 0;
+    let afterWrite = false;
+    for (const [index, item] of prepared.entries()) {
+      if (READ_ONLY_TOOLS.has(item.call.function.name)) continue;
+      if (start < index) {
+        await this.executeToolSegment(prepared.slice(start, index), start, results, calls.length, context, afterWrite);
+      }
+      await this.executeToolSegment([item], index, results, calls.length, context, afterWrite);
+      // 写后不得复用写前的只读结果；同一响应内后续只读也全部串行。
+      this.dedupe.invalidateResults();
+      afterWrite = true;
+      start = index + 1;
+    }
+    if (start < prepared.length) {
+      await this.executeToolSegment(prepared.slice(start), start, results, calls.length, context, afterWrite);
+    }
+    if (context.signal?.aborted) throw new AgentCancelledError(context.completed);
+    context.completed.sort((left, right) => left.step - right.step);
+    return results;
+  }
+
+  private async executeToolSegment(
+    prepared: Array<{
+      call: LlmToolCall;
+      args: Record<string, unknown>;
+      valid: boolean;
+      key?: string;
+    }>,
+    offset: number,
+    results: unknown[],
+    total: number,
+    context: {
+      runId: string;
+      completed: CompletedStep[];
+      signal?: AbortSignal;
+      onProgress?: AgentRunOptions['onProgress'];
+    },
+    serialOnly: boolean
+  ): Promise<void> {
+    const decisions = this.dedupe.plan(prepared.map((item) => ({
+      tool: item.call.function.name,
+      args: item.args,
+      ...(item.valid ? {} : { dedupe: false, key: item.key })
+    }))).map((decision) => ({
+      ...decision,
+      index: offset + decision.index,
+      ...(decision.duplicateOf !== undefined ? { duplicateOf: offset + decision.duplicateOf } : {})
+    }));
+    const fingerprint = projectFingerprint(this.turnContext);
+    const executions: Array<{ prepared: (typeof prepared)[number]; decision: DedupeDecision }> = [];
+    const duplicates: Array<{ prepared: (typeof prepared)[number]; decision: DedupeDecision; source: number }> = [];
+
+    for (const decision of decisions) {
+      const item = prepared[decision.index - offset]!;
+      const call = item.call;
+      const progress = {
+        runId: context.runId,
+        index: decision.index + 1,
+        total,
+        completed: context.completed,
+        ...(context.signal ? { signal: context.signal } : {}),
+        ...(context.onProgress ? { onProgress: context.onProgress } : {})
+      };
+      if (decision.action === 'overflow') {
+        const message = `本轮工具调用超过上限 ${this.toolCallLimit} 次；请拆分为多轮再试（多余调用未执行）`;
+        results[decision.index] = await this.executeTool(call, progress, {
+          ...(item.valid ? { args: item.args } : {}),
+          synthetic: {
+            result: { ok: false, code: 'TOO_MANY_TOOL_CALLS', message, error: { code: 'TOO_MANY_TOOL_CALLS', message } },
+            code: 'TOO_MANY_TOOL_CALLS',
+            message
+          }
+        });
+        continue;
+      }
+
+      if (decision.action === 'reuse' && decision.hasResult) {
+        results[decision.index] = await this.executeTool(call, progress, {
+          ...(item.valid ? { args: item.args } : {}),
+          synthetic: {
+            result: decision.result,
+            code: resultCode(decision.result),
+            message: '已复用（本轮重复调用，未再次执行）',
+            cacheHit: true,
+            reuse: 'dedupe'
+          }
+        });
+        continue;
+      }
+
+      if (decision.action === 'reuse' && decision.duplicateOf !== undefined) {
+        duplicates.push({ prepared: item, decision, source: decision.duplicateOf });
+        continue;
+      }
+
+      if (READ_ONLY_TOOLS.has(call.function.name) && item.valid) {
+        const hit = this.cache.get(call.function.name, item.args, fingerprint);
+        if (hit.hit) {
+          const result = await this.executeTool(call, progress, {
+            args: item.args,
+            synthetic: {
+              result: hit.result,
+              code: resultCode(hit.result),
+              message: '已复用（会话缓存命中，未再次执行）',
+              cacheHit: true,
+              reuse: 'cache'
+            }
+          });
+          this.dedupe.complete(decision, result);
+          results[decision.index] = result;
+          continue;
+        }
+      }
+
+      executions.push({ prepared: item, decision });
+    }
+
+    const steps: BatchStep[] = executions.map((item) => ({
+      tool: item.prepared.call.function.name,
+      args: item.prepared.args,
+      readOnly: READ_ONLY_TOOLS.has(item.prepared.call.function.name),
+      index: item.decision.index
+    }));
+    const batches = serialOnly
+      ? executions.map((_item, index) => ({ indexes: [index], concurrent: false, reason: 'write-barrier' as const }))
+      : planExecutionBatches(steps);
+
+    for (const batch of batches) {
+      if (context.signal?.aborted) throw new AgentCancelledError(context.completed);
+      const items = batch.indexes.map((stepIndex) => executions[stepIndex]!);
+      if (batch.concurrent) {
+        this.parallelBatches += 1;
+        const summary = await runReadOnlyBatch(items, async (item) => {
+          const progress = {
+            runId: context.runId,
+            index: item.decision.index + 1,
+            total,
+            completed: context.completed,
+            ...(context.signal ? { signal: context.signal } : {}),
+            ...(context.onProgress ? { onProgress: context.onProgress } : {})
+          };
+          return await this.executeTool(
+            item.prepared.call,
+            progress,
+            item.prepared.valid ? { args: item.prepared.args } : {}
+          );
+        }, { concurrency: this.parallelConcurrency });
+        this.maxParallelConcurrency = Math.max(this.maxParallelConcurrency, summary.maxConcurrency);
+        for (const settled of summary.results) {
+          const item = items[settled.index]!;
+          const index = item.decision.index;
+          if (settled.ok) {
+            const result = settled.value;
+            results[index] = result;
+            this.dedupe.complete(item.decision, result);
+            if (READ_ONLY_TOOLS.has(item.prepared.call.function.name) && item.prepared.valid) {
+              this.cache.set(item.prepared.call.function.name, item.prepared.args, fingerprint, result);
+            }
+            continue;
+          }
+          const error = settled.error;
+          if (error instanceof AgentCancelledError) throw error;
+          if (error instanceof AgentAborted || context.signal?.aborted) {
+            throw new AgentCancelledError(context.completed);
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          const result = failedTool('TOOL_EXECUTION_FAILED', message);
+          this.recordAudit({
+            tool: item.prepared.call.function.name,
+            ok: false,
+            code: 'TOOL_EXECUTION_FAILED',
+            source: 'llm',
+            args: item.prepared.args,
+            message,
+            elapsedMs: 0
+          });
+          results[index] = result;
+          this.dedupe.complete(item.decision, result);
+        }
+        continue;
+      }
+
+      for (const item of items) {
+        const progress = {
+          runId: context.runId,
+          index: item.decision.index + 1,
+          total,
+          completed: context.completed,
+          ...(context.signal ? { signal: context.signal } : {}),
+          ...(context.onProgress ? { onProgress: context.onProgress } : {})
+        };
+        const result = await this.executeTool(
+          item.prepared.call,
+          progress,
+          item.prepared.valid ? { args: item.prepared.args } : {}
+        );
+        results[item.decision.index] = result;
+        this.dedupe.complete(item.decision, result);
+        if (READ_ONLY_TOOLS.has(item.prepared.call.function.name) && item.prepared.valid) {
+          this.cache.set(item.prepared.call.function.name, item.prepared.args, fingerprint, result);
+        }
+      }
+    }
+
+    for (const duplicate of duplicates) {
+      const index = duplicate.decision.index;
+      const source = results[duplicate.source];
+      const progress = {
+        runId: context.runId,
+        index: index + 1,
+        total,
+        completed: context.completed,
+        ...(context.signal ? { signal: context.signal } : {}),
+        ...(context.onProgress ? { onProgress: context.onProgress } : {})
+      };
+      results[index] = await this.executeTool(duplicate.prepared.call, progress, {
+        ...(duplicate.prepared.valid ? { args: duplicate.prepared.args } : {}),
+        synthetic: {
+          result: source ?? failedTool('TOOL_EXECUTION_FAILED', '同轮首次调用没有返回结果'),
+          code: source === undefined ? 'TOOL_EXECUTION_FAILED' : resultCode(source),
+          message: source === undefined ? '同轮首次调用没有返回结果' : '已复用（本轮重复调用，未再次执行）',
+          cacheHit: true,
+          reuse: 'dedupe'
+        }
+      });
     }
   }
 
@@ -992,6 +1358,10 @@ export class AgentSession {
     this.replyMode = 'online';
     this.turnUsage = emptyTokenUsage();
     this.lastRequestUsage = null;
+    this.dedupe.clear();
+    this.parallelBatches = 0;
+    this.maxParallelConcurrency = 0;
+    this.cacheHits = 0;
     this.turnContext = emptyAgentContext();
     this.turnContextReady = false;
     if (this.contextProvider) {
@@ -1176,22 +1546,19 @@ export class AgentSession {
         }))
       });
 
-      const total = calls.length;
+      if (options.signal?.aborted) throw new AgentCancelledError(completed);
+      const results = await this.executeToolBatch(calls, {
+        runId,
+        completed,
+        ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.onProgress ? { onProgress: options.onProgress } : {})
+      });
       for (const [index, call] of calls.entries()) {
-        if (options.signal?.aborted) throw new AgentCancelledError(completed);
-        const result = await this.executeTool(call, {
-          runId,
-          index: index + 1,
-          total,
-          completed,
-          ...(options.signal ? { signal: options.signal } : {}),
-          ...(options.onProgress ? { onProgress: options.onProgress } : {})
-        });
         this.push({
           role: 'tool',
           tool_call_id: call.id,
           name: call.function.name,
-          content: guardToolResult(serializeToolResult(result).text, call.function.name).text
+          content: guardToolResult(serializeToolResult(results[index]).text, call.function.name).text
         });
       }
       if (options.signal?.aborted) throw new AgentCancelledError(completed);

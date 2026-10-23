@@ -90,8 +90,12 @@ test('会话 2 次工具调用按顺序执行并回灌结果', async () => {
 });
 
 test('超过最大轮数返回约定提示', async () => {
+  let round = 0;
   const llm = createLlm([
-    { content: '', toolCalls: [toolCall('call-x', 'list_components')] }
+    () => {
+      round += 1;
+      return { content: '', toolCalls: [toolCall(`call-x-${round}`, 'list_components', { q: `r${round}` })] };
+    }
   ]);
   const bus = createBus();
   const session = createSession(llm, bus, { maxIterations: 3 });

@@ -27,6 +27,9 @@ import { trimListResult } from '../src/agent/trim';
 import { estimateTokens, pack } from '../src/agent/budget';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
+import { TurnCallDeduper } from '../src/agent/dedupe';
+import { runReadOnlyBatch } from '../src/agent/parallel';
+import { ToolResultCache } from '../src/agent/cache';
 import { BYPASS_CONFIRMATION_NOTICE, detectBypassIntent } from '../src/agent/policy';
 import { suggestFailure } from '../src/agent/suggest';
 import { suggestNextActions } from '../src/agent/advisor';
@@ -1763,6 +1766,32 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log('SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1');
+
+        // P7-N：去重 / 只读并行 / 会话缓存
+        const smokeDedupe = new TurnCallDeduper({ isWrite: () => false });
+        const smokeDedupeDecisions = smokeDedupe.plan([
+          { tool: 'search_components', args: { q: 'SMC' } },
+          { tool: 'search_components', args: { q: ' SMC ' } },
+          { tool: 'search_components', args: { q: 'SMC' } }
+        ]);
+        const dedupeCount = smokeDedupeDecisions.filter((decision) => decision.action === 'reuse').length;
+        const parallelSummary = await runReadOnlyBatch([0, 1], async (item) => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return item;
+        }, { concurrency: 3 });
+        const smokeCache = new ToolResultCache({ now: () => 1_000 });
+        smokeCache.set('get_bom', {}, 'machine=smoke;bom=1;placed=0;cad=0', { ok: true, data: { rows: 1 } });
+        const cacheCount = smokeCache.get('get_bom', {}, 'machine=smoke;bom=1;placed=0;cad=0').hit ? 1 : 0;
+        if (dedupeCount !== 2 || parallelSummary.maxConcurrency !== 2 || cacheCount !== 1) {
+          console.error('SMOKE_FAIL agent_efficiency', JSON.stringify({
+            dedupe: dedupeCount,
+            parallel: parallelSummary.maxConcurrency,
+            cache: cacheCount
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_EFFICIENCY_OK dedupe=${dedupeCount} parallel=${parallelSummary.maxConcurrency} cache=${cacheCount}`);
 
         const auditPath = join(app.getPath('userData'), 'agent-audit-smoke.jsonl');
         const auditLog = createAuditLog({ write: (line) => appendFileSync(auditPath, `${line}\n`, 'utf8') });
