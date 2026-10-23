@@ -205,7 +205,7 @@ test('P8-3 导出目录：机型净化 + yyyyMMdd-HHmm', () => {
     now: new Date(2026, 9, 23, 9, 5, 12)
   });
   assert.equal(plan.name, '夹爪机台A-20261023-0905');
-  assert.equal(plan.path, '/tmp/exports/plc/夹爪机台A-20261023-0905');
+  assert.equal(plan.path, join('/tmp/exports/plc', '夹爪机台A-20261023-0905'));
   assert.equal(plan.zipName, '夹爪机台A-20261023-0905.zip');
 });
 

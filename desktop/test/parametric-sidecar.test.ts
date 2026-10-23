@@ -86,7 +86,8 @@ after(async () => {
 
 test('sidecar：解析 Python 与开发态脚本路径', () => {
   assert.equal(resolvePython({ AUTOMATIONCAD_PYTHON: process.execPath }), process.execPath);
-  assert.match(resolveScript({ appRoot: REPO_ROOT }) ?? '', /spike\/build123d\/app\.py$/);
+  // Windows 上 resolve 返回反斜杠，断言两种分隔符都接受。
+  assert.match(resolveScript({ appRoot: REPO_ROOT }) ?? '', /spike[\\/]build123d[\\/]app\.py$/);
 });
 
 test('sidecar：启动到 ready，状态不泄露 token 与端口', async () => {

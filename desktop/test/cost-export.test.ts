@@ -21,7 +21,9 @@ const fixture = JSON.parse(
 const costCase = JSON.parse(
   readFileSync(new URL('./fixtures/cost-case.json', import.meta.url), 'utf8')
 ) as Record<string, any>;
-const NOW = '2026-10-23T12:00:00+08:00';
+// exportTimestamp 按本地时区格式化文件名：先用本地时间分量确定瞬时，再取 ISO 字符串，
+// 这样在任何时区的 CI 上都格式化成 20261023-1200，且仍是合法的 ISO 入参。
+const NOW = new Date(2026, 9, 23, 12, 0).toISOString();
 const ILLEGAL = /[/\\:*?"<>|\u0000-\u001f\u007f]/;
 
 let sandbox = '';
