@@ -1,6 +1,6 @@
 # 机台硬件成本自动统计 · 设计方案
 
-状态：设计完成，待实现（P6）
+状态：P6-1 引擎 ✅、P6-2 面板与导出 ✅（2026-10-23）
 目标：从已有 BOM / 底板布置 / PLC 配置自动算出每台机台的硬件成本，单价可追溯、可覆盖、可导出。
 
 ## 1. 原则
@@ -84,16 +84,26 @@ interface CostReport {
 - 人工：`wiring = 接线点 × panelWiringPerPoint`，`assembly = 装配工时(默认 qty×3min) × assemblyHourly/60`
 - 加成/税/运费：只在 `totals` 末尾加，不污染单行价格
 
-## 4. 界面 `desktop/src/cost/ui.ts`
+## 4. 界面 `desktop/src/cost/ui.ts`（已实现，P6-2）
 
-入口：电气域顶栏「成本」；或 CAD 覆盖层底部。
+入口：顶栏「成本估算」`costEntryButton`，抽屉 `costDrawer`。
 
-面板结构：
-1. 顶部：项目名、机台编号（device_no）、价格簿选择、币种、报价日期
-2. 统计卡：硬件小计 / 辅材 / 人工 / 含税总价 / 待询价行数
-3. 明细表：分类、型号、数量、单价、小计、价格来源、价格年龄（>180 天标红）
-4. 「待询价」区：缺价物料清单，可手工填价（写入本次 overrides，不落价格簿）
-5. 操作：导出 CSV、导出 PDF（复用 A3 报告样式）、复制汇总文本
+已落地结构：
+1. 状态行 `#costStatus`（`成本：合计 ¥x · 明细 n 行 · 缺价 m 项 · 警告 k 条`）与价格簿来源行 `#costSource`（来源 / 可用条数 / 示例条数 / 更新日期）
+2. 参数区：加成率 %、税率 %、运费、线缆截面（mm²），改参数后重算即生效，不写回价格簿
+3. 统计卡 9 张：硬件 / 辅材 / 人工 / 小计 / 加成 / 税金 / 运费 / 合计 / 缺价
+4. 明细表：物料号、型号、分类、数量、单价、小计、价格来源与价格天数
+5. 缺价与告警分块：缺价行标明 `NO_PRICE` / `NO_PART_ID`，缺价时状态行标红、合计明确偏低
+6. 操作：计算成本、导入 BOM（JSON）、导入价格簿（JSON）、导出 PDF（A4 纵向）、导出 CSV（UTF-8 BOM）
+
+数据来源：价格簿 = 导入文件 → `__CostPricebookProvider` → 主进程 `cost:pricebook`（内置 `packs/builtin/pricebook-cn`，只含示例条目，面板会提示需替换）；BOM = `setBom()` / 导入 JSON → `__CostBomProvider`。未注入时明确提示，不伪造数据。
+
+## 4.1 报告与导出 `desktop/src/cost/report.ts`
+
+- `renderCostReportHtml`：A4 纵向，五节（总价构成 / 硬件明细 / 分类小计 / 缺价清单 / 告警）+ 价格说明与页脚
+- `costReportCsv`：`明细` / `汇总` / `缺价` / `告警` 四块，块间空行；金额两位小数不加千分位，便于二次计算
+- `describeCost` / `money`：状态栏与报告共用同一格式化口径
+- `exportReport` 增加可选 `page: { size: 'A3'|'A4', landscape }`，默认 A3 横向，成本报告传 A4 纵向
 
 ## 5. 与其他模块的关系
 
@@ -108,12 +118,13 @@ interface CostReport {
 - 不批量抓电商价（价格波动、含促销、不可追溯）
 - 用户可在价格簿 UI 里批量导入 CSV：`partId,price,currency,source,updatedAt`
 
-## 7. 验收
+## 7. 验收（P6-2 实测）
 
-- 单测 ≥20：阶梯价、缺价、override 优先、线缆估算、端子/人工、税与加成、价格过期告警、空 BOM、qty=0 拒绝
-- smoke：`SMOKE_COST_OK lines=6 missing=1 grand=1234.56`（固定 fixture）
-- 报告 PDF 字段齐全，与面板数字一致（同一次计算的结果对象）
-- 性能：500 行 BOM 计算 < 50 ms
+- 单测 43 条引擎/价格簿 + 14 条报告（HTML/CSV），全套 `npm test` 401/401
+- smoke：`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`（引擎 fixture）
+- smoke：`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`（面板：打开 → 载入价格簿 → 计算 → 9 卡 6 行 → A4 PDF 落盘；内置价格簿 IPC 返回 `exampleItems=4`）
+- 报告与面板数字同源（同一次 `computeCost` 结果对象），HTML 与 CSV 都断言合计 `1398.64`
+- 性能：500 行 BOM < 50 ms（引擎单测已覆盖）
 
 ## 8. 分期
 

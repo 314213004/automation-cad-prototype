@@ -975,6 +975,70 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        // 成本估算面板：内置价格簿 IPC → 打开面板 → 载入价格簿 → 计算 → 渲染 → 导出 PDF。
+        const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
+        const fixtureBook = JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown;
+        const caseInput = JSON.parse(readFileSync(join(fixtureDir, 'cost-case.json'), 'utf8')) as unknown;
+        const costUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const api = window.__CostPanel;
+            const entry = document.getElementById('costEntryButton');
+            if (!api || !entry) return { error: '成本估算面板缺失' };
+            const defaultBook = await window.desktop.cost.pricebook();
+            entry.click();
+            const drawer = document.getElementById('costDrawer');
+            const opened = Boolean(drawer && !drawer.hidden);
+            const set = api.setPricebook(${JSON.stringify(fixtureBook)});
+            const report = await api.run(${JSON.stringify(caseInput)});
+            const rows = document.querySelectorAll('#costTable tbody tr').length;
+            const cards = document.querySelectorAll('#costSummary .acp-check-card').length;
+            const status = api.status();
+            const html = api.html();
+            const csv = api.csv();
+            const pdf = await api.exportPdf();
+            const book = api.pricebook();
+            api.close();
+            return {
+              opened,
+              rows,
+              cards,
+              status,
+              missing: report ? report.missing.length : -1,
+              grand: report ? report.totals.grand : -1,
+              usable: set.usable,
+              bookLabel: book ? book.label : '',
+              defaultBookOk: defaultBook.ok === true,
+              defaultExamples: defaultBook.exampleItems ?? -1,
+              htmlSize: html.length,
+              hasSections: html.includes('机台成本报告') && html.includes('总价构成') &&
+                html.includes('硬件明细') && html.includes('缺价清单'),
+              csvHasDetail: csv.includes('PART-QF') && csv.includes('合计,1398.64') && csv.includes('缺价'),
+              pdfPath: pdf.path
+            };
+          })()`
+        ) as {
+          error?: string; opened: boolean; rows: number; cards: number; status: string;
+          missing: number; grand: number; usable: number; bookLabel: string;
+          defaultBookOk: boolean; defaultExamples: number; htmlSize: number;
+          hasSections: boolean; csvHasDetail: boolean; pdfPath: string;
+        };
+        if (costUi.error || !costUi.opened || costUi.rows !== 6 || costUi.cards !== 9 ||
+            costUi.missing !== 1 || Math.abs(costUi.grand - 1398.64) > 0.001 || costUi.usable !== 6 ||
+            !costUi.status.includes('成本：合计 ¥1,398.64') ||
+            !costUi.defaultBookOk || costUi.defaultExamples !== 4 ||
+            !costUi.hasSections || costUi.htmlSize < 2000 || !costUi.csvHasDetail ||
+            !costUi.pdfPath || !costUi.pdfPath.endsWith('report.pdf')) {
+          console.error('SMOKE_FAIL cost_ui', JSON.stringify(costUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COST_UI_OK rows=${costUi.rows} cards=${costUi.cards} grand=${costUi.grand.toFixed(2)} book=${costUi.usable} pdf=1`);
+      } catch (error) {
+        console.error('SMOKE_FAIL cost_ui_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         await runParametricSmoke(window);
       } catch (error) {
         console.error('SMOKE_FAIL parametric_sidecar', error);

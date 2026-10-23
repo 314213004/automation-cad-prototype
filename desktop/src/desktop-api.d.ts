@@ -277,7 +277,19 @@ interface Window {
     readFileBuffer(path: string): Promise<Uint8Array>;
     getPathForFile(file: File): string;
     exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
-    exportReport(payload: { html: string; projectName?: string }): Promise<{ path: string; htmlPath: string }>;
+    exportReport(payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }): Promise<{ path: string; htmlPath: string }>;
+    cost: {
+      pricebook(): Promise<{
+        ok: boolean;
+        message?: string;
+        book?: unknown;
+        path?: string;
+        currency?: string;
+        updatedAt?: string;
+        usableItems?: number;
+        exampleItems?: number;
+      }>;
+    };
     packs: {
       list(): Promise<DesktopPackInfo[]>;
       chooseZip(): Promise<{ canceled: boolean; filePaths: string[] }>;
@@ -414,6 +426,26 @@ interface Window {
     html(): string;
     exportPdf(): Promise<{ path: string; htmlPath: string }>;
     status(): string;
+  };
+  /** 成本估算数据源：BOM 行，由 CAD/机台配置侧注入。 */
+  __CostBomProvider?: () => import('./cost/engine').CostBomRow[] | null;
+  /** 成本估算价格簿：由外部价目表系统注入，优先于桌面内置价格簿。 */
+  __CostPricebookProvider?: () => unknown | null;
+  /** 成本估算面板：脚本化计算、报告 HTML/CSV 与导出（冒烟与后续 Agent 工具共用）。 */
+  __CostPanel?: {
+    open(): void;
+    close(): void;
+    setPricebook(value: unknown): { usable: number; examples: number };
+    loadPricebookText(text: string, label?: string): { usable: number; examples: number };
+    setBom(payload: Partial<import('./cost/engine').CostInput>, label?: string): { rows: number };
+    run(input: Partial<import('./cost/engine').CostInput>): Promise<import('./cost/engine').CostReport | null>;
+    result(): import('./cost/engine').CostReport | null;
+    html(): string;
+    csv(): string;
+    exportPdf(): Promise<{ path: string; htmlPath: string }>;
+    exportCsv(): Promise<{ canceled: boolean; path: string | null }>;
+    status(): string;
+    pricebook(): { label: string; usable: number; examples: number } | null;
   };
   AutomationCadViewer?: {
     open(): void;

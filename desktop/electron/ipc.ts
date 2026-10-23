@@ -17,6 +17,7 @@ import {
   validateExportFileName
 } from '../src/export/file';
 import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
+import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
 import type { AgentTools } from '../src/agent/tools.ts';
 import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
@@ -70,6 +71,10 @@ async function exportReport(payload: unknown): Promise<{ path: string; htmlPath:
   const pdfPath = join(directory, 'report.pdf');
   writeFileSync(htmlPath, html, 'utf8');
 
+  const page = typeof source?.page === 'object' && source.page !== null ? source.page as Record<string, unknown> : {};
+  const pageSize = page.size === 'A4' ? 'A4' : 'A3';
+  const landscape = page.landscape === undefined ? true : page.landscape === true;
+
   const reportWindow = new BrowserWindow({
     show: false,
     backgroundColor: '#ffffff',
@@ -83,8 +88,8 @@ async function exportReport(payload: unknown): Promise<{ path: string; htmlPath:
     reportWindow.webContents.on('will-navigate', (event) => event.preventDefault());
     await reportWindow.loadFile(htmlPath);
     const pdf = await reportWindow.webContents.printToPDF({
-      landscape: true,
-      pageSize: 'A3',
+      landscape,
+      pageSize,
       printBackground: true,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
@@ -220,6 +225,30 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     const ext = extname(filePath).toLowerCase();
     if (!isCadExtension(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
     return readFileSync(filePath);
+  });
+
+  // 成本估算的内置价格簿：只读，返回校验后的价格簿与条目统计（示例条目不计价）。
+  ipcMain.handle('cost:pricebook', () => {
+    const pricebookPath = join(context.builtinDir, 'pricebook-cn', 'pricebook.json');
+    if (!existsSync(pricebookPath)) {
+      return { ok: false, message: `内置价格簿缺失：${pricebookPath}` };
+    }
+    try {
+      const book = validatePricebook(JSON.parse(readFileSync(pricebookPath, 'utf8')) as unknown);
+      const items = Object.values(book.items);
+      const usableItems = items.filter((item) => isUsablePricebookItem(item)).length;
+      return {
+        ok: true,
+        book,
+        path: pricebookPath,
+        currency: book.currency,
+        updatedAt: book.updatedAt,
+        usableItems,
+        exampleItems: items.length - usableItems
+      };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
   });
 
   ipcMain.handle('packs:list', async () => await registry.scan());

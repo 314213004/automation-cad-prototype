@@ -14,7 +14,10 @@ const desktopApi = {
   readFileBuffer: (filePath: string) => ipcRenderer.invoke('cad:read-file', filePath),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   exportFile: (name: string, data: Uint8Array | string) => ipcRenderer.invoke('export:saveFile', name, data),
-  exportReport: (payload: { html: string; projectName?: string }) => ipcRenderer.invoke('export:report', payload),
+  exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),
+  cost: {
+    pricebook: () => ipcRenderer.invoke('cost:pricebook')
+  },
   packs: {
     list: () => ipcRenderer.invoke('packs:list'),
     chooseZip: () => ipcRenderer.invoke('packs:choose-zip'),
