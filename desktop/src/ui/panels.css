@@ -233,6 +233,17 @@
 .acp-tool-advice-title{color:#e8d49b}
 .acp-tool-advice ul{margin:3px 0 0;padding-left:15px}
 .acp-tool-advice li{margin:1px 0}
+.acp-machine-card{margin-top:6px;padding:9px 10px;border:1px solid #3f5560;border-left:3px solid #2dd4bf;border-radius:4px;background:#1b2528}
+.acp-machine-card-head{display:flex;align-items:flex-start;gap:8px}
+.acp-machine-card-head .acp-pill{margin-left:auto;white-space:nowrap}
+.acp-machine-title{min-width:0;color:#dff5ef;font-size:12px;font-weight:600;line-height:1.45;word-break:break-word}
+.acp-machine-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 8px;margin-top:7px;color:#9fb4b0;font-size:10px}
+.acp-machine-stats b{color:#e6f5f1;font-size:11px}
+.acp-machine-warnings{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.acp-machine-warning{padding:5px 7px;border-left:2px solid #d6a93b;background:#332d18;color:#efd99b;font-size:9px;line-height:1.55;word-break:break-word}
+.acp-machine-warning.is-ok{border-left-color:#2a5b55;background:#1c2826;color:#9fc5bc}
+.acp-machine-actions{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap}
+.acp-machine-hint{color:#7f918e;font:9px/1.4 var(--font-mono,monospace);word-break:break-word}
 .acp-audit-controls{display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
 .acp-audit-select{flex:1 1 120px;min-width:100px;padding:4px 6px;font-size:10px}
 .acp-audit-list{max-height:300px;overflow:auto;padding:4px 8px;border:1px solid #343a40;border-radius:4px;background:#1b1e21}

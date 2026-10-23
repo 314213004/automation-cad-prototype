@@ -33,6 +33,8 @@ export interface MachineBomItem {
   kind: 'actuator' | 'sensor' | 'electrical';
   name: string;
   qty: number;
+  /** 可选型号；方案合成默认不编造型号。 */
+  model?: string;
   note?: string;
 }
 

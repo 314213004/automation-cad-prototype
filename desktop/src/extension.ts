@@ -28,6 +28,7 @@ import { initElecCheckPanel } from './elec/ui';
 import { initCostPanel } from './cost/ui';
 import { initPlcGenUi } from './plcgen/ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
+import type { MachineConfig } from './commission/machine-config';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel } from './agent/ui';
 import { bomSignatureFromRows } from './agent/advisor';
@@ -313,14 +314,16 @@ function currentBomRows(): BomRow[] {
 }
 
 function reportBomRows(): BomRow[] {
-  const parts = viewer?.getModelParts() ?? [];
-  return parts.map((part, index) => ({
+  const rows = viewer?.getBomRows() ?? [];
+  return rows.map((row, index) => ({
     index: index + 1,
-    name: part.name,
-    model: part.name,
-    quantity: 1,
-    material: '—',
-    note: '来自当前 CAD 模型'
+    name: row.name,
+    model: row.spec,
+    quantity: row.qty,
+    material: row.mat,
+    note: row.note ?? (row.source === 'machine-design'
+      ? `来源：machine-design；分类：${row.category ?? '未分类'}`
+      : '来自当前 CAD 模型')
   }));
 }
 
@@ -930,6 +933,60 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    appendMachineBomRows: (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') {
+        return { ok: false, message: 'BOM 草稿参数不合法' };
+      }
+      const source = payload as Record<string, unknown>;
+      if (!Array.isArray(source.rows)) return { ok: false, message: 'BOM 草稿行必须是数组' };
+      try {
+        const batchId = typeof source.batchId === 'string' ? source.batchId : '';
+        const added = ensureViewer().appendDraftBomRows(source.rows as Parameters<CadViewer['appendDraftBomRows']>[0], batchId);
+        return { ok: true, added, total: ensureViewer().getBomRows().length };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    removeMachineBomRows: (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      const batchId = payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>).batchId
+        : undefined;
+      if (typeof batchId !== 'string' || !batchId.trim()) {
+        return { ok: false, message: 'BOM 批次 id 不能为空' };
+      }
+      try {
+        const removed = ensureViewer().removeDraftBomRowsByBatch(batchId);
+        return { ok: true, removed };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    applyMachineConfig: (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!commission) return { ok: false, message: '联调面板尚未就绪' };
+      if (!payload || typeof payload !== 'object') {
+        return { ok: false, message: '机型配置参数不合法' };
+      }
+      const source = payload as Record<string, unknown>;
+      try {
+        commission.setMachineConfig(source.config ? source.config as MachineConfig : null);
+        const config = commission.getMachineConfig();
+        return {
+          ok: true,
+          machine: {
+            id: config.id,
+            name: config.name,
+            stations: config.stations.length,
+            actuators: config.actuators.length,
+            sensors: config.sensors.length
+          }
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
     getPlcGenConfig: () => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       try {
@@ -1513,6 +1570,15 @@ function init(): void {
     enumerable: false
   });
   initAgentBridge();
+  void window.desktop?.machine?.active?.().then((result) => {
+    if (!result?.ok || !result.design || typeof result.design !== 'object') return;
+    const config = (result.design as Record<string, unknown>).config;
+    if (config && typeof config === 'object') {
+      commission?.setMachineConfig(config as MachineConfig);
+    }
+  }).catch(() => {
+    // active 指针缺失或损坏时保持内置样机，不影响启动。
+  });
   window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
 }
 

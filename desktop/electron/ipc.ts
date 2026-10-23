@@ -36,6 +36,7 @@ import type { FeatureDoc } from '../src/parametric/features.ts';
 import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
 import { createZip, normalizeZipPath, type ZipEntry } from '../src/shared/zip.ts';
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
+import { readActiveMachineDesign } from '../src/machine/store.ts';
 import {
   mergePlcHistory,
   normalizeHistoryEntry,
@@ -779,6 +780,18 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   };
 
   ipcMain.handle('agent:llm:get', () => publicLlmConfig(readLlmConfig(context.userDataDir)));
+
+  // 当前工程机型：只读 active 指针，供渲染层启动时恢复 3D 配置。
+  ipcMain.handle('machine:active', () => {
+    try {
+      const design = readActiveMachineDesign(context.userDataDir);
+      return design
+        ? { ok: true, design }
+        : { ok: true, design: null };
+    } catch (error) {
+      return { ok: false, design: null, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
 
   ipcMain.handle('agent:llm:save', (_event, patch: unknown) => {
     const saved = saveLlmConfig(context.userDataDir, patch);

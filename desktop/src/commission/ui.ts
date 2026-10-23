@@ -10,15 +10,18 @@ import {
 import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
 import { runSequence, type SequenceIo, type SequenceResult, type Step, type StepResult } from './sequence.ts';
 import { diagnose, type Diagnosis } from './diagnose.ts';
-import { demoMachineConfig, type MachineConfig } from './machine-config.ts';
+import { demoMachineConfig, validateMachineConfig, type MachineConfig } from './machine-config.ts';
 import { createScene3D, type Commission3DStats, type CommissionKinematicsMode, type CommissionScene3D } from './scene3d.ts';
 import type { KinematicsAnnotation } from '../cad/kinematics-ui.ts';
 import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
 import commissionStyles from './commission.css?inline';
 
 const COMMISSION_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 13.5V8h2.5v5.5M8 13.5V4.5h2.5v9M11.5 13.5V6.5H14v7"/><path d="M3.5 5.5l2.5-2 2 1.2 3.5-2.5"/></svg>';
-const MACHINE_CONFIG = demoMachineConfig();
-const MACHINE_SUMMARY = `机型：${MACHINE_CONFIG.stations.length} 工位 · ${MACHINE_CONFIG.actuators.length} 执行机构 · ${MACHINE_CONFIG.sensors.length} 传感器`;
+let machineConfig = demoMachineConfig();
+
+function machineSummary(): string {
+  return `机型：${machineConfig.name} · ${machineConfig.stations.length} 工位 · ${machineConfig.actuators.length} 执行机构 · ${machineConfig.sensors.length} 传感器`;
+}
 
 const STATUS_LABEL: Record<PlcStatus, string> = {
   disconnected: '未连接',
@@ -68,6 +71,8 @@ export interface CommissionPanelHandle {
   open(): void;
   getReport(): CommissionReport;
   getMachineConfig(): MachineConfig;
+  /** 切换到新的机型配置；传 null 恢复内置 4 工位样机。 */
+  setMachineConfig(config: MachineConfig | null): void;
   setKinematics(annotation: KinematicsAnnotation | null): void;
   runPowerUp(): Promise<boolean>;
   runCase(id: string): Promise<boolean>;
@@ -798,7 +803,7 @@ function buildPanel(): void {
         <strong id="commissionStatusDetail">未建立通信</strong>
       </div>
       <div class="acp-section-title"><span>3D 联动</span><label class="acp-switch"><input type="checkbox" id="commission3dToggle" checked>启用</label></div>
-      <div class="acp-note" id="commission3dMachine">${MACHINE_SUMMARY}</div>
+      <div class="acp-note" id="commission3dMachine">${machineSummary()}</div>
       <div class="commission-3d-mode" id="commission3dMode" data-mode="config">配置驱动 · 尚未加载运动学标注</div>
       <div class="commission-3d" id="commission3dHost"></div>
       <div class="acp-section-title"><span>PLC 连接</span><b>28 点位</b></div>
@@ -891,7 +896,7 @@ function buildPanel(): void {
     export: get<HTMLButtonElement>('#commissionExport'),
     summary: get<HTMLElement>('#commissionSummary')
   };
-  scene3d = createScene3D(elements.scene3dHost, MACHINE_CONFIG);
+  scene3d = createScene3D(elements.scene3dHost, machineConfig);
   scene3d.setEnabled(elements.scene3dToggle.checked);
   scene3d.setActive(drawer.isOpen());
   renderSceneMode();
@@ -912,6 +917,18 @@ function buildPanel(): void {
 export function initCommissionPanel(options: PanelOptions): CommissionPanelHandle {
   optionsRef = options;
   buildPanel();
+  const applyMachineConfig = (config: MachineConfig | null): void => {
+    machineConfig = config ? validateMachineConfig(config) : demoMachineConfig();
+    if (!elements) return;
+    const summary = elements.drawer.querySelector<HTMLElement>('#commission3dMachine');
+    if (summary) summary.textContent = machineSummary();
+    scene3d?.dispose();
+    elements.scene3dHost.innerHTML = '';
+    scene3d = createScene3D(elements.scene3dHost, machineConfig);
+    scene3d.setEnabled(elements.scene3dToggle.checked);
+    scene3d.setActive(drawerHandle?.isOpen() ?? false);
+    renderSceneMode();
+  };
   const handle: CommissionPanelHandle = {
     open(): void {
       drawerHandle?.open();
@@ -919,7 +936,8 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
       void loadSavedConfig();
     },
     getReport,
-    getMachineConfig: (): MachineConfig => MACHINE_CONFIG,
+    getMachineConfig: (): MachineConfig => machineConfig,
+    setMachineConfig: applyMachineConfig,
     setKinematics,
     runPowerUp,
     runCase: runCaseById,

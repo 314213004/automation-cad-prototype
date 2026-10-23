@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 自然语言设计机器（二）：落盘写工具 + 3D/BOM/PLC 联动（P10-2，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1110/1110**（1084 + 新增 26）、`npm run smoke` 新增 `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`、`npm run eval:agent` **68/68（1.00）**；不 push。
+- A. 写工具：新增 `apply_machine_design`（工具数 19 → 20，只读 10 + 写 10），schema `{brief?, design?, name?, overwrite?, withBom?, withPlc?}`；`brief` / 完整 `design` 二选一，内部统一走 `validateMachineConfig`；补校验工位/执行机构/传感器 id 唯一、传感器 `part` 引用存在、`design.points` 与配置点位一致；写 `userData/machine/<id>.json` 与 `active.json`，默认同名返回 `FILE_EXISTS`，`overwrite:true` 才覆盖；成功刷新 3D 并进入撤销栈，`undo_last` 恢复上一 active 方案。
+- B. BOM/PLC 联动：`withBom` 默认 `true`，把 `bomDraft` 转为 BOM 行（`kind` → 执行机构/传感器/电气，缺型号写「模型待定」，来源 `machine-design`），追加到 BOM 草稿并写 `machine/<id>/bom-draft.csv`；`withPlc` 默认 `false`，复用 `plcgen/io.ts` + `plcgen/tags.ts` 只生成 `exports/plc/<id>/io-map.csv`，不生成完整 ST；两者都在结果返回实际路径。
+- C. UI：`design_machine` 结果新增「机型方案卡」（工位数/执行机构/传感器/节拍/功率/全部警告 + 「应用到工程」按钮），警告黄色条不折叠；按钮走计划确认，成功后 3D 切到新机型并显示「已应用：<名称>」；启动时按 `machine:active` 恢复上次方案。
+- D. 测试：新增 `desktop/test/agent/apply-machine-design.test.mjs` 26 条，覆盖 brief/design 二选一、缺参、design 校验失败、执行机构 id 重复、点位重复/引用缺失、overwrite 语义、active 指针、撤销恢复、BOM 追加行数与来源、PLC 点位齐全、确认拒绝不落盘、`../` 路径净化；同步更新工具数、MCP/RPC、离线路由与报告断言。
+- E. 评测：`docs/desktop/eval/cases.json` 新增 d05/d06/d07 三条机型落盘用例（应用上一轮方案、生成 BOM、生成 PLC 点位映射），离线 68/68，意图/工具/参数/拒绝均为 1.00；`desktop/eval/agent-cases.json` 保持同内容兼容副本。
+- F. 文档：`MACHINE-DESIGN.md` 补「应用到工程」流程、文件布局与 3D/BOM/PLC 联动；`NL-AGENT.md` 工具清单 19 → 20 与写确认规则；同步 `README.md`、`MODULES.md`、`desktop/src/agent/MODULE.md`、`desktop/test/MODULE.md`、本文件；`npm run kb:build` 重建离线索引。
+- 边界：3D 仍是配置驱动示意，不生成真实几何；BOM 型号缺省不猜；PLC 只输出点位映射，不生成厂商工程文件；applied 方案的 active 指针损坏时启动回退内置 4 工位样机。
+
 ## 自然语言机型方案合成（P10-1，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1084/1084**（1044 + 新增 40）、`npm run smoke` 新增 `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`npm run eval:agent` **65/65（1.00）**；不 push。

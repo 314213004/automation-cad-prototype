@@ -79,6 +79,22 @@ const CAPABILITY_TOOLS = [
     eval: '离线评估 + 单轮真实模型'
   },
   {
+    id: 'design_machine',
+    capability: '自然语言机型方案合成',
+    module: 'desktop/src/machine/synth.ts',
+    unit: 'desktop/test/agent/design-machine.test.mjs',
+    smoke: 'SMOKE_MACHINE_DESIGN_OK',
+    eval: '离线评估'
+  },
+  {
+    id: 'apply_machine_design',
+    capability: '机型方案落盘（3D / BOM / PLC 联动，可撤销）',
+    module: 'desktop/src/machine/store.ts',
+    unit: 'desktop/test/agent/apply-machine-design.test.mjs',
+    smoke: 'SMOKE_MACHINE_APPLY_OK',
+    eval: '离线评估'
+  },
+  {
     id: 'import_cad',
     capability: '导入 CAD 文件',
     module: 'desktop/src/agent/tools.ts',

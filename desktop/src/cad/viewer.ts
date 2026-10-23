@@ -35,6 +35,8 @@ export interface CadBomRow {
   mat: string;
   note?: string;
   partId?: string;
+  category?: string;
+  source?: string;
 }
 
 export interface CadKinematicsMesh {
@@ -101,6 +103,7 @@ export class CadViewer {
   private grid: THREE.GridHelper | null = null;
   private parts: LoadedPart[] = [];
   private modelParts: InterferencePart[] = [];
+  private draftBomRows: Array<Omit<CadBomRow, 'no'>> = [];
   private importedResult: CadImportResult | null = null;
   private selected: number | null = null;
   private pointerDown = { x: 0, y: 0 };
@@ -665,7 +668,7 @@ export class CadViewer {
   }
 
   getBomRows(): CadBomRow[] {
-    return this.modelParts.map((part, index) => ({
+    const rows: CadBomRow[] = this.modelParts.map((part, index) => ({
       no: index + 1,
       name: part.name,
       spec: part.name,
@@ -674,6 +677,56 @@ export class CadViewer {
       ...(this.parts[index]?.note ? { note: this.parts[index]!.note } : {}),
       ...(this.parts[index]?.partId ? { partId: this.parts[index]!.partId } : {})
     }));
+    for (const row of this.draftBomRows) {
+      rows.push({ ...row, no: rows.length + 1 });
+    }
+    return rows;
+  }
+
+  /** Agent apply_machine_design：追加独立于 CAD 零件的 BOM 草稿行。 */
+  appendDraftBomRows(rows: readonly Omit<CadBomRow, 'no'>[], batchId: string): number {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+    if (typeof batchId !== 'string' || !batchId.trim()) throw new Error('BOM 批次 id 不能为空');
+    const accepted: Array<Omit<CadBomRow, 'no'>> = [];
+    for (const [index, row] of rows.entries()) {
+      if (!row || typeof row.name !== 'string' || !row.name.trim()) {
+        throw new Error(`BOM 草稿第 ${index + 1} 行缺少名称`);
+      }
+      const qty = Number(row.qty);
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error(`BOM 草稿第 ${index + 1} 行数量不合法`);
+      accepted.push({
+        ...row,
+        name: row.name.trim(),
+        spec: typeof row.spec === 'string' && row.spec.trim() ? row.spec.trim() : '模型待定',
+        qty,
+        mat: typeof row.mat === 'string' && row.mat.trim() ? row.mat.trim() : '—',
+        source: row.source ?? 'machine-design',
+        ...(row.note ? { note: row.note } : {}),
+        ...(row.category ? { category: row.category } : {}),
+        ...(row.partId ? { partId: row.partId } : {})
+      });
+    }
+    this.draftBomRows.push(...accepted);
+    const marker = accepted[0]?.source === 'machine-design' ? batchId : '';
+    if (marker) {
+      for (const row of this.draftBomRows.slice(-accepted.length)) {
+        (row as Omit<CadBomRow, 'no'> & { batchId?: string }).batchId = marker;
+      }
+    }
+    this.renderPartList();
+    return accepted.length;
+  }
+
+  removeDraftBomRowsByBatch(batchId: string): number {
+    const key = String(batchId ?? '').trim();
+    if (!key) return 0;
+    const before = this.draftBomRows.length;
+    this.draftBomRows = this.draftBomRows.filter((row) => (
+      (row as Omit<CadBomRow, 'no'> & { batchId?: string }).batchId !== key
+    ));
+    const removed = before - this.draftBomRows.length;
+    if (removed > 0) this.renderPartList();
+    return removed;
   }
 
   /** Agent update_component：按 0 基下标更新 BOM 行的型号/数量/备注。 */

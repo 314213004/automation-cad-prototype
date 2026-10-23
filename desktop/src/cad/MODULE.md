@@ -30,6 +30,18 @@ interface CadImportResult {
   meshes: CadMeshData[];
   stats: { meshCount: number; triangleCount: number; elapsedMs: number; format: string };
 }
+
+interface CadBomRow {
+  no: number;
+  name: string;
+  spec: string;
+  qty: number;
+  mat: string;
+  note?: string;
+  partId?: string;
+  category?: string;   // 机型方案：执行机构 / 传感器 / 电气
+  source?: string;     // 机型方案固定为 machine-design
+}
 ```
 
 Worker 协议（`importer.worker.ts`）：
@@ -46,6 +58,7 @@ Response: { id, ok: true, result: CadImportResult } | { id, ok: false, error: st
 - 单位按 STEP 源文件 mm 解释，**不做隐式缩放**；状态栏明示「300.000 × 300.000 × 300.000 mm」
 - 选中/悬停走材质高亮，不重建 Mesh
 - 自动 fit 用包围球 + 视角 FOV 计算相机距离
+- `getBomRows()` = CAD 零件行 + `appendDraftBomRows()` 追加的机型 BOM 草稿行；草稿行不参与几何拾取，可按 `batchId` 整批移除，供 `apply_machine_design` / `undo_last` 联动。
 
 ## 运动学标注（kinematics.ts）
 

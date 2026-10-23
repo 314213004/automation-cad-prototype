@@ -1,21 +1,21 @@
 # Agent 能力报告
 
-> 生成时间：2026-10-23T15:23:39.180Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
+> 生成时间：2026-10-23T15:45:01.470Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
 > 口径：单轮 = 真实模型 30 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
 
 ## 总览
 
 | 指标 | 数值 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 工具数 | 19 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-23T15:22:52.084Z |
-| 测试数 | 1,084 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T15:23:32.364Z |
+| 工具数 | 20 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-23T15:44:42.366Z |
+| 测试数 | 1,110 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T15:44:54.822Z |
 | 单轮准确率 | 100.0%（30/30） | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
 | 单轮 p50 / p95 | 7,254 ms / 18,414 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
 | 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
 | 多轮准确率 | 100.0%（6/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮轮次 | 15/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮 p50 / p95 | 7,028 ms / 15,528 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
-| 离线意图准确率 | 100.0%（65/65） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
+| 离线意图准确率 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
 | 审计条目 | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失 |
 
 ## 分组表现（真实模型单轮）
@@ -31,11 +31,11 @@
 
 | 指标 | 结果 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 意图 | 100.0%（65/65） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
-| 工具 | 100.0%（65/65） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
-| 参数 | 100.0%（32/32） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
-| 超纲拒绝 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
-| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:22:52.084Z |
+| 意图 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 工具 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 参数 | 100.0%（34/34） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 超纲拒绝 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
 
 ## 多轮场景
 
@@ -56,6 +56,8 @@
 | 列出元件（按类别 / 数据包）<br>`list_components` | desktop/src/agent/tools.ts | 单测 agent/tools.test.mjs；smoke SMOKE_AGENT_TOOLS_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
 | 按型号 / 品牌 / 类别搜索元件<br>`search_components` | desktop/src/agent/tools.ts | 单测 agent/tools.test.mjs；smoke SMOKE_AGENT_TOOLS_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
 | 本地知识检索（离线 RAG）<br>`search_docs` | desktop/src/agent/kb/search.ts | 单测 agent/kb.test.mjs；smoke SMOKE_AGENT_KB_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
+| 自然语言机型方案合成<br>`design_machine` | desktop/src/machine/synth.ts | 单测 agent/design-machine.test.mjs；smoke SMOKE_MACHINE_DESIGN_OK；eval 离线评估 | ✅ 已实现 |
+| 机型方案落盘（3D / BOM / PLC 联动，可撤销）<br>`apply_machine_design` | desktop/src/machine/store.ts | 单测 agent/apply-machine-design.test.mjs；smoke SMOKE_MACHINE_APPLY_OK；eval 离线评估 | ✅ 已实现 |
 | 导入 CAD 文件<br>`import_cad` | desktop/src/agent/tools.ts | 单测 agent/tools-v2.test.mjs；smoke SMOKE_AGENT_TOOLS_V2；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
 | 读取当前装配体 BOM<br>`get_bom` | desktop/src/agent/tools.ts | 单测 agent/tools.test.mjs；smoke SMOKE_AGENT_TOOLS_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
 | 工程上下文快照<br>`get_project_context` | desktop/src/agent/context.ts | 单测 agent/context-memory-trim.test.mjs；smoke SMOKE_AGENT_CONTEXT_OK；eval 离线评估 + 单轮真实模型 | ✅ 已实现 |
@@ -87,10 +89,10 @@
 
 ## 已知缺口（从 BACKLOG 自动摘取）
 
-- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:201`，生成时间：2026-10-23T15:23:15.910Z）
-- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:326`，生成时间：2026-10-23T15:23:15.910Z）
-- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。（来源：`docs/desktop/BACKLOG.md:327`，生成时间：2026-10-23T15:23:15.910Z）
-- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。（来源：`docs/desktop/BACKLOG.md:328`，生成时间：2026-10-23T15:23:15.910Z）
+- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:212`，生成时间：2026-10-23T15:39:14.375Z）
+- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:337`，生成时间：2026-10-23T15:39:14.375Z）
+- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。（来源：`docs/desktop/BACKLOG.md:338`，生成时间：2026-10-23T15:39:14.375Z）
+- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。（来源：`docs/desktop/BACKLOG.md:339`，生成时间：2026-10-23T15:39:14.375Z）
 
 ## 缺失数据源
 

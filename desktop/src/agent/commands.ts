@@ -25,6 +25,27 @@ import {
 import { createZip } from '../shared/zip.ts';
 import { resolvePartReference } from './placement.ts';
 import { checkExportTargetPath } from './policy.ts';
+import { parseMachineBrief } from '../machine/spec.ts';
+import { synthMachine } from '../machine/synth.ts';
+import {
+  activeMachinePath,
+  buildMachineBomRows,
+  machineBomDraftPath,
+  machineDesignPath,
+  readActiveMachineDesign,
+  readActivePointer,
+  readStoredMachineDesign,
+  readTextIfExists,
+  renderMachineBomCsv,
+  restoreText,
+  sanitizeMachineId,
+  validateMachineDesign,
+  writeActivePointer,
+  writeText,
+  type MachineBomRow,
+  type StoredMachineDesign
+} from '../machine/store.ts';
+import { buildMachineIoMap } from '../machine/io-map.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -58,6 +79,8 @@ export interface CommandContext {
   renderCostPdf?: (html: string) => Promise<Uint8Array>;
   /** 固定导出根目录（userData/exports）；export_files 与 run_plc_generate 用。 */
   exportsRoot?: string;
+  /** 用户数据根目录（userData）；apply_machine_design 用。 */
+  userDataRoot?: string;
   /** HTML → PDF 字节（A3 横向装配报告）；export_files 的 pdf 用。 */
   renderReportPdf?: (html: string) => Promise<Uint8Array>;
   /** 可注入的时钟；测试用，缺省当前时间。 */
@@ -68,6 +91,7 @@ export interface CommandBusOptions {
   loadBuiltinPricebook?: () => unknown;
   renderCostPdf?: (html: string) => Promise<Uint8Array>;
   exportsRoot?: string;
+  userDataRoot?: string;
   renderReportPdf?: (html: string) => Promise<Uint8Array>;
   now?: () => Date;
 }
@@ -160,7 +184,10 @@ const BRIDGE_METHODS = new Set([
   'updateComponent',
   'removeProjectComponent',
   'restoreProjectComponent',
-  'exportArtifact'
+  'exportArtifact',
+  'applyMachineConfig',
+  'appendMachineBomRows',
+  'removeMachineBomRows'
 ]);
 
 export const SIMPLE_BOM_NOTE = '简化 BOM：由当前 CAD 零件与已插入占位件生成；型号取零件名称，材料统一记为“—”。';
@@ -1117,6 +1144,254 @@ function registerPlcGenerateCommand(bus: CommandBus): void {
   });
 }
 
+interface MachineApplyUndoToken {
+  machineId: string;
+  machineFile: string;
+  activeFile: string;
+  activeText: string | null;
+  designText: string | null;
+  bomPath?: string;
+  bomText?: string | null;
+  plcPath?: string;
+  plcText?: string | null;
+  previousConfig: StoredMachineDesign['config'] | null;
+  batchId: string;
+  withBom: boolean;
+}
+
+function registerMachineApplyCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'apply_machine_design',
+    async run(args, ctx) {
+      const brief = optionalString(args, 'brief');
+      const rawDesign = args.design;
+      if (brief && rawDesign !== undefined) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'brief 与 design 只能二选一');
+      }
+      if (!brief && rawDesign === undefined) {
+        throw new CommandFailure('INVALID_ARGUMENT', '必须提供 brief 或 design 之一');
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      const name = optionalString(args, 'name');
+      const overwrite = optionalBoolean(args, 'overwrite', 'overwrite') === true;
+      const withBom = optionalBoolean(args, 'withBom', 'withBom') ?? true;
+      const withPlc = optionalBoolean(args, 'withPlc', 'withPlc') ?? false;
+      if (!ctx.userDataRoot) {
+        throw new CommandFailure('WRITE_FAILED', '用户数据目录未配置，无法写入机型方案');
+      }
+
+      let normalized;
+      try {
+        if (brief) {
+          const design = synthMachine(parseMachineBrief(brief), name ? { name } : {});
+          normalized = validateMachineDesign(design);
+        } else {
+          normalized = validateMachineDesign(rawDesign);
+        }
+      } catch (error) {
+        throw new CommandFailure(
+          'INVALID_ARGUMENT',
+          `机型方案校验失败：${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      if (name) normalized.config.name = name;
+      const machineId = sanitizeMachineId(normalized.config.id);
+      normalized.config.id = machineId;
+      const machineFile = machineDesignPath(ctx.userDataRoot, machineId);
+      if (existsSync(machineFile) && !overwrite) {
+        throw new CommandFailure(
+          'FILE_EXISTS',
+          `机型方案已存在：${machineId}；如需覆盖请显式传入 overwrite=true`
+        );
+      }
+
+      const now = ctx.now?.() ?? new Date();
+      const appliedAt = now.toISOString();
+      const previousPointer = readActivePointer(ctx.userDataRoot);
+      const previousDesign = previousPointer
+        ? readStoredMachineDesign(ctx.userDataRoot, previousPointer.machineId)
+        : readActiveMachineDesign(ctx.userDataRoot);
+      const activeFile = activeMachinePath(ctx.userDataRoot);
+      const activeText = readTextIfExists(activeFile);
+      const designText = readTextIfExists(machineFile);
+      const stored: StoredMachineDesign = {
+        ...normalized,
+        schemaVersion: 1,
+        kind: 'machine-design',
+        id: machineId,
+        name: normalized.config.name,
+        appliedAt
+      };
+
+      try {
+        writeText(machineFile, `${JSON.stringify(stored, null, 2)}\n`);
+        writeActivePointer(ctx.userDataRoot, {
+          schemaVersion: 1,
+          machineId,
+          name: stored.name,
+          file: `machine/${machineId}.json`,
+          appliedAt
+        });
+      } catch (error) {
+        throw new CommandFailure(
+          'WRITE_FAILED',
+          `机型方案写入失败：${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+
+      const warnings = [...normalized.warnings];
+      const bomRows: MachineBomRow[] = buildMachineBomRows(normalized);
+      const batchId = `machine-${machineId}-${now.getTime()}`;
+      let bomPath: string | undefined;
+      let bomText: string | null | undefined;
+      let bomAdded = 0;
+      if (withBom) {
+        bomPath = machineBomDraftPath(ctx.userDataRoot, machineId);
+        bomText = readTextIfExists(bomPath);
+        try {
+          writeText(bomPath, renderMachineBomCsv(bomRows));
+        } catch (error) {
+          warnings.push(`BOM 草稿写入失败：${error instanceof Error ? error.message : String(error)}`);
+        }
+        if (bomRows.length > 0) {
+          try {
+            const appended = await ctx.bridge.call<{ ok?: boolean; added?: number; message?: string }>(
+              'appendMachineBomRows',
+              {
+                batchId,
+                source: 'machine-design',
+                rows: bomRows.map((row, index) => ({
+                  no: index + 1,
+                  name: row.name,
+                  spec: row.model,
+                  qty: row.qty,
+                  mat: '—',
+                  category: row.category,
+                  source: row.source,
+                  ...(row.note ? { note: row.note } : {})
+                }))
+              }
+            );
+            if (appended?.ok === false) {
+              warnings.push(`BOM 草稿追加失败：${appended.message ?? '渲染层未返回原因'}`);
+            } else {
+              bomAdded = Number(appended?.added ?? bomRows.length);
+            }
+          } catch (error) {
+            warnings.push(`BOM 草稿追加失败：${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+
+      let plcPath: string | undefined;
+      let plcText: string | null | undefined;
+      let plcPoints = 0;
+      if (withPlc) {
+        const exportsRoot = ctx.exportsRoot ?? join(ctx.userDataRoot, 'exports');
+        plcPath = join(exportsRoot, 'plc', machineId, 'io-map.csv');
+        plcText = readTextIfExists(plcPath);
+        try {
+          const ioMap = buildMachineIoMap(normalized.config);
+          plcPoints = ioMap.rows.length;
+          writeText(plcPath, ioMap.csv);
+        } catch (error) {
+          throw new CommandFailure(
+            'WRITE_FAILED',
+            `PLC 点位映射写入失败：${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+
+      let sceneRefreshed = false;
+      try {
+        const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
+          config: normalized.config,
+          machineId,
+          name: stored.name
+        });
+        if (refreshed?.ok === false) {
+          warnings.push(`3D 联调视图刷新失败：${refreshed.message ?? '渲染层未返回原因'}`);
+        } else {
+          sceneRefreshed = true;
+        }
+      } catch (error) {
+        warnings.push(`3D 联调视图刷新失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+
+      const undoToken: MachineApplyUndoToken = {
+        machineId,
+        machineFile,
+        activeFile,
+        activeText,
+        designText,
+        previousConfig: previousDesign?.config ?? null,
+        batchId,
+        withBom,
+        ...(bomPath !== undefined ? { bomPath } : {}),
+        ...(withBom ? { bomText: bomText ?? null } : {}),
+        ...(plcPath !== undefined ? { plcPath } : {}),
+        ...(withPlc ? { plcText: plcText ?? null } : {})
+      };
+
+      return {
+        ok: true,
+        data: {
+          machineId,
+          name: stored.name,
+          stations: normalized.config.stations.length,
+          actuators: normalized.config.actuators.length,
+          sensors: normalized.config.sensors.length,
+          warnings,
+          activePath: activeFile,
+          designPath: machineFile,
+          sceneRefreshed,
+          ...(withBom ? {
+            bomPath,
+            bom: { count: bomRows.length, added: bomAdded, source: 'machine-design' }
+          } : {}),
+          ...(withPlc ? {
+            plcPath,
+            plc: { points: plcPoints }
+          } : {})
+        },
+        undoToken
+      };
+    },
+    async undo(token, ctx) {
+      const undo = token as MachineApplyUndoToken;
+      if (!undo || typeof undo !== 'object' || !undo.machineId) {
+        throw new CommandFailure('UNDO_FAILED', '撤销令牌无效');
+      }
+      restoreText(undo.machineFile, undo.designText);
+      restoreText(undo.activeFile, undo.activeText);
+      if (undo.bomPath) restoreText(undo.bomPath, undo.bomText ?? null);
+      if (undo.plcPath) restoreText(undo.plcPath, undo.plcText ?? null);
+      if (undo.withBom) {
+        try {
+          await ctx.bridge.call('removeMachineBomRows', { batchId: undo.batchId });
+        } catch {
+          // BOM 行是内存草稿；撤销文件与 active 指针优先，渲染层不可用时不阻断。
+        }
+      }
+      try {
+        await ctx.bridge.call('applyMachineConfig', {
+          config: undo.previousConfig,
+          name: undo.previousConfig?.name ?? null
+        });
+      } catch {
+        // 3D 刷新失败不回滚已恢复的文件状态。
+      }
+      return {
+        machineId: undo.machineId,
+        restored: undo.previousConfig?.name ?? null
+      };
+    }
+  });
+}
+
 function registerExportFilesCommand(bus: CommandBus): void {
   bus.register({
     name: 'export_files',
@@ -1285,6 +1560,7 @@ export function createAgentCommandBus(
   if (options.loadBuiltinPricebook) context.loadBuiltinPricebook = options.loadBuiltinPricebook;
   if (options.renderCostPdf) context.renderCostPdf = options.renderCostPdf;
   if (options.exportsRoot) context.exportsRoot = options.exportsRoot;
+  if (options.userDataRoot) context.userDataRoot = options.userDataRoot;
   if (options.renderReportPdf) context.renderReportPdf = options.renderReportPdf;
   if (options.now) context.now = options.now;
   const bus = new CommandBus(context);
@@ -1300,6 +1576,7 @@ export function createAgentCommandBus(
   registerCostExportCommand(bus);
   registerPlcVerifyCommand(bus);
   registerPlcGenerateCommand(bus);
+  registerMachineApplyCommand(bus);
   registerExportFilesCommand(bus);
   return bus;
 }

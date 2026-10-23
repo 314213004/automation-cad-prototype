@@ -108,6 +108,8 @@ let advisorSuggestions: AdvisorSuggestion[] = [];
 const ignoredAdvisorIds = new Set<string>();
 let advisorRefreshSeq = 0;
 let usageState: DesktopAgentUsage | null = null;
+const machineDesignCards = new Map<string, { design: Record<string, unknown> }>();
+const appliedMachineCards = new Map<string, string>();
 
 interface LiveProgress {
   key: string;
@@ -452,6 +454,130 @@ function failureSuggestionHtml(input: {
       </div>`;
 }
 
+function parseMachineCard(result: DesktopAgentChatMessage | undefined): {
+  design: Record<string, unknown>;
+  config: Record<string, unknown>;
+  warnings: string[];
+  cycle: Record<string, unknown> | null;
+  power: Record<string, unknown> | null;
+} | null {
+  if (!result) return null;
+  const raw = unwrapToolResultData(result.content) ?? result.content ?? '';
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    if (record.ok === false) return null;
+    const design = record.design;
+    if (typeof design !== 'object' || design === null || Array.isArray(design)) return null;
+    const designRecord = design as Record<string, unknown>;
+    const config = designRecord.config;
+    if (typeof config !== 'object' || config === null || Array.isArray(config)) return null;
+    return {
+      design: designRecord,
+      config: config as Record<string, unknown>,
+      warnings: Array.isArray(designRecord.warnings)
+        ? designRecord.warnings.filter((value): value is string => typeof value === 'string')
+        : [],
+      cycle: typeof designRecord.cycle === 'object' && designRecord.cycle !== null && !Array.isArray(designRecord.cycle)
+        ? designRecord.cycle as Record<string, unknown>
+        : null,
+      power: typeof designRecord.power === 'object' && designRecord.power !== null && !Array.isArray(designRecord.power)
+        ? designRecord.power as Record<string, unknown>
+        : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatMessage | undefined): string {
+  if (call.function.name !== 'design_machine') return '';
+  const card = parseMachineCard(result);
+  if (!card) return '';
+  machineDesignCards.set(call.id, { design: card.design });
+  const appliedName = appliedMachineCards.get(call.id);
+  const stations = Array.isArray(card.config.stations) ? card.config.stations.length : 0;
+  const actuators = Array.isArray(card.config.actuators) ? card.config.actuators.length : 0;
+  const sensors = Array.isArray(card.config.sensors) ? card.config.sensors.length : 0;
+  const name = typeof card.config.name === 'string' ? card.config.name : '机型方案';
+  const perMin = typeof card.cycle?.perMin === 'number' ? card.cycle.perMin : null;
+  const seconds = typeof card.cycle?.secondsPerPiece === 'number' ? card.cycle.secondsPerPiece : null;
+  const va = typeof card.power?.va === 'number' ? card.power.va : null;
+  const warnings = card.warnings.length > 0
+    ? card.warnings.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
+    : '<div class="acp-machine-warning is-ok">无已知警告；选型、强度与安全仍需人工确认。</div>';
+  return `<div class="acp-machine-card" data-machine-card="${escapeHtml(call.id)}">
+      <div class="acp-machine-card-head">
+        <span class="acp-machine-title">机型方案卡 · ${escapeHtml(name)}</span>
+        <span class="acp-pill ${appliedName ? 'is-ok' : 'is-warn'}">${appliedName ? `已应用：${escapeHtml(appliedName)}` : '未应用'}</span>
+      </div>
+      <div class="acp-machine-stats">
+        <span><b>${stations}</b> 工位</span>
+        <span><b>${actuators}</b> 执行机构</span>
+        <span><b>${sensors}</b> 传感器</span>
+        <span><b>${perMin === null ? '—' : perMin}</b> 件/分钟</span>
+        <span><b>${seconds === null ? '—' : seconds.toFixed(2)}</b> 秒/件</span>
+        <span><b>${va === null ? '—' : Math.round(va)}</b> VA</span>
+      </div>
+      <div class="acp-machine-warnings">${warnings}</div>
+      <div class="acp-machine-actions">
+        <button type="button" class="acp-btn acp-btn-primary" data-apply-machine="${escapeHtml(call.id)}" ${appliedName ? 'disabled' : ''}>
+          ${appliedName ? '已应用到工程' : '应用到工程'}
+        </button>
+        <span class="acp-machine-hint">确认后写入 machine/&lt;id&gt;.json，并刷新 3D / BOM</span>
+      </div>
+    </div>`;
+}
+
+async function applyMachineDesignCard(callId: string): Promise<void> {
+  const card = machineDesignCards.get(callId);
+  if (!card || !window.desktop) return;
+  if (thinking || multiPlan?.running || recipeUi.running) {
+    chatFeedback('当前有任务正在执行，完成后再应用方案。', true);
+    return;
+  }
+  const button = body?.querySelector<HTMLButtonElement>(`[data-apply-machine="${CSS.escape(callId)}"]`);
+  if (button) button.disabled = true;
+  try {
+    const result = await window.desktop.agent.plan.execute({
+      plan: {
+        steps: [{
+          tool: 'apply_machine_design',
+          args: { design: card.design, withBom: true },
+          why: '把机型方案写入当前工程并刷新 3D/BOM',
+          readOnly: false
+        }],
+        confidence: 1
+      }
+    });
+    if (!result.confirmed) {
+      chatFeedback(result.confirmOutcome === 'timeout' ? '确认超时，未写入工程。' : '已取消，未写入工程。');
+      if (button) button.disabled = false;
+      return;
+    }
+    const step = result.results[0];
+    if (!result.ok || !step?.ok) {
+      chatFeedback(step?.message ?? result.summary ?? '应用失败，未写入工程。', true);
+      if (button) button.disabled = false;
+      return;
+    }
+    const data = step.data && typeof step.data === 'object' ? step.data as Record<string, unknown> : {};
+    const name = typeof data.name === 'string' && data.name
+      ? data.name
+      : typeof (card.design.config as Record<string, unknown> | undefined)?.name === 'string'
+        ? String((card.design.config as Record<string, unknown>).name)
+        : '机型方案';
+    appliedMachineCards.set(callId, name);
+    renderMessages();
+    chatFeedback(`已应用：${name}`);
+    void refreshAdvisor();
+  } catch (error) {
+    chatFeedback(`应用失败：${errorMessage(error)}`, true);
+    if (button) button.disabled = false;
+  }
+}
+
 function renderToolCard(call: DesktopAgentToolCall, result: DesktopAgentChatMessage | undefined): string {
   let status = '待执行';
   let tone = 'is-warn';
@@ -490,7 +616,7 @@ function renderToolCard(call: DesktopAgentToolCall, result: DesktopAgentChatMess
       <div class="acp-pack-meta">${escapeHtml(meta)}</div>
       ${detail ? `<div class="acp-pack-meta">结果：${escapeHtml(detail)}</div>` : ''}
       ${advice}
-    </div>`;
+    </div>${renderMachineCard(call, result)}`;
 }
 
 function progressKey(event: DesktopAgentProgressEvent): string {
@@ -1554,6 +1680,8 @@ async function clearMessages(): Promise<void> {
     messages = Array.isArray(result.messages) ? result.messages : [];
     lastReceipt = null;
     usageState = null;
+    machineDesignCards.clear();
+    appliedMachineCards.clear();
     renderMessages();
     renderUsage();
     chatFeedback('');
@@ -1647,6 +1775,11 @@ function bindControls(): void {
     renderAudit();
   });
   body?.querySelector<HTMLElement>('#agentChatLog')?.addEventListener('click', (event) => {
+    const applyButton = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-apply-machine]');
+    if (applyButton) {
+      void applyMachineDesignCard(applyButton.dataset.applyMachine ?? '');
+      return;
+    }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-candidate]');
     if (!button) return;
     const input = fieldElement('agentChatInput');

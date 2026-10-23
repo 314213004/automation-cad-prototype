@@ -458,6 +458,7 @@ interface NormalizedResult {
 }
 
 const UNDOABLE_WRITE_TOOLS = new Set([
+  'apply_machine_design',
   'insert_component',
   'place_component',
   'update_component',

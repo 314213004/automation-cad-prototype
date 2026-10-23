@@ -149,6 +149,15 @@ export function isMachineDesignRequest(text: string): boolean {
   return designVerb && machineNoun && engineeringHint;
 }
 
+/** 机型方案落盘请求：需要已有 design（通常来自上一轮 design_machine）。 */
+export function isMachineApplyRequest(text: string): boolean {
+  const value = (text ?? '').trim();
+  if (!value) return false;
+  const applyVerb = /应用|落地|套用|写入|导入|下发/.test(value);
+  const target = /工程|项目|当前|机型|方案/.test(value);
+  return applyVerb && target && /机型|方案|设计|工位/.test(value);
+}
+
 /** 规则分类：取分最高者，同分按写操作优先，全 0 判为超纲。 */
 export function routeIntent(text: string): IntentMatch {
   const normalized = (text ?? '').trim();
@@ -157,6 +166,9 @@ export function routeIntent(text: string): IntentMatch {
   }
   if (isDocQuestion(normalized)) {
     return { intent: 'query', confidence: 'high', score: 3, hits: ['本地文档'], reason: '文档类问题，查本地知识库' };
+  }
+  if (isMachineApplyRequest(normalized)) {
+    return { intent: 'modify', confidence: 'high', score: 4, hits: ['机型落盘'], reason: '把已有方案应用到工程（写操作，需确认）' };
   }
   if (isMachineDesignRequest(normalized)) {
     return { intent: 'generate', confidence: 'high', score: 4, hits: ['机型设计'], reason: '从中文需求合成机型方案（只读，不落盘）' };
@@ -207,7 +219,7 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 19 个工具里，只读 10 个、写操作 9 个。 */
+/** 目前注册的 20 个工具里，只读 10 个、写操作 10 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
@@ -222,6 +234,7 @@ export const READ_ONLY_TOOLS = new Set([
 ]);
 
 export const WRITE_TOOLS = new Set([
+  'apply_machine_design',
   'import_cad',
   'insert_component',
   'place_component',
@@ -557,6 +570,19 @@ function planToolBase(text: string): ToolPlan | null {
   // 越权文件、审计篡改、危险路径与跨域误用一律拒绝，不能靠后续工具兜底。
   if (FORBIDDEN_TARGET.test(value) || AUDIT_TAMPER.test(value) || CROSS_DOMAIN_MISUSE.test(value)) {
     return null;
+  }
+
+  if (isMachineApplyRequest(value)) {
+    return {
+      tool: 'apply_machine_design',
+      args: {
+        ...(/(?:bom|物料|清单)/i.test(value) ? { withBom: true } : {}),
+        ...(/(?:plc|点位映射|io|i\/o)/i.test(value) ? { withPlc: true } : {})
+      },
+      readOnly: false,
+      missing: ['design'],
+      why: '把上一轮机型方案写入工程并刷新 3D（需确认；BOM 默认追加，PLC 映射可选）'
+    };
   }
 
   if (isMachineDesignRequest(value)) {

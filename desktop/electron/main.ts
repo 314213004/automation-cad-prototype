@@ -1186,8 +1186,9 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 19 ||
+          summaries.length !== 20 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
+          !summaries.some((tool) => tool.name === 'apply_machine_design') ||
           !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
@@ -1240,6 +1241,54 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1');
+
+        const applied = await activeTools.call('apply_machine_design', {
+          brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
+          withPlc: true
+        }) as {
+          ok?: boolean;
+          machineId?: string;
+          stations?: number;
+          actuators?: number;
+          sensors?: number;
+          bom?: { count?: number };
+          bomPath?: string;
+          plcPath?: string;
+          designPath?: string;
+          message?: string;
+        };
+        const appliedScene = await window.webContents.executeJavaScript(
+          'window.__Commission3D?.stats?.()?.stations ?? -1'
+        ) as number;
+        if (
+          !applied.ok ||
+          applied.stations !== 3 ||
+          applied.actuators !== 6 ||
+          applied.sensors !== 6 ||
+          applied.bom?.count !== 6 ||
+          !applied.bomPath || !existsSync(applied.bomPath) ||
+          !applied.plcPath || !existsSync(applied.plcPath) ||
+          !applied.designPath || !existsSync(applied.designPath) ||
+          appliedScene !== 3
+        ) {
+          console.error('SMOKE_FAIL machine_apply', JSON.stringify({ ...applied, appliedScene }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        const undone = await activeTools.call('undo_last', {}) as {
+          ok?: boolean;
+          command?: string;
+          message?: string;
+        };
+        const restoredScene = await window.webContents.executeJavaScript(
+          'window.__Commission3D?.stats?.()?.stations ?? -1'
+        ) as number;
+        if (!undone.ok || undone.command !== 'apply_machine_design' || restoredScene !== 4) {
+          console.error('SMOKE_FAIL machine_apply_undo', JSON.stringify({ undone, restoredScene }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=6 undo=1`);
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
           ok?: boolean;
@@ -2574,7 +2623,8 @@ async function bootstrap(): Promise<void> {
     loadBuiltinPricebook: readBuiltinPricebookRaw,
     renderCostPdf: renderCostReportPdf,
     renderReportPdf: renderAssemblyReportPdf,
-    exportsRoot: join(app.getPath('userData'), 'exports')
+    exportsRoot: join(app.getPath('userData'), 'exports'),
+    userDataRoot: app.getPath('userData')
   });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({

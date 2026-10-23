@@ -606,6 +606,9 @@ interface Window {
         exampleItems?: number;
       }>;
     };
+    machine: {
+      active(): Promise<{ ok: boolean; design?: unknown; message?: string }>;
+    };
     packs: {
       list(): Promise<DesktopPackInfo[]>;
       chooseZip(): Promise<{ canceled: boolean; filePaths: string[] }>;

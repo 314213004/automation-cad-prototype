@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）；机型方案合成已完成（`design_machine` 只读工具，工具数 18 → 19，评估集 65 条，见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）；机型方案合成已完成（`design_machine` 只读工具）；机型落盘已完成（`apply_machine_design` 写工具 + 3D/BOM/PLC 联动 + 撤销，工具数 18 → 20，评估集 68 条，见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -36,7 +36,7 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（已实现 19 个：只读 10 + 写 9；另 3 个规划中）
+## 3. 工具清单（已实现 20 个：只读 10 + 写 10；另 3 个规划中）
 
 | 工具 | 类型 | 说明 |
 |---|---|---|
@@ -44,6 +44,7 @@
 | `search_components` | 只读 | 型号、品牌、类别、规格全文检索 |
 | `search_docs` | 只读 | 离线检索 13 份项目文档、截图索引与元件库分类；返回 `{source,heading,snippet,score}`，无命中返回空 |
 | `design_machine` | 只读 | 从中文 brief 合成 `MachineConfig` 方案：工艺/工位/执行机构/传感器/节拍瓶颈/功率估算/BOM 草案/警告与假设；不落盘、不改工程（见 MACHINE-DESIGN.md） |
+| `apply_machine_design` | 写 | 把 brief 或完整 design 写入 `userData/machine/<id>.json` 并更新 `active.json`；默认追加 BOM 草稿，可选生成 PLC `io-map.csv`，成功后刷新 3D；需确认，可用 `undo_last` 撤销 |
 | `get_bom` | 只读 | 当前装配体简化 BOM |
 | `get_project_context` | 只读 | 当前域 / 视图 / 选中对象 / 机型 / 底板 / 单位制 / 最近操作；缺失项返回 null |
 | `run_interference_check` | 只读 | 包围盒干涉初筛 |
@@ -70,14 +71,14 @@
 
 | 级别 | 范围 | 约束 |
 |---|---|---|
-| 只读 | 8 个查询/计算/验证工具 | 可离线直接执行，不产生副作用；`get_project_context` 缺失项必须返回 null |
+| 只读 | 10 个查询/计算/验证工具 | 可离线直接执行，不产生副作用；`get_project_context` 缺失项必须返回 null |
 | W1 可撤销装配写 | `insert_component`、`place_component`、`update_component`、`remove_component` | 执行前二次确认；成功后写入撤销栈，`undo_last` 恢复插入件 / 放置 / 型号与备注 / 被移除元件 |
-| W2 文件写 | `import_cad`、`run_plc_generate`、`export_files`、`export_cost_report` | 执行前二次确认；导入只读用户明确给出的 CAD 路径，导出固定写入 `userData/exports/`，不接受任意写入路径，文件名走统一净化与冲突策略 |
+| W2 文件写 | `apply_machine_design`、`import_cad`、`run_plc_generate`、`export_files`、`export_cost_report` | 执行前二次确认；机型方案固定写入 `userData/machine/`，id 净化且 `overwrite=true` 才覆盖，成功后可用 `undo_last` 恢复上一个 active；导入只读用户明确给出的 CAD 路径，导出固定写入 `userData/exports/`，不接受任意写入路径 |
 | W3 外部副作用 | 规划的 `start_commission` / `sync_design_package` | 除二次确认外，还需明文展示目标地址与机台编号 |
 
-`undo_last` 本身也走确认，但只回滚栈顶的一条可撤销写，不会删除文件或撤销外部操作。
+`undo_last` 本身也走确认，但只回滚栈顶的一条可撤销写。`apply_machine_design` 的撤销会恢复 active 指针、方案文件、BOM 草稿与 PLC 映射，并让 3D 切回上一个配置；外部设备操作仍不可撤销。
 
-稳定错误码：`INVALID_ARGUMENT`（缺参/类型错误）、`PART_NOT_FOUND`（新型号不在数据包）、`NOT_PLACED`（删除目标不在底板/BOM）、`PRECHECK_FAILED`（PLC 预检错误，不落盘）、`UNSUPPORTED_FORMAT`（导出格式不在白名单）、`WRITE_FAILED` / `EXPORT_FAILED`（落盘与内容生成失败）。
+稳定错误码：`INVALID_ARGUMENT`（缺参/类型错误/方案校验失败）、`FILE_EXISTS`（同名机型未允许覆盖）、`PART_NOT_FOUND`（新型号不在数据包）、`NOT_PLACED`（删除目标不在底板/BOM）、`PRECHECK_FAILED`（PLC 预检错误，不落盘）、`UNSUPPORTED_FORMAT`（导出格式不在白名单）、`WRITE_FAILED` / `EXPORT_FAILED`（落盘与内容生成失败）。
 
 ## 4. 上下文注入与指代消解（已实现）
 
@@ -202,12 +203,12 @@ executePlan(plan, deps) → {
 通用多步补充：含「然后 / 接着 / 之后 / 最后 / 并且 / 同时 / 再 / 并」的指令会逐句调用 `planTool()`；任何一句落空都整单拒绝，避免做一半。单句仍回落到 `planTool()`。
 
 工具清单（以 `tools.ts` 注册表为准）：
-- 只读 9：`list_components`、`search_components`、`search_docs`、`get_bom`、`get_project_context`、`run_interference_check`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
-- 写 9：`import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last`
+- 只读 10：`list_components`、`search_components`、`search_docs`、`design_machine`、`get_bom`、`get_project_context`、`run_interference_check`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
+- 写 10：`apply_machine_design`、`import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last`
 - 规划中但未注册：`start_commission`、`diagnose_fault`、`sync_design_package`；未注册前不会进入可执行计划
 
 工具名与过滤：
-- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 19 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
+- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 20 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
 - 规划阶段逐条校验工具名；不存在的工具从步骤中移除并写入 `warnings`（例如 `忽略未注册工具 sync_design_package（第 1 步）`）。全部被过滤时 `refused:true`，不会执行空计划。
 - 不编造工具名；`sync_design_package` 注册后无需改规划规则即可自动纳入。
 
@@ -398,7 +399,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ### 8.6 上下文预算与成本（P7-M）
 
-目标：不让 19 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
+目标：不让 20 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
 
 **预算模型**（`desktop/src/agent/budget.ts`，纯函数）
 
@@ -465,7 +466,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ## 9. 质量评估
 
-固定 65 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；19 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
+固定 68 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；20 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。本轮新增 3 条机型落盘用例（应用上一轮方案、生成 BOM、生成 PLC 点位映射）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
 
 在 `desktop/` 下运行：
 
@@ -486,9 +487,9 @@ npm run eval:agent
 任一指标低于上述阈值时脚本退出码为 1；当前离线基线（2026-10-23，v0.2.0）：
 
 ```
-意图准确率   100.0%  (65/65)
-工具选择率   100.0%  (65/65)
-参数抽取率   100.0%  (32/32)
+意图准确率   100.0%  (68/68)
+工具选择率   100.0%  (68/68)
+参数抽取率   100.0%  (34/34)
 超纲拒绝率   100.0%  (5/5)
 多步完成率   100.0%  (5/5)
 EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
@@ -586,12 +587,12 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=19 audit=3 ctx=572`；`SMOKE_AGENT_TOOLS_V2 tools=19`；`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`；`SMOKE_AGENT_TOOLS_V2 tools=20`；`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 932/932（新增 `test/agent/policy.test.mjs` 42 条；P7-I 流程模板 29 条、P7-H 主动建议 21 条），其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 932/932）
-- 评估集与回归 —— ✅ 65 条中文用例（19 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（65/65 意图、65/65 工具、32/32 参数、5/5 超纲拒绝、5/5 多步）；真实模型 30 条评测 `matched=30/30`、`refusalRate=1.00`（见 9.1，含三轮迭代与失败归因）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 1110/1110，其中机型落盘 26 条（`test/agent/apply-machine-design.test.mjs`）、PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（当前全套 1110/1110）
+- 评估集与回归 —— ✅ 68 条中文用例（20 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（68/68 意图、68/68 工具、34/34 参数、5/5 超纲拒绝、5/5 多步）；真实模型 30 条评测 `matched=30/30`、`refusalRate=1.00`（见 9.1，含三轮迭代与失败归因）
 - 确认与路径策略 —— ✅ 策略层纯函数 + `executeTool` 硬确认 + 拒绝后短路 + 回复话术过滤；导出默认只接受纯文件名，绝对路径/盘符/UNC/`../` 返回 `TARGET_PATH_UNSUPPORTED`，`allowSanitize=true` 才净化落盘；`policy.test.mjs` 42 条，smoke `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`

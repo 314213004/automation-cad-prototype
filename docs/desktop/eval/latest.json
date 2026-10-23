@@ -1,15 +1,16 @@
 {
-  "generatedAt": "2026-10-23T15:22:52.084Z",
+  "generatedAt": "2026-10-23T15:46:32.698Z",
   "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 65,
+    "count": 68,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
     "outOfScope": 5,
     "toolCoverage": [
+      "apply_machine_design",
       "design_machine",
       "export_cost_report",
       "export_files",
@@ -49,18 +50,18 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 65,
-      "total": 65,
+      "correct": 68,
+      "total": 68,
       "rate": 1
     },
     "tools": {
-      "correct": 65,
-      "total": 65,
+      "correct": 68,
+      "total": 68,
       "rate": 1
     },
     "params": {
-      "correct": 32,
-      "total": 32,
+      "correct": 34,
+      "total": 34,
       "rate": 1
     },
     "refused": {
@@ -1902,6 +1903,106 @@
           },
           "readOnly": true,
           "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d05",
+      "input": "把刚才的机型方案应用到工程",
+      "tags": [
+        "machine_apply"
+      ],
+      "note": "机型落盘：方案来自上一轮 design_machine，离线计划点名缺少 design。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "apply_machine_design"
+      ],
+      "actualTools": [
+        "apply_machine_design"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "apply_machine_design",
+          "args": {},
+          "readOnly": false,
+          "missing": [
+            "design"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d06",
+      "input": "把当前机型方案落地到工程并生成 BOM",
+      "tags": [
+        "machine_apply"
+      ],
+      "note": "机型落盘：显式生成 BOM 草稿。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "apply_machine_design"
+      ],
+      "actualTools": [
+        "apply_machine_design"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "apply_machine_design",
+          "args": {
+            "withBom": true
+          },
+          "readOnly": false,
+          "missing": [
+            "design"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d07",
+      "input": "把机型方案写入工程并生成 PLC 点位映射",
+      "tags": [
+        "machine_apply"
+      ],
+      "note": "机型落盘：可选生成 io-map.csv，不生成完整 ST。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "apply_machine_design"
+      ],
+      "actualTools": [
+        "apply_machine_design"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "apply_machine_design",
+          "args": {
+            "withPlc": true
+          },
+          "readOnly": false,
+          "missing": [
+            "design"
+          ]
         }
       ],
       "passed": true

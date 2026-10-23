@@ -163,6 +163,7 @@ export function emptyAgentUsage(model = ''): AgentUsageSnapshot {
 }
 
 const MUTATING_TOOLS = new Set([
+  'apply_machine_design',
   'import_cad',
   'insert_component',
   'place_component',

@@ -958,5 +958,48 @@
       "machine_design"
     ],
     "note": "机型设计：中文数字工位数。"
+  },
+  {
+    "id": "d05",
+    "input": "把刚才的机型方案应用到工程",
+    "intent": "modify",
+    "expect": {
+      "tool": "apply_machine_design",
+      "argsContains": {}
+    },
+    "tags": [
+      "machine_apply"
+    ],
+    "note": "机型落盘：方案来自上一轮 design_machine，离线计划点名缺少 design。"
+  },
+  {
+    "id": "d06",
+    "input": "把当前机型方案落地到工程并生成 BOM",
+    "intent": "modify",
+    "expect": {
+      "tool": "apply_machine_design",
+      "argsContains": {
+        "withBom": true
+      }
+    },
+    "tags": [
+      "machine_apply"
+    ],
+    "note": "机型落盘：显式生成 BOM 草稿。"
+  },
+  {
+    "id": "d07",
+    "input": "把机型方案写入工程并生成 PLC 点位映射",
+    "intent": "modify",
+    "expect": {
+      "tool": "apply_machine_design",
+      "argsContains": {
+        "withPlc": true
+      }
+    },
+    "tags": [
+      "machine_apply"
+    ],
+    "note": "机型落盘：可选生成 io-map.csv，不生成完整 ST。"
   }
 ]

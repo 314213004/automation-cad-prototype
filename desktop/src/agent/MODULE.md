@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 19 个 AgentTool；含只读 `design_machine`）
+tools.ts（AgentTools + 20 个 AgentTool；含只读 `design_machine` 与写工具 `apply_machine_design`）
  ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
  ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
@@ -69,6 +69,8 @@ interface Bridge {
 | `list_components` | `q? / category? / packId?` | 无（直接读 registry） | ✅ 可用 |
 | `search_components` | `q` | 无（直接读 registry） | ✅ 可用 |
 | `search_docs` | `query / limit?` | 无（直接读内嵌 `kb.json`） | ✅ 只读：来源 + 标题 + 摘要 + 分数；无命中返回空 |
+| `design_machine` | `brief / stationCount? / cyclePerMin?` | 无 | ✅ 只读：需求抽取 + 方案合成，不落盘、不改工程 |
+| `apply_machine_design` | `brief? / design? / name? / overwrite? / withBom? / withPlc?` | `apply_machine_design` | ✅ 写：brief 与 design 二选一；校验后写 `machine/<id>.json` + `active.json`，默认追加 BOM，可选 PLC `io-map.csv`；需确认、可撤销、刷新 3D |
 | `import_cad` | `path` | `import_cad` | ✅ 可用 |
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
 | `get_project_context` | 无 | `get_project_context` | ✅ 只读：域/视图/选中/机型/底板/单位/最近操作，缺失为 null |
@@ -86,6 +88,8 @@ interface Bridge {
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
 
 `get_bom` 的 BOM 由「当前 CAD 零件 + 已插入占位件」生成：序号递增、名称/型号取零件名、数量 1、材料 `—`，并带 `note` 说明这是简化 BOM。没有模型时返回空数组。
+
+机型落盘的校验、文件读写与 BOM 行转换在 `src/machine/store.ts`；PLC 点位映射在 `src/machine/io-map.ts`，复用 `plcgen/io.ts` 与 `plcgen/tags.ts`，只输出 CSV、不复制完整 ST 生成逻辑。`apply_machine_design` 校验失败返回 `INVALID_ARGUMENT`，同名文件默认 `FILE_EXISTS`，写入失败返回 `WRITE_FAILED`；确认拒绝时不调用命令总线、不创建目录。
 
 ## 本地知识检索（kb/）
 
@@ -384,7 +388,7 @@ IPC 与 UI：
 
 - `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
 - UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
-- `llm.ts` 以 OpenAI 兼容格式发送 18 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `llm.ts` 以 OpenAI 兼容格式发送 20 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
 - `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，先经 `serializeToolResult` 裁剪、再由 `guard.ts` 包成不可信数据块，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
 - `import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
 - 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
@@ -531,8 +535,8 @@ parseFallbackCandidates(text): string[]
 
 ## 进度
 
-- ✅ 注册表 + 18 工具（只读 9 / 写 9）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 19 个）
+- ✅ 注册表 + 20 工具（只读 10 / 写 10）+ 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 20 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
@@ -544,9 +548,9 @@ parseFallbackCandidates(text): string[]
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 1084/1084（新增 `machine/spec.test.mjs` 14 条、`machine/synth.test.mjs` 16 条、`design-machine.test.mjs` 10 条；`policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=19 implemented=19`、`SMOKE_AGENT_TOOLS_V2 tools=19`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`SMOKE_AGENT_KB_OK docs=13 chunks=337 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=19 audit=3 ctx=572`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 1110/1110（新增 `machine/spec.test.mjs` 14 条、`machine/synth.test.mjs` 16 条、`design-machine.test.mjs` 10 条、`apply-machine-design.test.mjs` 26 条；`policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=20 implemented=20`、`SMOKE_AGENT_TOOLS_V2 tools=20`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`、`SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
-- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 65 条，覆盖 19 工具与 6 类拒绝
+- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 68 条，覆盖 20 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
 - ✅ P7-I 可复用流程：`recipes.ts` 5 个纯数据模板 + `runRecipe` 前置条件/跳过/逐次确认/失败报告/Markdown；侧栏流程下拉与执行记录导出
 - ✅ P7-J 工具调用纠错：`repair.ts` 脏 JSON 修复 + schema 中文路径 + 截断限 3 层 + `partId` 选中回填；`retry.ts` 一次重试与两条候选回落；审计 `retries/reason/repairs`；LLM `response_format` 自动降级

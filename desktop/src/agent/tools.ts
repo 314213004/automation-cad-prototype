@@ -172,6 +172,27 @@ const DESIGN_MACHINE_SCHEMA = {
   additionalProperties: false
 };
 
+const APPLY_MACHINE_DESIGN_SCHEMA = {
+  type: 'object',
+  properties: {
+    brief: {
+      type: 'string',
+      minLength: 1,
+      description: '机型需求；与完整 design 二选一，内部会先跑 synth'
+    },
+    design: {
+      type: 'object',
+      description: '上一步 design_machine 返回的完整 design；与 brief 二选一，避免重复合成',
+      additionalProperties: true
+    },
+    name: { type: 'string', description: '可选，应用到工程后的机型名称' },
+    overwrite: { type: 'boolean', description: '默认 false；同名机型文件存在时返回 FILE_EXISTS，true 才覆盖' },
+    withBom: { type: 'boolean', description: '默认 true；把 bomDraft 追加到 BOM 草稿并写 bom-draft.csv' },
+    withPlc: { type: 'boolean', description: '默认 false；生成 exports/plc/<machineId>/io-map.csv' }
+  },
+  additionalProperties: false
+};
+
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -586,6 +607,44 @@ export class AgentTools {
             message: error instanceof Error ? error.message : String(error)
           };
         }
+      }
+    });
+
+    this.add({
+      name: 'apply_machine_design',
+      description:
+        '把机型方案写入 userData/machine/<id>.json 并把当前工程指向它；brief 与完整 design 二选一。需要用户确认，可用 undo_last 撤销。默认把 bomDraft 追加到 BOM 草稿（withBom=true），可选生成 PLC 点位映射 io-map.csv（withPlc=true）；成功后 3D 联调视图切到新配置。',
+      inputSchema: APPLY_MACHINE_DESIGN_SCHEMA,
+      handler: async (args) => {
+        const brief = getString(args.brief);
+        const hasDesign = args.design !== undefined && args.design !== null;
+        if (args.brief !== undefined && args.brief !== null && !brief) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'brief 不能为空' };
+        }
+        if (hasDesign && !isRecord(args.design)) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'design 必须是对象' };
+        }
+        if (Boolean(brief) === hasDesign) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'brief 与 design 必须二选一' };
+        }
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        for (const key of ['overwrite', 'withBom', 'withPlc'] as const) {
+          if (args[key] !== undefined && args[key] !== null && typeof args[key] !== 'boolean') {
+            return { ok: false, code: 'INVALID_ARGUMENT', message: `${key} 必须是布尔值` };
+          }
+        }
+        const name = getString(args.name);
+        const result = await this.execute('apply_machine_design', {
+          ...(brief ? { brief } : {}),
+          ...(hasDesign ? { design: args.design } : {}),
+          ...(name ? { name } : {}),
+          ...(args.overwrite === true ? { overwrite: true } : {}),
+          ...(args.withBom !== undefined ? { withBom: args.withBom === true } : {}),
+          ...(args.withPlc !== undefined ? { withPlc: args.withPlc === true } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
       }
     });
 
