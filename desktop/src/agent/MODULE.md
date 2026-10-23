@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 7 个 AgentTool）
+tools.ts（AgentTools + 9 个 AgentTool）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
  ├─ mcp.ts        → MCP stdio server，工具定义直接复用
  ├─ mcp-proxy.ts  → stdio MCP → 桌面 RPC 写工具代理（10 秒超时）
@@ -50,6 +50,8 @@ interface Bridge {
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
 | `run_interference_check` | 无 | `run_interference` | ✅ 前 20 条 |
 | `insert_component` | `partId / name?` | `insert_component` | ✅ 可撤销 |
+| `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条 |
+| `run_cost_report` | `bom? / pricebook? / placements? / plate? / plc? / options? / overrides? / wireSection? / now?` | `run_cost_report` | ✅ 只读，明细前 50 行、缺价/告警各 20 条 |
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
 
 `get_bom` 的 BOM 由「当前 CAD 零件 + 已插入占位件」生成：序号递增、名称/型号取零件名、数量 1、材料 `—`，并带 `note` 说明这是简化 BOM。没有模型时返回空数组。
@@ -58,6 +60,8 @@ interface Bridge {
 
 - `execute(name, args)` 始终返回 `CommandResult`，异常被转换成中文错误，不向调用方抛。
 - 每次已注册命令执行都写入 `history`；面板只显示最近 5 条。
+- `run_cost_report` 未显式给 `bom` 时先 `bridge.call('getBom')` 取场景 BOM；场景零件没有物料号，引擎按 `NO_PART_ID` 记缺价，不按 0 计价。
+- 该命令通过构造参数 `createAgentCommandBus(registry, bridge, { loadBuiltinPricebook })` 拿到内置价格簿读取器（主进程读 `packs/builtin/pricebook-cn/pricebook.json`），与 `cost:pricebook` IPC 同源。
 - `insert_component` 成功后将 `meshIndex` 作为 undo token 入栈；`undo_last` 调用 `removeComponent` 后索引会重排。
 - `PART_NOT_FOUND`、`UNSUPPORTED_FORMAT`、`FILE_NOT_FOUND`、`RENDERER_TIMEOUT`、`RENDERER_UNAVAILABLE` 均为结构化错误码。
 
@@ -65,14 +69,14 @@ interface Bridge {
 
 - 独立 stdio MCP 启动时读取 `userData/agent-token`，调用 `POST http://127.0.0.1:7420/rpc` 的 `tools/call`，工具名和参数原样转发，默认 10 秒超时。
 - 桌面可达时所有已知工具都转发，写操作走主进程 CommandBus 与渲染桥。
-- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 5 个工具返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
+- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 7 个工具返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
 - 代理错误不包含 token；401 单独返回鉴权错误，不降级成“桌面未运行”。
 
 ## 应用内智能体对话
 
 - `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
 - UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
-- `llm.ts` 以 OpenAI 兼容格式发送 7 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `llm.ts` 以 OpenAI 兼容格式发送 9 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
 - `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
 - `insert_component`、`import_cad`、`undo_last` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
 - 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
@@ -114,13 +118,13 @@ window.__AgentBridge = {
 
 ## 进度
 
-- ✅ 注册表 + 7 工具 + 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 7 个）
+- ✅ 注册表 + 9 工具 + 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 9 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
-- ✅ 单测：146/146；smoke：`SMOKE_AGENT_TOOLS_OK tools=7 implemented=7`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`
+- ✅ 单测：全套 413/413；smoke：`SMOKE_AGENT_TOOLS_OK tools=9 implemented=9`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`
 - ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources
 
 ## 待办

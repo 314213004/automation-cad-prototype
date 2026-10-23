@@ -27,7 +27,8 @@ const DESKTOP_REQUIRED_TOOLS = new Set([
   'insert_component',
   'undo_last',
   'get_bom',
-  'run_interference_check'
+  'run_interference_check',
+  'run_cost_report'
 ]);
 
 const DESKTOP_NOT_RUNNING = {

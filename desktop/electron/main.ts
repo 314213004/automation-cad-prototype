@@ -78,6 +78,13 @@ function builtinPacksDir(): string {
     : resolve(desktopRoot(), '..', 'packs', 'builtin');
 }
 
+/** Agent 工具 `run_cost_report` 的内置价格簿来源；与 `cost:pricebook` IPC 读同一份文件。 */
+function readBuiltinPricebookRaw(): unknown {
+  const pricebookPath = join(builtinPacksDir(), 'pricebook-cn', 'pricebook.json');
+  if (!existsSync(pricebookPath)) throw new Error(`内置价格簿缺失：${pricebookPath}`);
+  return JSON.parse(readFileSync(pricebookPath, 'utf8')) as unknown;
+}
+
 function userPacksDir(): string {
   return join(app.getPath('userData'), 'packs');
 }
@@ -797,7 +804,11 @@ function createWindow(): BrowserWindow {
       }
       try {
         const summaries = agentTools?.summaries() ?? [];
-        if (summaries.length !== 8 || !summaries.some((tool) => tool.name === 'run_electrical_check')) {
+        if (
+          summaries.length !== 9 ||
+          !summaries.some((tool) => tool.name === 'run_electrical_check') ||
+          !summaries.some((tool) => tool.name === 'run_cost_report')
+        ) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);
           return;
@@ -971,6 +982,52 @@ function createWindow(): BrowserWindow {
         );
       } catch (error) {
         console.error('SMOKE_FAIL cost_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        // Agent 工具 run_cost_report：经命令总线执行，结果必须与直接调用引擎一致（含价格簿注入）。
+        const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
+        const fixtureBook = JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown;
+        const costCase = JSON.parse(
+          readFileSync(join(fixtureDir, 'cost-case.json'), 'utf8')
+        ) as Record<string, unknown>;
+        const agentCost = commandBus
+          ? await commandBus.execute('run_cost_report', {
+              ...costCase,
+              pricebook: fixtureBook,
+              now: '2026-10-23T12:00:00+08:00'
+            })
+          : null;
+        const agentData = agentCost && agentCost.ok && agentCost.data && typeof agentCost.data === 'object'
+          ? (agentCost.data as Record<string, unknown>)
+          : null;
+        const agentTotals = agentData && typeof agentData.totals === 'object'
+          ? (agentData.totals as Record<string, unknown>)
+          : null;
+        const agentCounts = agentData && typeof agentData.counts === 'object'
+          ? (agentData.counts as Record<string, unknown>)
+          : null;
+        const agentLines = agentCounts ? Number(agentCounts.lines ?? -1) : -1;
+        const agentMissing = agentCounts ? Number(agentCounts.missing ?? -1) : -1;
+        const agentGrand = agentTotals ? Number(agentTotals.grand ?? -1) : -1;
+        if (!agentData || agentData.bomSource !== 'argument' || agentLines !== 6 || agentMissing !== 1 || agentGrand !== 1398.64) {
+          console.error('SMOKE_FAIL cost_agent', JSON.stringify({
+            ok: agentCost?.ok,
+            error: agentCost?.error,
+            bomSource: agentData?.bomSource,
+            lines: agentLines,
+            missing: agentMissing,
+            grand: agentGrand
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(
+          `SMOKE_COST_AGENT_OK bomSource=${String(agentData.bomSource)} lines=${agentLines} missing=${agentMissing} grand=${agentGrand.toFixed(2)}`
+        );
+      } catch (error) {
+        console.error('SMOKE_FAIL cost_agent_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }
@@ -1181,7 +1238,9 @@ async function bootstrap(): Promise<void> {
   mainWindow = createWindow();
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow));
+  commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow), {
+    loadBuiltinPricebook: readBuiltinPricebookRaw
+  });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({
     userDataDir: app.getPath('userData'),

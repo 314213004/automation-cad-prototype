@@ -11,6 +11,7 @@ import {
   type PowerOptions,
   type Wire
 } from '../elec/check.ts';
+import { runCostTool, CostToolError } from '../cost/agent.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -36,6 +37,12 @@ export interface CommandHistoryEntry {
 export interface CommandContext {
   registry: PackRegistry;
   bridge: Bridge;
+  /** 读取内置价格簿（主进程注入）；返回原始 JSON 或已校验对象 */
+  loadBuiltinPricebook?: () => unknown;
+}
+
+export interface CommandBusOptions {
+  loadBuiltinPricebook?: () => unknown;
 }
 
 interface CommandRunResult extends CommandResult {
@@ -547,11 +554,44 @@ function registerElectricalCheckCommand(bus: CommandBus): void {
   });
 }
 
-export function createAgentCommandBus(registry: PackRegistry, bridge: Bridge): CommandBus {
-  const bus = new CommandBus({ registry, bridge });
+function registerCostCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'run_cost_report',
+    async run(args, ctx) {
+      // 未显式给 bom 时回落到当前场景 BOM；场景 BOM 没有物料号，引擎会如实记为「缺物料号」。
+      let sceneBom: unknown;
+      if (!(Array.isArray(args.bom) && args.bom.length > 0)) {
+        const rows = await ctx.bridge.call<unknown>('getBom');
+        if (!Array.isArray(rows)) {
+          throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(rows, '读取当前 BOM 失败'));
+        }
+        sceneBom = rows;
+      }
+      try {
+        const deps: { sceneBom?: unknown; loadBuiltinPricebook?: () => unknown } = {};
+        if (sceneBom !== undefined) deps.sceneBom = sceneBom;
+        if (ctx.loadBuiltinPricebook) deps.loadBuiltinPricebook = ctx.loadBuiltinPricebook;
+        return { ok: true, data: runCostTool(args, deps) };
+      } catch (error) {
+        if (error instanceof CostToolError) throw new CommandFailure(error.code, error.message);
+        throw error;
+      }
+    }
+  });
+}
+
+export function createAgentCommandBus(
+  registry: PackRegistry,
+  bridge: Bridge,
+  options: CommandBusOptions = {}
+): CommandBus {
+  const context: CommandContext = { registry, bridge };
+  if (options.loadBuiltinPricebook) context.loadBuiltinPricebook = options.loadBuiltinPricebook;
+  const bus = new CommandBus(context);
   registerInsertCommand(bus);
   registerImportCommand(bus);
   registerReadCommands(bus);
   registerElectricalCheckCommand(bus);
+  registerCostCommand(bus);
   return bus;
 }

@@ -124,6 +124,99 @@ const ELEC_CHECK_SCHEMA = {
   additionalProperties: false
 };
 
+const COST_REPORT_SCHEMA = {
+  type: 'object',
+  properties: {
+    bom: {
+      type: 'array',
+      description: '物料明细；不传则使用当前场景 BOM（场景零件无物料号，会被计入「缺物料号」）',
+      items: {
+        type: 'object',
+        properties: {
+          partId: { type: 'string', description: '价格簿物料号，缺省则无法计价' },
+          name: { type: 'string' },
+          model: { type: 'string' },
+          category: { type: 'string' },
+          spec: { type: 'string' },
+          specs: { type: 'object', description: '结构化规格，可含「接线点数」' },
+          qty: { type: 'number', description: '正整数' },
+          terminationPoints: { type: 'number' },
+          assemblyMinutesPerUnit: { type: 'number' }
+        },
+        required: ['name', 'qty']
+      }
+    },
+    pricebook: { type: 'object', description: '价格簿 JSON；缺省读取桌面版内置价格簿（示例条目不计价）' },
+    placements: {
+      type: 'array',
+      description: '底板布置（毫米），用于线缆长度估算：id/partId/model/x/y/w/h',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          partId: { type: 'string' },
+          model: { type: 'string' },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          w: { type: 'number' },
+          h: { type: 'number' }
+        },
+        required: ['x', 'y']
+      }
+    },
+    plate: {
+      type: 'object',
+      description: '底板尺寸（毫米）与导轨，用于导轨/线槽辅材估算',
+      properties: {
+        width: { type: 'number' },
+        height: { type: 'number' },
+        rails: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              y: { type: 'number' },
+              height: { type: 'number' },
+              label: { type: 'string' }
+            }
+          }
+        }
+      },
+      required: ['width', 'height']
+    },
+    plc: {
+      type: 'object',
+      description: 'PLC 配置：ioPoints 点数 + modules 模块清单（partId/qty）',
+      properties: {
+        ioPoints: { type: 'number' },
+        modules: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { partId: { type: 'string' }, qty: { type: 'number' } },
+            required: ['partId']
+          }
+        }
+      },
+      required: ['modules']
+    },
+    options: {
+      type: 'object',
+      description: '报价参数：markupRate 加成率、taxRate 税率、freight 运费（元）',
+      properties: {
+        markupRate: { type: 'number' },
+        taxRate: { type: 'number' },
+        freight: { type: 'number' }
+      }
+    },
+    overrides: { type: 'object', description: '按物料号手工改价：{ partId: 单价 }' },
+    wireSection: { type: 'string', description: '线缆截面档位，如 "2.5"' },
+    now: { type: 'string', description: '计算基准时间（ISO 8601），用于核对价格时效' }
+  },
+  additionalProperties: false
+};
+
 export class AgentTools {
   private readonly registry: PackRegistry;
   private readonly commands: AgentCommandExecutor | undefined;
@@ -296,6 +389,18 @@ export class AgentTools {
           findings: findings.slice(0, 50),
           truncated: findings.length > 50
         };
+      }
+    });
+
+    this.add({
+      name: 'run_cost_report',
+      description:
+        '按 BOM 与价格簿计算机台硬件成本：硬件/辅材/人工小计、加成、税、运费与合计，附分类小计、缺价与告警；只读，不生成文件。未传 bom 时使用当前场景 BOM（场景零件没有物料号，会如实计入缺价而非按 0 处理）。',
+      inputSchema: COST_REPORT_SCHEMA,
+      handler: async (args) => {
+        const result = await this.execute('run_cost_report', args);
+        if (!result) return this.unavailable();
+        return commandSuccess(result);
       }
     });
 
