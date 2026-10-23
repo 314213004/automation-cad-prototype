@@ -196,13 +196,40 @@ UI 与 IPC：
 - **敏感信息**：`X-Design-Key` 等凭据不出现在日志与回执里，只显示掩码
 - **失败兜底**：模型故障或超时 → 降级为「只读建议」模式，不执行写操作
 
-## 7. 模型接入
+## 7. 已实现——流程模板
+
+`desktop/src/agent/recipes.ts` 内置 5 个纯数据模板（不含 LLM），每个模板都有 `id / title / steps[] / preconditions[] / estimatedSeconds`。步骤引用 `tools.ts` 注册表中的真实工具名，参数模板支持 `{ from: 'context.machine.name' }` 这类点路径占位符（可带 `default` / `optional`）。
+
+| id | 模板 | 步骤（有序工具） | 预计 |
+|---|---|---|---|
+| `new-machine` | 新机台快速起步 | `import_cad` → `get_bom` → `run_interference_check` → `run_electrical_check` → `run_cost_report` | 45s |
+| `plate-delivery` | 底板布置交付 | 缺尺寸检查（`get_bom`）→ 未放置件（`get_project_context`）→ 底板冲突（`run_interference_check`）→ 导出底板记录（`export_files`） | 20s |
+| `electrical-delivery` | 电气交付 | `run_electrical_check` → 修正提示（`get_project_context`）→ PLC 预检（`verify_plc_program`）→ 生成落盘（`run_plc_generate`）→ 交付 PDF（`export_files`） | 90s |
+| `cost-review` | 成本核对 | `get_bom` → `run_cost_report` → `export_cost_report(format=csv)` → 缺价件标注（`run_cost_report`） | 30s |
+| `full-package` | 整包交付 | 导入 CAD、BOM、干涉、电气、成本 → 导出 BOM / PDF → `run_plc_generate` | 180s |
+
+### 7.1 执行器
+
+`runRecipe(recipeId, ctx, executor)`：
+
+- **前置条件**：按点路径读取上下文（如 `context.machine.name`、`context.plate.width`、`context.bom`）；不满足时返回 `code='PRECONDITION_FAILED'`、`missing[]`（缺什么）与 `suggestions[]`（建议动作），`results` 为空且不调用任何工具。
+- **可跳过**：`skipSteps`（步骤 id / 工具名）、`skipIndexes`（0 基）或 `isSkipped(step,index)`；跳过的步骤不执行，结果标记 `skipped:true`、`code='SKIPPED'`。
+- **逐次确认**：写工具默认每一步都调用 `executor.confirm()`；只有显式 `rememberSameKind:true`（UI 勾选「本流程内同类操作不再询问」）才会在同类写操作后停止询问。默认关闭，拒绝返回 `USER_DENIED` 并停止。
+- **失败停止**：工具返回 `ok:false`、业务错误码或抛异常都会停止，保留此前成功步骤于 `completed/kept`，并给出中文 `summary/report`：失败步骤、错误码、建议、已完成清单。
+- **耗时**：`totalMs` 与每步 `elapsedMs` 均记录；`onProgress` 逐步骤发出 `source='recipe'` 的开始 / 结束 / 跳过事件。
+- **记录导出**：`recipeRunToMarkdown(result)` 输出 Markdown（模板、状态、总耗时、步骤表、失败详情、已完成 / 已跳过、参数摘要）。
+
+### 7.2 模型接入
 
 - 通道：本机 JSON-RPC `127.0.0.1:7420`（Bearer）+ MCP stdio（供外部 Agent 调用）
 - 模型：可配置本地（llama.cpp / Ollama）或远程 OpenAI 兼容端点；按任务路由（分类用小模型、规划用大模型）
 - 工具调用协议：OpenAI tools schema；对不支持 function calling 的模型走「JSON 文本 + 解析 + 重试一次」
 - 上下文预算：系统提示 ≤1.5k tokens，工具结果按需截断（列表类只回前 20 条 + 总数）
 - 离线优先：无网络时仍可用规则路由完成「查件、算成本、跑校验」这些确定性任务
+
+UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可取消勾选）→ 开始 → 步骤进度与结果 → 「导出本次执行记录」（Markdown）。IPC 为 `agent:recipe:execute` / `agent:recipe:cancel`，写操作仍弹主进程确认。
+
+测试与冒烟：`test/agent/recipes.test.mjs` 29 条；`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`，并校验流程下拉 UI。
 
 ## 8. 交互形态
 
@@ -339,9 +366,10 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 - 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`；`SMOKE_AGENT_TOOLS_V2 tools=17`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 801/801（P7-H 主动建议 21 条），其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 801/801）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 830/830（P7-I 流程模板 29 条、P7-H 主动建议 21 条），其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 830/830）
 - 评估集与回归 —— ✅ P7-G：58 条中文用例（17 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58 意图、58/58 工具、25/25 参数、5/5 超纲拒绝、5/5 多步）；真实模型冒烟 `matched=12/12`
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
 - 待补：写操作的逐步确认 UI（当前多步计划一次确认；单步模型工具调用仍是一次性弹窗）
+- 可复用流程 —— ✅ P7-I：5 个纯数据模板、占位符、前置条件拦截、步骤可跳过、写工具逐次确认（默认）、失败停止保留已完成、Markdown 记录；`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`

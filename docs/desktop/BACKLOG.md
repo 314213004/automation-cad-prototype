@@ -11,6 +11,16 @@
 - 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
 - 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
 
+## Agent 流程模板（P7-I，2026-10-23，本轮）
+
+- 状态：✅ 完成；不 push。
+- A. 模板：新增 `desktop/src/agent/recipes.ts`，5 个纯数据模板 `new-machine` / `plate-delivery` / `electrical-delivery` / `cost-review` / `full-package`；每个含 `id/title/summary/steps[]/preconditions[]/estimatedSeconds`，步骤全部引用现有 17 个注册工具，参数模板支持 `{from:'context.machine.name'}` 点路径占位符（含数组下标、`default`、`optional`）。
+- B. 执行器：`runRecipe(recipeId, ctx, executor)` 前置条件不满足返回 `PRECONDITION_FAILED` + 缺什么 + 建议动作且零执行；`skipSteps/skipIndexes/isSkipped` 支持取消勾选；写工具默认每步 `confirm()`，显式 `rememberSameKind` 才同类免问；任一步失败停止并保留 `completed/kept`，生成含失败步骤、错误码、建议与已完成清单的中文 `report`；记录 `totalMs` 与每步 `elapsedMs`。
+- C. UI/IPC：`agent:recipe:execute` / `agent:recipe:cancel`；侧栏「流程」下拉、前置条件红/绿、步骤复选框、开始/取消/导出 Markdown、分步进度与结果；写操作弹「流程写操作确认」，审计 `source='recipe'`。
+- D. 测试：新增 `desktop/test/agent/recipes.test.mjs` 29 条，覆盖 5 模板 schema（工具名必须存在于注册表）、重复 id/非法耗时、占位符解析/缺失/默认值、前置条件拦截与数值下限、失败停止保留已完成、跳过（id/工具名/下标）、默认逐次确认、同类免问、拒绝、无确认回调、耗时、中文报告与 Markdown 导出、未知模板。
+- E. 验收：`npx tsc --noEmit` 通过；`npm test` **830/830**（801 + 29）；`npm run smoke` → `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_RECIPE_UI_OK recipes=5 steps=5`、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）。
+- F. 文档：`docs/desktop/NL-AGENT.md` 第 7 节改为「已实现——流程模板」；README 智能体表与冒烟清单；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
+
 ## Agent 主动建议（P7-H，2026-10-23，本轮）
 
 - 状态：✅ 完成；未 push。

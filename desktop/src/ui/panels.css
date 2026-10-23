@@ -263,3 +263,34 @@
 .acp-advisor-ignore:hover{color:#ffc9c4}
 .acp-advisor-why{margin-top:4px;color:#9aa8a5;font-size:10px;line-height:1.55;word-break:break-word}
 .acp-advisor-action{margin-top:5px;color:#6fcfbf;font:9px/1.4 var(--font-mono,monospace)}
+
+/* P7-I：可复用流程模板 */
+.acp-recipe{margin-top:8px;padding:8px 9px;border:1px solid #3b444b;border-radius:4px;background:#1b1f23}
+.acp-recipe-pick{align-items:center}
+.acp-recipe-pick .acp-input{flex:1;min-width:0}
+.acp-recipe-preconditions{display:flex;flex-direction:column;gap:3px;margin:6px 0}
+.acp-recipe-pre{display:flex;justify-content:space-between;gap:8px;padding:3px 6px;border-radius:3px;background:#20252a;color:#aeb8bf;font-size:9px;line-height:1.5}
+.acp-recipe-pre.is-ok{color:#a9e8dc}
+.acp-recipe-pre.is-error{background:#332323;color:#ffc9c4}
+.acp-recipe-pre span:last-child{text-align:right;word-break:break-word}
+.acp-recipe-steps{display:flex;flex-direction:column;gap:5px;max-height:300px;overflow:auto;margin:6px 0}
+.acp-recipe-step{display:flex;gap:7px;padding:5px 6px;border:1px solid #30373d;border-radius:3px;background:#20252a}
+.acp-recipe-step input[type=checkbox]{flex:0 0 auto;margin:3px 0 0}
+.acp-recipe-step.is-running{border-color:#8a6f35;background:#28251d}
+.acp-recipe-step.is-done{border-color:#2a5b55;background:#1b2725}
+.acp-recipe-step.is-fail{border-color:#6d3c3c;background:#332323}
+.acp-recipe-step.is-skip{opacity:.65}
+.acp-recipe-step-icon{flex:0 0 18px;height:18px;border-radius:50%;background:#2a3137;color:#aeb8bf;font:10px/18px var(--font-mono,monospace);text-align:center}
+.acp-recipe-step.is-done .acp-recipe-step-icon{background:#2a5b55;color:#c9fff7}
+.acp-recipe-step.is-fail .acp-recipe-step-icon{background:#6d3c3c;color:#ffd7d2}
+.acp-recipe-step.is-running .acp-recipe-step-icon{background:#6b5a33;color:#f2dfaa}
+.acp-recipe-remember{display:flex;align-items:center;gap:6px;margin:4px 0}
+.acp-recipe-feedback{margin-top:6px;padding:5px 7px;border-radius:3px;background:#23282d;color:#aeb8bf;font-size:9px;line-height:1.55;word-break:break-word}
+.acp-recipe-feedback.is-error{background:#332323;color:#ffc9c4}
+.acp-recipe-feedback.is-ok{background:#1b2725;color:#a9e8dc}
+.acp-recipe-result{margin-top:7px}
+.acp-recipe-summary{padding:5px 7px;border-radius:3px;background:#23282d;color:#aeb8bf;font-size:9px;line-height:1.55}
+.acp-recipe-summary.is-ok{background:#1b2725;color:#a9e8dc}
+.acp-recipe-summary.is-error{background:#332323;color:#ffc9c4}
+.acp-recipe-completed{margin-top:5px;color:#9fb0ba;font:9px/1.7 var(--font-mono,monospace);word-break:break-word}
+.acp-recipe-report{margin:6px 0 0;padding:6px 7px;border:1px solid #30373d;border-radius:3px;background:#161a1e;color:#aeb8bf;font:9px/1.6 var(--font-mono,monospace);white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto}

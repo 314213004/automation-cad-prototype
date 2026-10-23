@@ -19,6 +19,7 @@ tools.ts（AgentTools + 17 个 AgentTool）
  ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
  │    ├─ planner.ts → 多步规划 plan() + 顺序执行 executePlan()（P7-C）
+ │    ├─ recipes.ts → 5 个流程模板 + runRecipe 前置条件/跳过/逐次确认/失败报告（P7-I）
  │    ├─ context.ts → 结构化上下文快照（≤1.5 KB）+ 历史工具清单文本块
  │    ├─ reference.ts → 选中/最近操作/几何三级指代消解（<0.6 不猜）
  │    ├─ memory.ts  → 最近 5 次工具调用摘要（仅内存）
@@ -75,6 +76,45 @@ interface Bridge {
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
 
 `get_bom` 的 BOM 由「当前 CAD 零件 + 已插入占位件」生成：序号递增、名称/型号取零件名、数量 1、材料 `—`，并带 `note` 说明这是简化 BOM。没有模型时返回空数组。
+
+## 可复用流程模板（P7-I）
+
+`recipes.ts` 与 `planner.ts` 一样是无 IO 的共享模块，渲染层用它做预览，主进程用它执行，单测用注入执行器验证。
+
+```ts
+RECIPES: Recipe[]  // 5 个：new-machine / plate-delivery / electrical-delivery / cost-review / full-package
+// Recipe = { id, title, summary, steps[], preconditions[], estimatedSeconds }
+// Step   = { id, title, tool, args, why }
+// Precondition = { id, label, from, action, nonEmpty?, min? }
+
+runRecipe(recipeId, ctx, executor): Promise<RecipeRunResult>
+// executor = { execute(step,index), confirm?(request), skipSteps?, skipIndexes?,
+//              isSkipped?, rememberSameKind?, signal?, now?, onProgress? }
+// → { ok, code, results[], completed[], kept[], skipped[], failedStep?, failedAt?,
+//     errorCode?, suggestion?, missing?, suggestions?, totalMs, summary, report, error? }
+```
+
+模板规则：
+
+| id | 标题 | 步骤 |
+|---|---|---|
+| `new-machine` | 新机台快速起步 | `import_cad` → `get_bom` → `run_interference_check` → `run_electrical_check` → `run_cost_report` |
+| `plate-delivery` | 底板布置交付 | `get_bom`（缺尺寸）→ `get_project_context`（未放置）→ `run_interference_check`（底板冲突）→ `export_files` |
+| `electrical-delivery` | 电气交付 | `run_electrical_check` → `get_project_context` → `verify_plc_program` → `run_plc_generate` → `export_files(pdf)` |
+| `cost-review` | 成本核对 | `get_bom` → `run_cost_report` → `export_cost_report(csv)` → `run_cost_report`（缺价件标注） |
+| `full-package` | 整包交付 | 导入 CAD、BOM、干涉、电气、成本 → `export_files(bom)` → `export_files(pdf)` → `run_plc_generate` |
+
+- **schema**：`validateRecipe` / `validateRecipes` 校验 id、标题、步骤 id/标题/工具/args/why、前置条件字段与 `estimatedSeconds`；工具名必须存在于 `DEFAULT_RECIPE_TOOL_NAMES`（或调用方传入的实时注册表名称）。
+- **占位符**：`resolveRecipeArgs(args, ctx)` 递归解析 `{from:'context.machine.name'}`、`{from:'context.bom.0.partId'}`，支持 `default` / `optional`；缺失返回点路径数组，执行时转为 `MISSING_CONTEXT` 并停止。
+- **前置条件**：`checkRecipePreconditions(recipe, ctx)` 支持字符串非空、数组非空与 `min`；失败返回 `code='PRECONDITION_FAILED'`，`missing` 是中文标签、`suggestions` 是建议动作，`results=[]` 且零工具调用。
+- **跳过与确认**：`skipSteps` 接受步骤 id / 工具名 / 1 基序号，`skipIndexes` 是 0 基；跳过的步骤标 `skipped:true`。写工具默认每步调用 `confirm()`；`rememberSameKind:true` 才在首个同类写操作后免问（UI 默认关）。没有确认回调时返回 `CONFIRMATION_REQUIRED`，绝不静默执行。
+- **失败与记录**：任一步 `ok:false` / 业务码 / 异常都会停止，`completed/kept` 保留成功步骤；`suggest` 生成中文建议，`report` 写明失败步骤、错误码、建议与已完成清单。每步 `elapsedMs`、总计 `totalMs` 由注入时钟记录。
+- **Markdown**：`recipeRunToMarkdown(result)` 输出模板、状态、耗时、步骤表、失败详情、已完成 / 已跳过与参数摘要，侧栏「导出本次执行记录」直接写 `.md`。
+
+IPC / UI：
+- `agent:recipe:execute` 接收 `{recipeId, context?, skipSteps?, rememberSameKind?}`，主进程再次走 `runRecipe`，写步骤弹「流程写操作确认」，审计 `source='recipe'`，进度事件 `source='recipe'` 复用 `agent:progress`；`agent:recipe:cancel` 中断当前流程。
+- 侧栏「流程」区：下拉 5 个模板、前置条件红/绿、步骤复选框、`开始` / `取消流程` / `导出本次执行记录`；执行中步骤 `…`，完成 `✓`，失败 `×`，跳过 `—`。
+- 冒烟：`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`；`SMOKE_AGENT_RECIPE_UI_OK recipes=5 steps=5`。
 
 ## 离线路由 / 上下文 / 审计（P7-A）
 
@@ -344,10 +384,11 @@ interface AdvisorProjectState {
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 801/801（P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 830/830（P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 58 条，覆盖 17 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
+- ✅ P7-I 可复用流程：`recipes.ts` 5 个纯数据模板 + `runRecipe` 前置条件/跳过/逐次确认/失败报告/Markdown；侧栏流程下拉与执行记录导出
 - ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 
 ## 待办

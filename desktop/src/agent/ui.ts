@@ -46,6 +46,17 @@ import {
   type AdvisorSuggestion
 } from './advisor.ts';
 import { READ_ONLY_TOOLS } from './router.ts';
+import {
+  RECIPES,
+  checkRecipePreconditions,
+  getRecipe,
+  recipeRunToMarkdown,
+  resolveRecipeArgs,
+  type Recipe,
+  type RecipeContext,
+  type RecipeRunResult,
+  type RecipeStep
+} from './recipes.ts';
 import { unwrapToolResultData } from './guard.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
@@ -124,6 +135,27 @@ interface MultiPlanState {
 
 let multiPlan: MultiPlanState | null = null;
 
+interface RecipeUiState {
+  selectedId: string;
+  skipped: Set<string>;
+  running: boolean;
+  result: RecipeRunResult | null;
+  feedback: string;
+  tone: 'ok' | 'error' | '';
+  live: Map<number, LiveProgress>;
+}
+
+const firstRecipeId = RECIPES[0]?.id ?? '';
+let recipeUi: RecipeUiState = {
+  selectedId: firstRecipeId,
+  skipped: new Set<string>(),
+  running: false,
+  result: null,
+  feedback: '',
+  tone: '',
+  live: new Map<number, LiveProgress>()
+};
+
 function serviceAddress(info: AgentInfo): string {
   if (info.host && info.port) return `${info.host}:${info.port}`;
   if (info.url) return info.url.replace(/^https?:\/\//, '');
@@ -194,6 +226,29 @@ function renderShell(): void {
           <button type="button" class="acp-btn" id="agentPlanCancel">取消</button>
         </div>
       </div>
+    </div>
+
+    <div class="acp-section-title">流程 <b id="agentRecipeCount">${RECIPES.length} 个模板</b></div>
+    <div class="acp-recipe" id="agentRecipePanel" data-recipe-id="${escapeHtml(recipeUi.selectedId)}">
+      <div class="acp-row acp-recipe-pick">
+        <select class="acp-input" id="agentRecipeSelect" aria-label="选择流程模板">
+          ${RECIPES.map((recipe) => `<option value="${escapeHtml(recipe.id)}">${escapeHtml(recipe.title)}</option>`).join('')}
+        </select>
+        <span class="acp-pill" id="agentRecipeEstimate">≈ —</span>
+      </div>
+      <div class="acp-note" id="agentRecipeSummary"></div>
+      <div class="acp-recipe-preconditions" id="agentRecipePreconditions"></div>
+      <div class="acp-recipe-steps" id="agentRecipeSteps"></div>
+      <label class="acp-note acp-recipe-remember">
+        <input type="checkbox" id="agentRecipeRemember"> 本流程内同类操作不再询问（默认关）
+      </label>
+      <div class="acp-row">
+        <button type="button" class="acp-btn acp-btn-primary" id="agentRecipeStart">开始</button>
+        <button type="button" class="acp-btn" id="agentRecipeCancel" hidden>取消流程</button>
+        <button type="button" class="acp-btn" id="agentRecipeExport" hidden>导出本次执行记录</button>
+      </div>
+      <div class="acp-recipe-feedback" id="agentRecipeFeedback" hidden></div>
+      <div class="acp-recipe-result" id="agentRecipeResult"></div>
     </div>
 
     <div class="acp-section-title">模型设置 <b>OpenAI 兼容</b></div>
@@ -274,6 +329,7 @@ function renderShell(): void {
   fillConfig();
   renderMessages();
   renderPreview();
+  renderRecipe();
   renderAudit();
   renderAdvisor();
   updateBusyState();
@@ -464,6 +520,10 @@ function applyProgress(event: DesktopAgentProgressEvent): void {
       code: event.code ?? (event.ok ? 'OK' : 'FAILED')
     });
   }
+  if (event.source === 'recipe') {
+    recipeUi.live.set(event.index, next);
+    renderRecipe();
+  }
   renderProgress();
   if (event.phase === 'end') void refreshAdvisor();
   if (progressSteps.some((step) => step.elapsedMs === undefined)) startProgressTicker();
@@ -622,6 +682,212 @@ function currentAgentContext(): AgentContext {
     raw = null;
   }
   return collectAgentContext({ projectContext: () => raw });
+}
+
+/**
+ * 流程预览与执行需要比对话更多的上下文：CAD 源路径与 BOM 行。
+ * 这些信息只用于模板占位符解析，不写入磁盘。
+ */
+function currentRecipeContext(): RecipeContext {
+  const base = currentAgentContext();
+  let cadPath = '';
+  try {
+    const scene = window.__AgentBridge?.getScene?.() as unknown;
+    if (scene && typeof scene === 'object' && !('message' in scene)) {
+      const source = (scene as Record<string, unknown>).source;
+      if (typeof source === 'string') cadPath = source;
+    }
+  } catch {
+    cadPath = '';
+  }
+  let bom: unknown[] = [];
+  try {
+    const rows = window.__AgentBridge?.getBom?.() as unknown;
+    if (Array.isArray(rows)) bom = rows;
+  } catch {
+    bom = [];
+  }
+  return { ...base, cadPath, bom } as RecipeContext;
+}
+
+function recipeStepIcon(index: number, step: RecipeStep, skipped: boolean): { tone: string; icon: string } {
+  const result = recipeUi.result?.results.find((item) => item.stepId === step.id);
+  if (result) {
+    if (result.skipped) return { tone: 'is-skip', icon: '—' };
+    return result.ok ? { tone: 'is-done', icon: '✓' } : { tone: 'is-fail', icon: '×' };
+  }
+  if (skipped) return { tone: 'is-skip', icon: '—' };
+  const live = recipeUi.live.get(index + 1);
+  if (live && live.elapsedMs === undefined) return { tone: 'is-running', icon: '…' };
+  if (live && live.ok === false) return { tone: 'is-fail', icon: '×' };
+  if (live && live.ok === true) return { tone: 'is-done', icon: '✓' };
+  return { tone: 'is-pending', icon: String(index + 1) };
+}
+
+/** 流程卡片：模板下拉 → 前置条件/步骤预览（可取消勾选）→ 开始 → 结果与导出。 */
+function renderRecipe(): void {
+  const panel = body?.querySelector<HTMLElement>('#agentRecipePanel');
+  if (!panel) return;
+  const recipe = getRecipe(recipeUi.selectedId) ?? RECIPES[0];
+  if (!recipe) return;
+  panel.dataset.recipeId = recipe.id;
+  panel.dataset.running = recipeUi.running ? '1' : '0';
+  const select = body?.querySelector<HTMLSelectElement>('#agentRecipeSelect');
+  if (select) select.value = recipe.id;
+  const estimate = body?.querySelector<HTMLElement>('#agentRecipeEstimate');
+  if (estimate) estimate.textContent = `≈ ${recipe.estimatedSeconds}s`;
+  const summary = body?.querySelector<HTMLElement>('#agentRecipeSummary');
+  if (summary) summary.textContent = recipe.summary;
+
+  const ctx = currentRecipeContext();
+  const pre = checkRecipePreconditions(recipe, ctx);
+  const preBox = body?.querySelector<HTMLElement>('#agentRecipePreconditions');
+  if (preBox) {
+    if (recipe.preconditions.length === 0) {
+      preBox.innerHTML = '<div class="acp-recipe-pre is-ok"><span>✓ 无前置条件</span><span>可直接开始</span></div>';
+    } else {
+      preBox.innerHTML = recipe.preconditions.map((rule) => {
+        const met = !pre.missing.some((item) => item.id === rule.id);
+        return `<div class="acp-recipe-pre ${met ? 'is-ok' : 'is-error'}">
+          <span>${met ? '✓' : '×'} ${escapeHtml(rule.label)}</span>
+          <span>${escapeHtml(met ? '已满足' : rule.action)}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  const stepsBox = body?.querySelector<HTMLElement>('#agentRecipeSteps');
+  if (stepsBox) {
+    stepsBox.innerHTML = recipe.steps.map((step, index) => {
+      const skipped = recipeUi.skipped.has(step.id);
+      const status = recipeStepIcon(index, step, skipped);
+      const resolved = resolveRecipeArgs(step.args, ctx);
+      const missing = resolved.missing.length > 0
+        ? `<span class="acp-plan-missing">缺 ${escapeHtml(resolved.missing.join('、'))}</span>`
+        : '';
+      const readOnly = READ_ONLY_TOOLS.has(step.tool);
+      return `<label class="acp-recipe-step ${status.tone}">
+        <input type="checkbox" data-recipe-step="${escapeHtml(step.id)}" ${skipped ? '' : 'checked'} ${recipeUi.running ? 'disabled' : ''}>
+        <span class="acp-recipe-step-icon">${status.icon}</span>
+        <span class="acp-plan-step-main">
+          <span class="acp-plan-step-head"><b>${index + 1}. ${escapeHtml(step.title)}</b>${missing}<span class="acp-plan-io">${readOnly ? '只读' : '写'}</span></span>
+          <span class="acp-plan-step-args">${escapeHtml(step.tool)} · ${escapeHtml(summarizeArguments(resolved.args))}</span>
+          <span class="acp-plan-step-why">${escapeHtml(step.why)}</span>
+        </span>
+      </label>`;
+    }).join('');
+  }
+
+  const feedback = body?.querySelector<HTMLElement>('#agentRecipeFeedback');
+  if (feedback) {
+    feedback.hidden = !recipeUi.feedback;
+    feedback.textContent = recipeUi.feedback;
+    feedback.classList.toggle('is-error', recipeUi.tone === 'error');
+    feedback.classList.toggle('is-ok', recipeUi.tone === 'ok');
+  }
+
+  const resultBox = body?.querySelector<HTMLElement>('#agentRecipeResult');
+  const result = recipeUi.result;
+  if (resultBox) {
+    if (!result) {
+      resultBox.innerHTML = '';
+    } else {
+      const completed = result.completed.length > 0
+        ? result.completed.map((item) => `✓ 第 ${item.step} 步 ${escapeHtml(item.title)}（${formatDuration(item.elapsedMs)}）`).join('<br>')
+        : '无';
+      const skipped = result.skipped.length > 0
+        ? `<div class="acp-note">已跳过：${result.skipped.map((item) => escapeHtml(item.title)).join('、')}</div>`
+        : '';
+      resultBox.innerHTML = `<div class="acp-recipe-summary ${result.ok ? 'is-ok' : 'is-error'}">${escapeHtml(result.summary)}</div>
+        <div class="acp-note">总耗时 ${formatDuration(result.totalMs)} · 完成 ${result.completed.length} 步${result.skipped.length > 0 ? ` · 跳过 ${result.skipped.length} 步` : ''}</div>
+        <div class="acp-recipe-completed">${completed}</div>
+        ${skipped}
+        ${result.report ? `<pre class="acp-recipe-report">${escapeHtml(result.report)}</pre>` : ''}`;
+    }
+  }
+
+  const start = body?.querySelector<HTMLButtonElement>('#agentRecipeStart');
+  if (start) {
+    start.disabled = recipeUi.running;
+    start.textContent = recipeUi.running ? '执行中…' : '开始';
+  }
+  const cancel = body?.querySelector<HTMLButtonElement>('#agentRecipeCancel');
+  if (cancel) cancel.hidden = !recipeUi.running;
+  const exportButton = body?.querySelector<HTMLButtonElement>('#agentRecipeExport');
+  if (exportButton) exportButton.hidden = !result;
+  const remember = body?.querySelector<HTMLInputElement>('#agentRecipeRemember');
+  if (remember) remember.disabled = recipeUi.running;
+}
+
+async function startRecipe(): Promise<void> {
+  if (!window.desktop || recipeUi.running) return;
+  const recipe = getRecipe(recipeUi.selectedId);
+  if (!recipe) return;
+  if (thinking || multiPlan?.running) {
+    recipeUi.feedback = '当前有对话或计划正在执行，完成后再启动流程。';
+    recipeUi.tone = 'error';
+    renderRecipe();
+    return;
+  }
+  const remember = body?.querySelector<HTMLInputElement>('#agentRecipeRemember')?.checked === true;
+  recipeUi.running = true;
+  recipeUi.result = null;
+  recipeUi.live.clear();
+  recipeUi.feedback = `正在执行「${recipe.title}」…`;
+  recipeUi.tone = '';
+  resetProgress();
+  renderRecipe();
+  updateBusyState();
+  try {
+    const result = await window.desktop.agent.recipe.execute({
+      recipeId: recipe.id,
+      context: { ...currentRecipeContext() },
+      skipSteps: [...recipeUi.skipped],
+      rememberSameKind: remember
+    });
+    recipeUi.result = result;
+    recipeUi.feedback = result.summary;
+    recipeUi.tone = result.ok ? 'ok' : 'error';
+    if (!result.ok) chatFeedback(result.summary, true);
+  } catch (error) {
+    recipeUi.feedback = `流程执行失败：${errorMessage(error)}`;
+    recipeUi.tone = 'error';
+  } finally {
+    recipeUi.running = false;
+    renderRecipe();
+    updateBusyState();
+    void loadAudit();
+    void refreshAdvisor();
+  }
+}
+
+async function cancelRecipe(): Promise<void> {
+  if (!window.desktop || !recipeUi.running) return;
+  recipeUi.feedback = '正在取消流程…';
+  recipeUi.tone = 'error';
+  renderRecipe();
+  try {
+    await window.desktop.agent.recipe.cancel();
+  } catch (error) {
+    recipeUi.feedback = `取消失败：${errorMessage(error)}`;
+    recipeUi.tone = 'error';
+    renderRecipe();
+  }
+}
+
+async function exportRecipeRecord(): Promise<void> {
+  if (!window.desktop || !recipeUi.result) return;
+  const markdown = recipeRunToMarkdown(recipeUi.result);
+  const safeTitle = (recipeUi.result.recipeTitle || recipeUi.result.recipeId).replace(/[\\/:*?"<>|]/g, '_');
+  try {
+    const result = await window.desktop.exportFile(`流程执行记录-${safeTitle}.md`, markdown);
+    recipeUi.feedback = result.canceled ? '已取消导出，未写入文件。' : `已导出执行记录：${result.path ?? `流程执行记录-${safeTitle}.md`}`;
+    recipeUi.tone = result.canceled ? '' : 'ok';
+  } catch (error) {
+    recipeUi.feedback = `导出失败：${errorMessage(error)}`;
+    recipeUi.tone = 'error';
+  }
+  renderRecipe();
 }
 
 const EMPTY_ADVISOR_STATE: AdvisorProjectState = {
@@ -931,7 +1197,7 @@ function renderMultiPlan(): void {
 
 async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
   const state = multiPlan;
-  if (!state || state.running || thinking || state.plan.refused || !window.desktop) return;
+  if (!state || state.running || thinking || recipeUi.running || state.plan.refused || !window.desktop) return;
   if (state.next >= state.plan.steps.length) return;
   state.running = true;
   state.feedback = '';
@@ -1135,7 +1401,7 @@ function updateBusyState(): void {
   const send = body?.querySelector<HTMLButtonElement>('#agentChatSend');
   const clear = body?.querySelector<HTMLButtonElement>('#agentChatClear');
   const cancel = body?.querySelector<HTMLButtonElement>('#agentChatCancel');
-  const busy = thinking || multiPlan?.running === true;
+  const busy = thinking || multiPlan?.running === true || recipeUi.running;
   if (send) {
     send.disabled = busy;
     send.textContent = thinking ? '思考中…' : '发送';
@@ -1170,7 +1436,7 @@ function lastTurnMessages(): Array<{ role: string; content?: string | null }> {
 }
 
 async function sendMessage(): Promise<void> {
-  if (!body || thinking || multiPlan?.running) return;
+  if (!body || thinking || multiPlan?.running || recipeUi.running) return;
   const input = fieldElement('agentChatInput');
   const text = input?.value.trim() ?? '';
   if (!text) return;
@@ -1279,6 +1545,26 @@ async function testSettings(): Promise<void> {
 function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatSend')?.addEventListener('click', () => { void sendMessage(); });
   body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
+  body?.querySelector<HTMLSelectElement>('#agentRecipeSelect')?.addEventListener('change', (event) => {
+    recipeUi.selectedId = (event.target as HTMLSelectElement).value;
+    recipeUi.skipped.clear();
+    recipeUi.result = null;
+    recipeUi.live.clear();
+    recipeUi.feedback = '';
+    recipeUi.tone = '';
+    renderRecipe();
+  });
+  body?.querySelector<HTMLElement>('#agentRecipeSteps')?.addEventListener('change', (event) => {
+    const target = event.target as HTMLInputElement;
+    const id = target?.dataset?.recipeStep;
+    if (!id) return;
+    if (target.checked) recipeUi.skipped.delete(id);
+    else recipeUi.skipped.add(id);
+    renderRecipe();
+  });
+  body?.querySelector<HTMLButtonElement>('#agentRecipeStart')?.addEventListener('click', () => { void startRecipe(); });
+  body?.querySelector<HTMLButtonElement>('#agentRecipeCancel')?.addEventListener('click', () => { void cancelRecipe(); });
+  body?.querySelector<HTMLButtonElement>('#agentRecipeExport')?.addEventListener('click', () => { void exportRecipeRecord(); });
   body?.querySelector<HTMLButtonElement>('#agentPlanRunAll')?.addEventListener('click', () => { void runMultiPlan('all'); });
   body?.querySelector<HTMLButtonElement>('#agentPlanRunStep')?.addEventListener('click', () => { void runMultiPlan('step'); });
   body?.querySelector<HTMLButtonElement>('#agentPlanCancel')?.addEventListener('click', () => { void cancelMultiPlan(); });

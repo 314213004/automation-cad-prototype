@@ -36,7 +36,7 @@ export interface AgentProgressEvent {
   ok?: boolean;
   code?: string;
   message?: string;
-  source?: 'chat' | 'plan';
+  source?: 'chat' | 'plan' | 'recipe';
 }
 
 export const LONG_STEP_MS = 10_000;

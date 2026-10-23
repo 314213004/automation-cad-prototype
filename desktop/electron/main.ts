@@ -14,6 +14,7 @@ import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
 import { executePlan, plan } from '../src/agent/planner';
+import { RECIPES, runRecipe } from '../src/agent/recipes';
 import {
   buildAgentContext,
   collectAgentContext,
@@ -1258,6 +1259,50 @@ function createWindow(): BrowserWindow {
         }
         console.log(`SMOKE_AGENT_CHAT_UI_OK fields=${chatUi.fields} log=${chatUi.log}`);
 
+        // P7-I：流程下拉、步骤预览与「开始 / 导出执行记录」按钮。
+        const recipeUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const select = document.getElementById('agentRecipeSelect');
+            const panel = document.getElementById('agentRecipePanel');
+            if (!select || !panel) return { error: 'missing_recipe_panel' };
+            const options = select.querySelectorAll('option').length;
+            const before = panel.querySelectorAll('.acp-recipe-step').length;
+            select.value = 'cost-review';
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            await wait(80);
+            const after = panel.querySelectorAll('.acp-recipe-step').length;
+            return {
+              options,
+              before,
+              after,
+              start: Boolean(document.getElementById('agentRecipeStart')),
+              exportButton: Boolean(document.getElementById('agentRecipeExport')),
+              preconditions: panel.querySelectorAll('.acp-recipe-pre').length,
+              remember: document.getElementById('agentRecipeRemember')?.checked === false
+            };
+          })()`
+        ) as {
+          error?: string;
+          options: number;
+          before: number;
+          after: number;
+          start: boolean;
+          exportButton: boolean;
+          preconditions: number;
+          remember: boolean;
+        };
+        if (
+          recipeUi.error || recipeUi.options !== 5 || recipeUi.before !== 5 ||
+          recipeUi.after !== 4 || !recipeUi.start || !recipeUi.exportButton ||
+          recipeUi.preconditions !== 1 || !recipeUi.remember
+        ) {
+          console.error('SMOKE_FAIL agent_recipe_ui', JSON.stringify(recipeUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_RECIPE_UI_OK recipes=${recipeUi.options} steps=${recipeUi.before}`);
+
         // P7-A-2：侧栏计划预览（只读可离线 / 写操作需联网）+ 审计面板
         const auditUiFile = join(app.getPath('userData'), 'agent-audit.jsonl');
         appendFileSync(
@@ -1449,6 +1494,39 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_PLAN_OK steps=${planned.steps.length} confirm=${planConfirms}`);
+
+        // P7-I：流程模板执行——5 个模板、5 步流程、第 3 步注入失败、保留前 2 步。
+        const recipeSmoke = await runRecipe('new-machine', {
+          machine: { name: 'SF-2026-01' },
+          cadPath: 'D:\\models\\smoke.step'
+        }, {
+          confirm: async () => true,
+          execute: async (step) => {
+            if (step.id === 'interference') {
+              return { ok: false, code: 'SMOKE_INJECTED', message: '冒烟注入失败' };
+            }
+            return { ok: true, data: { smoke: step.id } };
+          }
+        });
+        const recipeFailed = recipeSmoke.results.filter((item) => !item.ok && !item.skipped).length;
+        if (
+          RECIPES.length !== 5 ||
+          (RECIPES.find((recipe) => recipe.id === 'new-machine')?.steps.length ?? 0) !== 5 ||
+          recipeSmoke.ok ||
+          recipeFailed !== 1 ||
+          recipeSmoke.kept.length !== 2
+        ) {
+          console.error('SMOKE_FAIL agent_recipe', JSON.stringify({
+            recipes: RECIPES.length,
+            steps: (RECIPES.find((recipe) => recipe.id === 'new-machine')?.steps.length ?? 0),
+            failed: recipeFailed,
+            kept: recipeSmoke.kept.length,
+            summary: recipeSmoke.summary
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_RECIPE_OK recipes=${RECIPES.length} steps=${(RECIPES.find((recipe) => recipe.id === 'new-machine')?.steps.length ?? 0)} failed=${recipeFailed} kept=${recipeSmoke.kept.length}`);
 
         // P7-A：离线规则路由 + 上下文裁剪 + 审计脱敏（无网络也必须是真实覆盖）
         const nlSamples = [

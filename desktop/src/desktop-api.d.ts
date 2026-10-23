@@ -281,12 +281,53 @@ interface DesktopAgentPlanExecuteResult {
   undoHint?: string;
 }
 
+interface DesktopAgentRecipeStepResult {
+  index: number;
+  step: number;
+  stepId: string;
+  title: string;
+  tool: string;
+  ok: boolean;
+  skipped: boolean;
+  code: string;
+  message?: string;
+  elapsedMs: number;
+  args?: Record<string, unknown>;
+  data?: unknown;
+  suggestion?: string;
+}
+
+interface DesktopAgentRecipeRunResult {
+  ok: boolean;
+  code: string;
+  recipeId: string;
+  recipeTitle: string;
+  runId: string;
+  results: DesktopAgentRecipeStepResult[];
+  completed: DesktopAgentRecipeStepResult[];
+  kept: DesktopAgentRecipeStepResult[];
+  skipped: DesktopAgentRecipeStepResult[];
+  failedStep?: DesktopAgentRecipeStepResult;
+  failedAt?: number;
+  failedTool?: string;
+  errorCode?: string;
+  suggestion?: string;
+  missing?: string[];
+  suggestions?: string[];
+  preconditionFailed?: boolean;
+  totalMs: number;
+  summary: string;
+  report: string;
+  confirmations?: number;
+  error?: { code: string; message: string; missing?: string[]; suggestions?: string[] };
+}
+
 interface DesktopAgentAuditEntry {
   at: string;
   tool: string;
   ok: boolean;
   code?: string;
-  source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan';
+  source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan' | 'recipe';
   args?: Record<string, unknown>;
   message?: string;
   elapsedMs?: number;
@@ -324,18 +365,20 @@ interface AgentCompletedStep {
 
 interface DesktopAgentProgressEvent {
   runId: string;
-  phase: 'start' | 'end';
+  phase: 'start' | 'end' | 'skip';
   index: number;
   total: number;
   tool: string;
   argsSummary: string;
   startedAt: number;
   callId?: string;
+  stepId?: string;
+  title?: string;
   elapsedMs?: number;
   ok?: boolean;
   code?: string;
   message?: string;
-  source?: 'chat' | 'plan';
+  source?: 'chat' | 'plan' | 'recipe';
 }
 
 interface AgentBridgeFailure {
@@ -548,6 +591,15 @@ interface Window {
           startAt?: number;
           maxSteps?: number;
         }): Promise<DesktopAgentPlanExecuteResult>;
+        cancel(): Promise<{ ok: boolean; cancelled: boolean; message?: string }>;
+      };
+      recipe: {
+        execute(payload: {
+          recipeId: string;
+          context?: Record<string, unknown>;
+          skipSteps?: string[];
+          rememberSameKind?: boolean;
+        }): Promise<DesktopAgentRecipeRunResult>;
         cancel(): Promise<{ ok: boolean; cancelled: boolean; message?: string }>;
       };
       onProgress(callback: (progress: DesktopAgentProgressEvent) => void): () => void;

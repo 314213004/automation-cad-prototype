@@ -48,6 +48,10 @@ const desktopApi = {
       execute: (payload: unknown) => ipcRenderer.invoke('agent:plan:execute', payload),
       cancel: () => ipcRenderer.invoke('agent:plan:cancel')
     },
+    recipe: {
+      execute: (payload: unknown) => ipcRenderer.invoke('agent:recipe:execute', payload),
+      cancel: () => ipcRenderer.invoke('agent:recipe:cancel')
+    },
     onProgress: (callback: (progress: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress);
       ipcRenderer.on('agent:progress', listener);

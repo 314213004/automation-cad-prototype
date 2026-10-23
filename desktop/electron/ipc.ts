@@ -25,6 +25,7 @@ import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentCancelledError, AgentSession } from '../src/agent/session.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
+import { runRecipe, type RecipeContext, type RecipeProgressEvent } from '../src/agent/recipes.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import { AUDIT_DISPLAY_LIMIT, limitAuditEntries } from '../src/agent/audit-view.ts';
 import type { AgentProgressEvent } from '../src/agent/feedback.ts';
@@ -705,6 +706,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   let session: AgentSession | null = null;
   let activeChat: AbortController | null = null;
   let activePlan: AbortController | null = null;
+  let activeRecipe: AbortController | null = null;
 
   const clearSession = (): void => {
     session = null;
@@ -946,6 +948,142 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     return { ...result, confirmations: confirmCount };
   });
 
+  // P7-I：流程模板执行。模板与占位符在共享模块中解析，主进程只负责逐步骤确认、审计与进度。
+  ipcMain.handle('agent:recipe:execute', async (event, payload: unknown) => {
+    const tools = context.getTools();
+    const bus = context.getBus();
+    let recipeId = '';
+    if (!tools || !bus) {
+      return {
+        ok: false,
+        code: 'AGENT_UNAVAILABLE',
+        recipeId,
+        recipeTitle: '',
+        runId: '',
+        results: [],
+        completed: [],
+        kept: [],
+        skipped: [],
+        totalMs: 0,
+        summary: '智能体服务尚未启动',
+        report: '智能体服务尚未启动，未执行任何步骤。',
+        error: { code: 'AGENT_UNAVAILABLE', message: '智能体服务尚未启动' }
+      };
+    }
+
+    let ctx: RecipeContext = {};
+    let skipSteps: string[] = [];
+    let rememberSameKind = false;
+    try {
+      if (typeof payload !== 'object' || payload === null) throw new Error('流程参数必须是对象');
+      const source = payload as Record<string, unknown>;
+      recipeId = typeof source.recipeId === 'string' ? source.recipeId.trim() : '';
+      if (!recipeId) throw new Error('缺少 recipeId');
+      if (source.context !== undefined) {
+        if (typeof source.context !== 'object' || source.context === null || Array.isArray(source.context)) {
+          throw new Error('context 必须是对象');
+        }
+        ctx = { ...(source.context as Record<string, unknown>) } as RecipeContext;
+      }
+      skipSteps = Array.isArray(source.skipSteps)
+        ? source.skipSteps.filter((value): value is string => typeof value === 'string')
+        : [];
+      rememberSameKind = source.rememberSameKind === true;
+    } catch (error) {
+      return {
+        ok: false,
+        code: 'INVALID_ARGUMENT',
+        recipeId,
+        recipeTitle: '',
+        runId: '',
+        results: [],
+        completed: [],
+        kept: [],
+        skipped: [],
+        totalMs: 0,
+        summary: `流程参数无效：${error instanceof Error ? error.message : String(error)}`,
+        report: `流程参数无效：${error instanceof Error ? error.message : String(error)}`,
+        error: { code: 'INVALID_ARGUMENT', message: error instanceof Error ? error.message : String(error) }
+      };
+    }
+
+    if (Object.keys(ctx).length === 0) {
+      try {
+        const project = await bus.execute('get_project_context');
+        if (project.ok) {
+          ctx = { ...collectAgentContext({ projectContext: () => project.data }) } as RecipeContext;
+        }
+      } catch {
+        ctx = {};
+      }
+    }
+    if (!Array.isArray(ctx.bom)) {
+      try {
+        const bom = await bus.execute('get_bom');
+        if (bom.ok && Array.isArray(bom.data)) ctx.bom = bom.data;
+      } catch {
+        // BOM 只影响成本流程前置条件；读取失败时让前置条件如实拦截。
+      }
+    }
+
+    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
+    const audit = createAuditLog({ write: (line) => appendFileSync(auditFile, `${line}
+`, 'utf8') });
+    let confirmCount = 0;
+    const controller = new AbortController();
+    activeRecipe = controller;
+    const emitProgress = (progress: RecipeProgressEvent): void => {
+      if (!event.sender.isDestroyed()) event.sender.send('agent:progress', progress);
+    };
+    const result = await runRecipe(recipeId, ctx, {
+      signal: controller.signal,
+      skipSteps,
+      rememberSameKind,
+      onProgress: emitProgress,
+      confirm: async (request) => {
+        confirmCount += 1;
+        const window = context.getWindow();
+        if (!window || window.isDestroyed()) return false;
+        const detail = `${request.tool} ${JSON.stringify(request.args)}`;
+        const response = await dialog.showMessageBox(window, {
+          type: 'question',
+          title: '流程写操作确认',
+          message: request.message,
+          detail: detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail,
+          buttons: ['允许', '拒绝'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true
+        });
+        return response.response === 0;
+      },
+      execute: async (step, _index, signal) => {
+        const stepStarted = Date.now();
+        const outcome = await tools.call(step.tool, step.args, signal);
+        const record = typeof outcome === 'object' && outcome !== null
+          ? outcome as Record<string, unknown>
+          : null;
+        const ok = record ? record.ok !== false : true;
+        const code = record && typeof record.code === 'string'
+          ? record.code
+          : record && typeof record.error === 'object' && record.error !== null && typeof (record.error as Record<string, unknown>).code === 'string'
+            ? String((record.error as Record<string, unknown>).code)
+            : undefined;
+        audit.record({
+          tool: step.tool,
+          ok,
+          source: 'recipe',
+          args: step.args,
+          elapsedMs: Math.max(0, Date.now() - stepStarted),
+          ...(code ? { code } : {})
+        });
+        return outcome;
+      }
+    });
+    if (activeRecipe === controller) activeRecipe = null;
+    return { ...result, confirmations: confirmCount };
+  });
+
   ipcMain.handle('agent:chat:cancel', () => {
     if (!activeChat) return { ok: true, cancelled: false, message: '当前没有执行中的对话' };
     activeChat.abort();
@@ -955,6 +1093,12 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   ipcMain.handle('agent:plan:cancel', () => {
     if (!activePlan) return { ok: true, cancelled: false, message: '当前没有执行中的计划' };
     activePlan.abort();
+    return { ok: true, cancelled: true };
+  });
+
+  ipcMain.handle('agent:recipe:cancel', () => {
+    if (!activeRecipe) return { ok: true, cancelled: false, message: '当前没有执行中的流程' };
+    activeRecipe.abort();
     return { ok: true, cancelled: true };
   });
 
