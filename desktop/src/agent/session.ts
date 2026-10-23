@@ -11,6 +11,8 @@ import {
 import { AgentMemory, summarizeToolCall } from './memory.ts';
 import { serializeToolResult } from './trim.ts';
 import { DATA_POLICY_PROMPT, guardToolResult } from './guard.ts';
+import { repairToolCall } from './repair.ts';
+import { buildFallbackReply, buildRetryPrompt } from './retry.ts';
 import {
   cancellationText,
   summarizeArguments,
@@ -30,6 +32,8 @@ export interface AgentSessionOptions {
   offlineFallback?: boolean;
   /** 每轮对话开始时采集 UI 上下文；失败按空快照处理，不阻断对话。 */
   contextProvider?: () => AgentContext | null | Promise<AgentContext | null>;
+  /** 工具参数 JSON Schema（name → schema）；用于模型脏输出纠错。 */
+  toolSchemas?: Record<string, unknown> | ((name: string) => unknown);
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
@@ -135,6 +139,10 @@ function failedTool(code: string, message: string): Record<string, unknown> {
   return { ok: false, error: { code, message } };
 }
 
+type PreparedToolCalls =
+  | { ok: true; calls: LlmToolCall[]; repairs: string[] }
+  | { ok: false; reason: string; repairs: string[] };
+
 export class AgentSession {
   private readonly llm: LlmClient;
   private readonly bus: AgentCommandExecutor;
@@ -144,6 +152,7 @@ export class AgentSession {
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private readonly offlineFallback: boolean;
   private readonly contextProvider: AgentSessionOptions['contextProvider'];
+  private readonly toolSchemas: AgentSessionOptions['toolSchemas'];
   private readonly memory = new AgentMemory();
   private messages: LlmMessage[] = [];
   private replyMode: AgentReplyMode = 'online';
@@ -158,6 +167,7 @@ export class AgentSession {
     this.audit = options.audit;
     this.offlineFallback = options.offlineFallback !== false;
     this.contextProvider = options.contextProvider;
+    this.toolSchemas = options.toolSchemas;
   }
 
   private recordAudit(record: AgentAuditRecord): void {
@@ -210,6 +220,53 @@ export class AgentSession {
       this.systemPrompt(),
       ...this.messages.map((message) => ({ ...message }))
     ];
+  }
+
+  private toolSchema(name: string): Record<string, unknown> | undefined {
+    const source = typeof this.toolSchemas === 'function'
+      ? this.toolSchemas(name)
+      : this.toolSchemas?.[name];
+    return isRecord(source) ? source : undefined;
+  }
+
+  /** 对模型返回的每个工具调用做结构修复 + schema 校验；任一失败则整轮重试。 */
+  private prepareToolCalls(calls: LlmToolCall[]): PreparedToolCalls {
+    const repaired: LlmToolCall[] = [];
+    const repairs: string[] = [];
+    for (const call of calls) {
+      const result = repairToolCall(call.function.arguments, this.toolSchema(call.function.name), {
+        ...(this.turnContext.selection ? { selection: this.turnContext.selection } : {})
+      });
+      if (!result.ok || !result.call) {
+        const message = result.error?.message ?? '工具参数无法解析';
+        return { ok: false, reason: `${call.function.name}: ${message}`, repairs };
+      }
+      for (const note of result.repairs) repairs.push(`${call.function.name}: ${note}`);
+      repaired.push({
+        ...call,
+        function: { name: call.function.name, arguments: JSON.stringify(result.call.args) }
+      });
+    }
+    return { ok: true, calls: repaired, repairs };
+  }
+
+  /** 重试上下文：把上一次无效输出作为普通 assistant 文本回灌，再追加纠错指令。 */
+  private retryContext(reason: string, invalid: LlmToolCall[]): LlmMessage[] {
+    const summary = invalid
+      .map((call) => `${call.function.name} ${call.function.arguments}`)
+      .join('\n')
+      .slice(0, 800);
+    return [
+      ...this.context(),
+      { role: 'assistant', content: `上次工具调用输出：\n${summary}` },
+      { role: 'user', content: buildRetryPrompt(reason) }
+    ];
+  }
+
+  private respondFallback(userText: string, reason: string): string {
+    const reply = buildFallbackReply(reason, userText);
+    this.push({ role: 'assistant', content: reply });
+    return reply;
   }
 
   private emitProgress(
@@ -511,6 +568,7 @@ export class AgentSession {
     }
     this.push({ role: 'user', content: text });
 
+    let retryUsed = false;
     for (let iteration = 0; iteration < this.maxIterations; iteration += 1) {
       if (options.signal?.aborted) throw new AgentCancelledError(completed);
       let response;
@@ -532,17 +590,126 @@ export class AgentSession {
         return reply;
       }
 
+      const originalCalls = response.toolCalls;
+      const checked = this.prepareToolCalls(originalCalls);
+      let calls: LlmToolCall[];
+      if (!checked.ok) {
+        const reason = checked.reason;
+        const toolNames = originalCalls.map((call) => call.function.name).join(',');
+        this.recordAudit({
+          tool: toolNames,
+          ok: false,
+          code: 'TOOL_CALL_INVALID',
+          source: 'llm',
+          message: reason,
+          reason,
+          retries: retryUsed ? 1 : 0
+        });
+        if (retryUsed) {
+          this.recordAudit({
+            tool: toolNames,
+            ok: false,
+            code: 'TOOL_CALL_FALLBACK',
+            source: 'llm',
+            message: reason,
+            reason,
+            retries: 1
+          });
+          return this.respondFallback(text, reason);
+        }
+
+        retryUsed = true;
+        let retryResponse;
+        try {
+          retryResponse = await withAbort(this.llm.chat(this.retryContext(reason, originalCalls)), options.signal);
+        } catch (error) {
+          if (error instanceof AgentAborted || options.signal?.aborted) throw new AgentCancelledError(completed);
+          const offline = await this.runOffline(text, { ...options, runId }, completed);
+          if (offline) {
+            this.replyMode = 'offline';
+            this.push({ role: 'assistant', content: offline });
+            return offline;
+          }
+          throw error;
+        }
+        if (retryResponse.toolCalls.length === 0) {
+          const reply = retryResponse.content.trim();
+          if (reply) {
+            this.recordAudit({
+              tool: toolNames,
+              ok: true,
+              code: 'TOOL_CALL_RETRY_TEXT',
+              source: 'llm',
+              message: reason,
+              reason,
+              retries: 1
+            });
+            this.push({ role: 'assistant', content: reply });
+            return reply;
+          }
+          this.recordAudit({
+            tool: toolNames,
+            ok: false,
+            code: 'TOOL_CALL_FALLBACK',
+            source: 'llm',
+            message: reason,
+            reason,
+            retries: 1
+          });
+          return this.respondFallback(text, reason);
+        }
+
+        const retried = this.prepareToolCalls(retryResponse.toolCalls);
+        if (!retried.ok) {
+          this.recordAudit({
+            tool: retryResponse.toolCalls.map((call) => call.function.name).join(','),
+            ok: false,
+            code: 'TOOL_CALL_FALLBACK',
+            source: 'llm',
+            message: retried.reason,
+            reason: retried.reason,
+            retries: 1
+          });
+          return this.respondFallback(text, retried.reason);
+        }
+        this.recordAudit({
+          tool: retryResponse.toolCalls.map((call) => call.function.name).join(','),
+          ok: true,
+          code: 'TOOL_CALL_RETRY_OK',
+          source: 'llm',
+          message: reason,
+          reason,
+          retries: 1,
+          ...(retried.repairs.length > 0 ? { repairs: retried.repairs } : {})
+        });
+        response = retryResponse;
+        calls = retried.calls;
+      } else {
+        calls = checked.calls;
+        if (checked.repairs.length > 0) {
+          this.recordAudit({
+            tool: calls.map((call) => call.function.name).join(','),
+            ok: true,
+            code: 'TOOL_CALL_REPAIRED',
+            source: 'llm',
+            message: checked.repairs.join('; '),
+            repairs: checked.repairs,
+            retries: 0
+          });
+        }
+      }
+
       this.push({
         role: 'assistant',
         content: response.content.trim() || null,
-        tool_calls: response.toolCalls.map((call) => ({
+        tool_calls: calls.map((call) => ({
           ...call,
           function: { ...call.function }
         }))
       });
 
-      const total = response.toolCalls.length;
-      for (const [index, call] of response.toolCalls.entries()) {
+      const total = calls.length;
+      for (const [index, call] of calls.entries()) {
         if (options.signal?.aborted) throw new AgentCancelledError(completed);
         const result = await this.executeTool(call, {
           runId,

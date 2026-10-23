@@ -3,6 +3,16 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 工具调用纠错与重试（P7-J，2026-10-23，本轮）
+
+- 状态：✅ 完成；不 push。
+- A. 纠错纯函数：新增 `desktop/src/agent/repair.ts`，`repairToolCall(raw, schema, ctx?)` 先剥代码围栏与前后解释，再逐字符扫描第一个平衡 JSON 对象；支持单引号、尾逗号、`//` 注释、`"120mm"→120`（仅 number 且含单位）、`"true"/"false"→boolean`、纯数字 `"3"→3`（仅 integer）、`{name,arguments}` 信封、多工具串取第一个；必填 `partId` 仅从 `ctx.selection.id` 回填；`additionalProperties:false` 的未知字段删除并记录；截断最多补 3 层 `}`/`]`，超限/无法补全返回 `TRUNCATED_JSON`；修复后必须过 schema，首个错误带路径与中文消息（`参数 qty 应为整数，收到 "3 个"`）。`qty:"很多"`、`"3 个"` 不猜值，直接拒绝。
+- B. 重试策略：新增 `desktop/src/agent/retry.ts`；首次失败追加「上次输出错误：<原因>。只输出 JSON…」重试 1 次；仍失败回落「没听懂 + 未执行任何工具 + 两条按原话匹配的候选指令」，侧栏候选按钮只填入输入框、不自动发送；重试仅 1 次/用户轮次，失败立即返回，不空转。
+- C. 接入：`session.ts` 新增 `toolSchemas`，模型工具参数统一走 repair；失败路径写 `TOOL_CALL_INVALID` / `TOOL_CALL_RETRY_OK` / `TOOL_CALL_FALLBACK`，成功修复写 `TOOL_CALL_REPAIRED`，审计新增 `retries/reason/repairs`；`ipc.ts` 与 `scripts/agent-live.mjs` 传入注册表 schema；`llm.ts` 默认发送 `response_format:{type:'json_object'}`，端点明确不支持时去掉并重试一次，`responseFormat:false` 可关闭。
+- D. 测试：新增 `desktop/test/agent/repair.test.mjs` 39 条（围栏/前后废话/单引号/尾逗号/注释/单位数字/字符串布尔/字符串整数/多工具串/截断成功与失败/schema 中文路径/禁止猜测/selection 回填/未知字段/重试成功/重试回落/审计）；`test/agent/llm.test.mjs` 新增 3 条（默认 response_format、端点不支持时降级、显式关闭）。
+- E. 验收：`npx tsc --noEmit` 通过；`npm test` **872/872**（830 + 39 + 3）；`npm run smoke` → `SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、既有 Agent/成本/PLC 断言全绿、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）；`npm run agent:live` 无凭据 → `AGENT_LIVE_SKIP`（有凭据时仍跑 12/12）。
+- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.5「输出纠错与重试」；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
+
 ## 发版准备 0.3.0（2026-10-23）
 
 - 状态：✅ 代码与文档准备完成；**未打包、未触发 CI、未打 tag、未 push**

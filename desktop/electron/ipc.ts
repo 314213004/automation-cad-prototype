@@ -735,6 +735,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       llm,
       bus,
       maxIterations: config.maxIterations,
+      toolSchemas: Object.fromEntries(tools.summaries().map((tool) => [tool.name, tool.inputSchema])),
       audit: (record) => audit.record(record),
       contextProvider: async () => {
         try {

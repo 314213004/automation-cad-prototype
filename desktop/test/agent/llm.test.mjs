@@ -15,6 +15,7 @@ const tools = [
 
 async function startServer(handler) {
   let captured;
+  const bodies = [];
   const server = createServer((request, response) => {
     const chunks = [];
     request.on('data', (chunk) => chunks.push(chunk));
@@ -23,6 +24,7 @@ async function startServer(handler) {
         authorization: request.headers.authorization,
         body: JSON.parse(Buffer.concat(chunks).toString('utf8'))
       };
+      bodies.push(captured.body);
       handler(captured, response);
     });
   });
@@ -31,6 +33,9 @@ async function startServer(handler) {
     baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
     get captured() {
       return captured;
+    },
+    get bodies() {
+      return bodies;
     },
     async close() {
       await new Promise((resolve) => server.close(resolve));
@@ -163,6 +168,74 @@ test('测试连接发送 ping 且 max_tokens=8', async () => {
     assert.equal(server.captured.body.max_tokens, 8);
     assert.deepEqual(server.captured.body.messages, [{ role: 'user', content: 'ping' }]);
     assert.equal('tools' in server.captured.body, false);
+  } finally {
+    await server.close();
+  }
+});
+
+test('LLM 客户端默认发送 response_format=json_object 作为第一道保险', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 200, { choices: [{ message: { content: '', tool_calls: [] } }] });
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools
+    });
+    await client.chat([{ role: 'user', content: '只输出 JSON' }]);
+    assert.deepEqual(server.captured.body.response_format, { type: 'json_object' });
+  } finally {
+    await server.close();
+  }
+});
+
+test('LLM 端点不支持 response_format 时自动去掉并重试一次', async () => {
+  const server = await startServer((captured, response) => {
+    if (captured.body.response_format) {
+      jsonResponse(response, 400, { error: { message: 'Unsupported parameter: response_format' } }, 'Bad Request');
+      return;
+    }
+    jsonResponse(response, 200, {
+      choices: [{ message: { content: '', tool_calls: [{
+        id: 'call-retry',
+        type: 'function',
+        function: { name: 'list_components', arguments: '{}' }
+      }] } }]
+    });
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools
+    });
+    const result = await client.chat([{ role: 'user', content: '列出元件' }]);
+    assert.equal(server.bodies.length, 2);
+    assert.ok(server.bodies[0].response_format);
+    assert.equal('response_format' in server.bodies[1], false);
+    assert.equal(result.toolCalls[0].function.name, 'list_components');
+  } finally {
+    await server.close();
+  }
+});
+
+test('LLM responseFormat:false 时不发送 response_format', async () => {
+  const server = await startServer((_captured, response) => {
+    jsonResponse(response, 200, { choices: [{ message: { content: 'ok' } }] });
+  });
+  try {
+    const client = new OpenAiCompatibleClient({
+      baseUrl: server.baseUrl,
+      apiKey: 'sk-local-secret-1234',
+      model: 'gpt-test',
+      tools,
+      responseFormat: false
+    });
+    await client.chat([{ role: 'user', content: 'ping' }]);
+    assert.equal('response_format' in server.captured.body, false);
   } finally {
     await server.close();
   }

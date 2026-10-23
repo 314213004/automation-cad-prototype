@@ -279,6 +279,7 @@ async function runCase(testCase, tempRoot) {
     bus,
     maxIterations: 8,
     offlineFallback: false,
+    toolSchemas: Object.fromEntries(tools.map((tool) => [tool.name, tool.inputSchema])),
     contextProvider: () => projectContext,
     confirmWrite: async (name, args) => {
       confirmations.push({ name, args });

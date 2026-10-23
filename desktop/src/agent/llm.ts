@@ -36,16 +36,29 @@ export interface AgentLlmOptions {
   tools: AgentToolSummary[];
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** 是否发送 response_format=json_object（端点不支持时自动降级重试一次）。 */
+  responseFormat?: boolean;
 }
 
 export class LlmError extends Error {
   readonly code: string;
+  readonly status: number | undefined;
+  readonly detail: string | undefined;
 
-  constructor(code: string, message: string) {
+  constructor(code: string, message: string, options: { status?: number; detail?: string } = {}) {
     super(message);
     this.name = 'LlmError';
     this.code = code;
+    this.status = options.status;
+    this.detail = options.detail;
   }
+}
+
+function isUnsupportedResponseFormat(error: unknown): boolean {
+  if (!(error instanceof LlmError) || error.code !== 'LLM_HTTP_ERROR') return false;
+  if (error.status !== 400 && error.status !== 404 && error.status !== 422 && error.status !== 500) return false;
+  const text = `${error.message} ${error.detail ?? ''}`;
+  return /response[_-]?format|unsupported|not support|unknown (?:parameter|field)|invalid (?:parameter|request)/i.test(text);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +112,7 @@ export class OpenAiCompatibleClient implements LlmClient {
   private readonly tools: Array<Record<string, unknown>>;
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
+  private responseFormat: boolean;
 
   constructor(options: AgentLlmOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -107,6 +121,7 @@ export class OpenAiCompatibleClient implements LlmClient {
     this.tools = toOpenAiTools(options.tools);
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.responseFormat = options.responseFormat !== false;
   }
 
   private headers(): Record<string, string> {
@@ -135,7 +150,16 @@ export class OpenAiCompatibleClient implements LlmClient {
       });
       if (!response.ok) {
         const statusText = response.statusText ? ` ${response.statusText}` : '';
-        throw new LlmError('LLM_HTTP_ERROR', `模型服务返回错误：HTTP ${response.status}${statusText}`);
+        let detail = '';
+        try {
+          detail = (await response.text()).slice(0, 800);
+        } catch {
+          detail = '';
+        }
+        throw new LlmError('LLM_HTTP_ERROR', `模型服务返回错误：HTTP ${response.status}${statusText}`, {
+          status: response.status,
+          ...(detail ? { detail } : {})
+        });
       }
       try {
         return await response.json() as unknown;
@@ -160,11 +184,26 @@ export class OpenAiCompatibleClient implements LlmClient {
   }
 
   async chat(messages: LlmMessage[]): Promise<LlmChatResponse> {
-    const payload = await this.post({
+    const body: Record<string, unknown> = {
       model: this.model,
       messages,
       ...(this.tools.length > 0 ? { tools: this.tools, tool_choice: 'auto' } : {})
-    });
+    };
+    if (this.responseFormat && this.tools.length > 0) {
+      body.response_format = { type: 'json_object' };
+    }
+    let payload: unknown;
+    try {
+      payload = await this.post(body);
+    } catch (error) {
+      if (this.responseFormat && this.tools.length > 0 && isUnsupportedResponseFormat(error)) {
+        this.responseFormat = false;
+        delete body.response_format;
+        payload = await this.post(body);
+      } else {
+        throw error;
+      }
+    }
     if (!isRecord(payload) || !Array.isArray(payload.choices) || !isRecord(payload.choices[0])) {
       throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应字段不存在：choices');
     }

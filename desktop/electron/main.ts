@@ -27,6 +27,7 @@ import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/a
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
 import { suggestFailure } from '../src/agent/suggest';
 import { suggestNextActions } from '../src/agent/advisor';
+import { repairToolCall } from '../src/agent/repair';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
@@ -1786,6 +1787,48 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_AGENT_ADVISOR_OK suggestions=${suggestions.length} top=${suggestions[0]?.id}`);
       } catch (error) {
         console.error('SMOKE_FAIL agent_advisor_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const repairSchema = {
+          type: 'object',
+          properties: {
+            q: { type: 'string' },
+            x: { type: 'number' },
+            qty: { type: 'integer' },
+            enabled: { type: 'boolean' }
+          },
+          additionalProperties: false
+        };
+        const repairCases = [
+          { raw: '```json\n{"q":"SMC"}\n```', expect: true },
+          { raw: '结果如下：{"q":"SMC"} 请执行', expect: true },
+          { raw: "{'q':'SMC'}", expect: true },
+          { raw: '{"q":"SMC",}', expect: true },
+          { raw: '{"q":"SMC" // 型号\n}', expect: true },
+          { raw: '{"x":"120mm"}', expect: true },
+          { raw: '{"q":"SMC"', expect: true },
+          { raw: '{"q":"SMC"}', expect: false },
+          { raw: '{"qty":3,"enabled":true}', expect: false },
+          { raw: '{}', expect: false }
+        ];
+        let repairPassed = 0;
+        let repaired = 0;
+        for (const item of repairCases) {
+          const result = repairToolCall(item.raw, repairSchema);
+          if (result.ok) repairPassed += 1;
+          if (result.ok && result.repairs.length > 0) repaired += 1;
+          if (!result.ok || result.repairs.length > 0 !== item.expect) {
+            throw new Error(`repair case failed: ${item.raw} -> ${JSON.stringify(result)}`);
+          }
+        }
+        if (repairCases.length !== 10 || repairPassed !== 10 || repaired !== 7) {
+          throw new Error(`repair summary cases=${repairCases.length} passed=${repairPassed} repaired=${repaired}`);
+        }
+        console.log(`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`);
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_repair_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

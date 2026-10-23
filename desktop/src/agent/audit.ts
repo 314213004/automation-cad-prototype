@@ -16,6 +16,12 @@ export interface AgentAuditRecord {
   message?: string;
   /** 工具执行耗时（毫秒）；旧记录没有该字段时按「—」展示。 */
   elapsedMs?: number;
+  /** 本次调用因参数修复失败而重试的次数（0 = 未重试）。 */
+  retries?: number;
+  /** 重试原因（失败时的首个 schema/解析错误）。 */
+  reason?: string;
+  /** 实际应用的参数修复项，按发生顺序。 */
+  repairs?: string[];
 }
 
 export interface AgentAuditEntry extends AgentAuditRecord {
@@ -62,6 +68,13 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
     ...(record.source ? { source: record.source } : {}),
     ...(typeof record.elapsedMs === 'number' && Number.isFinite(record.elapsedMs) && record.elapsedMs >= 0
       ? { elapsedMs: Math.round(record.elapsedMs) }
+      : {}),
+    ...(typeof record.retries === 'number' && Number.isInteger(record.retries) && record.retries >= 0
+      ? { retries: record.retries }
+      : {}),
+    ...(record.reason ? { reason: maskSecrets(record.reason) } : {}),
+    ...(Array.isArray(record.repairs) && record.repairs.length > 0
+      ? { repairs: record.repairs.map((item) => maskSecrets(item)) }
       : {}),
     ...(record.message ? { message: maskSecrets(record.message) } : {}),
     ...(record.args ? { args: redactValue(record.args) as Record<string, unknown> } : {})

@@ -20,6 +20,8 @@ tools.ts（AgentTools + 17 个 AgentTool）
  │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
  │    ├─ planner.ts → 多步规划 plan() + 顺序执行 executePlan()（P7-C）
  │    ├─ recipes.ts → 5 个流程模板 + runRecipe 前置条件/跳过/逐次确认/失败报告（P7-I）
+ │    ├─ repair.ts  → 模型脏输出纠错（围栏/解释/单引号/尾逗号/注释/类型转换/截断）（P7-J）
+ │    ├─ retry.ts   → 失败重试提示与两条候选回落（P7-J）
  │    ├─ context.ts → 结构化上下文快照（≤1.5 KB）+ 历史工具清单文本块
  │    ├─ reference.ts → 选中/最近操作/几何三级指代消解（<0.6 不猜）
  │    ├─ memory.ts  → 最近 5 次工具调用摘要（仅内存）
@@ -353,6 +355,43 @@ interface AdvisorProjectState {
 
 单测 `test/agent/advisor.test.mjs` 21 条；冒烟 `SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`。
 
+## 输出纠错与重试（P7-J）
+
+`repair.ts` 与 `retry.ts` 都是纯函数，无 DOM / fs / net 依赖；`session.ts` 是唯一调用方，外部 RPC / MCP 不经过模型输出，因此不受影响。
+
+```ts
+repairToolCall(raw: string, schema: unknown, ctx?: { selection?: { id?: string|null }|null; maxClosures?: number }): {
+  ok: boolean;
+  call?: { name?: string; args: Record<string, unknown> };
+  repairs: string[];
+  error?: { code: 'NO_JSON'|'INVALID_JSON'|'TRUNCATED_JSON'|'SCHEMA_INVALID'; message: string; path?: string };
+}
+validateToolArguments(value, schema): { ok: true } | { ok: false; path?: string; message: string }
+buildRetryPrompt(reason): string
+buildFallbackReply(reason, userInput?): string
+fallbackCandidates(userInput?): [string, string]
+parseFallbackCandidates(text): string[]
+```
+
+修复管线：
+1. `stripFence` 剥离开/闭代码围栏；`extractFirstJson` 逐字符扫描第一个平衡的对象/数组，识别双/单引号、转义与 `//` 注释，不靠贪婪正则。
+2. 文本级修正（每项只在真的改变文本时记录）：删 `//` 注释 → 删尾逗号 → 单引号转双引号。字符串里的 URL 与花括号不受影响。
+3. 解析失败且结尾不平衡时补引号和 `}`/`]`，最多 3 层；超限或补完仍不合法返回 `TRUNCATED_JSON`。
+4. 解包 `{name, arguments}` 信封；数组形式的多工具只取第一个并记录。
+5. schema 修正：number 只接受带明确单位的字符串（`"120mm"` → 120，`"120"` 拒绝）；integer 只接受纯数字字符串（`"3"` → 3，`"3 个"` 拒绝）；boolean 只接受 `"true"/"false"`；必填 `partId` 只从 `ctx.selection.id` 回填；`additionalProperties:false` 的未知字段删除并记录。
+6. 修复后必须通过 `validateToolArguments`；首个错误带路径与中文消息（`参数 qty 应为整数，收到 "3 个"`）。**非法值绝不猜成看似合理的值。**
+
+`AgentSession` 的接入点：
+- 构造参数新增 `toolSchemas`（`Record<string, schema>` 或按工具名取 schema 的函数）；IPC 从 `tools.summaries()` 传入，live 脚本同样传入。
+- `prepareToolCalls` 先 repair 再执行；修复成功但未重试时写审计 `TOOL_CALL_REPAIRED`（`retries:0`、`repairs[]`）。
+- 首次修复/校验失败：写 `TOOL_CALL_INVALID`，把无效输出作为普通 assistant 文本 + `buildRetryPrompt(reason)` 追加到临时上下文，重试 1 次（不计入会话历史）；成功写 `TOOL_CALL_RETRY_OK`（`retries:1`、`reason`），仍失败写 `TOOL_CALL_FALLBACK` 并返回两条候选。
+- 重试只允许 1 次/用户轮次；失败后立即返回，不继续消耗 `maxIterations`。
+- 审计新增 `retries?: number` / `reason?: string` / `repairs?: string[]`，仍经过 `maskSecrets`。
+
+`llm.ts` 在有工具时默认附带 `response_format:{type:'json_object'}`。若端点返回 400/404/422/500 且错误文本提到 `response_format`/unsupported/unknown parameter，客户端去掉该字段并重试一次；`responseFormat:false` 可显式关闭。
+
+测试：`test/agent/repair.test.mjs` 39 条；`test/agent/llm.test.mjs` 新增 3 条。冒烟：`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`。
+
 ## 坑点
 
 1. **不要把 token 写进日志**：`startAgent` 只打印 token 文件路径。
@@ -371,6 +410,9 @@ interface AdvisorProjectState {
 14. **指代优先级不能反**：有选中对象时「刚才那个」也先用选中对象；几何指代（左边第二个）必须优先于「这个」，否则会拿错 placement。没有候选或置信度 <0.6 时宁可追问，不能回退成搜索关键词。
 15. **上下文裁剪要按 UTF-8 码点落刀**：`slice(0,-1)` 会把汉字或 emoji 代理对切成 U+FFFD；统一用 `truncateUtf8`。工具结果进模型前必须走 `serializeToolResult` + `guardToolResult`，不能在别处直接 `JSON.stringify` 大对象；guard 只标记不可信数据，不能改变工具选择。
 16. **命令历史摘要只放白名单参数**：`recentActions` 会进系统提示，`summarizeCommandResult` 不得拼接 `apiKey/token/password` 等字段；对象标记 `[target=...]` 仅用于回退解析，展示前要剥离。
+17. **纠错只修结构，不猜语义**：`qty:"很多"`、`"3 个"` 必须留在 schema 校验里拒绝；只有纯数字字符串、带明确单位的 number 字符串、`true/false` 才能转换。否则会把用户的真实意图改错。
+18. **截断补全必须限层**：最多补 3 个 `}`/`]`（未闭合字符串先补引号），超限返回 `TRUNCATED_JSON`；不要为了「救回来」无限补括号。
+19. **重试不能吞掉审计**：首次失败与重试结果都要写 `TOOL_CALL_INVALID` / `TOOL_CALL_RETRY_OK` / `TOOL_CALL_FALLBACK`，并带 `retries/reason/repairs`；否则用户看到参数被改却查不到原因。
 
 ## 进度
 
@@ -384,11 +426,12 @@ interface AdvisorProjectState {
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 830/830（P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 872/872（P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 58 条，覆盖 17 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
 - ✅ P7-I 可复用流程：`recipes.ts` 5 个纯数据模板 + `runRecipe` 前置条件/跳过/逐次确认/失败报告/Markdown；侧栏流程下拉与执行记录导出
+- ✅ P7-J 工具调用纠错：`repair.ts` 脏 JSON 修复 + schema 中文路径 + 截断限 3 层 + `partId` 选中回填；`retry.ts` 一次重试与两条候选回落；审计 `retries/reason/repairs`；LLM `response_format` 自动降级
 - ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 
 ## 待办

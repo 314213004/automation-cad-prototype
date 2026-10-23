@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型 12 指令冒烟 + 工具结果抗提示注入，评估集扩至 58 条）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型 12 指令冒烟 + 工具结果抗提示注入，评估集扩至 58 条）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -296,6 +296,37 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 - 每次工具执行结束（`agent:progress` 的 `end` 事件）、对话结束、计划执行结束都会刷新建议；刷新只更新建议列表 DOM，不重建对话、不清空输入框、不打断正在进行的会话。
 
 冒烟：`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`；单测 `test/agent/advisor.test.mjs` 21 条，覆盖每条规则命中/不命中、优先级、上限、空状态、忽略与刷新不复活、`why` 数字、BOM 指纹。
+
+### 8.5 输出纠错与重试（P7-J）
+
+真实模型在长任务里仍会出现代码围栏、前后解释、单引号、尾逗号、注释、单位字符串、字符串布尔/整数和截断。会话层不再直接 `JSON.parse`，而是统一走 `repairToolCall(raw, schema, ctx)`（纯函数，`desktop/src/agent/repair.ts`）。
+
+修复顺序与边界：
+
+| 现象 | 处理 | repairs 记录 |
+|---|---|---|
+| ```json 围栏 / 前后解释文字 | 先剥围栏，再逐字符扫描第一个平衡的 JSON 对象/数组（不靠贪婪正则） | `stripped code fence` / `stripped surrounding text` |
+| 单引号、尾逗号、`//` 注释 | 只在字符串外修改，URL 里的 `//` 不动 | `converted single quotes to double quotes` / `removed trailing commas` / `removed // comments` |
+| `"120mm"` 且 schema 为 number | 仅去掉明确单位（mm/cm/m/in/°/deg/%/毫米等） | `converted "120mm" to 120 (number)` |
+| `"true"`/`"false"` 且 schema 为 boolean | 转布尔 | `converted "true" to true (boolean)` |
+| 纯数字字符串 `"3"` 且 schema 为 integer | 转整数 | `converted "3" to 3 (integer)` |
+| `"3 个"`、`"很多"` | **不猜**，按原值交给 schema 校验并拒绝 | 无 |
+| 必填 `partId` 缺失且有选中对象 | 只从 `ctx.selection.id` 回填 | `filled from selection` |
+| 未知字段且 `additionalProperties:false` | 删除并记录，不静默通过 | `removed unknown field <path>` |
+| 结尾截断 | 最多补 3 层 `}`/`]`（字符串未闭合时先补引号） | `completed truncated JSON (n layers)` |
+
+修复后必须通过 JSON Schema 校验；失败返回 `SCHEMA_INVALID` + 首个错误路径与中文消息，例如 `参数 qty 应为整数，收到 "3 个"`、`参数 bom[0].qty 应为整数...`。截断无法安全补全返回 `TRUNCATED_JSON`；没找到 JSON 对象返回 `NO_JSON`。
+
+重试与回落（`desktop/src/agent/retry.ts`）：
+
+- 参数修复/schema 校验首次失败 → 会话把无效输出作为普通 assistant 文本回灌，并追加 `上次输出错误：<原因>。只输出 JSON，不要代码围栏、解释文字或多余字段。`，重试 1 次；
+- 重试成功 → 继续执行修复后的工具调用，写审计 `TOOL_CALL_RETRY_OK`（`retries:1`、`reason`）；
+- 重试仍失败 → 不再空转，返回「没听懂…没有执行任何工具」+ 两条按用户原话匹配的候选指令（`候选 1/2：`），侧栏渲染为可点击按钮，点击只填入输入框、不自动发送；审计 `TOOL_CALL_INVALID` → `TOOL_CALL_FALLBACK`；
+- 首次就修复成功（未重试）也会写 `TOOL_CALL_REPAIRED`，带 `repairs[]` 与 `retries:0`，避免「悄悄改参数」；审计字段新增 `retries / reason / repairs`，仍走 `maskSecrets` 脱敏。
+
+模型端第一道保险：`OpenAiCompatibleClient` 默认在有工具时发送 `response_format:{type:'json_object'}`；若端点以 400/404/422/500 明确表示不支持 `response_format`，自动去掉该字段并重试一次，不把兼容性错误暴露给用户。`response_format:false` 可关闭。
+
+测试与冒烟：`desktop/test/agent/repair.test.mjs` 39 条覆盖围栏/废话/单引号/尾逗号/注释/单位/布尔/整数/多工具串/截断成功与失败/schema 中文路径/禁止猜测/selection 回填/未知字段/重试成功/重试回落/审计；LLM 三条覆盖 response_format 与降级。冒烟新增 `SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`。
 
 ## 9. 质量评估
 

@@ -58,6 +58,7 @@ import {
   type RecipeStep
 } from './recipes.ts';
 import { unwrapToolResultData } from './guard.ts';
+import { parseFallbackCandidates } from './retry.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
 
@@ -605,6 +606,17 @@ async function cancelExecution(): Promise<void> {
   }
 }
 
+function renderAssistantBubble(content: string): string {
+  const candidates = parseFallbackCandidates(content);
+  const visible = candidates.length > 0
+    ? content.split(/\r?\n/).filter((line) => !/^候选\s*[12]\s*[：:]/.test(line)).join('\n').trim()
+    : content;
+  const buttons = candidates.length > 0
+    ? `<div class="acp-chat-candidates">${candidates.map((command, index) => `<button type="button" class="acp-chat-candidate" data-candidate="${escapeHtml(command)}">${index + 1}. ${escapeHtml(command)}</button>`).join('')}</div>`
+    : '';
+  return `<div class="acp-chat-bubble">${escapeHtml(visible)}${buttons}</div>`;
+}
+
 function renderMessages(): void {
   const log = body?.querySelector<HTMLElement>('#agentChatLog');
   const count = body?.querySelector<HTMLElement>('#agentChatCount');
@@ -625,7 +637,7 @@ function renderMessages(): void {
     }
     if (message.role === 'assistant') {
       if (message.content) {
-        blocks.push(`<div class="acp-chat-msg is-assistant"><div class="acp-chat-role">助手</div><div class="acp-chat-bubble">${escapeHtml(message.content)}</div></div>`);
+        blocks.push(`<div class="acp-chat-msg is-assistant"><div class="acp-chat-role">助手</div>${renderAssistantBubble(message.content)}</div>`);
       }
       for (const call of message.tool_calls ?? []) {
         rendered.add(call.id);
@@ -1580,6 +1592,16 @@ function bindControls(): void {
   body?.querySelector<HTMLSelectElement>('#agentAuditResultFilter')?.addEventListener('change', (event) => {
     auditFilterResult = (event.target as HTMLSelectElement).value as AuditResultFilter;
     renderAudit();
+  });
+  body?.querySelector<HTMLElement>('#agentChatLog')?.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-candidate]');
+    if (!button) return;
+    const input = fieldElement('agentChatInput');
+    if (!input) return;
+    input.value = button.dataset.candidate ?? '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    chatFeedback('已填入候选指令，按发送继续。');
   });
   body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('input', () => { renderPreview(); });
   body?.querySelector<HTMLInputElement>('#agentLlmApiKey')?.addEventListener('input', () => { apiKeyDirty = true; });

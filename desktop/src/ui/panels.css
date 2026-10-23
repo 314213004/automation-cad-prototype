@@ -122,6 +122,9 @@
 .acp-chat-bubble{padding:7px 9px;border:1px solid #343a40;border-radius:4px;background:#23272b;color:#d6dde2;font-size:11px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
 .acp-chat-msg.is-user .acp-chat-bubble{border-color:#2a5b55;background:#1c2b29;color:#d9fbf6}
 .acp-chat-msg.is-assistant .acp-chat-bubble{border-color:#3b444b;background:#262b30}
+.acp-chat-candidates{display:flex;flex-direction:column;gap:5px;margin-top:7px}
+.acp-chat-candidate{text-align:left;padding:5px 7px;border:1px solid #3c5f5a;border-radius:4px;background:#1f3330;color:#bff3eb;font-size:11px;cursor:pointer}
+.acp-chat-candidate:hover{border-color:#42c2b0;background:#25403c}
 .acp-chat-tool{margin-top:6px;padding:7px 9px;border:1px solid #3b444b;border-radius:4px;background:#202428}
 .acp-chat-tool.is-ok{border-color:#2a5b55;background:#1c2826}
 .acp-chat-tool.is-error{border-color:#6d3c3c;background:#2d2020}
