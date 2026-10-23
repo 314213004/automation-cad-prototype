@@ -138,6 +138,25 @@ test('写工具确认被拒绝时不执行命令并返回 USER_DENIED', async ()
   assert.equal(parsed.code, 'USER_DENIED');
 });
 
+test('写工具 export_cost_report 执行前请求二次确认', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('call-export', 'export_cost_report', { format: 'csv' })] },
+    { content: '报价单已导出。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  const prompts = [];
+  const session = createSession(llm, bus, {
+    confirmWrite: async (name, args) => {
+      prompts.push({ name, args });
+      return true;
+    }
+  });
+  const reply = await session.run('导出一份 CSV 报价单');
+  assert.equal(reply, '报价单已导出。');
+  assert.deepEqual(prompts, [{ name: 'export_cost_report', args: { format: 'csv' } }]);
+  assert.deepEqual(bus.calls, [{ name: 'export_cost_report', args: { format: 'csv' } }]);
+});
+
 test('历史只保留最近 20 条消息', async () => {
   const llm = createLlm([{ content: '收到', toolCalls: [] }]);
   const bus = createBus();

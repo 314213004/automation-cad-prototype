@@ -804,6 +804,53 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    exportCostFile: async (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') {
+        return { ok: false, code: 'WRITE_FAILED', message: '导出参数不合法' };
+      }
+      const source = payload as Record<string, unknown>;
+      if (source.format !== 'pdf' && source.format !== 'csv') {
+        return { ok: false, code: 'UNSUPPORTED_FORMAT', message: '导出格式仅支持 pdf 或 csv' };
+      }
+      if (!window.desktop?.exportCostFile) {
+        return { ok: false, code: 'DENIED', message: '桌面版导出接口不可用' };
+      }
+      let data: string | Uint8Array;
+      if (source.encoding === 'base64') {
+        if (typeof source.data !== 'string' || !source.data) {
+          return { ok: false, code: 'WRITE_FAILED', message: '导出数据不能为空' };
+        }
+        try {
+          const binary = atob(source.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+          data = bytes;
+        } catch {
+          return { ok: false, code: 'WRITE_FAILED', message: 'PDF 数据解码失败' };
+        }
+      } else {
+        if (typeof source.data !== 'string') {
+          return { ok: false, code: 'WRITE_FAILED', message: '导出数据必须是字符串或字节数组' };
+        }
+        data = source.data;
+      }
+      try {
+        return await window.desktop.exportCostFile({
+          format: source.format,
+          ...(typeof source.fileName === 'string' ? { fileName: source.fileName } : {}),
+          overwrite: source.overwrite === true,
+          data,
+          ...(typeof source.suggestedName === 'string' ? { suggestedName: source.suggestedName } : {})
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          code: 'WRITE_FAILED',
+          message: `成本报告写入失败：${error instanceof Error ? error.message : String(error)}`
+        };
+      }
+    },
     runInterference: () => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       try {

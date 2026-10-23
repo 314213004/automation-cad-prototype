@@ -15,6 +15,13 @@ const desktopApi = {
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   exportFile: (name: string, data: Uint8Array | string) => ipcRenderer.invoke('export:saveFile', name, data),
   exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),
+  exportCostFile: (payload: {
+    format: 'pdf' | 'csv';
+    fileName?: string;
+    overwrite?: boolean;
+    data: Uint8Array | string;
+    suggestedName?: string;
+  }) => ipcRenderer.invoke('export:costFile', payload),
   cost: {
     pricebook: () => ipcRenderer.invoke('cost:pricebook')
   },

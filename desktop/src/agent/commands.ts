@@ -1,5 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
-import { extname } from 'node:path';
+import { basename, extname } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
 import {
@@ -12,6 +12,11 @@ import {
   type Wire
 } from '../elec/check.ts';
 import { runCostTool, CostToolError } from '../cost/agent.ts';
+import {
+  buildCostExport,
+  CostExportError,
+  type CostExportSaveResult
+} from '../cost/export.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -39,10 +44,13 @@ export interface CommandContext {
   bridge: Bridge;
   /** 读取内置价格簿（主进程注入）；返回原始 JSON 或已校验对象 */
   loadBuiltinPricebook?: () => unknown;
+  /** HTML → PDF 字节（主进程注入，复用 A4 打印管线）；PDF 导出用。 */
+  renderCostPdf?: (html: string) => Promise<Uint8Array>;
 }
 
 export interface CommandBusOptions {
   loadBuiltinPricebook?: () => unknown;
+  renderCostPdf?: (html: string) => Promise<Uint8Array>;
 }
 
 interface CommandRunResult extends CommandResult {
@@ -107,7 +115,8 @@ const BRIDGE_METHODS = new Set([
   'insertComponent',
   'removeComponent',
   'runInterference',
-  'importPath'
+  'importPath',
+  'exportCostFile'
 ]);
 
 export const SIMPLE_BOM_NOTE = '简化 BOM：由当前 CAD 零件与已插入占位件生成；型号取零件名称，材料统一记为“—”。';
@@ -580,6 +589,76 @@ function registerCostCommand(bus: CommandBus): void {
   });
 }
 
+function registerCostExportCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'export_cost_report',
+    async run(args, ctx) {
+      if (args.format !== 'pdf' && args.format !== 'csv') {
+        throw new CommandFailure('UNSUPPORTED_FORMAT', '导出格式仅支持 pdf 或 csv');
+      }
+
+      // 复用 run_cost_report 的取数路径：显式 bom 不读场景；否则先取场景 BOM。
+      let sceneBom: unknown;
+      let projectName: string | undefined;
+      if (!(Array.isArray(args.bom) && args.bom.length > 0)) {
+        const rows = await ctx.bridge.call<unknown>('getBom');
+        if (!Array.isArray(rows)) {
+          throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(rows, '读取当前 BOM 失败'));
+        }
+        sceneBom = rows;
+        try {
+          const scene = await ctx.bridge.call<{ source?: unknown } | null>('getScene');
+          const source = scene && typeof scene === 'object' ? scene.source : undefined;
+          if (typeof source === 'string' && source.trim()) {
+            projectName = basename(source.trim(), extname(source.trim()));
+          }
+        } catch {
+          // 项目名只影响默认文件名，取不到时回落「机台」，不阻塞导出。
+        }
+      }
+
+      try {
+        const data = await buildCostExport(args, {
+          ...(sceneBom !== undefined ? { sceneBom } : {}),
+          ...(ctx.loadBuiltinPricebook ? { loadBuiltinPricebook: ctx.loadBuiltinPricebook } : {}),
+          ...(projectName ? { projectName } : {}),
+          ...(ctx.renderCostPdf ? { renderPdf: ctx.renderCostPdf } : {}),
+          saveFile: async (payload) => {
+            const binary = typeof payload.data !== 'string';
+            if (binary) {
+              const bytes = payload.data as Uint8Array;
+              const result = await ctx.bridge.call<CostExportSaveResult>('exportCostFile', {
+                format: payload.format,
+                ...(payload.fileName ? { fileName: payload.fileName } : {}),
+                overwrite: payload.overwrite,
+                data: Buffer.from(bytes).toString('base64'),
+                encoding: 'base64',
+                suggestedName: payload.suggestedName
+              });
+              return result ?? { ok: false, code: 'WRITE_FAILED', message: '渲染层未返回落盘结果' };
+            }
+            const result = await ctx.bridge.call<CostExportSaveResult>('exportCostFile', {
+              format: payload.format,
+              ...(payload.fileName ? { fileName: payload.fileName } : {}),
+              overwrite: payload.overwrite,
+              data: payload.data,
+              encoding: 'utf8',
+              suggestedName: payload.suggestedName
+            });
+            return result ?? { ok: false, code: 'WRITE_FAILED', message: '渲染层未返回落盘结果' };
+          }
+        });
+        return { ok: true, data };
+      } catch (error) {
+        if (error instanceof CostExportError) {
+          throw new CommandFailure(error.code, error.message);
+        }
+        throw error;
+      }
+    }
+  });
+}
+
 export function createAgentCommandBus(
   registry: PackRegistry,
   bridge: Bridge,
@@ -587,11 +666,15 @@ export function createAgentCommandBus(
 ): CommandBus {
   const context: CommandContext = { registry, bridge };
   if (options.loadBuiltinPricebook) context.loadBuiltinPricebook = options.loadBuiltinPricebook;
+  if (options.renderCostPdf) context.renderCostPdf = options.renderCostPdf;
   const bus = new CommandBus(context);
   registerInsertCommand(bus);
   registerImportCommand(bus);
   registerReadCommands(bus);
   registerElectricalCheckCommand(bus);
   registerCostCommand(bus);
+  registerCostExportCommand(bus);
   return bus;
 }
+
+export { planExportName, buildCostExport } from '../cost/export.ts';

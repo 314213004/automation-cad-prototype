@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { join } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
@@ -18,6 +18,7 @@ import {
 } from '../src/export/file';
 import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
+import { CostExportError, planExportName } from '../src/cost/export.ts';
 import type { AgentTools } from '../src/agent/tools.ts';
 import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
@@ -57,23 +58,23 @@ function exportPayload(data: unknown): string | Uint8Array {
   throw new Error('导出数据必须是字符串或字节数组');
 }
 
-async function exportReport(payload: unknown): Promise<{ path: string; htmlPath: string }> {
-  const source = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
-  const html = source?.html;
+interface ReportPageOptions {
+  size: 'A3' | 'A4';
+  landscape: boolean;
+}
+
+async function printHtmlToPdf(
+  html: string,
+  page: ReportPageOptions,
+  directory: string
+): Promise<{ pdf: Uint8Array; htmlPath: string }> {
   if (typeof html !== 'string' || !html.trim()) throw new Error('报告 HTML 不能为空');
   if (html.length > 20 * 1024 * 1024) throw new Error('报告 HTML 超过 20MB，已拒绝导出');
   if (!html.includes('<html') || !html.includes('</html>')) throw new Error('报告 HTML 结构不完整');
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const directory = join(app.getPath('userData'), 'exports', timestamp);
   mkdirSync(directory, { recursive: true });
   const htmlPath = join(directory, 'report.html');
-  const pdfPath = join(directory, 'report.pdf');
   writeFileSync(htmlPath, html, 'utf8');
-
-  const page = typeof source?.page === 'object' && source.page !== null ? source.page as Record<string, unknown> : {};
-  const pageSize = page.size === 'A4' ? 'A4' : 'A3';
-  const landscape = page.landscape === undefined ? true : page.landscape === true;
 
   const reportWindow = new BrowserWindow({
     show: false,
@@ -88,19 +89,62 @@ async function exportReport(payload: unknown): Promise<{ path: string; htmlPath:
     reportWindow.webContents.on('will-navigate', (event) => event.preventDefault());
     await reportWindow.loadFile(htmlPath);
     const pdf = await reportWindow.webContents.printToPDF({
-      landscape,
-      pageSize,
+      landscape: page.landscape,
+      pageSize: page.size,
       printBackground: true,
       margins: { top: 0, bottom: 0, left: 0, right: 0 }
     });
     if (pdf.byteLength === 0) throw new Error('PDF 打印结果为空');
-    writeFileSync(pdfPath, pdf);
+    return { pdf, htmlPath };
   } catch (error) {
     throw new Error(`PDF 报告导出失败：${error instanceof Error ? error.message : String(error)}`);
   } finally {
     if (!reportWindow.isDestroyed()) reportWindow.destroy();
   }
+}
+
+async function exportReport(payload: unknown): Promise<{ path: string; htmlPath: string }> {
+  const source = typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+  const html = source?.html;
+  if (typeof html !== 'string' || !html.trim()) throw new Error('报告 HTML 不能为空');
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const directory = join(app.getPath('userData'), 'exports', timestamp);
+  const page = typeof source?.page === 'object' && source.page !== null ? source.page as Record<string, unknown> : {};
+  const { pdf, htmlPath } = await printHtmlToPdf(html, {
+    size: page.size === 'A4' ? 'A4' : 'A3',
+    landscape: page.landscape === undefined ? true : page.landscape === true
+  }, directory);
+  const pdfPath = join(directory, 'report.pdf');
+  writeFileSync(pdfPath, pdf);
   return { path: pdfPath, htmlPath };
+}
+
+/** Agent 导出 PDF：复用 A4 打印管线，返回字节；临时目录用完即删。 */
+export async function renderCostReportPdf(html: string): Promise<Uint8Array> {
+  const root = join(app.getPath('userData'), 'exports');
+  mkdirSync(root, { recursive: true });
+  const directory = mkdtempSync(join(root, '.render-'));
+  try {
+    const { pdf } = await printHtmlToPdf(html, { size: 'A4', landscape: false }, directory);
+    return pdf;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function costExportFailure(error: unknown): { ok: false; code: string; message: string } {
+  const code = error instanceof CostExportError ? error.code : 'WRITE_FAILED';
+  const detail = error instanceof Error ? error.message : String(error);
+  return {
+    ok: false,
+    code,
+    message: code === 'UNSUPPORTED_FORMAT' ? detail : `成本报告写入失败：${detail}`
+  };
 }
 
 function syncBytes(value: unknown, label: string): Uint8Array {
@@ -202,6 +246,41 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   });
 
   ipcMain.handle('export:report', async (_event, payload: unknown) => await exportReport(payload));
+
+  // Agent 成本报告落盘：目录固定 userData/exports，不接受调用方传入路径，也不弹系统对话框。
+  ipcMain.handle('export:costFile', async (_event, payload: unknown) => {
+    try {
+      if (!isRecord(payload)) throw new Error('导出参数必须是对象');
+      const format = payload.format;
+      if (format !== 'pdf' && format !== 'csv') {
+        throw new CostExportError('UNSUPPORTED_FORMAT', '导出格式仅支持 pdf 或 csv');
+      }
+      let data = payload.data;
+      if (payload.encoding === 'base64') {
+        if (typeof data !== 'string' || !data) throw new Error('导出数据不能为空');
+        data = Buffer.from(data, 'base64');
+      }
+      const content = exportPayload(data);
+      if (typeof content === 'string' && content.length === 0) throw new Error('导出数据不能为空');
+      if (content instanceof Uint8Array && content.byteLength === 0) throw new Error('导出数据不能为空');
+
+      const directory = join(app.getPath('userData'), 'exports');
+      mkdirSync(directory, { recursive: true });
+      const planned = planExportName({
+        directory,
+        format,
+        fileName: payload.fileName,
+        suggestedName: payload.suggestedName,
+        overwrite: payload.overwrite === true,
+        exists: existsSync
+      });
+      writeFileSync(planned.path, content);
+      const bytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf8') : content.byteLength;
+      return { ok: true, path: planned.path, bytes };
+    } catch (error) {
+      return costExportFailure(error);
+    }
+  });
 
   ipcMain.handle('cad:open-dialog', async () => {
     const window = BrowserWindow.getFocusedWindow();

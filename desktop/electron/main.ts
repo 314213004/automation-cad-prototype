@@ -1,9 +1,9 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS } from './ipc';
+import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS, renderCostReportPdf } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
@@ -12,6 +12,7 @@ import { buildDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
 import { computeCost, type CostInput } from '../src/cost/engine';
 import { validatePricebook } from '../src/cost/pricebook';
+import { planExportName } from '../src/cost/export';
 import { ParametricManager } from './parametric.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
@@ -805,9 +806,10 @@ function createWindow(): BrowserWindow {
       try {
         const summaries = agentTools?.summaries() ?? [];
         if (
-          summaries.length !== 9 ||
+          summaries.length !== 10 ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
-          !summaries.some((tool) => tool.name === 'run_cost_report')
+          !summaries.some((tool) => tool.name === 'run_cost_report') ||
+          !summaries.some((tool) => tool.name === 'export_cost_report')
         ) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);
@@ -1032,6 +1034,67 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        // Agent 导出：用假桥接直接调命令，不弹系统对话框、不依赖 GUI 保存界面。
+        const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
+        const fixtureBook = JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown;
+        const costCase = JSON.parse(
+          readFileSync(join(fixtureDir, 'cost-case.json'), 'utf8')
+        ) as Record<string, unknown>;
+        const exportDir = mkdtempSync(join(tmpdir(), 'automationcad-cost-export-'));
+        const fakeBridge = {
+          async call<T>(method: string, args: unknown): Promise<T> {
+            if (method !== 'exportCostFile') return { ok: false, message: `unexpected ${method}` } as T;
+            const payload = (args ?? {}) as Record<string, unknown>;
+            const format = payload.format === 'pdf' ? 'pdf' : 'csv';
+            const data = payload.encoding === 'base64'
+              ? Buffer.from(String(payload.data ?? ''), 'base64')
+              : String(payload.data ?? '');
+            const planned = planExportName({
+              directory: exportDir,
+              format,
+              fileName: payload.fileName,
+              suggestedName: payload.suggestedName,
+              overwrite: payload.overwrite === true,
+              exists: existsSync
+            });
+            writeFileSync(planned.path, data);
+            return {
+              ok: true,
+              path: planned.path,
+              bytes: typeof data === 'string' ? Buffer.byteLength(data, 'utf8') : data.byteLength
+            } as T;
+          }
+        };
+        const exportBus = createAgentCommandBus({} as PackRegistry, fakeBridge, {
+          loadBuiltinPricebook: () => fixtureBook
+        });
+        const exported = await exportBus.execute('export_cost_report', {
+          ...costCase,
+          format: 'csv',
+          fileName: '报价/单:2026*',
+          pricebook: fixtureBook,
+          now: '2026-10-23T12:00:00+08:00'
+        });
+        const exportData = exported.ok && exported.data && typeof exported.data === 'object'
+          ? exported.data as Record<string, unknown>
+          : null;
+        const exportPath = typeof exportData?.path === 'string' ? exportData.path : '';
+        const exportBytes = Number(exportData?.bytes ?? 0);
+        const exportName = exportPath ? basename(exportPath) : '';
+        if (!exportData || exportBytes <= 0 || !exportName.endsWith('.csv') ||
+            /[\\/:*?"<>|]/.test(exportName) || exportData.format !== 'csv' ||
+            Number(exportData.lines ?? -1) !== 6 || Math.abs(Number(exportData.grand ?? -1) - 1398.64) > 0.001) {
+          console.error('SMOKE_FAIL cost_agent_export', JSON.stringify({ exported, exportName, exportBytes }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=${exportBytes} name=sanitized`);
+      } catch (error) {
+        console.error('SMOKE_FAIL cost_agent_export_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         // 成本估算面板：内置价格簿 IPC → 打开面板 → 载入价格簿 → 计算 → 渲染 → 导出 PDF。
         const fixtureDir = resolve(desktopRoot(), 'test', 'fixtures');
         const fixtureBook = JSON.parse(readFileSync(join(fixtureDir, 'pricebook.json'), 'utf8')) as unknown;
@@ -1239,7 +1302,8 @@ async function bootstrap(): Promise<void> {
   mainWindow.on('closed', () => { mainWindow = null; });
 
   commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow), {
-    loadBuiltinPricebook: readBuiltinPricebookRaw
+    loadBuiltinPricebook: readBuiltinPricebookRaw,
+    renderCostPdf: renderCostReportPdf
   });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({

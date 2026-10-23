@@ -217,6 +217,28 @@ const COST_REPORT_SCHEMA = {
   additionalProperties: false
 };
 
+const COST_EXPORT_SCHEMA = {
+  type: 'object',
+  properties: {
+    format: {
+      type: 'string',
+      enum: ['pdf', 'csv'],
+      description: '导出格式：pdf 为 A4 纵向报告，csv 为 UTF-8 BOM（Excel 中文不乱码）'
+    },
+    fileName: {
+      type: 'string',
+      description: '可选，不含扩展名；非法字符会被移除，扩展名按 format 强制为 .pdf / .csv'
+    },
+    overwrite: {
+      type: 'boolean',
+      description: '可选，默认 false；同名文件存在时自动追加 (1)、(2)，为 true 时直接覆盖'
+    },
+    ...COST_REPORT_SCHEMA.properties
+  },
+  required: ['format'],
+  additionalProperties: false
+};
+
 export class AgentTools {
   private readonly registry: PackRegistry;
   private readonly commands: AgentCommandExecutor | undefined;
@@ -401,6 +423,17 @@ export class AgentTools {
         const result = await this.execute('run_cost_report', args);
         if (!result) return this.unavailable();
         return commandSuccess(result);
+      }
+    });
+
+    this.add({
+      name: 'export_cost_report',
+      description:
+        '按 BOM 与价格簿生成成本报告并写文件到用户数据目录 exports/（PDF 为 A4 纵向，CSV 带 UTF-8 BOM）。需要用户确认；不会覆盖已有文件，除非 overwrite=true。返回实际落盘路径、字节数、明细行数与合计；未传 bom 时使用当前场景 BOM（可能全部缺物料号）。',
+      inputSchema: COST_EXPORT_SCHEMA,
+      handler: async (args) => {
+        const result = await this.execute('export_cost_report', args);
+        return result ? commandSuccess(result) : this.unavailable();
       }
     });
 

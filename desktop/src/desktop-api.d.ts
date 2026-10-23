@@ -267,6 +267,14 @@ interface AgentBridgeApi {
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   runInterference(): { hits: number; items: { a: string; b: string; volume: number; severity: string }[] } | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
+  exportCostFile(payload: {
+    format: 'pdf' | 'csv';
+    fileName?: string;
+    overwrite?: boolean;
+    data: string;
+    encoding: 'base64' | 'utf8';
+    suggestedName?: string;
+  }): Promise<{ ok: boolean; path?: string; bytes?: number; code?: string; message?: string }>;
 }
 
 interface Window {
@@ -278,6 +286,13 @@ interface Window {
     getPathForFile(file: File): string;
     exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
     exportReport(payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }): Promise<{ path: string; htmlPath: string }>;
+    exportCostFile(payload: {
+      format: 'pdf' | 'csv';
+      fileName?: string;
+      overwrite?: boolean;
+      data: Uint8Array | string;
+      suggestedName?: string;
+    }): Promise<{ ok: boolean; path?: string; bytes?: number; code?: string; message?: string }>;
     cost: {
       pricebook(): Promise<{
         ok: boolean;

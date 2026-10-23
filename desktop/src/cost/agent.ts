@@ -305,12 +305,27 @@ function resolvePricebook(
   return fail('PRICEBOOK_UNAVAILABLE', '缺少价格簿：请传入 pricebook，或确认桌面版内置价格簿可用');
 }
 
+export interface CostReportComputation {
+  /** 完整报告；面板、窄输出与落盘导出共用同一份对象。 */
+  report: CostReport;
+  pricebook: CostToolPricebookMeta;
+  bomSource: 'argument' | 'scene';
+  bomRows: number;
+  notes: string[];
+}
+
 /**
- * 执行成本报告（只读，无副作用）。
+ * 取数 + 校验 + 计算的唯一入口。
+ *
+ * `runCostTool`（只读摘要）与 `buildCostExport`（PDF/CSV 落盘）都从这里拿 `CostReport`，
+ * 避免出现「问答一个数、导出另一个数」。
  *
  * 价格优先级与面板一致：`overrides` > 入参价格簿 > 内置价格簿 > 缺价（进 missing，不写成 0）。
  */
-export function runCostTool(args: Record<string, unknown>, deps: CostToolDeps = {}): CostToolResult {
+export function computeCostReport(
+  args: Record<string, unknown>,
+  deps: CostToolDeps = {}
+): CostReportComputation {
   if (!isRecord(args)) fail('INVALID_ARGUMENT', '工具入参必须是对象');
 
   const explicitBom = parseBom(args.bom);
@@ -362,6 +377,18 @@ export function runCostTool(args: Record<string, unknown>, deps: CostToolDeps = 
     notes.push(`有 ${report.missing.length} 项物料未计价，合计偏低，不要当作报价单使用。`);
   }
 
+  return { report, pricebook: meta, bomSource, bomRows: bom.length, notes };
+}
+
+/**
+ * 执行成本报告（只读，无副作用）。
+ *
+ * 输出刻意收窄，详见文件头注释；完整报告只用于本地导出，不回灌给模型。
+ */
+export function runCostTool(args: Record<string, unknown>, deps: CostToolDeps = {}): CostToolResult {
+  const computation = computeCostReport(args, deps);
+  const { report, pricebook: meta, bomSource, bomRows, notes } = computation;
+
   const lines = report.lines.slice(0, COST_TOOL_LINE_LIMIT);
   const missing = report.missing.slice(0, COST_TOOL_ISSUE_LIMIT);
   const warnings = report.warnings.slice(0, COST_TOOL_ISSUE_LIMIT);
@@ -369,7 +396,7 @@ export function runCostTool(args: Record<string, unknown>, deps: CostToolDeps = 
   return {
     ok: true,
     bomSource,
-    bomRows: bom.length,
+    bomRows,
     pricebook: meta,
     totals: report.totals,
     labor: report.labor,
