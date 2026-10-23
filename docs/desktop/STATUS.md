@@ -4,7 +4,7 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`）；集成分支 `integ/3d-all` 合并迭代 34/35/36 三条 3D 分支，本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1247/1247 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9 + Agent `suggest_kinematics` 9 + KB 余量守卫 1；沙箱需 `TZ=Asia/Shanghai`）。
+- 测试：**1248/1248 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9 + Agent `suggest_kinematics` 9 + KB 余量守卫 1 + STEP 分块清理/近似件透出 1；沙箱需 `TZ=Asia/Shanghai`）。
 - 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
@@ -14,7 +14,7 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1247 pass / 0 fail / 0 skipped |
+| `npm test` | 1248 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
 | `npm run screenshots:machine` | 4 张 1600×1000 真实 Electron 截图，尺寸/文件大小/颜色数校验通过 |
@@ -139,7 +139,7 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 1247 条单测/集成测试
+npm test                            # 1248 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke

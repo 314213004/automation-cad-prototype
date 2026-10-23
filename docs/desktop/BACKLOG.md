@@ -6,10 +6,11 @@
 
 ## 知识库容量治理 + Agent 工具 `suggest_kinematics`（integ/3d-all，2026-10-24，本轮）
 
-- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1247/1247**（+10：工具 9 + KB 余量守卫 1）、`build:ext`、smoke 全绿（新增 `SMOKE_AGENT_KINEMATICS_OK high=4 low=1 written=0`）、`npm run eval:agent` 75/75；未打包、未触发 CI、未发版。
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1248/1248**（+10：工具 9 + KB 余量守卫 1；+1：STEP 旧分块清理与近似件透出）、`build:ext`、smoke 全绿（新增 `SMOKE_AGENT_KINEMATICS_OK high=4 low=1 written=0`）、`npm run eval:agent` 75/75；未打包、未触发 CI、未发版。
 - KB：根因是 BACKLOG 迭代记录持续增长、整份进索引。改为本文件只留最近一轮，早于本轮的 20 节原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不在 `KB_DOC_FILES`）；`kb.json` 从约 408 KB 降到约 363 KB，未截断、上限不变。`kb.test.mjs` 新增守卫：归档不入索引、索引须留 ≥5% 余量（约 20 KB），超了提示继续归档。
 - 工具：只读 `suggest_kinematics`（命令 `suggest_kinematics` → 渲染桥 `suggestKinematics` → 标注抽屉 `suggest()`），参数 `includeLow? / limit?(1–30)`，返回压缩后的高/低置信度建议（轴向 ±X/Y/Z、行程或角度、行程来源、型号、工位、点位、置信度、中文理由），`applied=false`；**从不写入标注**，采纳仍由用户在抽屉逐条确认并保存。已接入路由（「识别/找出…运动件」）、MCP/RPC（21 个工具）、评估集 `kin01`、Agent 报告。
 - 边界：未导入模型时返回提示先 `import_cad`；建议本身的识别边界同迭代 36。
+- 合并前复查修正（`192983e`）：① `solids/` 里上一次遗留的 `part-N.step` 现在先入撤销快照再清掉，避免旧分块混进本次整机（撤销可恢复）；② STEP 实体化把水平圆柱按等截面方棒近似时，写中文 warning 点名零件并在 `geometry.approximatedIds` 透出 id 列表，不再只给数量；③ `apply-machine-geometry.test.mjs` 新增 1 条覆盖这两条。
 
 ## 集成：34/35/36 三条 3D 分支合并 + 同步 main（P10-4 六工位案例）（integ/3d-all，2026-10-24）
 
