@@ -1,15 +1,16 @@
 {
-  "generatedAt": "2026-10-23T13:58:24.305Z",
+  "generatedAt": "2026-10-23T15:22:52.084Z",
   "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 61,
+    "count": 65,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
     "outOfScope": 5,
     "toolCoverage": [
+      "design_machine",
       "export_cost_report",
       "export_files",
       "get_bom",
@@ -48,18 +49,18 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 61,
-      "total": 61,
+      "correct": 65,
+      "total": 65,
       "rate": 1
     },
     "tools": {
-      "correct": 61,
-      "total": 61,
+      "correct": 65,
+      "total": 65,
       "rate": 1
     },
     "params": {
-      "correct": 28,
-      "total": 28,
+      "correct": 32,
+      "total": 32,
       "rate": 1
     },
     "refused": {
@@ -1770,6 +1771,134 @@
           "tool": "search_docs",
           "args": {
             "query": "没有尺寸 件"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d01",
+      "input": "设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服",
+      "tags": [
+        "machine_design"
+      ],
+      "note": "机型设计：中文需求原样交给方案合成器，只读、不落盘。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d02",
+      "input": "做一台两工位点胶机，3 秒一件，用汇川伺服",
+      "tags": [
+        "machine_design"
+      ],
+      "note": "机型设计：秒/件写法与品牌识别。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "做一台两工位点胶机，3 秒一件，用汇川伺服"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d03",
+      "input": "设计一条四工位装配线，分钟 15 件，带安全光栅",
+      "tags": [
+        "machine_design"
+      ],
+      "note": "机型设计：分钟 N 件写法与安全光栅。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一条四工位装配线，分钟 15 件，带安全光栅"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d04",
+      "input": "设计一台检测机，六个工位，节拍 30 件/分钟",
+      "tags": [
+        "machine_design"
+      ],
+      "note": "机型设计：中文数字工位数。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一台检测机，六个工位，节拍 30 件/分钟"
           },
           "readOnly": true,
           "missing": []

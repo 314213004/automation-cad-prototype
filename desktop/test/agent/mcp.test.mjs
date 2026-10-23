@@ -42,9 +42,10 @@ after(async () => {
   rmSync(sandbox, { recursive: true, force: true });
 });
 
-test('MCP server 通过 in-memory transport 列出 18 个复用工具', async () => {
+test('MCP server 通过 in-memory transport 列出 19 个复用工具', async () => {
   const result = await client.listTools();
   assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
+    'design_machine',
     'export_cost_report',
     'export_files',
     'get_bom',

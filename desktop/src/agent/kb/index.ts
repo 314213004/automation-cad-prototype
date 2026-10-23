@@ -14,6 +14,7 @@ export const KB_DOC_FILES = [
   'COSTING.md',
   'PLC-CODEGEN.md',
   'SMART-FACTORY-INTEGRATION.md',
+  'MACHINE-DESIGN.md',
   'DIMS-GAPS.md',
   'HARDENING.md'
 ] as const;

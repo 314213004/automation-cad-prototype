@@ -33,7 +33,7 @@ function docSource(path) {
 test('kb.json 已提交且体积不超过 400 KB', () => {
   assert.ok(raw.length > 0);
   assert.ok(Buffer.byteLength(raw, 'utf8') <= KB_MAX_BYTES);
-  assert.equal(kb.meta.docs, 12);
+  assert.equal(kb.meta.docs, KB_DOC_FILES.length);
   assert.equal(kb.meta.sources.filter((source) => source.kind === 'doc').length, KB_DOC_FILES.length);
   assert.equal(kb.meta.chunks, kb.chunks.length);
   assert.equal(kb.meta.truncated, false);
@@ -42,7 +42,7 @@ test('kb.json 已提交且体积不超过 400 KB', () => {
 });
 
 test('KB_STATS 与 kb.json 元数据一致', () => {
-  assert.equal(KB_STATS.docs, 12);
+  assert.equal(KB_STATS.docs, KB_DOC_FILES.length);
   assert.equal(KB_STATS.chunks, kb.chunks.length);
   assert.equal(KB_STATS.bytes, kb.meta.bytes);
   assert.equal(KB_STATS.truncated, false);

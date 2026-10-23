@@ -6,6 +6,8 @@ import { checkExportTargetPath } from './policy.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
 import { searchDocs } from './kb/search.ts';
+import { parseMachineBrief, MACHINE_STATIONS_MAX, MACHINE_STATIONS_MIN } from '../machine/spec.ts';
+import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
 
 export interface AgentTool {
   name: string;
@@ -143,6 +145,30 @@ const SEARCH_DOCS_SCHEMA = {
     limit: { type: 'integer', minimum: 1, maximum: 5, description: '返回条数，默认 3，最多 5' }
   },
   required: ['query'],
+  additionalProperties: false
+};
+
+const DESIGN_MACHINE_SCHEMA = {
+  type: 'object',
+  properties: {
+    brief: {
+      type: 'string',
+      minLength: 1,
+      description: '中文机型需求，例如「设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服」'
+    },
+    stationCount: {
+      type: 'integer',
+      minimum: MACHINE_STATIONS_MIN,
+      maximum: MACHINE_STATIONS_MAX,
+      description: '覆盖 brief 中的工位数，1–12'
+    },
+    cyclePerMin: {
+      type: 'number',
+      exclusiveMinimum: 0,
+      description: '覆盖 brief 中的目标节拍（件/分钟）'
+    }
+  },
+  required: ['brief'],
   additionalProperties: false
 };
 
@@ -501,6 +527,65 @@ export class AgentTools {
         const limit = getNumber(args.limit);
         const hits = searchDocs(query, limit);
         return { ok: true, query, hits };
+      }
+    });
+
+    this.add({
+      name: 'design_machine',
+      description:
+        '从中文机型需求合成可确认的机型方案：工艺、工位、执行机构、传感器、节拍瓶颈、功率估算与 BOM 草案。只读，不写文件、不改当前工程；几何仍由 MachineConfig 配置驱动。',
+      inputSchema: DESIGN_MACHINE_SCHEMA,
+      handler: async (args) => {
+        const briefText = getString(args.brief);
+        if (!briefText) return { ok: false, code: 'INVALID_ARGUMENT', message: 'brief 不能为空' };
+
+        let stationCount: number | undefined;
+        if (args.stationCount !== undefined) {
+          const value = getNumber(args.stationCount);
+          if (value === undefined || !Number.isInteger(value) || value < MACHINE_STATIONS_MIN || value > MACHINE_STATIONS_MAX) {
+            return {
+              ok: false,
+              code: 'INVALID_ARGUMENT',
+              message: `stationCount 必须是 ${MACHINE_STATIONS_MIN}–${MACHINE_STATIONS_MAX} 的整数`
+            };
+          }
+          stationCount = value;
+        }
+
+        let cyclePerMin: number | undefined;
+        if (args.cyclePerMin !== undefined) {
+          const value = getNumber(args.cyclePerMin);
+          if (value === undefined || value <= 0) {
+            return { ok: false, code: 'INVALID_ARGUMENT', message: 'cyclePerMin 必须是大于 0 的数字' };
+          }
+          cyclePerMin = value;
+        }
+
+        try {
+          const brief = parseMachineBrief(briefText);
+          const design = synthMachine(brief, {
+            ...(stationCount !== undefined ? { stationCount } : {}),
+            ...(cyclePerMin !== undefined ? { cyclePerMin } : {})
+          });
+          return {
+            ok: true,
+            design: {
+              config: design.config,
+              cycle: design.cycle,
+              power: design.power,
+              bomDraft: design.bomDraft,
+              warnings: design.warnings,
+              assumptions: design.assumptions
+            },
+            summary: summarizeMachineDesign(design)
+          };
+        } catch (error) {
+          return {
+            ok: false,
+            code: 'INVALID_ARGUMENT',
+            message: error instanceof Error ? error.message : String(error)
+          };
+        }
       }
     });
 

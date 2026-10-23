@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入，评估集扩至 61 条）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）；机型方案合成已完成（`design_machine` 只读工具，工具数 18 → 19，评估集 65 条，见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -36,13 +36,14 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（已实现 18 个：只读 9 + 写 9；另 3 个规划中）
+## 3. 工具清单（已实现 19 个：只读 10 + 写 9；另 3 个规划中）
 
 | 工具 | 类型 | 说明 |
 |---|---|---|
 | `list_components` | 只读 | 按类别 / 数据包列出元件 |
 | `search_components` | 只读 | 型号、品牌、类别、规格全文检索 |
-| `search_docs` | 只读 | 离线检索 12 份项目文档、截图索引与元件库分类；返回 `{source,heading,snippet,score}`，无命中返回空 |
+| `search_docs` | 只读 | 离线检索 13 份项目文档、截图索引与元件库分类；返回 `{source,heading,snippet,score}`，无命中返回空 |
+| `design_machine` | 只读 | 从中文 brief 合成 `MachineConfig` 方案：工艺/工位/执行机构/传感器/节拍瓶颈/功率估算/BOM 草案/警告与假设；不落盘、不改工程（见 MACHINE-DESIGN.md） |
 | `get_bom` | 只读 | 当前装配体简化 BOM |
 | `get_project_context` | 只读 | 当前域 / 视图 / 选中对象 / 机型 / 底板 / 单位制 / 最近操作；缺失项返回 null |
 | `run_interference_check` | 只读 | 包围盒干涉初筛 |
@@ -107,13 +108,13 @@
 
 目标：用户问「底板画布怎么放导轨」「D2 是什么决策」「没有尺寸的件怎么处理」时，Agent 先检索项目自带文档与元件库，再基于 `source/heading/snippet` 回答；查不到就明确说查不到，不凭常识补写。
 
-- **输入**：`docs/desktop/` 下 12 份文档（NL-AGENT / MODULES / BACKLOG / STATUS / PLUGIN-PACKS / PARAMETRIC-CAD / SKETCH-SPIKE / COSTING / PLC-CODEGEN / SMART-FACTORY-INTEGRATION / DIMS-GAPS / HARDENING）、`docs/desktop/screenshots/` 文件名、`packs/builtin/*/parts.json` 的元件库分类名。
+- **输入**：`docs/desktop/` 下 13 份文档（NL-AGENT / MODULES / BACKLOG / STATUS / PLUGIN-PACKS / PARAMETRIC-CAD / SKETCH-SPIKE / COSTING / PLC-CODEGEN / SMART-FACTORY-INTEGRATION / MACHINE-DESIGN / DIMS-GAPS / HARDENING）、`docs/desktop/screenshots/` 文件名、`packs/builtin/*/parts.json` 的元件库分类名。
 - **分块**：`kb/index.ts` 按 Markdown 标题切分，块 ≤800 字符，超长按行贪心拆、单行再硬切；每块保留 `source`（`文件#标题路径`）、`heading`、`line` 与唯一 `id`。标题层级用 ` > ` 连接。
 - **构建期生成**：`cd desktop && npm run kb:build` 输出 `src/agent/kb/kb.json`（提交入库）。索引目标 ≤400 KB；若超限只保留前 200 块，并在 `meta.truncated/droppedChunks` 记录。启动只加载这份 JSON，不扫盘、不联网。
 - **检索**：`kb/search.ts` 是纯函数。中文按 2-gram、英文/数字按词切分，简化 BM25（k1=1.5、b=0.75）加 IDF 排序，默认 top 3（`limit` 1–5）；没有任何查询词命中时返回空数组，不做相近词硬凑。返回结果整体 ≤2 KB 注入上下文。
 - **工具**：`search_docs({query, limit?})` 只读，返回 `{ok,query,hits:[{source,heading,snippet,score}]}`。系统提示要求涉及「怎么操作 / 限制 / 决策 / 为什么」先查文档；命中要引用来源，无命中就直说。
 - **同步校验**：`kb.json` 为每份文档保存标题列表 SHA-256；测试会重新扫描当前 Markdown 并比对。改了标题却忘记运行 `npm run kb:build` 会直接失败。另覆盖 800 字符上限、source/line、2-gram 命中「导轨/干涉/D2」、top3 排序、无命中、2 KB 上限与 400 KB 体积。
-- **冒烟**：`SMOKE_AGENT_KB_OK docs=12 chunks=N query=D2 hits=1`；评估集新增 3 条文档类用例（导轨、D2、缺尺寸）。
+- **冒烟**：`SMOKE_AGENT_KB_OK docs=13 chunks=N query=D2 hits=1`；评估集新增 3 条文档类用例（导轨、D2、缺尺寸）。
 
 ### 4.2 多轮与续跑（P7-L）
 
@@ -206,7 +207,7 @@ executePlan(plan, deps) → {
 - 规划中但未注册：`start_commission`、`diagnose_fault`、`sync_design_package`；未注册前不会进入可执行计划
 
 工具名与过滤：
-- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 18 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
+- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 19 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
 - 规划阶段逐条校验工具名；不存在的工具从步骤中移除并写入 `warnings`（例如 `忽略未注册工具 sync_design_package（第 1 步）`）。全部被过滤时 `refused:true`，不会执行空计划。
 - 不编造工具名；`sync_design_package` 注册后无需改规划规则即可自动纳入。
 
@@ -397,7 +398,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ### 8.6 上下文预算与成本（P7-M）
 
-目标：不让 18 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
+目标：不让 19 个工具 schema、长工具结果与多轮历史无限堆积；同时把每轮真实/估算 token 与费用直接展示给用户。
 
 **预算模型**（`desktop/src/agent/budget.ts`，纯函数）
 
@@ -453,7 +454,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 线上基线仍是此前 30 条真实用例的 **p50 7.6 s / p95 21.3 s**（`deepseek-v4.1-flash`）。配置 `AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL` 后应重跑 `npm run agent:live`，用新结果替换本节表格上方说明；当前不把桩延迟与模型延迟混为一谈。
 
-**验证**：新增 `desktop/test/agent/efficiency.test.mjs` 33 条（含写后不复用写前结果）；`tsc` 干净、`npm test` 1034/1034、`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 61/61。
+**验证**：新增 `desktop/test/agent/efficiency.test.mjs` 33 条（含写后不复用写前结果）；`tsc` 干净、`npm test` 1034/1034、`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 65/65。
 
 **限制**
 
@@ -464,7 +465,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ## 9. 质量评估
 
-固定 61 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；18 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
+固定 65 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；19 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
 
 在 `desktop/` 下运行：
 
@@ -485,9 +486,9 @@ npm run eval:agent
 任一指标低于上述阈值时脚本退出码为 1；当前离线基线（2026-10-23，v0.2.0）：
 
 ```
-意图准确率   100.0%  (61/61)
-工具选择率   100.0%  (61/61)
-参数抽取率   100.0%  (25/25)
+意图准确率   100.0%  (65/65)
+工具选择率   100.0%  (65/65)
+参数抽取率   100.0%  (32/32)
 超纲拒绝率   100.0%  (5/5)
 多步完成率   100.0%  (5/5)
 EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
@@ -585,12 +586,12 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`；`SMOKE_AGENT_TOOLS_V2 tools=18`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=19 audit=3 ctx=572`；`SMOKE_AGENT_TOOLS_V2 tools=19`；`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
 - 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 932/932（新增 `test/agent/policy.test.mjs` 42 条；P7-I 流程模板 29 条、P7-H 主动建议 21 条），其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
 - 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 932/932）
-- 评估集与回归 —— ✅ P7-G：61 条中文用例（18 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（61/61 意图、61/61 工具、28/28 参数、5/5 超纲拒绝、5/5 多步）；真实模型 30 条评测 `matched=30/30`、`refusalRate=1.00`（见 9.1，含三轮迭代与失败归因）
+- 评估集与回归 —— ✅ 65 条中文用例（19 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（65/65 意图、65/65 工具、32/32 参数、5/5 超纲拒绝、5/5 多步）；真实模型 30 条评测 `matched=30/30`、`refusalRate=1.00`（见 9.1，含三轮迭代与失败归因）
 - 确认与路径策略 —— ✅ 策略层纯函数 + `executeTool` 硬确认 + 拒绝后短路 + 回复话术过滤；导出默认只接受纯文件名，绝对路径/盘符/UNC/`../` 返回 `TARGET_PATH_UNSUPPORTED`，`allowSanitize=true` 才净化落盘；`policy.test.mjs` 42 条，smoke `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`

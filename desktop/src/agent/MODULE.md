@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 18 个 AgentTool）
+tools.ts（AgentTools + 19 个 AgentTool；含只读 `design_machine`）
  ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
  ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
@@ -89,7 +89,7 @@ interface Bridge {
 
 ## 本地知识检索（kb/）
 
-- `kb/index.ts`：构建期读取 `docs/desktop/` 的 12 份文档、`screenshots/` 文件名和 `packs/builtin/*/parts.json` 分类名；按 Markdown 标题切块（≤800 字符），`source` 为 `文件#标题路径`，附 `line`。`buildKnowledgeBase()` 输出 `{meta,chunks}`；`meta.sources[].headingHash` 是标题列表 SHA-256。
+- `kb/index.ts`：构建期读取 `docs/desktop/` 的 13 份文档、`screenshots/` 文件名和 `packs/builtin/*/parts.json` 分类名；按 Markdown 标题切块（≤800 字符），`source` 为 `文件#标题路径`，附 `line`。`buildKnowledgeBase()` 输出 `{meta,chunks}`；`meta.sources[].headingHash` 是标题列表 SHA-256。
 - `kb/search.ts`：启动只加载 `kb.json`，不扫盘、不联网。中文 2-gram、英文/数字按词切分；简化 BM25（k1=1.5、b=0.75）+ IDF；默认 top 3、`limit` 1–5；没有查询词命中返回 `[]`，不做模糊兜底。结果整体压到 2048 字节内。
 - `scripts/build-kb.mjs` / `npm run kb:build`：重建并写回 `kb.json`；超过 400 KB 时只保留前 200 块并写 `truncated/droppedChunks`。
 - 系统提示要求「怎么操作 / 限制 / 决策 / 为什么」先调 `search_docs`；命中引用 `source` 与 `heading`，无命中直说查不到。
@@ -532,7 +532,7 @@ parseFallbackCandidates(text): string[]
 ## 进度
 
 - ✅ 注册表 + 18 工具（只读 9 / 写 9）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 18 个）
+- ✅ MCP stdio（真实握手 `tools/list` 返回 19 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
@@ -544,9 +544,9 @@ parseFallbackCandidates(text): string[]
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 1034/1034（新增 `policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=18 implemented=18`、`SMOKE_AGENT_TOOLS_V2 tools=18`、`SMOKE_AGENT_KB_OK docs=12 chunks=309 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=18 audit=3 ctx=555`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 1084/1084（新增 `machine/spec.test.mjs` 14 条、`machine/synth.test.mjs` 16 条、`design-machine.test.mjs` 10 条；`policy.test.mjs` 42 条；`kb.test.mjs` 18 条；P7-J `repair.test.mjs` 39 条；P7-I `recipes.test.mjs` 29 条；P7-H `advisor.test.mjs` 21 条；P7-G `guard.test.mjs` 14 条；`context-memory-trim.test.mjs` 28 条；P7-L `thread.test.mjs` 30 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=19 implemented=19`、`SMOKE_AGENT_TOOLS_V2 tools=19`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`SMOKE_AGENT_KB_OK docs=13 chunks=337 query=D2 hits=1`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=19 audit=3 ctx=572`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、`SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
-- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 61 条，覆盖 18 工具与 6 类拒绝
+- ✅ P7-G：`scripts/agent-live.mjs` 真实模型 12 指令冒烟（本机 deepseek-v4.1-flash 12/12）+ `guard.ts` 工具结果数据块与提示注入检测；评估集扩至 65 条，覆盖 19 工具与 6 类拒绝
 - ✅ P7-H 主动建议：`advisor.ts` 纯函数 + 侧栏建议卡片（ask 填入输入框 / tool 单步计划确认）+ 会话内忽略 + 工具执行后非阻塞刷新
 - ✅ P7-I 可复用流程：`recipes.ts` 5 个纯数据模板 + `runRecipe` 前置条件/跳过/逐次确认/失败报告/Markdown；侧栏流程下拉与执行记录导出
 - ✅ P7-J 工具调用纠错：`repair.ts` 脏 JSON 修复 + schema 中文路径 + 截断限 3 层 + `partId` 选中回填；`retry.ts` 一次重试与两条候选回落；审计 `retries/reason/repairs`；LLM `response_format` 自动降级

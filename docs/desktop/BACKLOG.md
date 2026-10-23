@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 自然语言机型方案合成（P10-1，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1084/1084**（1044 + 新增 40）、`npm run smoke` 新增 `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`npm run eval:agent` **65/65（1.00）**；不 push。
+- A. 需求抽取：新增 `desktop/src/machine/spec.ts` 纯函数 `parseMachineBrief`，支持中文数字工位、`分钟 20 件` / `20 件/分钟` / `3 秒一件` / `CT` 三类节拍、五类工艺、气缸/夹爪/旋转轴/伺服/步进、接近/光电/安全光栅/压力、品牌与 220VAC/380VAC/24VDC；缺省项写 `notes` 标记，不抛错。
+- B. 方案合成：新增 `desktop/src/machine/synth.ts` 纯函数 `synthMachine`，输出可直接喂给 `createScene3D` 的 `MachineConfig`、唯一点位（`ST1-EXT-A1` 等）、节拍瓶颈与并行工位建议、固定表功率估算、BOM 草案、warnings 与 assumptions；伺服/步进按旋转轴建模并按 750 VA/轴计功率，不重复计 200 VA 旋转轴。
+- C. 工具：新增只读 `design_machine`（工具数 18 → 19，只读 10 + 写 9），schema `{brief, stationCount?, cyclePerMin?}`；空 brief、工位越界/非整数、非正节拍返回 `INVALID_ARGUMENT`；不写文件、不改工程，摘要 ≤600 字。
+- D. 路由与评测：`isMachineDesignRequest` 将机型设计识别为 `generate` 并映射到 `design_machine`；`docs/desktop/eval/cases.json` 增加 4 条（锁螺丝/点胶/装配/检测），离线评测 65/65 全绿。
+- E. 测试：新增 `test/machine/spec.test.mjs`（14）、`synth.test.mjs`（15）、`test/agent/design-machine.test.mjs`（10），共 39 条；覆盖中文数字、三种节拍写法、品牌、缺省 warning、工位均分、点位唯一、瓶颈、功率求和、BOM、schema、越界、空 brief 与摘要数字。
+- F. 文档：新建 `docs/desktop/MACHINE-DESIGN.md`（能力边界、API、规则、工具、验证、后续）；同步 `NL-AGENT.md` 工具清单、`README.md` 工具数/评测数、`MODULES.md` 与 `desktop/src/agent/MODULE.md`；`npm run kb:build` 重建离线索引。
+- 边界：几何仍为配置驱动，功率为固定表估算，节拍未计入上下料/通讯/调试损失；本轮不落盘，写工具与 UI 方案卡留给下一轮。
+
 ## Agent 运行报告与可视化（P7-O，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1044/1044**（1034 + 新增 10）、`npm run smoke` 全绿（`SMOKE_OK`）、`npm run agent:report` 产出 md/json/svg 三个非空文件；不 push。

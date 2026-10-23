@@ -1186,7 +1186,8 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 18 ||
+          summaries.length !== 19 ||
+          !summaries.some((tool) => tool.name === 'design_machine') ||
           !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
@@ -1205,6 +1206,40 @@ function createWindow(): BrowserWindow {
         }
         console.log(`SMOKE_AGENT_TOOLS_OK tools=${summaries.length} implemented=${summaries.length}`);
         console.log(`SMOKE_AGENT_TOOLS_V2 tools=${summaries.length}`);
+
+        const machineDesign = await activeTools.call('design_machine', {
+          brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
+          stationCount: 3
+        }) as {
+          ok?: boolean;
+          design?: {
+            config?: { stations?: unknown[]; actuators?: unknown[]; sensors?: unknown[] };
+            cycle?: { perMin?: number; secondsPerPiece?: number };
+            power?: { va?: number };
+            warnings?: unknown[];
+            assumptions?: unknown[];
+          };
+          summary?: string;
+          message?: string;
+        };
+        if (
+          !machineDesign.ok ||
+          machineDesign.design?.config?.stations?.length !== 3 ||
+          machineDesign.design?.config?.actuators?.length !== 6 ||
+          machineDesign.design?.config?.sensors?.length !== 6 ||
+          machineDesign.design?.cycle?.perMin !== 20 ||
+          machineDesign.design?.cycle?.secondsPerPiece !== 3 ||
+          !(Number(machineDesign.design?.power?.va) > 0) ||
+          machineDesign.design?.warnings?.length !== 1 ||
+          !Array.isArray(machineDesign.design?.assumptions) ||
+          typeof machineDesign.summary !== 'string' ||
+          machineDesign.summary.length > 600
+        ) {
+          console.error('SMOKE_FAIL machine_design', JSON.stringify(machineDesign));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1');
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
           ok?: boolean;

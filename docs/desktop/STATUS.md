@@ -59,13 +59,14 @@
 | `SMOKE_COST_AGENT_OK` | `bomSource=argument lines=6 missing=1 grand=1398.64` |
 | `SMOKE_COST_AGENT_EXPORT_OK` | `format=csv bytes=737 name=sanitized` |
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
-| `SMOKE_AGENT_TOOLS_OK` | `tools=18 implemented=18` |
-| `SMOKE_AGENT_TOOLS_V2` | `tools=18`，新增工具全部注册 |
-| `SMOKE_AGENT_KB_OK` | `docs=12 chunks=302 query=D2 hits=1`，离线知识索引可检索 |
+| `SMOKE_AGENT_TOOLS_OK` | `tools=19 implemented=19` |
+| `SMOKE_AGENT_TOOLS_V2` | `tools=19`，新增工具全部注册 |
+| `SMOKE_MACHINE_DESIGN_OK` | `stations=3 actuators=6 sensors=6 warnings=1` |
+| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=337 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
 | `SMOKE_AGENT_READONLY_UI_OK` | `preview=2 offline=1 rows=2 summary=ok scene=0` |
-| `SMOKE_AGENT_NL_OK` | `intents=7 tools=18 audit=3 ctx=555` |
+| `SMOKE_AGENT_NL_OK` | `intents=7 tools=19 audit=3 ctx=572` |
 | `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
 | `SMOKE_AGENT_PLAN_OK` | `steps=3 confirm=1` |
 | `SMOKE_PROTO_INSERT_OK` | `parts=7→8 dof=+2` |

@@ -44,7 +44,7 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   const sources = loadSources();
   const report = build(sources);
   assert.equal(verifyReport(report, sources), true);
-  assert.equal(report.overview.toolCount.value, 18);
+  assert.equal(report.overview.toolCount.value, 19);
   assert.equal(report.overview.toolCount.source, 'docs/desktop/eval/latest.json#dataset.toolCoverage');
   assert.equal(report.overview.singleTurn.total.value, 30);
   assert.equal(report.overview.singleTurn.matched.value, 30);
@@ -55,7 +55,7 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   assert.equal(report.overview.multiTurn.total.value, multi.total);
   assert.equal(report.overview.multiTurn.passed.value, multi.passed);
   assert.equal(report.overview.multiTurn.turnPassed.value, multi.turnPassed);
-  assert.equal(report.overview.offline.metrics.intent.correct.value, 61);
+  assert.equal(report.overview.offline.metrics.intent.correct.value, 65);
   assert.equal(report.overview.testCount.value, 1042);
 });
 
@@ -137,7 +137,7 @@ test('SVG：4 组条形图 + KPI 行全部由报告数据驱动', () => {
   assert.ok(svg.startsWith('<?xml'));
   assert.ok(svg.includes('fill="#0b1220"'));
   for (const label of ['查询', '操作', '流程', '拒绝/澄清']) assert.ok(svg.includes(label));
-  assert.ok(svg.includes('>18<'));
+  assert.ok(svg.includes('>19<'));
   assert.ok(svg.includes('1,042'));
   assert.ok(svg.includes('30/30'));
   assert.ok(svg.includes('4/6'));

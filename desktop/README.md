@@ -22,11 +22,11 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 无 WebGL 时显示「当前环境不支持 WebGL，无法显示 3D 模型」降级面板，并展示解析统计；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
 - 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
-- 智能体注册表为 18 个工具，渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
+- 智能体注册表为 19 个工具（含只读 `design_machine`），渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=337 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
 
 ## MCP（stdio）接入
 
-MCP 入口直接复用 `src/agent/tools.ts` 的 18 个工具（只读 9 + 写 9）：`list_components`、`search_components`、`search_docs`、`import_cad`、`get_bom`、`get_project_context`、`run_interference_check`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_electrical_check`、`run_cost_report`、`run_plc_generate`、`export_files`、`export_cost_report`、`verify_plc_program`、`undo_last`。MCP 进程会读取桌面 token 并优先把工具调用转发到 `127.0.0.1:7420`；桌面未启动时，只读检索（含 `search_docs`）回退本地 registry，其余工具返回 `DESKTOP_NOT_RUNNING`，不会假装成功。
+MCP 入口直接复用 `src/agent/tools.ts` 的 19 个工具（只读 10 + 写 9）：`list_components`、`search_components`、`search_docs`、`design_machine`、`import_cad`、`get_bom`、`get_project_context`、`run_interference_check`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_electrical_check`、`run_cost_report`、`run_plc_generate`、`export_files`、`export_cost_report`、`verify_plc_program`、`undo_last`。MCP 进程会读取桌面 token 并优先把工具调用转发到 `127.0.0.1:7420`；桌面未启动时，只读检索（含 `search_docs`）回退本地 registry，其余工具返回 `DESKTOP_NOT_RUNNING`，不会假装成功。
 
 先构建：
 

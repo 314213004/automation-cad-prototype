@@ -139,6 +139,16 @@ export function splitInstructionSteps(text: string): string[] {
     .filter(Boolean);
 }
 
+/** 机型设计请求：例如「设计一台三工位锁螺丝机，节拍 20 件/分钟」。 */
+export function isMachineDesignRequest(text: string): boolean {
+  const value = (text ?? '').trim();
+  if (!value) return false;
+  const designVerb = /设计|做一台|做一套|做一条|搭一台|搭一套/.test(value);
+  const machineNoun = /(?:机|线|设备|装置|工位)/.test(value);
+  const engineeringHint = /(?:工位|节拍|锁螺丝|锁付|点胶|装配|检测|包装|伺服|气缸|夹爪|传感器)/.test(value);
+  return designVerb && machineNoun && engineeringHint;
+}
+
 /** 规则分类：取分最高者，同分按写操作优先，全 0 判为超纲。 */
 export function routeIntent(text: string): IntentMatch {
   const normalized = (text ?? '').trim();
@@ -147,6 +157,9 @@ export function routeIntent(text: string): IntentMatch {
   }
   if (isDocQuestion(normalized)) {
     return { intent: 'query', confidence: 'high', score: 3, hits: ['本地文档'], reason: '文档类问题，查本地知识库' };
+  }
+  if (isMachineDesignRequest(normalized)) {
+    return { intent: 'generate', confidence: 'high', score: 4, hits: ['机型设计'], reason: '从中文需求合成机型方案（只读，不落盘）' };
   }
   // 多步指令以最后一步的目标分类：「读 BOM 然后做干涉」应算计算而不是查询。
   const steps = splitInstructionSteps(normalized);
@@ -194,11 +207,12 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 18 个工具里，只读 9 个、写操作 9 个。 */
+/** 目前注册的 19 个工具里，只读 10 个、写操作 9 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
   'search_docs',
+  'design_machine',
   'get_bom',
   'get_project_context',
   'run_interference_check',
@@ -543,6 +557,16 @@ function planToolBase(text: string): ToolPlan | null {
   // 越权文件、审计篡改、危险路径与跨域误用一律拒绝，不能靠后续工具兜底。
   if (FORBIDDEN_TARGET.test(value) || AUDIT_TAMPER.test(value) || CROSS_DOMAIN_MISUSE.test(value)) {
     return null;
+  }
+
+  if (isMachineDesignRequest(value)) {
+    return {
+      tool: 'design_machine',
+      args: { brief: value },
+      readOnly: true,
+      missing: [],
+      why: '按中文需求合成机型方案（只读，不落盘、不改当前工程）'
+    };
   }
 
   const category = matchCategory(value);

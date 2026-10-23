@@ -285,7 +285,7 @@ test('P8-4 校验：支持直接验证已有生成工程（project, config）', 
 test('P8-4 工具：verify_plc_program 已注册为只读且能直接返回摘要', async () => {
   assert.ok(READ_ONLY_TOOLS.has('verify_plc_program'));
   const tools = new AgentTools({} as never);
-  assert.equal(tools.list().length, 18);
+  assert.equal(tools.list().length, 19);
   assert.ok(tools.has('verify_plc_program'));
   const summary = await tools.call('verify_plc_program', { config: makeConfig() }) as {
     ok: boolean;

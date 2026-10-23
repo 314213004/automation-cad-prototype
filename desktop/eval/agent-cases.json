@@ -898,5 +898,65 @@
       "docs"
     ],
     "note": "限制类问题：检索缺尺寸处理口径（DIMS-GAPS）。"
+  },
+  {
+    "id": "d01",
+    "input": "设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服"
+      }
+    },
+    "tags": [
+      "machine_design"
+    ],
+    "note": "机型设计：中文需求原样交给方案合成器，只读、不落盘。"
+  },
+  {
+    "id": "d02",
+    "input": "做一台两工位点胶机，3 秒一件，用汇川伺服",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "做一台两工位点胶机，3 秒一件，用汇川伺服"
+      }
+    },
+    "tags": [
+      "machine_design"
+    ],
+    "note": "机型设计：秒/件写法与品牌识别。"
+  },
+  {
+    "id": "d03",
+    "input": "设计一条四工位装配线，分钟 15 件，带安全光栅",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一条四工位装配线，分钟 15 件，带安全光栅"
+      }
+    },
+    "tags": [
+      "machine_design"
+    ],
+    "note": "机型设计：分钟 N 件写法与安全光栅。"
+  },
+  {
+    "id": "d04",
+    "input": "设计一台检测机，六个工位，节拍 30 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一台检测机，六个工位，节拍 30 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design"
+    ],
+    "note": "机型设计：中文数字工位数。"
   }
 ]
