@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**619 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**647 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -36,7 +36,7 @@
 
 *CAD 查看：载入真实 STEP 装配体（18 个零件、5,040 个三角面），左侧零件列表可点选定位，中间 three.js 视口支持旋转 / 缩放 / 平移，底部给出解析统计。*
 
-> 截图未包含 P9-3 的「参数化」抽屉（本轮无新增截图）。实跑时顶栏「参数化」按钮会在右侧打开与「运动学」二选一的抽屉：上半部是带图标的特征树与上移/下移/抑制/改名/删除操作，下半部按特征类型显示参数表单；底部显示 `<状态> · 重建 50 ms · 面 19 · 体积 71.5 cm³` 并提供重建、导出 STEP/STL、保存/载入特征树。参数改动默认 300 ms 防抖自动重建，成功后把 sidecar 返回的 STL 载入 three.js，并可半透明叠加旧模型对比。
+> 截图未包含 P9-5 的「参数化」抽屉（本轮无新增截图）。实跑时顶栏「参数化」按钮会在右侧打开与「运动学」二选一的抽屉：装配实体区可增删实体并编辑名称 / partId / X/Y/Z/RZ，特征树支持上移/下移/抑制/改名/删除，参数表单按特征类型渲染；底部显示 `<状态> · 重建 50 ms · 面 19 · 体积 71.5 cm³` 并提供重建、导出 STEP/STL、导出 BOM、送成本、保存/载入特征树。参数改动默认 300 ms 防抖自动重建，成功后把 sidecar 返回的 STL 载入 three.js，并可半透明叠加旧模型对比。
 
 STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注**抽屉：网格多选合并为一个动件 → 指定轴类型（直线 / 旋转）、方向、行程、缩回位、绑定 IO 点位 → 中文实时校验（动件不在 STEP、行程非正、缩回超行程、直轴填角度、点位不存在、同点位冲突）→ 行程滑块直接拖动 3D 中的动件预览。标注按文件名存 `localStorage`，可导出 / 导入 JSON；无标注时 3D 联调回退到机型配置驱动，并在面板顶部说明原因。
 
@@ -113,7 +113,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 电气元件库 | iec-cn 数据包：371 型号 / 26 分类 / 219 符号 / 191 真实尺寸，插件式加载 | ✅ 桌面 |
 | **底板布置画布** | 毫米坐标 SVG、底板尺寸可设、1mm 吸附、两条 35mm 导轨、重叠标红、利用率统计、JSON 导出与刷新恢复 | ✅ 桌面 |
 | **电气合规校验** | 线号（缺号 / 格式 / 同网重复 / 跨网重号 / 相线电位不符 / 跳号）、功率统计（kW / kVA / 分相电流 / 不平衡度 / 主断路器与进线截面建议 / 24V 余量）、导线截面 vs 载流量；A3 PDF 报告 | ✅ 桌面 |
-| **参数化建模（P9-3）** | build123d sidecar + 右侧「参数化」抽屉：特征树增删/排序/抑制/改名、按类型参数表单（box/holes/slot/fillet/cylinder）、300 ms 防抖自动重建、旧模型半透明对比、特征包围盒高亮、STEP/STL 导出；校验失败逐条中文提示并禁止重建，内核不可用降级只读 | ✅ 生命周期 + IPC + 特征树 UI |
+| **参数化建模（P9-5）** | build123d sidecar + 右侧「参数化」抽屉：多实体装配（独立特征树 + X/Y/Z/RZ + partId，旧单件文档自动包装）、特征树增删/排序/抑制/改名、按类型参数表单（box/holes/slot/fillet/cylinder）、300 ms 防抖自动重建、旧模型半透明对比、特征包围盒高亮、STEP/STL 导出；BOM 按相同 partId / 未映射名称合并，导出 UTF-8 BOM CSV 并一键送成本（未映射走 `NO_PART_ID`，不猜物料号） | ✅ 生命周期 + IPC + 装配/BOM 联动 |
 | **硬件成本统计** | 价格簿（阶梯价 / 来源 / 更新日期 / 示例价自动排除）+ 纯函数引擎：BOM × 阶梯价 + 底板推算线缆 / 端子 / 导轨 / 线槽 + 人工 + 税 / 加成 / 运费；缺价单列「待询价」；成本面板（9 张统计卡 + 明细表 + 缺价告警）导出 A4 PDF 与 UTF-8 BOM 的 CSV；Agent 工具 `run_cost_report` 只读返回同一份报告摘要，`export_cost_report` 按一句话把 PDF/CSV 落到 `userData/exports/` | ✅ 引擎 + 面板 + 导出 + Agent 问答/落盘 |
 
 ### CAD 与数据
@@ -219,7 +219,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（619 个）
+│   ├── test/                                 # node:test 单测与集成测试（647 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -247,7 +247,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 619 个单测（node:test）
+npm test          # 647 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
 ```
@@ -259,7 +259,7 @@ smoke 覆盖并断言：
 - 干涉、受力、导出的计算与文件写出；
 - PLC 点位、上电序列、用例；
 - PLC 代码生成（`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）：五个基础块、11 文件汇总、自动序列/安全/报警 FC 与确定性校验；内置模拟器按 mapping 跑 6 步联调（0 报警）；UI 从电气域入口打开、预检、生成、模拟验证、历史与 zip 落盘全链路；
-- 参数化 sidecar 与特征树 UI（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `desktop/scripts/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`；不设环境变量时输出 `SMOKE_PARAMETRIC_UI_SKIP`；
+- 参数化 sidecar、特征树 UI 与多实体 BOM（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `desktop/scripts/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`、`SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3`；不设环境变量时输出 `SMOKE_PARAMETRIC_UI_SKIP`；
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
@@ -276,7 +276,7 @@ smoke 覆盖并断言：
 - **价格簿尚无真实报价**：内置价格簿只含明确标注「示例，需替换」的条目，引擎会自动排除示例价；真实成本需导入企业价格表后才能用于报价。
 - **成本面板的 BOM 需手工导入**：面板接受 BOM JSON（或由上层注入 `__CostBomProvider`），尚未把 CAD 模型零件名自动映射到元器件物料号（映射口径待定，见 BACKLOG D7）；Agent 工具 `run_cost_report` 未传 `bom` 时回落到当前场景 BOM，场景零件没有物料号，会全部计入「缺物料号」而不会按 0 计价。Agent 导出工具 `export_cost_report` 固定写 `<userData>/exports/`（Windows 通常为 `%APPDATA%/AutomationCAD/exports/`），不接受任意绝对路径、不弹系统保存对话框；面板里的 CSV 仍走系统保存对话框。
 - **运动学标注需人工指定**：STEP 不含运动学，动件 / 轴 / 行程 / 点位由人标注；未标注时联调回退到机型配置。
-- **参数化建模已完成 P9-3 单件特征树**：右侧抽屉可编辑 box / holes / slot / fillet / cylinder，自动重建后载入 sidecar 返回的 STL 并叠加旧模型（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)）。仍需 Python sidecar 运行时；草图约束（P9-4）、多实体装配与 BOM/成本联动（P9-5）未做。
+- **参数化建模已完成 P9-5 多实体与 BOM 联动**：右侧抽屉可维护多个实体（独立 box / holes / slot / fillet / cylinder 特征与 X/Y/Z/RZ），自动重建后载入 sidecar 返回的 STL 并叠加旧模型；BOM 按 partId 合并、未映射件显式标黄，可导出 UTF-8 BOM CSV 并送成本面板，未映射件按 `NO_PART_ID` 缺价（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)）。仍需 Python sidecar 运行时；草图约束（P9-4）未做。
 - **PLC 程序自动生成完成 P8-1～P8-4**：预检、IO 变量表、五个基础块、自动序列/报警/安全 FC、`mapping.json`、生成 UI、zip 导出、最近 10 次历史，以及内置模拟器执行联调序列（超时/SafeStop/传感器矛盾）已落地（[PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)）；仍不生成厂商专有工程文件。
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。

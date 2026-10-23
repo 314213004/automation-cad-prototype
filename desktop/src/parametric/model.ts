@@ -1,5 +1,16 @@
 // 参数化特征树的编辑与持久化纯逻辑：无 DOM、无 IPC，便于单测与 UI 复用。
-import type { FeatureDoc, FeatureNode, FeatureType } from './features.ts';
+import {
+  ASSEMBLY_SCHEMA_VERSION,
+  MAX_ASSEMBLY_INSTANCES,
+  isAssemblyDoc,
+  toAssembly,
+  type AssemblyDoc,
+  type FeatureDoc,
+  type FeatureNode,
+  type FeatureType,
+  type InstanceTransform,
+  type PartInstance
+} from './features.ts';
 
 export const PARAMETRIC_STORAGE_KEY = 'automationcad.parametric.v1';
 export const PARAMETRIC_STORAGE_VERSION = 1;
@@ -173,6 +184,136 @@ export function makeDoc(
     features: features.map((feature) => clone(feature)),
     updatedAt: timestamp(options.now ?? Date.now())
   };
+}
+
+export function emptyInstance(id = 'p1', index = 1): PartInstance {
+  const feature = createFeature('box', []);
+  return {
+    id,
+    name: `零件 ${index}`,
+    transform: { x: 0, y: 0, z: 0, rz: 0 },
+    features: [feature]
+  };
+}
+
+export function makeAssembly(
+  instances: readonly PartInstance[] = [emptyInstance()],
+  options: { sourceFile?: string; now?: number } = {}
+): AssemblyDoc {
+  return {
+    schemaVersion: ASSEMBLY_SCHEMA_VERSION,
+    ...(options.sourceFile?.trim() ? { sourceFile: options.sourceFile.trim() } : {}),
+    instances: instances.map((instance) => clone(instance)),
+    updatedAt: timestamp(options.now ?? Date.now())
+  };
+}
+
+/** 把旧单件文档包成装配；已有装配规范化并深拷贝。 */
+export function assemblyFromDoc(doc: FeatureDoc | AssemblyDoc): AssemblyDoc {
+  return toAssembly(doc);
+}
+
+export function nextInstanceId(instances: readonly PartInstance[]): string {
+  let max = 0;
+  for (const instance of instances) {
+    const match = /^p(\d+)$/.exec(instance.id);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return `p${max + 1}`;
+}
+
+export function findInstance(assembly: AssemblyDoc, id: string | null): PartInstance | null {
+  if (!id) return null;
+  return assembly.instances.find((instance) => instance.id === id) ?? null;
+}
+
+export function instanceFeatures(assembly: AssemblyDoc): FeatureNode[] {
+  return assembly.instances.flatMap((instance) => instance.features);
+}
+
+function touchAssembly(assembly: AssemblyDoc, now: number): AssemblyDoc {
+  return { ...assembly, updatedAt: timestamp(now) };
+}
+
+export function addInstance(
+  assembly: AssemblyDoc,
+  options: { now?: number; name?: string; partId?: string } = {}
+): { assembly: AssemblyDoc; instance: PartInstance } {
+  if (assembly.instances.length >= MAX_ASSEMBLY_INSTANCES) {
+    throw new Error(`装配最多支持 ${MAX_ASSEMBLY_INSTANCES} 个实体`);
+  }
+  const index = assembly.instances.length + 1;
+  const instance = emptyInstance(nextInstanceId(assembly.instances), index);
+  if (options.name?.trim()) instance.name = options.name.trim();
+  if (options.partId?.trim()) instance.partId = options.partId.trim();
+  return {
+    assembly: touchAssembly({ ...assembly, instances: [...assembly.instances, instance] }, options.now ?? Date.now()),
+    instance
+  };
+}
+
+/** 至少保留一个实体；删除不存在或最后一个实体时只更新时间戳。 */
+export function removeInstance(assembly: AssemblyDoc, id: string, now = Date.now()): AssemblyDoc {
+  if (assembly.instances.length <= 1) return touchAssembly(assembly, now);
+  return touchAssembly({
+    ...assembly,
+    instances: assembly.instances.filter((instance) => instance.id !== id)
+  }, now);
+}
+
+export function renameInstance(assembly: AssemblyDoc, id: string, name: string, now = Date.now()): AssemblyDoc {
+  const trimmed = name.trim() || '未命名';
+  return touchAssembly({
+    ...assembly,
+    instances: assembly.instances.map((instance) =>
+      instance.id === id ? { ...instance, name: trimmed } : instance
+    )
+  }, now);
+}
+
+export function setInstancePartId(assembly: AssemblyDoc, id: string, partId: string, now = Date.now()): AssemblyDoc {
+  const trimmed = partId.trim();
+  return touchAssembly({
+    ...assembly,
+    instances: assembly.instances.map((instance) => {
+      if (instance.id !== id) return instance;
+      if (!trimmed) {
+        const { partId: _removed, ...rest } = instance;
+        return rest;
+      }
+      return { ...instance, partId: trimmed };
+    })
+  }, now);
+}
+
+export function updateInstanceTransform(
+  assembly: AssemblyDoc,
+  id: string,
+  patch: Partial<InstanceTransform>,
+  now = Date.now()
+): AssemblyDoc {
+  return touchAssembly({
+    ...assembly,
+    instances: assembly.instances.map((instance) =>
+      instance.id === id
+        ? { ...instance, transform: { ...instance.transform, ...patch } }
+        : instance
+    )
+  }, now);
+}
+
+export function setInstanceFeatures(
+  assembly: AssemblyDoc,
+  id: string,
+  features: readonly FeatureNode[],
+  now = Date.now()
+): AssemblyDoc {
+  return touchAssembly({
+    ...assembly,
+    instances: assembly.instances.map((instance) =>
+      instance.id === id ? { ...instance, features: features.map((feature) => clone(feature)) } : instance
+    )
+  }, now);
 }
 
 export function addFeature(
@@ -399,14 +540,107 @@ export function docBounds(doc: FeatureDoc): FeatureBounds | null {
   return result;
 }
 
-export function serializeDoc(doc: FeatureDoc): string {
+export function serializeDoc(doc: FeatureDoc | AssemblyDoc): string {
   return JSON.stringify(doc, null, 2);
 }
 
 export interface DeserializeResult {
   ok: boolean;
-  doc: FeatureDoc | null;
+  doc: FeatureDoc | AssemblyDoc | null;
   errors: string[];
+}
+
+function parseFeatureNodes(
+  rawFeatures: unknown[],
+  errors: string[],
+  prefix = ''
+): FeatureNode[] {
+  const features: FeatureNode[] = [];
+  rawFeatures.forEach((value, index) => {
+    const label = `${prefix}第 ${index + 1} 个特征`;
+    if (!isRecord(value)) {
+      errors.push(`${label}必须是对象`);
+      return;
+    }
+    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`${label}缺少 id`);
+    if (typeof value.type !== 'string' || !TYPE_SET.has(value.type)) {
+      errors.push(`${label}类型无效`);
+      return;
+    }
+    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`${label}缺少名称`);
+    if (!isRecord(value.params)) errors.push(`${label} params 必须是对象`);
+    features.push({
+      id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `f${index + 1}`,
+      type: value.type as FeatureType,
+      name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : '未命名',
+      params: clone(isRecord(value.params) ? value.params : {}),
+      ...(value.suppressed === true ? { suppressed: true } : {})
+    });
+  });
+  return features;
+}
+
+function parseAssembly(raw: Record<string, unknown>, errors: string[]): AssemblyDoc | null {
+  if (raw.schemaVersion !== 1 && raw.schemaVersion !== ASSEMBLY_SCHEMA_VERSION) {
+    errors.push('schemaVersion 必须为 1 或 2');
+  }
+  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('updatedAt 缺失');
+  if (raw.sourceFile !== undefined && typeof raw.sourceFile !== 'string') errors.push('sourceFile 必须是字符串');
+  if (!Array.isArray(raw.instances)) {
+    errors.push('instances 必须是数组');
+    return null;
+  }
+  if (raw.instances.length === 0) errors.push('装配为空，至少需要一个实体');
+  if (raw.instances.length > MAX_ASSEMBLY_INSTANCES) {
+    errors.push(`装配最多支持 ${MAX_ASSEMBLY_INSTANCES} 个实体（当前 ${raw.instances.length} 个）`);
+  }
+  const instances: PartInstance[] = [];
+  raw.instances.forEach((value, index) => {
+    const label = `第 ${index + 1} 个实体`;
+    if (!isRecord(value)) {
+      errors.push(`${label}必须是对象`);
+      return;
+    }
+    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`${label}缺少 id`);
+    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`${label}缺少名称`);
+    if (value.partId !== undefined && typeof value.partId !== 'string') errors.push(`${label} partId 必须是字符串`);
+    const transform = isRecord(value.transform) ? value.transform : null;
+    if (!transform) errors.push(`${label} transform 必须是对象`);
+    const x = transform?.x;
+    const y = transform?.y;
+    const z = transform?.z;
+    const rz = transform?.rz;
+    if (typeof x !== 'number' || !Number.isFinite(x) ||
+        typeof y !== 'number' || !Number.isFinite(y) ||
+        typeof z !== 'number' || !Number.isFinite(z) ||
+        (rz !== undefined && (typeof rz !== 'number' || !Number.isFinite(rz)))) {
+      errors.push(`${label} transform 必须包含数字 x / y / z（rz 可省略，省略按 0）`);
+    }
+    if (!Array.isArray(value.features)) {
+      errors.push(`${label} features 必须是数组`);
+      return;
+    }
+    const features = parseFeatureNodes(value.features, errors, `${label}：`);
+    instances.push({
+      id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `p${index + 1}`,
+      name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : `零件 ${index + 1}`,
+      ...(typeof value.partId === 'string' && value.partId.trim() ? { partId: value.partId.trim() } : {}),
+      transform: {
+        x: typeof x === 'number' && Number.isFinite(x) ? x : 0,
+        y: typeof y === 'number' && Number.isFinite(y) ? y : 0,
+        z: typeof z === 'number' && Number.isFinite(z) ? z : 0,
+        rz: typeof rz === 'number' && Number.isFinite(rz) ? rz : 0
+      },
+      features
+    });
+  });
+  if (errors.length > 0) return null;
+  return {
+    schemaVersion: ASSEMBLY_SCHEMA_VERSION,
+    ...(typeof raw.sourceFile === 'string' && raw.sourceFile.trim() ? { sourceFile: raw.sourceFile.trim() } : {}),
+    instances,
+    updatedAt: raw.updatedAt as string
+  };
 }
 
 /** 结构校验，不要求参数已全部合法（载入后可继续编辑）。 */
@@ -419,32 +653,19 @@ export function deserializeDoc(text: string, now = Date.now()): DeserializeResul
     return { ok: false, doc: null, errors: ['特征树 JSON 解析失败，请检查文件内容'] };
   }
   if (!isRecord(raw)) return { ok: false, doc: null, errors: ['特征树必须是 JSON 对象'] };
+  if (Array.isArray(raw.instances)) {
+    const assembly = parseAssembly(raw, errors);
+    return errors.length > 0 || !assembly
+      ? { ok: false, doc: null, errors }
+      : { ok: true, doc: assembly, errors: [] };
+  }
   if (raw.schemaVersion !== 1) errors.push('schemaVersion 必须为 1');
   if (!Array.isArray(raw.features)) errors.push('features 必须是数组');
   if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('updatedAt 缺失');
   if (raw.sourceFile !== undefined && typeof raw.sourceFile !== 'string') errors.push('sourceFile 必须是字符串');
   const features: FeatureNode[] = [];
   if (Array.isArray(raw.features)) {
-    raw.features.forEach((value, index) => {
-      if (!isRecord(value)) {
-        errors.push(`第 ${index + 1} 个特征必须是对象`);
-        return;
-      }
-      if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`第 ${index + 1} 个特征缺少 id`);
-      if (typeof value.type !== 'string' || !TYPE_SET.has(value.type)) {
-        errors.push(`第 ${index + 1} 个特征类型无效`);
-        return;
-      }
-      if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`第 ${index + 1} 个特征缺少名称`);
-      if (!isRecord(value.params)) errors.push(`第 ${index + 1} 个特征 params 必须是对象`);
-      features.push({
-        id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `f${index + 1}`,
-        type: value.type as FeatureType,
-        name: typeof value.name === 'string' && value.name.trim() ? value.name.trim() : '未命名',
-        params: clone(isRecord(value.params) ? value.params : {}),
-        ...(value.suppressed === true ? { suppressed: true } : {})
-      });
-    });
+    features.push(...parseFeatureNodes(raw.features, errors));
   }
   if (errors.length > 0) return { ok: false, doc: null, errors };
   const doc: FeatureDoc = {
@@ -464,7 +685,7 @@ export interface StorageLike {
 
 interface ParametricBucket {
   version: 1;
-  buckets: Record<string, FeatureDoc>;
+  buckets: Record<string, FeatureDoc | AssemblyDoc>;
 }
 
 function emptyBucket(): ParametricBucket {
@@ -479,15 +700,15 @@ function readBucket(storage: StorageLike): ParametricBucket {
     if (!isRecord(parsed) || parsed.version !== PARAMETRIC_STORAGE_VERSION || !isRecord(parsed.buckets)) {
       return emptyBucket();
     }
-    return { version: 1, buckets: parsed.buckets as Record<string, FeatureDoc> };
+    return { version: 1, buckets: parsed.buckets as Record<string, FeatureDoc | AssemblyDoc> };
   } catch {
     return emptyBucket();
   }
 }
 
 export interface ParametricStore {
-  get(sourceFile?: string | null): FeatureDoc | null;
-  set(sourceFile: string | null | undefined, doc: FeatureDoc): void;
+  get(sourceFile?: string | null): FeatureDoc | AssemblyDoc | null;
+  set(sourceFile: string | null | undefined, doc: FeatureDoc | AssemblyDoc): void;
   remove(sourceFile?: string | null): void;
   files(): string[];
 }
@@ -495,13 +716,15 @@ export interface ParametricStore {
 /** 单键 `automationcad.parametric.v1`，内部按 sourceFile 分桶。 */
 export function createParametricStore(storage: StorageLike): ParametricStore {
   return {
-    get(sourceFile?: string | null): FeatureDoc | null {
+    get(sourceFile?: string | null): FeatureDoc | AssemblyDoc | null {
       const key = storageBucketKey(sourceFile);
       const entry = readBucket(storage).buckets[key];
-      if (!entry || !Array.isArray(entry.features)) return null;
+      if (!entry || (isAssemblyDoc(entry) ? !Array.isArray(entry.instances) : !Array.isArray(entry.features))) {
+        return null;
+      }
       return clone(entry);
     },
-    set(sourceFile: string | null | undefined, doc: FeatureDoc): void {
+    set(sourceFile: string | null | undefined, doc: FeatureDoc | AssemblyDoc): void {
       const key = storageBucketKey(sourceFile);
       const bucket = readBucket(storage);
       bucket.buckets[key] = clone(doc);

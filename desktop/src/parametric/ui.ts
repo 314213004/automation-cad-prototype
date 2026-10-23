@@ -5,15 +5,19 @@ import type { CadImportResult } from '../shared/types';
 import type { CadViewer } from '../cad/viewer';
 import {
   summarize,
+  toAssembly,
   validateFeatures,
+  type AssemblyDoc,
   type FeatureDoc,
   type FeatureNode,
-  type FeatureType
+  type FeatureType,
+  type PartInstance
 } from './features.ts';
 import {
   FEATURE_SPECS,
   FEATURE_TYPES,
   addFeature,
+  addInstance,
   createParametricStore,
   debouncePlan,
   deserializeDoc,
@@ -21,16 +25,23 @@ import {
   featureBounds,
   findFeature,
   formatBuildStatus,
+  instanceFeatures,
   makeDoc,
+  makeAssembly,
   moveFeature,
   removeFeature,
+  removeInstance,
+  renameInstance,
   renameFeature,
   serializeDoc,
+  setInstancePartId,
   setSuppressed,
   storageBucketKey,
+  updateInstanceTransform,
   updateParams,
   type StorageLike
 } from './model.ts';
+import { bomToCsv, toBom, toCostInput } from './bom.ts';
 
 export interface ParametricUiStatus {
   status: 'stopped' | 'starting' | 'ready' | 'unavailable' | 'crashed';
@@ -63,6 +74,8 @@ export interface ParametricUiOptions {
 export interface ParametricUiState {
   sourceFile: string;
   features: number;
+  instances: number;
+  bomRows: number;
   selected: string | null;
   validationErrors: number;
   status: ParametricUiStatus['status'];
@@ -78,8 +91,8 @@ export interface ParametricUiHandle {
   close(): void;
   isOpen(): boolean;
   setSource(sourceFile: string): void;
-  setDoc(doc: FeatureDoc): void;
-  getDoc(): FeatureDoc;
+  setDoc(doc: FeatureDoc | AssemblyDoc): void;
+  getDoc(): AssemblyDoc;
   build(): Promise<ParametricBuildLike>;
   state(): ParametricUiState;
 }
@@ -136,6 +149,14 @@ function pathOf(files: Record<string, unknown> | undefined, format: 'step' | 'st
   return typeof path === 'string' && path.trim() ? path : null;
 }
 
+function copyFeatures(features: readonly FeatureNode[]): FeatureNode[] {
+  return JSON.parse(JSON.stringify(features)) as FeatureNode[];
+}
+
+function blankInstance(id: string, name: string): PartInstance {
+  return { id, name, transform: { x: 0, y: 0, z: 0, rz: 0 }, features: [] };
+}
+
 export function initParametricUi(options: ParametricUiOptions): ParametricUiHandle {
   const storage = options.storage ?? defaultStorage();
   const store = storage ? createParametricStore(storage) : null;
@@ -144,6 +165,8 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   const debounceMs = options.debounceMs ?? 300;
 
   let sourceFile = options.getSourceFile().trim();
+  let instances: PartInstance[] = [blankInstance('p1', '零件 1')];
+  let selectedInstanceId: string | null = 'p1';
   let doc: FeatureDoc = makeDoc([], {
     ...(sourceFile ? { sourceFile } : {}),
     now: now()
@@ -180,6 +203,16 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     <div class="cad-param-body">
       <section class="cad-param-section">
         <div class="cad-param-section-head">
+          <span>装配实体</span><b data-param-instance-count>1</b>
+        </div>
+        <div class="cad-param-instances" data-param-instances></div>
+        <div class="cad-param-add">
+          <button type="button" class="cad-btn" data-param-instance-add>新增实体</button>
+        </div>
+        <div class="cad-param-instance-form" data-param-instance-form></div>
+      </section>
+      <section class="cad-param-section">
+        <div class="cad-param-section-head">
           <span>特征树</span><b data-param-feature-count>0</b>
         </div>
         <div class="cad-param-add">
@@ -208,6 +241,12 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
         </div>
         <div class="cad-param-issues" data-param-issues></div>
       </section>
+      <section class="cad-param-section">
+        <div class="cad-param-section-head">
+          <span>BOM</span><b data-param-bom-count>0</b>
+        </div>
+        <div class="cad-param-bom" data-param-bom></div>
+      </section>
       <section class="cad-param-options">
         <label><input type="checkbox" data-param-auto checked> 参数改动 300 ms 后自动重建</label>
         <label><input type="checkbox" data-param-compare checked> 叠加旧模型（半透明）对比</label>
@@ -222,6 +261,8 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
         <button type="button" class="cad-btn cad-btn-primary" data-param-rebuild>重建</button>
         <button type="button" class="cad-btn" data-param-export="step">导出 STEP</button>
         <button type="button" class="cad-btn" data-param-export="stl">导出 STL</button>
+        <button type="button" class="cad-btn" data-param-export-bom>导出 BOM</button>
+        <button type="button" class="cad-btn" data-param-send-cost>送成本</button>
         <button type="button" class="cad-btn" data-param-save>保存特征树</button>
         <button type="button" class="cad-btn" data-param-load>载入特征树</button>
         <input type="file" accept="application/json,.json" data-param-file hidden>
@@ -237,12 +278,17 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   const stateDot = query<HTMLElement>('[data-param-state-dot]');
   const stateLabel = query<HTMLElement>('[data-param-state-label]');
   const stateMessage = query<HTMLElement>('[data-param-state-message]');
+  const instanceList = query<HTMLElement>('[data-param-instances]');
+  const instanceCount = query<HTMLElement>('[data-param-instance-count]');
+  const instanceForm = query<HTMLElement>('[data-param-instance-form]');
   const featureList = query<HTMLElement>('[data-param-features]');
   const featureCount = query<HTMLElement>('[data-param-feature-count]');
   const summary = query<HTMLElement>('[data-param-summary]');
   const form = query<HTMLElement>('[data-param-form]');
   const issues = query<HTMLElement>('[data-param-issues]');
   const issueCount = query<HTMLElement>('[data-param-issue-count]');
+  const bomList = query<HTMLElement>('[data-param-bom]');
+  const bomCount = query<HTMLElement>('[data-param-bom-count]');
   const addType = query<HTMLSelectElement>('[data-param-add-type]');
   const addButton = query<HTMLButtonElement>('[data-param-add]');
   const rebuildButton = query<HTMLButtonElement>('[data-param-rebuild]');
@@ -254,10 +300,68 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   const buildStatus = query<HTMLElement>('[data-param-build-status]');
   const buildHint = query<HTMLElement>('[data-param-build-hint]');
   const exportButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-param-export]')];
+  const exportBomButton = query<HTMLButtonElement>('[data-param-export-bom]');
+  const sendCostButton = query<HTMLButtonElement>('[data-param-send-cost]');
 
   const notify = (message: string, error = false): void => options.notify?.(message, error);
 
   const api = () => window.desktop?.parametric;
+
+  function currentInstance(): PartInstance | null {
+    return instances.find((instance) => instance.id === selectedInstanceId) ?? null;
+  }
+
+  function syncSelectedFeatures(): void {
+    if (!selectedInstanceId) return;
+    instances = instances.map((instance) =>
+      instance.id === selectedInstanceId ? { ...instance, features: copyFeatures(doc.features) } : instance
+    );
+  }
+
+  function currentAssembly(): AssemblyDoc {
+    syncSelectedFeatures();
+    return {
+      schemaVersion: 2,
+      ...(sourceFile ? { sourceFile } : {}),
+      instances: instances.map((instance) => JSON.parse(JSON.stringify(instance)) as PartInstance),
+      updatedAt: doc.updatedAt
+    };
+  }
+
+  function featureDocFor(instance: PartInstance, updatedAt: string): FeatureDoc {
+    return {
+      schemaVersion: 1,
+      ...(sourceFile ? { sourceFile } : {}),
+      features: copyFeatures(instance.features),
+      updatedAt
+    };
+  }
+
+  function applyAssembly(
+    next: AssemblyDoc,
+    options2: { keepSelection?: boolean; rebuild?: boolean } = {}
+  ): void {
+    instanceState(next.instances, options2.keepSelection === true, options2.rebuild !== false, next.updatedAt);
+  }
+
+  function instanceState(
+    nextInstances: PartInstance[],
+    keepSelection: boolean,
+    rebuild: boolean,
+    updatedAt?: string
+  ): void {
+    instances = nextInstances.map((instance) => JSON.parse(JSON.stringify(instance)) as PartInstance);
+    const stillThere = selectedInstanceId && instances.some((instance) => instance.id === selectedInstanceId);
+    selectedInstanceId = stillThere ? selectedInstanceId : instances[0]?.id ?? null;
+    const instance = currentInstance();
+    doc = featureDocFor(instance ?? blankInstance('p1', '零件 1'), updatedAt ?? doc.updatedAt);
+    if (!keepSelection || !findFeature(doc, selectedId)) selectedId = doc.features[0]?.id ?? null;
+    renamingId = null;
+    persist();
+    renderAll();
+    selectFeature(selectedId);
+    if (rebuild) scheduleRebuild();
+  }
 
   function touchSourceLabel(): void {
     sourceLabel.textContent = sourceFile || '未加载来源文件（untitled）';
@@ -266,14 +370,14 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
 
   function persist(): void {
     try {
-      store?.set(sourceFile, doc);
+      store?.set(sourceFile, currentAssembly());
     } catch {
       // localStorage 不可用时仍允许编辑与导出 JSON。
     }
   }
 
   function validation(): string[] {
-    return validateFeatures(doc);
+    return validateFeatures(currentAssembly());
   }
 
   function refreshState(): void {
@@ -304,6 +408,8 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
       const format = button.dataset.paramExport as 'step' | 'stl' | undefined;
       button.disabled = !format || !pathOf(lastFiles, format);
     }
+    exportBomButton.disabled = instances.length === 0;
+    sendCostButton.disabled = instances.length === 0;
   }
 
   function refreshIssues(): void {
@@ -317,11 +423,68 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   }
 
   function refreshSummary(): void {
-    const info = summarize(doc);
+    const assembly = currentAssembly();
+    const features = instanceFeatures(assembly);
+    const info = summarize({ schemaVersion: 1, features, updatedAt: assembly.updatedAt });
     summary.textContent = info.suppressed > 0
-      ? `${info.features} 特征 · ${info.holes} 孔 · ${info.suppressed} 抑制`
-      : `${info.features} 特征 · ${info.holes} 孔`;
-    featureCount.textContent = String(info.features);
+      ? `${assembly.instances.length} 实体 · ${info.features} 特征 · ${info.holes} 孔 · ${info.suppressed} 抑制`
+      : `${assembly.instances.length} 实体 · ${info.features} 特征 · ${info.holes} 孔`;
+    featureCount.textContent = String(doc.features.length);
+    instanceCount.textContent = String(assembly.instances.length);
+  }
+
+  function formatTransform(transform: PartInstance['transform']): string {
+    const value = (item: unknown): string => typeof item === 'number' && Number.isFinite(item)
+      ? String(Math.round(item * 100) / 100)
+      : '—';
+    return `X ${value(transform.x)} · Y ${value(transform.y)} · Z ${value(transform.z)} · RZ ${value(transform.rz)}`;
+  }
+
+  function renderInstances(): void {
+    instanceList.innerHTML = instances.map((instance, index) => {
+      const selected = instance.id === selectedInstanceId ? ' is-selected' : '';
+      const mapped = typeof instance.partId === 'string' && instance.partId.trim()
+        ? `<span class="cad-param-mapped">${escapeHtml(instance.partId.trim())}</span>`
+        : '<span class="cad-param-unmapped">未映射</span>';
+      return `<div class="cad-param-instance${selected}" data-param-instance="${escapeHtml(instance.id)}">
+        <button type="button" class="cad-param-instance-main" data-param-instance-select="${escapeHtml(instance.id)}" title="${escapeHtml(instance.name)}">
+          <b>${index + 1}</b><span>${escapeHtml(instance.name)}</span>${mapped}
+        </button>
+        <span class="cad-param-instance-transform">${escapeHtml(formatTransform(instance.transform))}</span>
+        <button type="button" class="cad-param-instance-delete" data-param-instance-delete="${escapeHtml(instance.id)}" title="删除实体">×</button>
+      </div>`;
+    }).join('');
+    renderInstanceForm();
+  }
+
+  function renderInstanceForm(): void {
+    const instance = currentInstance();
+    if (!instance) {
+      instanceForm.innerHTML = '<div class="cad-param-empty">新增实体后编辑位置与物料号。</div>';
+      return;
+    }
+    instanceForm.innerHTML = `
+      <div class="cad-param-grid">
+        <label class="cad-param-field"><span>实体名称</span>
+          <input type="text" data-param-inst-name value="${escapeHtml(instance.name)}" aria-label="实体名称"></label>
+        <label class="cad-param-field"><span>物料号 partId</span>
+          <input type="text" data-param-inst-partid value="${escapeHtml(instance.partId ?? '')}" placeholder="留空则标记未映射" aria-label="物料号"></label>
+        ${(['x', 'y', 'z', 'rz'] as const).map((axis) => `<label class="cad-param-field"><span>${axis.toUpperCase()}${axis === 'rz' ? ' (°)' : ' (mm)'}</span>
+          <input type="number" step="1" data-param-inst-transform="${axis}" value="${numberText(instance.transform[axis], '0')}" aria-label="实体 ${axis}"></label>`).join('')}
+      </div>`;
+  }
+
+  function refreshBom(): void {
+    const rows = toBom(currentAssembly());
+    bomCount.textContent = String(rows.length);
+    bomList.innerHTML = rows.length === 0
+      ? '<div class="cad-param-empty">还没有可汇总的实体。</div>'
+      : `<div class="cad-param-bom-head"><span>序号</span><span>名称</span><span>物料号</span><span>规格</span><span>数量</span></div>` +
+        rows.map((row) => `<div class="cad-param-bom-row" data-param-bom-row="${row.no}">
+          <span>${row.no}</span><span>${escapeHtml(row.name)}</span>
+          <span class="${row.unmapped ? 'cad-param-unmapped' : 'cad-param-mapped'}">${row.unmapped ? '未映射' : escapeHtml(row.partId ?? '')}</span>
+          <span>${escapeHtml(row.spec)}</span><span>${row.qty}</span>
+        </div>`).join('');
   }
 
   function iconFor(type: FeatureType): string {
@@ -446,17 +609,21 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   function renderAll(): void {
     touchSourceLabel();
     refreshSummary();
+    renderInstances();
     renderFeatures();
     renderForm();
     refreshIssues();
+    refreshBom();
     refreshState();
     refreshFooter();
   }
 
   function refreshLight(): void {
     refreshSummary();
+    renderInstances();
     renderFeatures();
     refreshIssues();
+    refreshBom();
     refreshFooter();
   }
 
@@ -467,15 +634,6 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     const feature = findFeature(doc, id);
     const bounds = feature ? featureBounds(feature, doc) ?? docBounds(doc) : null;
     viewer.highlightBounds(bounds);
-  }
-
-  function applyDoc(next: FeatureDoc, options2: { keepSelection?: boolean; rebuild?: boolean } = {}): void {
-    doc = next;
-    persist();
-    if (!options2.keepSelection || !findFeature(doc, selectedId)) selectedId = doc.features[0]?.id ?? null;
-    renderAll();
-    selectFeature(selectedId);
-    if (options2.rebuild !== false) scheduleRebuild();
   }
 
   function clearDebounce(): void {
@@ -552,7 +710,7 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     refreshFooter();
     notify('正在重建参数化模型…');
     try {
-      const result = await parametric.build(doc);
+      const result = await parametric.build(currentAssembly());
       if (!result.ok) {
         const message = result.message ?? '重建失败';
         lastBuildError = message;
@@ -700,9 +858,43 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     }
   }
 
+  async function exportBom(): Promise<void> {
+    const csv = bomToCsv(toBom(currentAssembly()));
+    const desktopApi = window.desktop;
+    if (desktopApi) {
+      try {
+        const result = await desktopApi.exportFile(`${safeBaseName(sourceFile || 'parametric')}.bom.csv`, csv);
+        if (result.canceled) notify('已取消导出 BOM');
+        else notify(`BOM 已导出：${result.path ?? ''}`);
+        return;
+      } catch (error) {
+        notify(`导出 BOM 失败：${error instanceof Error ? error.message : String(error)}`, true);
+        return;
+      }
+    }
+    try {
+      await navigator.clipboard?.writeText(csv.replace(/^\uFEFF/, ''));
+      notify('BOM CSV 已复制到剪贴板');
+    } catch {
+      notify('剪贴板不可用，BOM 未导出', true);
+    }
+  }
+
+  function sendBomToCost(): void {
+    const input = toCostInput(currentAssembly());
+    const panel = window.__CostPanel;
+    if (!panel) {
+      notify('成本面板不可用，请先打开成本面板', true);
+      return;
+    }
+    panel.setBom(input, '参数化装配 BOM');
+    panel.open();
+    notify(`已送成本面板：${input.bom.length} 行；未映射件按 NO_PART_ID 缺价，不猜物料号`);
+  }
+
   async function saveTree(): Promise<void> {
     persist();
-    const text = serializeDoc(doc);
+    const text = serializeDoc(currentAssembly());
     const desktopApi = window.desktop;
     if (desktopApi) {
       try {
@@ -730,17 +922,26 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
       return;
     }
     const next = parsed.doc;
-    applyDoc(next, { keepSelection: false });
-    notify(`已载入 ${next.features.length} 个特征`);
+    const assembly = toAssembly(next);
+    applyAssembly(assembly, { keepSelection: false });
+    notify(`已载入 ${assembly.instances.length} 个实体 · ${instanceFeatures(assembly).length} 个特征`);
   }
 
   function setSource(nextSource: string): void {
     sourceFile = nextSource.trim();
     const saved = store?.get(sourceFile) ?? null;
-    doc = saved ?? makeDoc([], {
-      ...(sourceFile ? { sourceFile } : {}),
-      now: now()
-    });
+    const assembly = saved
+      ? toAssembly(saved)
+      : makeAssembly([blankInstance('p1', '零件 1')], {
+          ...(sourceFile ? { sourceFile } : {}),
+          now: now()
+        });
+    instances = assembly.instances;
+    selectedInstanceId = instances[0]?.id ?? null;
+    const instance = currentInstance();
+    doc = instance
+      ? featureDocFor(instance, assembly.updatedAt)
+      : makeDoc([], { ...(sourceFile ? { sourceFile } : {}), now: now() });
     selectedId = doc.features[0]?.id ?? null;
     renamingId = null;
     lastBuildMs = undefined;
@@ -751,6 +952,78 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     renderAll();
     selectFeature(selectedId);
   }
+
+  function selectInstance(id: string): void {
+    if (id === selectedInstanceId) return;
+    syncSelectedFeatures();
+    const instance = instances.find((item) => item.id === id);
+    if (!instance) return;
+    selectedInstanceId = id;
+    doc = featureDocFor(instance, doc.updatedAt);
+    selectedId = doc.features[0]?.id ?? null;
+    persist();
+    renderAll();
+    selectFeature(selectedId);
+  }
+
+  instanceList.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    const remove = target.closest<HTMLElement>('[data-param-instance-delete]');
+    if (remove) {
+      const id = remove.dataset.paramInstanceDelete ?? '';
+      const next = removeInstance(currentAssembly(), id, now());
+      if (next.instances.length === instances.length) {
+        notify('至少保留一个实体', true);
+        return;
+      }
+      const deletedSelected = id === selectedInstanceId;
+      instances = next.instances;
+      if (deletedSelected) selectedInstanceId = next.instances[0]?.id ?? null;
+      const instance = currentInstance();
+      doc = featureDocFor(instance ?? blankInstance('p1', '零件 1'), next.updatedAt);
+      selectedId = doc.features[0]?.id ?? null;
+      persist();
+      renderAll();
+      selectFeature(selectedId);
+      scheduleRebuild();
+      return;
+    }
+    const select = target.closest<HTMLElement>('[data-param-instance-select]');
+    if (select) selectInstance(select.dataset.paramInstanceSelect ?? '');
+  });
+
+  instanceForm.addEventListener('change', (event) => {
+    const target = event.target as HTMLInputElement;
+    const instance = currentInstance();
+    if (!instance) return;
+    const assembly = currentAssembly();
+    if (target.dataset.paramInstName !== undefined) {
+      instances = renameInstance(assembly, instance.id, target.value, now()).instances;
+    } else if (target.dataset.paramInstPartid !== undefined) {
+      instances = setInstancePartId(assembly, instance.id, target.value, now()).instances;
+    } else {
+      const axis = target.dataset.paramInstTransform as 'x' | 'y' | 'z' | 'rz' | undefined;
+      if (!axis) return;
+      const value = readFieldValue('number', target.value) as number;
+      instances = updateInstanceTransform(assembly, instance.id, { [axis]: value }, now()).instances;
+    }
+    persist();
+    renderAll();
+    selectFeature(selectedId);
+    scheduleRebuild();
+  });
+
+  query<HTMLButtonElement>('[data-param-instance-add]').addEventListener('click', () => {
+    const result = addInstance(currentAssembly(), { now: now() });
+    instances = result.assembly.instances;
+    selectedInstanceId = result.instance.id;
+    doc = featureDocFor(result.instance, result.assembly.updatedAt);
+    selectedId = doc.features[0]?.id ?? null;
+    persist();
+    renderAll();
+    selectFeature(selectedId);
+    scheduleRebuild();
+  });
 
   addButton.addEventListener('click', () => {
     const type = addType.value as FeatureType;
@@ -858,6 +1131,14 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     });
   }
 
+  exportBomButton.addEventListener('click', () => {
+    void exportBom();
+  });
+
+  sendCostButton.addEventListener('click', () => {
+    sendBomToCost();
+  });
+
   saveButton.addEventListener('click', () => {
     void saveTree();
   });
@@ -911,17 +1192,19 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     setSource(nextSource: string): void {
       setSource(nextSource);
     },
-    setDoc(next: FeatureDoc): void {
-      applyDoc(next, { keepSelection: false });
+    setDoc(next: FeatureDoc | AssemblyDoc): void {
+      applyAssembly(toAssembly(next), { keepSelection: false });
     },
-    getDoc(): FeatureDoc {
-      return JSON.parse(serializeDoc(doc)) as FeatureDoc;
+    getDoc(): AssemblyDoc {
+      return JSON.parse(serializeDoc(currentAssembly())) as AssemblyDoc;
     },
     build: rebuild,
     state(): ParametricUiState {
       return {
         sourceFile: storageBucketKey(sourceFile),
-        features: doc.features.length,
+        features: instanceFeatures(currentAssembly()).length,
+        instances: instances.length,
+        bomRows: toBom(currentAssembly()).length,
         selected: selectedId,
         validationErrors: validationErrors.length,
         status: statusView.status,

@@ -70,10 +70,42 @@ const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
+      let payload = {};
+      try {
+        payload = JSON.parse(raw || '{}');
+      } catch {
+        return send(400, { ok: false, error: 'JSON 解析失败' });
+      }
+      const instances = Array.isArray(payload.instances) ? payload.instances : null;
+      const stats = instances && instances.length > 1
+        ? {
+            volumeMm3: 214487.1,
+            bbox: [220, 120, 40],
+            faces: 38,
+            edges: 96,
+            solids: 2,
+            instances: instances.map((instance) => ({
+              id: instance.id,
+              name: instance.name,
+              volumeMm3: 71495.7
+            }))
+          }
+        : {
+            volumeMm3: 71495.7,
+            bbox: [120, 80, 8],
+            faces: 19,
+            edges: 48,
+            solids: 1,
+            ...(instances ? { instances: instances.map((instance) => ({
+              id: instance.id,
+              name: instance.name,
+              volumeMm3: 71495.7
+            })) } : {})
+          };
       send(200, {
         ok: true,
         kernel: 'build123d',
-        stats: { volumeMm3: 71495.7, bbox: [120, 80, 8], faces: 19, edges: 48, solids: 1 },
+        stats,
         buildMs: 12,
         files: {
           step: { path: stepPath, bytes: 64, ms: 11.1 },

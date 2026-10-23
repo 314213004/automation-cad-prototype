@@ -4,13 +4,14 @@
 """
 from __future__ import annotations
 
-import argparse, json, os, secrets, tempfile, time, traceback
+import argparse, json, math, os, secrets, tempfile, time, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import build123d as bd
 
 TOKEN = ""
 VERSION = bd.__version__
+MAX_INSTANCES = 50
 
 
 def _num(value, name: str, minimum: float = 0.0) -> float:
@@ -73,15 +74,63 @@ def build(ops: list[dict]):
     return shape
 
 
-def describe(shape) -> dict:
+def _instance_transform(value, index: int) -> tuple[float, float, float, float]:
+    label = f"第 {index} 个实体"
+    if not isinstance(value, dict):
+        raise ValueError(f"{label}：transform 必须是对象")
+    x, y, z = value.get("x"), value.get("y"), value.get("z")
+    rz = value.get("rz", 0)
+    for name, item in (("x", x), ("y", y), ("z", z), ("rz", rz)):
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item):
+            raise ValueError(f"{label}：transform.{name} 必须是数字")
+    return float(x), float(y), float(z), float(rz)
+
+
+def build_assembly(instances) -> tuple[object, list[dict]]:
+    if not isinstance(instances, list) or not instances:
+        raise ValueError("instances 必须是非空数组")
+    if len(instances) > MAX_INSTANCES:
+        raise ValueError(f"装配最多支持 {MAX_INSTANCES} 个实体（当前 {len(instances)} 个）")
+    seen: set[str] = set()
+    shapes = []
+    volumes: list[dict] = []
+    for index, instance in enumerate(instances, 1):
+        if not isinstance(instance, dict):
+            raise ValueError(f"第 {index} 个实体：必须是对象")
+        instance_id = instance.get("id")
+        if not isinstance(instance_id, str) or not instance_id.strip():
+            raise ValueError(f"第 {index} 个实体：缺少实体 id")
+        instance_id = instance_id.strip()
+        if instance_id in seen:
+            raise ValueError(f"第 {index} 个实体：id「{instance_id}」重复")
+        seen.add(instance_id)
+        x, y, z, rz = _instance_transform(instance.get("transform"), index)
+        shape = build(instance.get("ops") or [])
+        placed = bd.Pos(x, y, z) * (bd.Rot(0, 0, rz) * shape)
+        shapes.append(placed)
+        volumes.append({
+            "id": instance_id,
+            "name": str(instance.get("name") or instance_id),
+            "volumeMm3": round(shape.volume, 1),
+        })
+    combined = shapes[0]
+    for shape in shapes[1:]:
+        combined = combined + shape
+    return combined, volumes
+
+
+def describe(shape, instances: list[dict] | None = None) -> dict:
     bb = shape.bounding_box()
-    return {
+    stats = {
         "volumeMm3": round(shape.volume, 1),
         "bbox": [round(bb.size.X, 2), round(bb.size.Y, 2), round(bb.size.Z, 2)],
         "faces": len(shape.faces()),
         "edges": len(shape.edges()),
         "solids": len(shape.solids()),
     }
+    if instances is not None:
+        stats["instances"] = instances
+    return stats
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -124,7 +173,11 @@ class Handler(BaseHTTPRequestHandler):
                 if item not in ("step", "stl"):
                     raise ValueError(f"不支持的导出格式：{item}")
             started = time.perf_counter()
-            shape = build(payload.get("ops") or [])
+            instances = payload.get("instances")
+            if instances is not None:
+                shape, instance_volumes = build_assembly(instances)
+            else:
+                shape, instance_volumes = build(payload.get("ops") or []), None
             built_ms = (time.perf_counter() - started) * 1000
             outdir = tempfile.mkdtemp(prefix="b123d-build-")
             files = {}
@@ -136,7 +189,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     bd.export_stl(shape, path, tolerance=0.1)
                 files[fmt] = {"path": path, "bytes": os.path.getsize(path), "ms": round((time.perf_counter() - t) * 1000, 1)}
-            self._send(200, {"ok": True, "kernel": "build123d", "stats": describe(shape), "buildMs": round(built_ms, 1), "files": files})
+            self._send(200, {"ok": True, "kernel": "build123d", "stats": describe(shape, instance_volumes), "buildMs": round(built_ms, 1), "files": files})
         except Exception as exc:  # noqa: BLE001
             self._send(400, {"ok": False, "error": str(exc), "trace": traceback.format_exc(limit=2)})
 

@@ -295,6 +295,23 @@
 .cad-param-add{display:flex;gap:5px;margin-bottom:6px}
 .cad-param-add select{flex:1;min-width:0;height:27px;padding:0 6px;border:1px solid #3c434a;border-radius:2px;background:#16181b;color:#d6dde2;font:10px/1 var(--font-mono,monospace)}
 .cad-param-add .cad-btn{height:27px;font-size:10px;padding:0 8px;white-space:nowrap}
+.cad-param-instances{display:flex;flex-direction:column;gap:4px;margin-bottom:6px;max-height:156px;overflow:auto}
+.cad-param-instance{display:grid;grid-template-columns:minmax(0,1fr) auto 18px;align-items:center;gap:4px;border:1px solid #343a40;border-radius:3px;background:#23272b;padding:4px 5px}
+.cad-param-instance.is-selected{border-color:#2b8f84;background:#22322f}
+.cad-param-instance-main{display:flex;align-items:center;gap:6px;min-width:0;border:0;background:transparent;color:#cbd3d8;text-align:left;cursor:pointer;padding:0}
+.cad-param-instance-main b{font:8px/1 var(--font-mono,monospace);color:#6f7b84}
+.cad-param-instance-main span:not(.cad-param-mapped):not(.cad-param-unmapped){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+.cad-param-instance-transform{font:7px/1.35 var(--font-mono,monospace);color:#66717a;white-space:nowrap}
+.cad-param-instance-delete{width:18px;height:18px;border:1px solid #5a3535;border-radius:2px;background:#2d2020;color:#e2a09a;font-size:10px;line-height:1;cursor:pointer}
+.cad-param-mapped,.cad-param-unmapped{font:7px/1 var(--font-mono,monospace);padding:1px 3px;border-radius:2px;white-space:nowrap}
+.cad-param-mapped{color:#8ee0d4;background:#1c2b29;border:1px solid #2a5b55}
+.cad-param-unmapped{color:#f3c98b;background:#302819;border:1px solid #5c4a2c}
+.cad-param-instance-form{border:1px solid #343a40;border-radius:4px;background:#202428;padding:7px 8px}
+.cad-param-bom{border:1px solid #343a40;border-radius:3px;background:#23272b;overflow:auto;max-height:180px}
+.cad-param-bom-head,.cad-param-bom-row{display:grid;grid-template-columns:24px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) 28px;gap:4px;align-items:center;padding:4px 6px;font-size:8px}
+.cad-param-bom-head{position:sticky;top:0;background:#1b1f22;color:#6f7b84;border-bottom:1px solid #343a40}
+.cad-param-bom-row{color:#b9c2c8;border-top:1px solid #2b3035}
+.cad-param-bom-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cad-param-features{display:flex;flex-direction:column;gap:4px;max-height:238px;overflow:auto}
 .cad-param-feature{border:1px solid #343a40;border-radius:3px;background:#23272b;overflow:hidden}
 .cad-param-feature.is-selected{border-color:#2b8f84;background:#22322f}

@@ -15,6 +15,48 @@ export interface FeatureDoc {
   updatedAt: string;
 }
 
+export interface InstanceTransform {
+  x: number;
+  y: number;
+  z: number;
+  rz: number;
+}
+
+/** 装配里的一个实体：独立特征列表 + 相对装配原点的变换。 */
+export interface PartInstance {
+  id: string;
+  name: string;
+  partId?: string;
+  transform: InstanceTransform;
+  features: FeatureNode[];
+}
+
+/** 装配文档；schemaVersion 2 用于区分旧的单件 FeatureDoc。 */
+export interface AssemblyDoc {
+  schemaVersion: 1 | 2;
+  sourceFile?: string;
+  instances: PartInstance[];
+  updatedAt: string;
+}
+
+export interface CompiledInstance {
+  id: string;
+  name: string;
+  partId?: string;
+  transform: InstanceTransform;
+  ops: Array<Record<string, unknown>>;
+}
+
+export interface CompiledAssembly {
+  /** 所有实体算子按实体顺序拼接，便于旧消费者观察全量操作。 */
+  ops: Array<Record<string, unknown>>;
+  /** 每实体独立算子与基础变换；sidecar 优先使用此字段。 */
+  instances: CompiledInstance[];
+}
+
+export const ASSEMBLY_SCHEMA_VERSION = 2 as const;
+export const MAX_ASSEMBLY_INSTANCES = 50;
+
 type UnknownRecord = Record<string, unknown>;
 
 const FEATURE_TYPES: readonly FeatureType[] = ['box', 'cylinder', 'holes', 'slot', 'fillet'];
@@ -105,8 +147,82 @@ function collectPlate(doc: FeatureDoc): { minX: number; maxX: number; minY: numb
   return plate;
 }
 
-/** 校验整棵特征树，返回全部中文错误；空数组表示可以编译。 */
-export function validateFeatures(doc: FeatureDoc): string[] {
+/** 判断输入是否为装配文档（存在 instances 数组）。 */
+export function isAssemblyDoc(value: unknown): value is AssemblyDoc {
+  return isRecord(value) && Array.isArray(value.instances);
+}
+
+function transformOf(value: unknown): InstanceTransform | null {
+  if (!isRecord(value)) return null;
+  const { x, y, z, rz } = value;
+  if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(z)) return null;
+  const rotation = rz === undefined ? 0 : rz;
+  if (!isFiniteNumber(rotation)) return null;
+  return { x, y, z, rz: rotation };
+}
+
+/** 校验整棵装配，逐实体复用特征树校验并补充实体级规则。 */
+export function validateAssembly(assembly: AssemblyDoc): string[] {
+  const errors: string[] = [];
+  const raw = assembly as unknown;
+  if (!isRecord(raw) || !Array.isArray(raw.instances)) {
+    errors.push('装配格式无效：instances 必须是数组');
+    return errors;
+  }
+  const instances = raw.instances;
+  if (instances.length === 0) errors.push('装配为空，至少需要一个实体');
+  if (instances.length > MAX_ASSEMBLY_INSTANCES) {
+    errors.push(`装配最多支持 ${MAX_ASSEMBLY_INSTANCES} 个实体（当前 ${instances.length} 个）`);
+  }
+  const updatedAt = typeof raw.updatedAt === 'string' && raw.updatedAt.trim()
+    ? raw.updatedAt
+    : '1970-01-01T00:00:00Z';
+  const ids = new Map<string, number>();
+
+  instances.forEach((value, index) => {
+    if (!isRecord(value)) {
+      errors.push(`第 ${index + 1} 个实体：必须是对象`);
+      return;
+    }
+    const id = typeof value.id === 'string' ? value.id.trim() : '';
+    const rawName = typeof value.name === 'string' ? value.name.trim() : '';
+    const label = `第 ${index + 1} 个实体${rawName ? `（${rawName}）` : ''}`;
+    if (!id) {
+      errors.push(`${label}：缺少实体 id`);
+    } else if (ids.has(id)) {
+      errors.push(`${label}：id「${id}」与第 ${(ids.get(id) ?? index) + 1} 个实体重复`);
+    } else {
+      ids.set(id, index);
+    }
+    if (!rawName) errors.push(`${label}：缺少实体名称`);
+    if (value.partId !== undefined && typeof value.partId !== 'string') {
+      errors.push(`${label}：partId 必须是字符串`);
+    }
+    if (transformOf(value.transform) === null) {
+      errors.push(`${label}：transform 必须包含数字 x / y / z（rz 可省略，省略按 0）`);
+    }
+    if (!Array.isArray(value.features)) {
+      errors.push(`${label}：features 必须是数组`);
+      return;
+    }
+    const featureErrors = validateFeatureDoc({
+      schemaVersion: 1,
+      features: value.features as FeatureNode[],
+      updatedAt
+    });
+    for (const message of featureErrors) errors.push(`${label}：${message}`);
+  });
+
+  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) {
+    errors.push('updatedAt 必须带时区（如 2026-10-23T12:00:00+08:00）');
+  } else if (!TIMEZONE_PATTERN.test(raw.updatedAt) || Number.isNaN(Date.parse(raw.updatedAt))) {
+    errors.push('updatedAt 必须带时区（如 2026-10-23T12:00:00+08:00）');
+  }
+  return errors;
+}
+
+/** 校验单个实体特征列表。 */
+function validateFeatureDoc(doc: FeatureDoc): string[] {
   const errors: string[] = [];
   const raw = doc as unknown;
   if (!isRecord(raw) || !Array.isArray(raw.features)) {
@@ -229,6 +345,14 @@ export function validateFeatures(doc: FeatureDoc): string[] {
   return errors;
 }
 
+/** 兼容入口：FeatureDoc 走单件校验，AssemblyDoc 走装配校验。 */
+export function validateFeatures(doc: FeatureDoc): string[];
+export function validateFeatures(assembly: AssemblyDoc): string[];
+export function validateFeatures(input: FeatureDoc | AssemblyDoc): string[];
+export function validateFeatures(input: FeatureDoc | AssemblyDoc): string[] {
+  return isAssemblyDoc(input) ? validateAssembly(input) : validateFeatureDoc(input);
+}
+
 function clone<T>(value: T): T {
   if (Array.isArray(value)) return value.map((item) => clone(item)) as T;
   if (isRecord(value)) {
@@ -237,10 +361,34 @@ function clone<T>(value: T): T {
   return value;
 }
 
-/** 将特征树编译为 sidecar 白名单算子；跳过抑制项，保持特征树顺序。 */
-export function compileOps(doc: FeatureDoc): Array<Record<string, unknown>> {
+/** 旧 FeatureDoc 自动包成单实体 AssemblyDoc；已有装配原样返回深拷贝。 */
+export function toAssembly(doc: FeatureDoc | AssemblyDoc): AssemblyDoc {
+  if (isAssemblyDoc(doc)) {
+    const sourceFile = typeof doc.sourceFile === 'string' ? doc.sourceFile.trim() : '';
+    return {
+      schemaVersion: ASSEMBLY_SCHEMA_VERSION,
+      ...(sourceFile ? { sourceFile } : {}),
+      instances: clone(doc.instances),
+      updatedAt: doc.updatedAt
+    };
+  }
+  const sourceFile = typeof doc.sourceFile === 'string' ? doc.sourceFile.trim() : '';
+  return {
+    schemaVersion: ASSEMBLY_SCHEMA_VERSION,
+    ...(sourceFile ? { sourceFile } : {}),
+    instances: [{
+      id: 'p1',
+      name: '零件 1',
+      transform: { x: 0, y: 0, z: 0, rz: 0 },
+      features: clone(Array.isArray(doc.features) ? doc.features : [])
+    }],
+    updatedAt: doc.updatedAt
+  };
+}
+
+function compileFeatureOps(features: readonly FeatureNode[]): Array<Record<string, unknown>> {
   const ops: Array<Record<string, unknown>> = [];
-  for (const node of Array.isArray(doc?.features) ? doc.features : []) {
+  for (const node of Array.isArray(features) ? features : []) {
     if (!isRecord(node) || node.suppressed === true) continue;
     const params = isRecord(node.params) ? node.params : {};
     const type = node.type;
@@ -279,6 +427,47 @@ export function compileOps(doc: FeatureDoc): Array<Record<string, unknown>> {
     }
   }
   return ops;
+}
+
+function compileTransform(value: unknown): InstanceTransform {
+  const transform = transformOf(value);
+  if (transform) return transform;
+  if (!isRecord(value)) return { x: 0, y: 0, z: 0, rz: 0 };
+  return {
+    x: isFiniteNumber(value.x) ? value.x : 0,
+    y: isFiniteNumber(value.y) ? value.y : 0,
+    z: isFiniteNumber(value.z) ? value.z : 0,
+    rz: isFiniteNumber(value.rz) ? value.rz : 0
+  };
+}
+
+/** 将装配编译为 sidecar 白名单算子与每实体变换。 */
+export function compileAssembly(assembly: AssemblyDoc): CompiledAssembly {
+  const instances: CompiledInstance[] = [];
+  for (const instance of Array.isArray(assembly?.instances) ? assembly.instances : []) {
+    if (!isRecord(instance)) continue;
+    const ops = compileFeatureOps(Array.isArray(instance.features) ? instance.features : []);
+    instances.push({
+      id: typeof instance.id === 'string' ? instance.id : '',
+      name: typeof instance.name === 'string' ? instance.name : '',
+      ...(typeof instance.partId === 'string' && instance.partId.trim()
+        ? { partId: instance.partId.trim() }
+        : {}),
+      transform: compileTransform(instance.transform),
+      ops
+    });
+  }
+  return { ops: instances.flatMap((instance) => instance.ops), instances };
+}
+
+/** 兼容入口：旧 FeatureDoc 返回 ops 数组；AssemblyDoc 返回 ops + instances。 */
+export function compileOps(doc: FeatureDoc): Array<Record<string, unknown>>;
+export function compileOps(assembly: AssemblyDoc): CompiledAssembly;
+export function compileOps(input: FeatureDoc | AssemblyDoc): Array<Record<string, unknown>> | CompiledAssembly;
+export function compileOps(input: FeatureDoc | AssemblyDoc): Array<Record<string, unknown>> | CompiledAssembly {
+  return isAssemblyDoc(input)
+    ? compileAssembly(input)
+    : compileFeatureOps(Array.isArray(input?.features) ? input.features : []);
 }
 
 /** 特征总数、预计孔数与抑制数；孔数只统计参与编译的孔位。 */

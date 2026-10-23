@@ -137,14 +137,48 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
         const state = ui.state();
         const drawer = document.getElementById('cadParametricDrawer');
         const rows = document.querySelectorAll('[data-param-feature]').length;
+        const oldBuildStatus = document.querySelector('[data-param-build-status]')?.textContent || '';
+        const assemblyDoc = {
+          schemaVersion: 2,
+          updatedAt: '2026-10-23T12:00:00+08:00',
+          instances: [
+            {
+              id: 'p1', name: '底板 A', partId: 'BASE-01',
+              transform: { x: 0, y: 0, z: 0, rz: 0 },
+              features: [
+                { id: 'f1', type: 'box', name: '底板', params: { length: 120, width: 80, height: 8 } },
+                { id: 'f2', type: 'holes', name: '安装孔', params: { diameter: 6, positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]] } }
+              ]
+            },
+            {
+              id: 'p2', name: '顶板 B', partId: 'PLATE-02',
+              transform: { x: 140, y: 0, z: 0, rz: 0 },
+              features: [{ id: 'f1', type: 'box', name: '顶板', params: { length: 120, width: 80, height: 8 } }]
+            },
+            {
+              id: 'p3', name: '支架', transform: { x: 0, y: 100, z: 0, rz: 30 },
+              features: [{ id: 'f1', type: 'box', name: '支架', params: { length: 60, width: 40, height: 12 } }]
+            }
+          ]
+        };
+        ui.setDoc(assemblyDoc);
+        const assemblyBuild = await ui.build();
+        await wait(80);
+        const assemblyState = ui.state();
+        const instanceRows = document.querySelectorAll('[data-param-instance]').length;
+        const bomRows = document.querySelectorAll('[data-param-bom-row]').length;
         return {
           button: true,
           status,
           build,
           state,
           rows,
+          assemblyBuild,
+          assemblyState,
+          instanceRows,
+          bomRows,
           drawerOpen: Boolean(drawer && !drawer.hidden),
-          buildStatus: document.querySelector('[data-param-build-status]')?.textContent || ''
+          buildStatus: oldBuildStatus
         };
       })()`
     ) as {
@@ -152,8 +186,12 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
       button?: boolean;
       status?: { status: string; message: string; version?: string };
       build?: { ok: boolean; stats?: { faces?: number }; message?: string };
-      state?: { features: number; status: string; statusLabel: string; stlLoaded: boolean; ghost: boolean };
+      state?: { features: number; instances?: number; bomRows?: number; status: string; statusLabel: string; stlLoaded: boolean; ghost: boolean };
       rows?: number;
+      assemblyBuild?: { ok: boolean; stats?: { solids?: number; instances?: unknown[] }; message?: string };
+      assemblyState?: { features: number; instances?: number; bomRows?: number; status: string };
+      instanceRows?: number;
+      bomRows?: number;
       drawerOpen?: boolean;
       buildStatus?: string;
     };
@@ -171,6 +209,17 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
     }
     console.log('SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1');
     console.log(`SMOKE_PARAMETRIC_UI_OK features=${result.state.features} status=${result.state.status}`);
+    if (!result.assemblyBuild?.ok || result.assemblyBuild.stats?.solids !== 2 ||
+        result.assemblyState?.instances !== 3 || result.assemblyState.bomRows !== 3 ||
+        result.instanceRows !== 3 || result.bomRows !== 3) {
+      throw new Error(`参数化装配异常：${JSON.stringify({
+        build: result.assemblyBuild,
+        state: result.assemblyState,
+        instanceRows: result.instanceRows,
+        bomRows: result.bomRows
+      })}`);
+    }
+    console.log(`SMOKE_PARAMETRIC_ASSEMBLY_OK solids=${result.assemblyBuild.stats.solids} bomRows=${result.assemblyState.bomRows}`);
   } finally {
     if (parametric) await parametric.stop();
   }

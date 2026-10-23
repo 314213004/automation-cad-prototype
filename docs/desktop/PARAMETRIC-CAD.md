@@ -266,3 +266,74 @@ smoke 使用假 sidecar，不依赖 Python；同时断言抽屉可见、特征�
 - 首期仍是单件结构件；草图与约束（P9-4）、多实体装配/BOM/成本联动（P9-5）未做。
 - 特征高亮是参数估算包围盒，不是精确 B-rep 面组；重建后如 sidecar 能按特征分组网格，再升级为网格级高亮。
 - 旧模型幽灵层来自当前视口模型，不额外读取 STEP；载入新文件时默认清空。
+
+## P9-5 实现记录
+
+日期：2026-10-23。本轮完成多实体装配、sidecar `instances` 契约、BOM 汇总与成本面板联动；单件 `FeatureDoc` 路径保持完全兼容。
+
+### 数据模型
+
+```ts
+PartInstance {
+  id: string; name: string; partId?: string;
+  transform: { x: number; y: number; z: number; rz: number };
+  features: FeatureNode[];
+}
+AssemblyDoc { schemaVersion: 1 | 2; sourceFile?: string; instances: PartInstance[]; updatedAt: string }
+```
+
+- 新文档以 `schemaVersion: 2` 保存；`instances` 存在时即按装配解析。
+- 旧 `FeatureDoc`（`schemaVersion: 1` + `features`）由 `toAssembly()` 自动包成单实体 `p1 / 零件 1`，位置与旋转均为 0；旧 CLI/测试仍可直接调用 `compileOps(featureDoc)` 得到算子数组。
+- `compileOps(assembly)` 返回 `{ops, instances}`：`ops` 是所有实体算子按实体顺序的拼接，`instances[]` 携带每实体的 `id / name / partId / transform / ops`。sidecar 优先消费 `instances`。
+- 实体上限 50；校验重复实体 id、缺失名称、非数字 `transform.x/y/z`、非数字 `rz`、空实体特征列表，并逐实体复用原特征树校验（错误前缀「第 N 个实体（名称）」）。不同实体可以使用相同特征 id。
+
+### sidecar 多实体
+
+`POST /build` 新增可选 `instances`（与顶层 `ops` 二选一）：
+
+```json
+{
+  "instances": [
+    { "id": "p1", "name": "底板", "transform": {"x":0,"y":0,"z":0,"rz":0},
+      "ops": [{"op":"box","length":120,"width":80,"height":8}] },
+    { "id": "p2", "name": "顶板", "transform": {"x":140,"y":0,"z":0,"rz":90},
+      "ops": [{"op":"box","length":60,"width":40,"height":6}] }
+  ],
+  "exports": ["step", "stl"]
+}
+```
+
+- 每实体用现有白名单算子独立建模，再 `bd.Pos(x,y,z) * (bd.Rot(0,0,rz) * shape)` 放置，最后用 `Part + Part` 合并。
+- 返回 `stats.solids`、`stats.volumeMm3` 与 `stats.instances[] = {id,name,volumeMm3}`（每实体建模体积）。
+- 中文拒绝：实体 id 重复、`transform` 非对象、`transform.x/y/z/rz` 非有限数字、实体数 > 50、空 `instances`。
+- 未传 `instances` 时仍走原单实体 `ops` 路径，响应结构与现有测试不变。
+
+### BOM 与成本
+
+`desktop/src/parametric/bom.ts` 为纯函数：
+
+- `toBom(assembly)`：相同 `partId` 合并数量；无 `partId` 按名称合并并标 `unmapped: true`；序号按首次出现顺序从 1 连续分配；`spec` 取首个启用 box 的 `长×宽×高 mm`，无 box 时回退圆柱尺寸/特征数。
+- `bomToCsv(rows)`：UTF-8 BOM（`\uFEFF`）+ 固定表头 `序号,物料号,名称,规格,数量,未映射`，逗号/引号/换行按 CSV 规则转义。
+- `toCostBomRows` / `toCostInput`：映射件保留 `partId`；未映射件不带 `partId`，交给现有成本引擎按 `NO_PART_ID` 记缺价，绝不猜物料号。
+- 面板新增「装配实体」区（增删实体、名称/partId、X/Y/Z/RZ 编辑）、BOM 预览表、「导出 BOM」与「送成本」；送成本复用 `__CostPanel.setBom({bom}, '参数化装配 BOM')`，与 `computeCostReport` 入参同形。
+
+### 测试与验收
+
+```bash
+cd desktop
+npx tsc --noEmit
+node --test test/parametric-assembly.test.ts   # 25
+npm test                                       # 647
+AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
+# SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1
+# SMOKE_PARAMETRIC_UI_OK features=2 status=ready
+# SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3
+```
+
+新增测试覆盖：旧文档包装、单件 `compileOps` 兼容、多实体顺序/拼接、抑制、`rz` 默认值、重复实体 id、transform 非数字、实体数 50 上限、空装配、跨实体同特征 id、BOM 合并/未映射/同名分流/确定性、CSV BOM 与转义、成本入参与 `NO_PART_ID`。
+
+### 边界
+
+- BOM 只按实体汇总，不按特征明细拆行；`spec` 是参数级摘要，不是加工工艺卡。
+- 装配为静态多实体合并，不做配合约束/自由度求解（仍属 P9-4）。
+- `partId` 仍由人工填写；本轮不做名称规则自动匹配（见 BACKLOG D7）。

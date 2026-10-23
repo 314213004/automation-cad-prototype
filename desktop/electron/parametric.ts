@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path';
-import { compileOps, validateFeatures, type FeatureDoc } from '../src/parametric/features.ts';
+import {
+  compileOps,
+  isAssemblyDoc,
+  validateFeatures,
+  type AssemblyDoc,
+  type FeatureDoc
+} from '../src/parametric/features.ts';
 
 export type ParametricStatus = 'stopped' | 'starting' | 'ready' | 'unavailable' | 'crashed';
 
@@ -287,7 +293,7 @@ export class ParametricManager {
     await this.stopping;
   }
 
-  build(doc: FeatureDoc): Promise<ParametricBuildResult> {
+  build(doc: FeatureDoc | AssemblyDoc): Promise<ParametricBuildResult> {
     const run = this.buildChain.then(
       () => this.buildOnce(doc),
       () => this.buildOnce(doc)
@@ -296,7 +302,7 @@ export class ParametricManager {
     return run;
   }
 
-  private async buildOnce(doc: FeatureDoc): Promise<ParametricBuildResult> {
+  private async buildOnce(doc: FeatureDoc | AssemblyDoc): Promise<ParametricBuildResult> {
     try {
       const errors = validateFeatures(doc);
       if (errors.length > 0) {
@@ -315,7 +321,12 @@ export class ParametricManager {
             authorization: `Bearer ${this.token}`,
             'content-type': 'application/json'
           },
-          body: JSON.stringify({ ops: compileOps(doc), exports: ['step', 'stl'] }),
+          body: JSON.stringify({
+            ...(isAssemblyDoc(doc)
+              ? compileOps(doc)
+              : { ops: compileOps(doc) }),
+            exports: ['step', 'stl']
+          }),
           signal: controller.signal
         });
         const payload = await this.readJson(response);

@@ -641,6 +641,8 @@ interface Window {
     state(): {
       sourceFile: string;
       features: number;
+      instances: number;
+      bomRows: number;
       selected: string | null;
       validationErrors: number;
       status: DesktopParametricStatus;

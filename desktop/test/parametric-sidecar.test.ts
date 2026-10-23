@@ -54,6 +54,32 @@ function validDoc() {
   };
 }
 
+function validAssembly() {
+  return {
+    schemaVersion: 2 as const,
+    updatedAt: '2026-10-23T12:00:00+08:00',
+    instances: [
+      {
+        id: 'p1',
+        name: '底板',
+        partId: 'BASE-01',
+        transform: { x: 0, y: 0, z: 0, rz: 0 },
+        features: [
+          { id: 'f1', type: 'box' as const, name: '底板', params: { length: 120, width: 80, height: 8 } }
+        ]
+      },
+      {
+        id: 'p2',
+        name: '顶板',
+        transform: { x: 130, y: 0, z: 0, rz: 90 },
+        features: [
+          { id: 'f1', type: 'box' as const, name: '顶板', params: { length: 60, width: 40, height: 6 } }
+        ]
+      }
+    ]
+  };
+}
+
 after(async () => {
   await Promise.all(managers.map((instance) => instance.stop().catch(() => undefined)));
 });
@@ -105,6 +131,40 @@ test('sidecar：build 返回 stats、buildMs 与文件', async () => {
   assert.equal(result.stats?.volumeMm3, 71495.7);
   assert.ok(result.files?.step);
   assert.ok(result.files?.stl);
+  await instance.stop();
+});
+
+test('sidecar：装配 build 发送 instances 并返回 solids 与每实体体积', async () => {
+  const instance = manager();
+  await instance.start();
+  const result = await instance.build(validAssembly());
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.stats?.solids, 2);
+  assert.equal(Array.isArray(result.stats?.instances), true);
+  assert.equal((result.stats?.instances as unknown[]).length, 2);
+  await instance.stop();
+});
+
+test('sidecar：装配重复实体 id 在本地拦截', async () => {
+  const instance = manager();
+  await instance.start();
+  const doc = validAssembly();
+  doc.instances[1]!.id = 'p1';
+  const result = await instance.build(doc);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'BUILD_FAILED');
+  assert.match(result.message ?? '', /重复/);
+  await instance.stop();
+});
+
+test('sidecar：装配 transform 非数字在本地拦截', async () => {
+  const instance = manager();
+  await instance.start();
+  const doc = validAssembly();
+  (doc.instances[0]!.transform as Record<string, unknown>).x = '0';
+  const result = await instance.build(doc);
+  assert.equal(result.ok, false);
+  assert.match(result.message ?? '', /transform/);
   await instance.stop();
 });
 

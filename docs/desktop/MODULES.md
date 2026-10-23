@@ -62,7 +62,7 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 ## 当前总体进度（2026-10-23）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 619 个单测 + 完整 smoke 断言全绿
+- ✅ 647 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -79,12 +79,13 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 
 ## 参数化建模（P9）
 
-- `desktop/electron/parametric.ts`：sidecar 生命周期（随机端口/令牌、健康检查、30 s 构建超时、10 min 空闲退出、崩溃重启一次、进程树清理）
-- `desktop/src/parametric/features.ts`：特征树 `FeatureDoc`、中文全量校验、`compileOps`（跳过抑制、稳定顺序）、`summarize`
-- `desktop/src/parametric/model.ts`：编辑操作（新建/删除/上移/下移/抑制/改名/参数更新）、300 ms 防抖计划、`localStorage` 按 `sourceFile` 分桶、JSON 序列化往返、特征包围盒与状态文案
-- `desktop/src/parametric/ui.ts`：右侧「参数化」抽屉（与运动学二选一）、按类型参数表单、逐条校验、重建/STEP/STL 导出、保存/载入特征树
+- `desktop/electron/parametric.ts`：sidecar 生命周期（随机端口/令牌、健康检查、30 s 构建超时、10 min 空闲退出、崩溃重启一次、进程树清理）；装配时发送 `{ops, instances}`，单件仍发送 `{ops}`
+- `desktop/src/parametric/features.ts`：特征树 `FeatureDoc` + 装配 `AssemblyDoc/PartInstance`、旧文档自动包装、中文全量校验（含实体 id/transform/50 上限）、`compileOps`（单件返回算子数组，装配返回 `{ops,instances}`）、`summarize`
+- `desktop/src/parametric/bom.ts`：`toBom`（partId / 未映射名称合并）、UTF-8 BOM CSV、`toCostInput`（未映射行不带 partId，走 `NO_PART_ID`）
+- `desktop/src/parametric/model.ts`：特征与实体编辑（新建/删除/上移/下移/抑制/改名/参数/transform）、300 ms 防抖计划、`localStorage` 按 `sourceFile` 分桶、JSON 序列化往返（兼容单件与装配）、特征包围盒与状态文案
+- `desktop/src/parametric/ui.ts`：右侧「参数化」抽屉（与运动学二选一）、装配实体区与 BOM 预览、按类型参数表单、逐条校验、重建/STEP/STL/BOM 导出、送成本、保存/载入特征树
 - `desktop/src/cad/viewer.ts`：参数化重建后的 STL 载入、旧模型半透明幽灵层（可开关）、特征包围盒高亮
-- `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet）
+- `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet；可选 `instances` 多实体独立建模后按 transform 合并）
 - 内核选型与分期见 [PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；实测见 [PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
 
 ## 维护约定
