@@ -26,7 +26,8 @@ const desktopApi = {
     pricebook: () => ipcRenderer.invoke('cost:pricebook')
   },
   machine: {
-    active: () => ipcRenderer.invoke('machine:active')
+    active: () => ipcRenderer.invoke('machine:active'),
+    ioMap: () => ipcRenderer.invoke('machine:io-map')
   },
   packs: {
     list: () => ipcRenderer.invoke('packs:list'),

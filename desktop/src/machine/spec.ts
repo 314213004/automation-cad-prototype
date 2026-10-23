@@ -67,7 +67,7 @@ const ACTUATOR_ALIASES: Record<MachineActuatorKind, string[]> = {
 const DRIVE_ALIASES = ['伺服', '步进'];
 
 const SENSOR_ALIASES: Record<MachineSensorKind, string[]> = {
-  proximity: ['接近开关', '接近传感器', '接近'],
+  proximity: ['接近开关', '接近传感器', '到位检测', '到位开关', '到位传感器', '磁性开关', '接近'],
   photoelectric: ['光电开关', '光电传感器', '光电'],
   safety: ['安全光栅', '安全门', '光栅'],
   pressure: ['压力传感器', '压力开关', '压力']
@@ -219,6 +219,85 @@ function aliasOccurrences(text: string, aliases: string[]): number {
   return text.match(new RegExp(term, 'g'))?.length ?? 0;
 }
 
+/**
+ * 按常见分隔符切段。数量只在同一段内生效，避免把「六工位」的 6
+ * 误算到后面的「1 个气爪」上。
+ */
+function splitClauses(text: string): string[] {
+  return text
+    .split(/[+＋、,，;；。\n\r]+/)
+    .map((clause) => clause.trim())
+    .filter(Boolean);
+}
+
+/** 屏蔽功率、电压、尺寸等规格数字，避免把 750W / 24V 当成数量。 */
+function maskSpecNumbers(text: string): string {
+  return text.replace(
+    /\d+(?:\.\d+)?\s*(?:kW|千瓦|W|瓦|V|A|mA|mm|cm|m|r\/min|rpm|N·m)/gi,
+    ' '
+  );
+}
+
+interface NumberToken {
+  value: number;
+  start: number;
+  end: number;
+}
+
+function numberTokens(text: string): NumberToken[] {
+  const tokens: NumberToken[] = [];
+  for (const match of text.matchAll(/(\d+|[一二两三四五六七八九十]+)/g)) {
+    const value = parseChineseNumber(match[1] ?? '');
+    if (value === null || value <= 0) continue;
+    const start = match.index ?? 0;
+    tokens.push({ value, start, end: start + (match[1]?.length ?? 0) });
+  }
+  return tokens;
+}
+
+/**
+ * 取与别名最近的数字。相比「取段内第一个数字」，这能正确处理
+ * 「六工位锁螺丝机每工位 1 套伺服」这种没有逗号的写法。
+ */
+function nearestAliasCount(clause: string, aliases: string[]): { count: number; explicit: boolean } {
+  const masked = maskSpecNumbers(clause);
+  const term = [...aliases]
+    .sort((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+    .join('|');
+  const aliasMatch = new RegExp(term).exec(masked);
+  if (!aliasMatch || aliasMatch.index === undefined) return { count: 0, explicit: false };
+  const aliasStart = aliasMatch.index;
+  const aliasEnd = aliasStart + aliasMatch[0].length;
+  let best: { count: number; distance: number } | null = null;
+  for (const token of numberTokens(masked)) {
+    const distance = token.end <= aliasStart
+      ? aliasStart - token.end
+      : token.start >= aliasEnd
+        ? token.start - aliasEnd
+        : 0;
+    if (!best || distance < best.distance) best = { count: token.value, distance };
+  }
+  return best ? { count: best.count, explicit: true } : { count: 1, explicit: false };
+}
+
+function aggregateAliasCount(
+  text: string,
+  aliases: string[],
+  perStation: boolean,
+  stations: number
+): { count: number; explicit: boolean } {
+  let count = 0;
+  let explicit = false;
+  for (const clause of splitClauses(text)) {
+    const found = nearestAliasCount(clause, aliases);
+    if (found.count <= 0) continue;
+    count += perStation && found.explicit ? found.count * stations : found.count;
+    explicit = explicit || found.explicit;
+  }
+  return { count, explicit };
+}
+
 function explicitCount(text: string, aliases: string[]): number {
   const term = aliases.map(escapeRegExp).join('|');
   let total = 0;
@@ -254,17 +333,36 @@ function explicitDriveCount(text: string): number {
   return total;
 }
 
-function detectActuators(text: string, notes: string[]): { kind: MachineActuatorKind; count: number }[] {
+function detectActuators(
+  text: string,
+  notes: string[],
+  stations: number
+): { kind: MachineActuatorKind; count: number }[] {
   const counts = new Map<MachineActuatorKind, number>();
+  const perStation = /每\s*(?:个)?\s*(?:工位|工作站|站)/.test(text);
   for (const kind of ['cylinder', 'gripper', 'rotary'] as const) {
     const aliases = ACTUATOR_ALIASES[kind];
-    let count = explicitCount(text, aliases);
-    if (count === 0 && aliasOccurrences(text, aliases) > 0) count = 1;
+    let count = 0;
+    for (const clause of splitClauses(text)) {
+      if (kind === 'rotary' && aliasOccurrences(clause, DRIVE_ALIASES) > 0) continue;
+      const found = nearestAliasCount(clause, aliases);
+      if (found.count <= 0) continue;
+      count += perStation && found.explicit ? found.count * stations : found.count;
+    }
     if (count > 0) counts.set(kind, count);
   }
 
-  const driveExplicit = explicitDriveCount(text);
-  const driveMentions = aliasOccurrences(text, DRIVE_ALIASES);
+  let driveExplicit = 0;
+  let driveMentions = 0;
+  for (const clause of splitClauses(text)) {
+    const mentions = aliasOccurrences(clause, DRIVE_ALIASES);
+    if (mentions === 0) continue;
+    driveMentions += mentions;
+    const found = nearestAliasCount(clause, DRIVE_ALIASES);
+    if (found.explicit) {
+      driveExplicit += perStation ? found.count * stations : found.count;
+    }
+  }
   if (driveExplicit > 0) {
     counts.set('rotary', (counts.get('rotary') ?? 0) + driveExplicit);
     const watt = text.match(/(\d+(?:\.\d+)?)\s*(?:kW|千瓦|W|瓦)/i)?.[0];
@@ -280,12 +378,20 @@ function detectActuators(text: string, notes: string[]): { kind: MachineActuator
     .map((kind) => ({ kind, count: counts.get(kind) ?? 0 }));
 }
 
-function detectSensors(text: string): { kind: MachineSensorKind; count: number }[] {
+function detectSensors(text: string, stations: number): { kind: MachineSensorKind; count: number }[] {
   const counts = new Map<MachineSensorKind, number>();
+  const perStation = /每\s*(?:个)?\s*(?:工位|工作站|站)/.test(text);
   for (const kind of ['proximity', 'photoelectric', 'safety', 'pressure'] as const) {
     const aliases = SENSOR_ALIASES[kind];
-    let count = explicitCount(text, aliases);
-    if (count === 0 && aliasOccurrences(text, aliases) > 0) count = 1;
+    let count = 0;
+    for (const clause of splitClauses(text)) {
+      const found = nearestAliasCount(clause, aliases);
+      if (found.count <= 0) continue;
+      // 安全光栅通常整机 1 套；只有同段明确写「每工位」时才按工位展开，
+      // 避免把「每工位 ... + 安全光栅」误扩成 6 套。
+      const multiply = perStation && found.explicit && kind !== 'safety';
+      count += multiply ? found.count * stations : found.count;
+    }
     if (count > 0) counts.set(kind, count);
   }
   return (['proximity', 'photoelectric', 'safety', 'pressure'] as const)
@@ -316,8 +422,8 @@ export function parseMachineBrief(text: string): MachineBrief {
   const cyclePerMin = detectCyclePerMin(source);
   if (cyclePerMin === null) notes.push(DEFAULT_NOTE_CYCLE);
 
-  const actuators = detectActuators(source, notes);
-  const sensors = detectSensors(source);
+  const actuators = detectActuators(source, notes, stations);
+  const sensors = detectSensors(source, stations);
   const brand = detectBrand(source);
   const voltage = detectVoltage(source);
 

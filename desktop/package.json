@@ -17,6 +17,7 @@
     "bench:render": "node scripts/bench-render-plan.mjs",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
     "screenshots": "node scripts/capture-screenshots.mjs",
+    "screenshots:machine": "npm run build:ext && node scripts/capture-machine-screenshots.mjs",
     "dist:win": "electron-builder --win nsis --x64",
     "build:mcp": "node scripts/build-mcp.mjs",
     "mcp": "node dist-electron/mcp.cjs",

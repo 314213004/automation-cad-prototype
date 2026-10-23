@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 六工位锁螺丝机完整案例 + 全流程真实截图（P10-4，2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1141/1141**（新增 9 条案例断言）、`npm run smoke` 全绿、`npm run screenshots:machine` 4 张图全部通过像素校验；不 push。
+- A. 案例：`desktop/scripts/build-machine-case.mjs` 用 `parseMachineBrief` + `synthMachine` + `mapMachineBom` + `buildMachineIoMap` 生成 `docs/desktop/eval/machine-case.json`；六工位 brief 解析为 6 工位 / 12 执行机构 / 7 传感器 / 19 点位。
+- B. 节拍如实记录：目标 3.00 秒/件，估算 3.18 秒/件（工艺固定 2.20 + 旋转轴 0.70 + 气爪 0.28），`meetsTarget=false`；按当前估算需每工序 2 个并行工位、总工位至少 12 个，未写成瓶颈已消失。
+- C. BOM 真实型号：`SV660P 750 W`、`MS1H1-75B30CB`、`MHZ2-20D`、`SY5120-5LZD`、`D-M9B`、`CP1E-N40DR-A`、`PNOZ s3 750103`、`LRS-350-24`、`iC65N 1P C6`、`5SY63 3P C16` 均按 `packId + partId` 校验存在；共 12 行，11 行真实型号 + 1 行安全光栅待选型；四项电气余量 1.346–2.885，均 ≥1.25 倍。
+- D. 截图：新增 `15-machine-design-card.png`、`16-machine-3d.png`、`17-machine-bom.png`、`18-machine-iomap.png`，均为 1600×1000 真实 Electron 渲染；3D 断言 `stations=6 actuators=12 sensors=7 ticks=86`，BOM 12 行、IO 19 行。
+- E. 复现：`cd desktop && npm run screenshots:machine`。脚本启动本地脚本化离线 OpenAI 兼容桩，注入 brief → 返回 `design_machine` → 渲染方案卡 → 自动确认应用 → 3D → BOM → IO；不依赖外部模型。
+- F. 文档：新增 [MACHINE-DESIGN-DEMO.md](MACHINE-DESIGN-DEMO.md)，同步 README、MODULES、STATUS 与本文件。
+- 边界：节拍未达标，按现估算需 12 个总工位；安全光栅没有库内型号；3D 为配置驱动示意，不含真实结构强度与运动学校核。
+
 ## 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测（P10-3，2026-10-24，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1132/1132**（1110 + 新增 22）、`npm run smoke` 新增 `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`npm run eval:agent` **74/74（1.00）**、`npm run agent:live` **36/36**；不 push。
@@ -348,6 +359,7 @@
 8. **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。
 9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
 10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
+11. **安全光栅型号缺失（待补录）**：`smc-cn` / `iec-cn` 均无安全光栅型号，六工位案例的 BOM 只能标「待选型」；需补录真实安全光栅型号、分辨率/保护高度/安全等级与安全继电器匹配参数，完成后再更新 `machine-case.json` 与 MACHINE-DESIGN-DEMO.md。
 
 ## 夜间执行约束
 

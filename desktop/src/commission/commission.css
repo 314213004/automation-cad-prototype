@@ -1,4 +1,5 @@
-.commission-drawer{width:520px}
+.acp-drawer.commission-drawer{width:620px}
+.commission-drawer .commission-3d{height:320px}
 .commission-panel{display:flex;flex-direction:column;gap:0}
 .commission-status{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid #343a40;border-radius:4px;background:#1d2124;font-size:11px;color:#aab3ba}
 .commission-lamp{width:8px;height:8px;border-radius:50%;background:#5d666e;box-shadow:0 0 0 2px rgba(93,102,110,.18)}
@@ -57,6 +58,6 @@
 .commission-diagnosis-actions{margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.06);color:#9aa5ad;font-size:9px;line-height:1.55}
 .commission-diagnosis-actions>span{color:#d2b3b0;font-size:9px;letter-spacing:.04em}
 .commission-diagnosis-actions ol{margin:4px 0 0;padding-left:16px}
-@media (max-width: 1180px){.commission-drawer{width:470px}}
+@media (max-width: 1180px){.acp-drawer.commission-drawer{width:470px}.commission-drawer .commission-3d{height:260px}}
 .commission-3d-mode{margin:0 0 5px;padding:5px 7px;border:1px solid #6b5a33;border-radius:3px;background:#302a1e;color:#e8d49b;font-size:9px;line-height:1.45}
 .commission-3d-mode[data-mode="annotation"]{border-color:#2a5b55;background:#1c2b29;color:#8ee0d4}

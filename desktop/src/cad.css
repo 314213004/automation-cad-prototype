@@ -372,3 +372,25 @@
 .cad-param-actions .cad-btn:disabled{opacity:.42;cursor:not-allowed}
 @media (max-width: 1440px){.cad-parametric-drawer{width:368px;flex-basis:368px}}
 @media (max-width: 1280px){.cad-parametric-drawer{width:336px;flex-basis:336px}}
+
+/* 机型 BOM / IO 点位侧栏：真实表格，数据来自应用后的 machine-design 与 plcgen 点位收集。 */
+.cad-machine-note{padding:8px 10px;border-bottom:1px solid #30353a;background:#1b1e21;color:#8b959d;font:9px/1.5 var(--font-mono,monospace);word-break:break-word}
+.cad-machine-table{flex:1;min-height:0;overflow:auto}
+.cad-machine-table-el{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10px}
+.cad-machine-table-el th{position:sticky;top:0;z-index:1;padding:6px 5px;border-bottom:1px solid #3a4047;background:#1a1d20;color:#7f8a92;font:9px/1.2 var(--font-mono,monospace);text-align:left;letter-spacing:.02em}
+.cad-machine-table-el td{padding:6px 5px;border-bottom:1px solid #2b3035;color:#b8c0c7;vertical-align:top;overflow-wrap:anywhere}
+.cad-machine-table-el tbody tr:hover{background:#24292d}
+.cad-bom-table th:nth-child(1),.cad-bom-table td:nth-child(1){width:24px}
+.cad-bom-table th:nth-child(3),.cad-bom-table td:nth-child(3){width:34px;text-align:right}
+.cad-bom-table th:nth-child(4),.cad-bom-table td:nth-child(4){width:64px}
+.cad-io-table th:nth-child(2),.cad-io-table td:nth-child(2){width:34px}
+.cad-io-table th:nth-child(4),.cad-io-table td:nth-child(4){width:42px}
+.cad-machine-no,.cad-machine-address,.cad-machine-point{font:9px/1.4 var(--font-mono,monospace);color:#7ed9cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-machine-main{min-width:0}
+.cad-machine-main b{display:block;color:#e2e8ec;font-size:10px;font-weight:600;line-height:1.35}
+.cad-machine-main span{display:block;margin-top:2px;color:#8fd8ce;font:9px/1.35 var(--font-mono,monospace);word-break:break-all}
+.cad-machine-main em{display:block;margin-top:2px;color:#6f7b84;font:8px/1.35 var(--font-mono,monospace);font-style:normal;word-break:break-all}
+.cad-machine-qty{font:10px/1.4 var(--font-mono,monospace);color:#e7edf1;text-align:right}
+.cad-machine-source{font:8px/1.35 var(--font-mono,monospace);color:#89949d;word-break:break-all}
+.cad-machine-dir{font:9px/1.4 var(--font-mono,monospace);color:#9cc8ff}
+.cad-machine-dir[data-dir="输出"]{color:#f3c879}

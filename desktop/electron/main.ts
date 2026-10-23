@@ -51,10 +51,12 @@ import { generateProject } from '../src/plcgen/generate';
 import { verifyGenerated } from '../src/plcgen/verify';
 import { ParametricManager } from './parametric.ts';
 import { captureProductScreenshots } from './screenshots';
+import { captureMachineScreenshots } from './machine-screenshots';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
-const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS;
+const HEADLESS_MACHINE_SCREENSHOTS = process.argv.includes('--headless-machine-screenshots');
+const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS;
 const APP_NAME = 'AutomationCAD';
 app.setName(APP_NAME);
 
@@ -66,9 +68,20 @@ if (HEADLESS_SMOKE) {
   // CI 的 xvfb 环境没有 GPU；显式关闭 WebGL 以稳定覆盖降级面板路径。
   app.commandLine.appendSwitch('disable-webgl');
 }
+if (HEADLESS_MACHINE_SCREENSHOTS) {
+  // xvfb 无硬件 GPU；用 SwiftShader 软件渲染，确保 3D 联调截图来自真实 WebGL 场景。
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+  app.commandLine.appendSwitch('use-gl', 'angle');
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+}
 if (HEADLESS) {
   // 避免与开发机上正在运行的实例争抢单实例锁。
-  app.setPath('userData', mkdtempSync(join(tmpdir(), HEADLESS_SCREENSHOTS ? 'automationcad-shots-' : 'automationcad-smoke-')));
+  const prefix = HEADLESS_MACHINE_SCREENSHOTS
+    ? 'automationcad-machine-shots-'
+    : HEADLESS_SCREENSHOTS
+      ? 'automationcad-shots-'
+      : 'automationcad-smoke-';
+  app.setPath('userData', mkdtempSync(join(tmpdir(), prefix)));
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -261,9 +274,9 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: HEADLESS_SCREENSHOTS ? 1600 : 1440,
-    height: HEADLESS_SCREENSHOTS ? 1000 : 900,
-    useContentSize: HEADLESS_SCREENSHOTS,
+    width: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1600 : 1440,
+    height: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1000 : 900,
+    useContentSize: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS,
     minWidth: 1000,
     minHeight: 680,
     backgroundColor: '#1E2124',
@@ -297,7 +310,22 @@ function createWindow(): BrowserWindow {
     } catch (error) {
       console.error('[desktop] 扩展脚本注入失败', error);
     }
-    if (HEADLESS_SCREENSHOTS) {
+      if (HEADLESS_MACHINE_SCREENSHOTS) {
+        const outputDir = process.env.AUTOMATIONCAD_SCREENSHOT_DIR
+          ? resolve(process.env.AUTOMATIONCAD_SCREENSHOT_DIR)
+          : resolve(desktopRoot(), '..', 'docs', 'desktop', 'screenshots');
+        try {
+          const result = await captureMachineScreenshots(window, { outputDir });
+          if (parametric) await parametric.stop();
+          setTimeout(() => app.exit(result.failed > 0 ? 1 : 0), 100);
+        } catch (error) {
+          console.error('SMOKE_MACHINE_SHOTS_FAIL', error);
+          if (parametric) await parametric.stop();
+          setTimeout(() => app.exit(1), 100);
+        }
+        return;
+      }
+      if (HEADLESS_SCREENSHOTS) {
       const outputDir = process.env.AUTOMATIONCAD_SCREENSHOT_DIR
         ? resolve(process.env.AUTOMATIONCAD_SCREENSHOT_DIR)
         : resolve(desktopRoot(), '..', 'docs', 'desktop', 'screenshots');
