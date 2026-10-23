@@ -22,8 +22,11 @@ import { generateSt } from '../src/plcgen/st';
 import { generateProject } from '../src/plcgen/generate';
 import { verifyGenerated } from '../src/plcgen/verify';
 import { ParametricManager } from './parametric.ts';
+import { captureProductScreenshots } from './screenshots';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
+const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
+const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS;
 const APP_NAME = 'AutomationCAD';
 app.setName(APP_NAME);
 
@@ -34,8 +37,10 @@ if (HEADLESS_SMOKE) {
   app.disableHardwareAcceleration();
   // CI 的 xvfb 环境没有 GPU；显式关闭 WebGL 以稳定覆盖降级面板路径。
   app.commandLine.appendSwitch('disable-webgl');
+}
+if (HEADLESS) {
   // 避免与开发机上正在运行的实例争抢单实例锁。
-  app.setPath('userData', mkdtempSync(join(tmpdir(), 'automationcad-smoke-')));
+  app.setPath('userData', mkdtempSync(join(tmpdir(), HEADLESS_SCREENSHOTS ? 'automationcad-shots-' : 'automationcad-smoke-')));
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -228,8 +233,9 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    width: HEADLESS_SCREENSHOTS ? 1600 : 1440,
+    height: HEADLESS_SCREENSHOTS ? 1000 : 900,
+    useContentSize: HEADLESS_SCREENSHOTS,
     minWidth: 1000,
     minHeight: 680,
     backgroundColor: '#1E2124',
@@ -262,6 +268,24 @@ function createWindow(): BrowserWindow {
       );
     } catch (error) {
       console.error('[desktop] 扩展脚本注入失败', error);
+    }
+    if (HEADLESS_SCREENSHOTS) {
+      const outputDir = process.env.AUTOMATIONCAD_SCREENSHOT_DIR
+        ? resolve(process.env.AUTOMATIONCAD_SCREENSHOT_DIR)
+        : resolve(desktopRoot(), '..', 'docs', 'desktop', 'screenshots');
+      try {
+        const result = await captureProductScreenshots(window, {
+          outputDir,
+          fixtureDir: resolve(desktopRoot(), 'test', 'fixtures')
+        });
+        if (parametric) await parametric.stop();
+        setTimeout(() => app.exit(result.failed > 0 ? 1 : 0), 100);
+      } catch (error) {
+        console.error('SMOKE_SHOTS_FAIL', error);
+        if (parametric) await parametric.stop();
+        setTimeout(() => app.exit(1), 100);
+      }
+      return;
     }
     if (HEADLESS_SMOKE) {
       try {
@@ -1853,7 +1877,7 @@ async function startAgent(registry: PackRegistry, commands: CommandBus): Promise
     token,
     version: app.getVersion(),
     host: '127.0.0.1',
-    port: HEADLESS_SMOKE ? 0 : 7420
+    port: HEADLESS ? 0 : 7420
   });
   try {
     const info = await agentServer.start(tokenFile);

@@ -119,6 +119,18 @@
 - 实测（P9-5）：`npx tsc --noEmit` 通过；`npm test` **647/647**（新增 `parametric-assembly.test.ts` 25 条 + sidecar 装配 3 条）；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3`
 - P9-5 边界：BOM 只按实体汇总、不拆特征明细；`partId` 需人工填写；装配为静态多实体合并，不做配合约束/自由度求解（P9-4）
 
+### P10 产品截图更新（本轮，2026-10-23）
+- 状态：✅ 已完成
+- 内容：新增 `--headless-screenshots` 分支与 `npm run screenshots`（`desktop/scripts/capture-screenshots.mjs`）：xvfb 启真实 Electron，`BrowserWindow.setContentSize(1600,1000)` 后用 `webContents.capturePage()` 抓图；参数化面板由 `AUTOMATIONCAD_PARAMETRIC_CMD=desktop/scripts/fake-parametric-sidecar.mjs` 驱动。
+- 新增截图（均为真实 Electron 实跑，非设计稿）：
+  - `docs/desktop/screenshots/11-plcgen.png`：预检 0 错误 + 11 文件树 + README 预览，167,125 B；
+  - `docs/desktop/screenshots/12-parametric.png`：4 特征树 + 孔位参数 + `面 19 / 体积 71.5 cm³`，152,671 B；
+  - `docs/desktop/screenshots/13-cost.png`：9 卡 + 6 行明细 + 缺价 1 项（¥1,398.64），307,220 B；
+  - `docs/desktop/screenshots/14-enclosure.png`：3 元件 + 1 处重叠红框/角标，281,093 B。
+- 验图：四张均为 1600×1000，PIL 统计颜色数 3,192–6,508、RGB stddev 均 > 14，非单色/空白。
+- 说明：xvfb 下 Chromium 把 WebGL 列入 blocklist，CAD 3D 视口显示解析统计降级面板；参数化抽屉与 PLC/成本/底板面板均为真实 DOM/SVG 渲染并已截图，无跳过项。
+- 验收：`npm test`、`npm run smoke` 全绿；README 界面一览与图注、`docs/desktop/MODULES.md` 截图索引已同步。
+
 ## 待决策（需要老王拍板，不阻塞其他开发）
 
 | # | 问题 | 选项 | 影响 | 建议 | 状态 |

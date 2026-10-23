@@ -28,7 +28,7 @@
 
 ## 截图目录（docs/desktop/screenshots/）
 
-Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容：
+Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），不是设计稿。复现：`cd desktop && npm run screenshots`（xvfb + 真实 Electron + `capturePage`，参数化面板由 `scripts/fake-parametric-sidecar.mjs` 驱动）。headless 下 Chromium 把 WebGL 列入 blocklist 时，CAD 3D 区域显示解析统计降级面板，目标面板本身仍为真实 DOM / SVG。文件名与内容：
 
 | 文件 | 内容 |
 |------|------|
@@ -42,6 +42,10 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 | `08-elec-library.png` | 电气元件库：44 型号 / 12 分类、符号标记与「放入图纸」 |
 | `09-agent.png` | 智能体面板：对话、工具、模型设置、本机服务信息 |
 | `10-sync-settings.png` | 智慧工厂同步设置：baseUrl / 机台编号 / 项目 / API Key 掩码 |
+| `11-plcgen.png` | PLC 程序生成：预检 0 错误、11 文件树、README 预览、生成历史（1600×1000） |
+| `12-parametric.png` | 参数化抽屉：4 特征树、孔位参数表单、`就绪 · 面 19 · 体积 71.5 cm³`（1600×1000，假 sidecar） |
+| `13-cost.png` | 成本估算：9 张统计卡、6 行明细、缺价 1 项、合计 ¥1,398.64（1600×1000） |
+| `14-enclosure.png` | 底板布置：3 个真实尺寸元件、1 处重叠红框/角标、利用率与冲突计数（1600×1000） |
 
 引用约定：README 与文档一律用**相对仓库根**的路径（如 `docs/desktop/screenshots/01-home.png`），保证 GitHub 上可直接渲染；补拍或替换截图时保持同名覆盖，避免文档批量改链接。
 
