@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 20 个 AgentTool；含只读 `design_machine` 与写工具 `apply_machine_design`）
+tools.ts（AgentTools + 21 个 AgentTool；含只读 `suggest_kinematics`；含只读 `design_machine` 与写工具 `apply_machine_design`）
  ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
  ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
@@ -75,6 +75,7 @@ interface Bridge {
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
 | `get_project_context` | 无 | `get_project_context` | ✅ 只读：域/视图/选中/机型/底板/单位/最近操作，缺失为 null |
 | `run_interference_check` | 无 | `run_interference` | ✅ 前 20 条 |
+| `suggest_kinematics` | `includeLow? / limit?` | `suggest_kinematics` → 渲染桥 `suggestKinematics` | ✅ 只读：返回压缩后的高/低置信度建议，只刷新标注抽屉建议列表，`applied=false`，从不写标注 |
 | `insert_component` | `partId / name?` | `insert_component` | ✅ 可撤销 |
 | `place_component` | `partId / x / y / rotate? / railSnap?` | `place_component` | ✅ 底板放置，可撤销；越界/重叠只告警 |
 | `update_component` | `partId? / ref? / model? / qty? / remark? / target?` | `update_component` | ✅ 改型号/数量/备注，可撤销；无尺寸返回 `NO_DIMENSIONS` 告警 |
@@ -535,8 +536,8 @@ parseFallbackCandidates(text): string[]
 
 ## 进度
 
-- ✅ 注册表 + 20 工具（只读 10 / 写 10）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 20 个）
+- ✅ 注册表 + 21 工具（只读 11 / 写 10）+ 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 21 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）

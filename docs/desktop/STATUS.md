@@ -4,8 +4,8 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`）；集成分支 `integ/3d-all` 合并迭代 34/35/36 三条 3D 分支，本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1237/1237 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9；沙箱需 `TZ=Asia/Shanghai`）。
-- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
+- 测试：**1247/1247 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9 + Agent `suggest_kinematics` 9 + KB 余量守卫 1；沙箱需 `TZ=Asia/Shanghai`）。
+- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
 
@@ -14,7 +14,7 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1237 pass / 0 fail / 0 skipped |
+| `npm test` | 1247 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
 | `npm run screenshots:machine` | 4 张 1600×1000 真实 Electron 截图，尺寸/文件大小/颜色数校验通过 |
@@ -30,6 +30,7 @@
 | `SMOKE_WEBGL_FALLBACK_OK` | `meshes=1 triangles=12 bounds=300×300×300 mm`，无 WebGL 降级面板 |
 | `SMOKE_KINEMATICS_UI_OK` | `parts=2 errors=1 slide=25`，标注校验与滑块预览 |
 | `SMOKE_KINEMATICS_AUTO_OK` | `high=4 low=1 accepted=1 autoApplied=0`，STEP 动件自动识别只出建议 |
+| `SMOKE_AGENT_KINEMATICS_OK` | `high=4 low=1 written=0`，Agent 工具 `suggest_kinematics` 经命令总线拿到建议且不改动件列表 |
 | `SMOKE_MECH_OK` | `hits=1`，干涉 AABB 初筛 |
 | `SMOKE_MECH_UI_OK` | `rootTab=1 calculators=3 inspector=1` |
 | `SMOKE_EXPORT_OK` | `csv=1 dxf=1`，BOM/DXF 写出 |
@@ -67,7 +68,7 @@
 | `SMOKE_MACHINE_TEMPLATES_OK` | `templates=5 clarify=1 multi=1`，五类工艺模板与追问上限 |
 | `SMOKE_MACHINE_GEOMETRY_OK` | `layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`，参数化整机几何 |
 | `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=5 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
-| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=367 query=D2 hits=1`，离线知识索引可检索 |
+| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=332 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_ORBIT_VIEW_OK` | `mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`，主视口 3D 降级路径 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
@@ -94,7 +95,7 @@
 | P4 大模型性能 | ✅ | 渲染规划（合批/视锥/LOD）与视图器接入、10 万面基准 | `f6962b3`、`71c0e9b` | 纯函数规划 + 批次层 |
 | P5 智慧工厂服务端 | 🔄 | 设计包 ZIP/manifest/幂等/上传/列表/diff/下载；本地端到端 | `0a1733e`、`ce11575` | 生产实例不可达，待 D2 |
 | P6 硬件成本统计 | 🔄 | 价格簿、引擎、面板、A4/CSV 导出、Agent 工具与落盘 | `a8c1e5f`、`6d70ae7`、`a66b26e`、`23cd284` | P6-5 采购价对接待 D2 |
-| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划、工具扩展、本地知识检索、机型方案合成与落盘联动 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 20 工具（只读 10 / 写 10）；真实模型仅按 OpenAI 兼容协议验证 |
+| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划、工具扩展、本地知识检索、机型方案合成与落盘联动 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 21 工具（只读 11 / 写 10）；真实模型仅按 OpenAI 兼容协议验证 |
 | P8 PLC 程序生成 | 🔄 | 预检、变量表、五个基础块、自动序列/报警/安全、11 文件、UI/zip/历史、模拟器 | `b36635b`、`ccbd0fc`、`1f50bac`、`a6b0534` | P8-5 厂商工程文件未做 |
 | P9 参数化建模 | 🔄 | build123d sidecar、特征树、防抖重建、STEP/STL、多实体装配与 BOM/成本联动 | `5c2a8c3`、`9eda660`、`8867853`、`449d060` | P9-4 草图约束未做；依赖 Python |
 
@@ -138,7 +139,7 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 1237 条单测/集成测试
+npm test                            # 1247 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke

@@ -153,6 +153,18 @@ interface InterferenceBridgeItem {
   severity: string;
 }
 
+/** 渲染层 suggestKinematics 的返回；建议对象原样透传，由 suggest_kinematics 工具压缩。 */
+interface KinematicsSuggestBridgeResult {
+  sourceFile?: string;
+  meshes?: number;
+  existingParts?: number;
+  summary?: string;
+  stats?: Record<string, number>;
+  suggestions: unknown[];
+  lowConfidence: unknown[];
+  skipped?: { name: string; reason: string }[];
+}
+
 interface InterferenceBridgeResult {
   hits: number;
   items: InterferenceBridgeItem[];
@@ -193,6 +205,7 @@ const BRIDGE_METHODS = new Set([
   'placeEnclosurePart',
   'removeEnclosurePart',
   'runInterference',
+  'suggestKinematics',
   'getPlcGenConfig',
   'importPath',
   'exportCostFile',
@@ -639,6 +652,17 @@ function registerReadCommands(bus: CommandBus): void {
         throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(rows, '读取 BOM 失败'));
       }
       return { ok: true, data: { rows, note: SIMPLE_BOM_NOTE } };
+    }
+  });
+
+  bus.register({
+    name: 'suggest_kinematics',
+    async run(_args, ctx) {
+      const result = await ctx.bridge.call<KinematicsSuggestBridgeResult>('suggestKinematics');
+      if (!result || isBridgeFailure(result) || !Array.isArray(result.suggestions) || !Array.isArray(result.lowConfidence)) {
+        throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(result, '运动件自动识别失败'));
+      }
+      return { ok: true, data: result };
     }
   });
 

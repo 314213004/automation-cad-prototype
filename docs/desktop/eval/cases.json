@@ -1097,5 +1097,18 @@
       "machine_clarify"
     ],
     "note": "信息不足：工具返回 needs/question，由会话层最多追问一次；不答则用默认值继续。"
+  },
+  {
+    "id": "kin01",
+    "input": "帮我自动识别一下这个 STEP 装配里的运动件",
+    "intent": "compute",
+    "expect": {
+      "tool": "suggest_kinematics",
+      "argsContains": {}
+    },
+    "tags": [
+      "kinematics"
+    ],
+    "note": "运动件自动识别：只读，只给建议、不写标注，采纳需用户在抽屉逐条确认。"
   }
 ]

@@ -41,6 +41,14 @@ test('kb.json 已提交且体积不超过 400 KB', () => {
   assert.equal(kb.meta.bytes, Buffer.byteLength(raw, 'utf8'));
 });
 
+test('BACKLOG 历史归档不进索引，且索引保留至少 5% 余量', () => {
+  assert.equal(KB_DOC_FILES.includes('BACKLOG-HISTORY.md'), false);
+  assert.equal(kb.meta.sources.some((source) => source.path.endsWith('BACKLOG-HISTORY.md')), false);
+  const history = readFileSync(resolve(REPO_ROOT, 'docs/desktop/BACKLOG-HISTORY.md'), 'utf8');
+  assert.match(history, /^## /m);
+  assert.ok(kb.meta.bytes <= KB_MAX_BYTES * 0.95, `kb.json ${kb.meta.bytes} B，余量不足 5%，请把更早的迭代记录移入 BACKLOG-HISTORY.md`);
+});
+
 test('KB_STATS 与 kb.json 元数据一致', () => {
   assert.equal(KB_STATS.docs, KB_DOC_FILES.length);
   assert.equal(KB_STATS.chunks, kb.chunks.length);

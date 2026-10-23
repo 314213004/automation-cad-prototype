@@ -80,7 +80,7 @@ const RULES: IntentRule[] = [
   },
   {
     intent: 'compute',
-    strong: ['成本', '多少钱', '报价', '干涉', '电气校验', '载流量', '不平衡度', '余量'],
+    strong: ['成本', '多少钱', '报价', '干涉', '电气校验', '载流量', '不平衡度', '余量', '动件', '运动部件', '运动学识别'],
     normal: ['计算', '算一下', '算一遍', '重算', '算算', '够不够', '合规', '校验', '检查', '统计', '功率', '费用', '总价', '合计']
   },
   {
@@ -218,7 +218,7 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 20 个工具里，只读 10 个、写操作 10 个。 */
+/** 目前注册的 21 个工具里，只读 11 个、写操作 10 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
@@ -227,6 +227,7 @@ export const READ_ONLY_TOOLS = new Set([
   'get_bom',
   'get_project_context',
   'run_interference_check',
+  'suggest_kinematics',
   'run_electrical_check',
   'run_cost_report',
   'verify_plc_program'
@@ -693,6 +694,15 @@ function planToolBase(text: string): ToolPlan | null {
   }
 
   // 只读工具：按「最具体」到「最泛」排序，避免「BOM 成本」落到 get_bom。
+  if (/(识别|推断|找出|找找|自动标注|分析).{0,20}(运动件|动件|运动部件|运动轴|运动学)|运动学.{0,4}(识别|建议)/.test(value)) {
+    return {
+      tool: 'suggest_kinematics',
+      args: {},
+      readOnly: true,
+      missing: [],
+      why: '对当前 STEP 装配自动识别运动件，只给建议、不写入标注'
+    };
+  }
   if (/干涉|碰撞/.test(value)) {
     return {
       tool: 'run_interference_check',

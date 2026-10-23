@@ -4,6 +4,7 @@ import wasmAssetUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
 import { occtFormatForFile, parseOcctBuffer } from './cad/step';
 import { parseStandardCadBuffer } from './cad/loaders';
 import { CadViewer } from './cad/viewer';
+import { describeSuggestions } from './cad/kinematics-auto';
 import {
   initKinematicsUi,
   pointOptionsFromMachineConfig,
@@ -1487,6 +1488,26 @@ function initAgentBridge(): void {
             volume: hit.volumeApprox,
             severity: hit.severity
           }))
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    suggestKinematics: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const handle = ensureKinematicsUi();
+        const before = handle.state();
+        const result = handle.suggest();
+        return {
+          sourceFile: before.sourceFile,
+          meshes: before.meshes.length,
+          existingParts: before.parts.length,
+          summary: describeSuggestions(result),
+          stats: result.stats,
+          suggestions: result.suggestions,
+          lowConfidence: result.lowConfidence,
+          skipped: result.skipped.slice(0, 10).map((item) => ({ name: item.name, reason: item.reason }))
         };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };

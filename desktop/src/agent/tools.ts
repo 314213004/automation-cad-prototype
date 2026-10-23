@@ -53,6 +53,39 @@ const EMPTY_SCHEMA = {
   additionalProperties: false
 };
 
+const SUGGEST_KINEMATICS_SCHEMA = {
+  type: 'object',
+  properties: {
+    includeLow: { type: 'boolean', description: '是否同时返回低置信度建议（默认 true）', default: true },
+    limit: { type: 'integer', minimum: 1, maximum: 30, description: '每档最多返回几条，1–30，默认 20', default: 20 }
+  },
+  additionalProperties: false
+};
+
+/** suggest_kinematics 输出给模型的单条建议：只留判断与复核需要的字段。 */
+export function compactKinematicsSuggestion(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value) || typeof value.id !== 'string') return null;
+  const num = (input: unknown): number => (typeof input === 'number' && Number.isFinite(input) ? input : 0);
+  const kind = value.kind === 'rotary' ? 'rotary' : 'linear';
+  const meshNames = Array.isArray(value.meshNames) ? value.meshNames.filter((name) => typeof name === 'string').slice(0, 6) : [];
+  return {
+    id: value.id,
+    name: typeof value.name === 'string' ? value.name : '',
+    category: typeof value.category === 'string' ? value.category : '',
+    kind,
+    axis: `${num(value.direction) < 0 ? '-' : '+'}${typeof value.axis === 'string' ? value.axis.toUpperCase() : '?'}`,
+    ...(kind === 'rotary' ? { rangeDeg: num(value.rangeDeg) } : { travelMm: num(value.travelMm) }),
+    strokeSource: typeof value.strokeSource === 'string' ? value.strokeSource : 'none',
+    modelCode: typeof value.modelCode === 'string' ? value.modelCode : '',
+    station: typeof value.station === 'string' ? value.station : '',
+    point: typeof value.point === 'string' ? value.point : '',
+    confidence: Math.round(num(value.confidence) * 100) / 100,
+    level: value.level === 'high' ? 'high' : 'low',
+    reason: typeof value.reason === 'string' ? value.reason : '',
+    meshNames
+  };
+}
+
 const PLACE_COMPONENT_SCHEMA = {
   type: 'object',
   properties: {
@@ -724,6 +757,51 @@ export class AgentTools {
           ok: true,
           hits: Number(data.hits ?? items.length),
           items
+        };
+      }
+    });
+
+    this.add({
+      name: 'suggest_kinematics',
+      description:
+        '对当前导入的 STEP 装配做运动件自动识别（按零件名/型号、装配层级、几何关系推断轴向、行程、置信度与 IO 点位）。只读：只生成建议并刷新运动标注抽屉的建议列表，从不写入标注；采纳必须由用户在抽屉里逐条确认并保存。',
+      inputSchema: SUGGEST_KINEMATICS_SCHEMA,
+      handler: async (args) => {
+        if (args.includeLow !== undefined && typeof args.includeLow !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'includeLow 必须是布尔值' };
+        }
+        let limit = 20;
+        if (args.limit !== undefined) {
+          const value = getNumber(args.limit);
+          if (value === undefined || !Number.isInteger(value) || value < 1 || value > 30) {
+            return { ok: false, code: 'INVALID_ARGUMENT', message: 'limit 必须是 1–30 的整数' };
+          }
+          limit = value;
+        }
+        const result = await this.execute('suggest_kinematics');
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        const data = isRecord(result.data) ? result.data : {};
+        const meshes = Number(data.meshes ?? 0);
+        const compact = (list: unknown): Record<string, unknown>[] =>
+          (Array.isArray(list) ? list : [])
+            .map(compactKinematicsSuggestion)
+            .filter((item): item is Record<string, unknown> => item !== null);
+        const high = compact(data.suggestions);
+        const low = args.includeLow === false ? [] : compact(data.lowConfidence);
+        return {
+          ok: true,
+          sourceFile: typeof data.sourceFile === 'string' ? data.sourceFile : '',
+          meshes,
+          existingParts: Number(data.existingParts ?? 0),
+          summary: meshes === 0 ? '当前没有导入 CAD 模型，请先 import_cad 导入 STEP 装配' : String(data.summary ?? ''),
+          stats: isRecord(data.stats) ? data.stats : {},
+          suggestions: high.slice(0, limit),
+          lowConfidence: low.slice(0, limit),
+          truncated: high.length > limit || low.length > limit,
+          skipped: Array.isArray(data.skipped) ? data.skipped.slice(0, 10) : [],
+          applied: false,
+          note: '仅为建议，未写入标注；请在「运动标注」抽屉逐条采纳，校验通过后保存。'
         };
       }
     });

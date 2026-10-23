@@ -719,6 +719,32 @@ function createWindow(): BrowserWindow {
             return;
           }
           console.log(`SMOKE_KINEMATICS_AUTO_OK high=${auto.high} low=${auto.low} accepted=${auto.acceptedParts} autoApplied=${auto.partsBefore}`);
+          // Agent 工具 suggest_kinematics：经命令总线 → 渲染桥，只给建议，不改动件列表。
+          if (!commandBus) throw new Error('命令总线尚未就绪');
+          const partsBeforeAgent = await window.webContents.executeJavaScript(
+            `(async () => {
+              await window.AutomationCadViewer.importPath(${JSON.stringify(autoFixture)});
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              return window.AutomationCadKinematics.state().parts.length;
+            })()`
+          ) as number;
+          const agentKin = await commandBus.execute('suggest_kinematics', {});
+          const agentData = (agentKin.ok ? agentKin.data : {}) as { meshes?: number; suggestions?: unknown[]; lowConfidence?: unknown[] };
+          const partsAfterAgent = await window.webContents.executeJavaScript(
+            `(async () => {
+              const count = window.AutomationCadKinematics.state().parts.length;
+              await window.AutomationCadViewer.importPath(${JSON.stringify(fixture)});
+              await new Promise((resolve) => setTimeout(resolve, 20));
+              return count;
+            })()`
+          ) as number;
+          if (!agentKin.ok || agentData.meshes !== 11 || agentData.suggestions?.length !== 4 ||
+              agentData.lowConfidence?.length !== 1 || partsAfterAgent !== partsBeforeAgent) {
+            console.error('SMOKE_FAIL agent_kinematics', JSON.stringify({ ok: agentKin.ok, agentData, partsBeforeAgent, partsAfterAgent }));
+            setTimeout(() => app.exit(1), 100);
+            return;
+          }
+          console.log(`SMOKE_AGENT_KINEMATICS_OK high=${agentData.suggestions.length} low=${agentData.lowConfidence.length} written=${partsAfterAgent - partsBeforeAgent}`);
         } catch (error) {
           console.error('SMOKE_FAIL kinematics_auto_exception', error);
           setTimeout(() => app.exit(1), 100);
@@ -1287,8 +1313,9 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 20 ||
+          summaries.length !== 21 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
+          !summaries.some((tool) => tool.name === 'suggest_kinematics') ||
           !summaries.some((tool) => tool.name === 'apply_machine_design') ||
           !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
