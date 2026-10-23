@@ -9,6 +9,9 @@ import { join, resolve, sep } from 'node:path';
 import { computeCostReport, CostToolError, type CostToolDeps } from './agent.ts';
 import { costReportCsv, renderCostReportHtml, type CostReportProject } from './report.ts';
 import type { CostReport } from './engine.ts';
+import { exportTimestamp, sanitizeFileName } from '../shared/filename.ts';
+
+export { sanitizeCostFileName, costExportTimestamp } from '../shared/filename.ts';
 
 export type CostExportFormat = 'pdf' | 'csv';
 
@@ -67,34 +70,8 @@ function fail(code: string, message: string): never {
   throw new CostExportError(code, message);
 }
 
-/**
- * 文件名净化：去掉路径分隔符、Windows 非法字符、控制字符与首尾空白/点。
- * 只返回基名，不保证扩展名；长度上限由 `planExportName` 按扩展名统一控制。
- */
-export function sanitizeCostFileName(value: unknown, maxLength = 80): string {
-  if (typeof value !== 'string') return '';
-  return value
-    .replace(/[\u0000-\u001f\u007f]/g, '')
-    .replace(/[/\\:*?"<>|]/g, '')
-    .replace(/^[\s.]+|[\s.]+$/g, '')
-    .trim()
-    .slice(0, Math.max(1, maxLength))
-    .replace(/[\s.]+$/g, '');
-}
-
 function stripKnownExtension(value: string): string {
   return value.replace(/\.(pdf|csv)$/i, '');
-}
-
-function pad2(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-/** `yyyyMMdd-HHmm`（本地时区）。 */
-export function costExportTimestamp(value: Date | string | number = new Date()): string {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return costExportTimestamp(new Date());
-  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}-${pad2(date.getHours())}${pad2(date.getMinutes())}`;
 }
 
 export interface PlanExportNameOptions {
@@ -130,15 +107,15 @@ export function planExportName(options: PlanExportNameOptions): PlannedExportNam
   const exists = options.exists ?? (() => false);
 
   const rawSuggestion = typeof options.suggestedName === 'string' ? options.suggestedName : '';
-  const fromSuggestion = sanitizeCostFileName(stripKnownExtension(rawSuggestion), maxBase);
+  const fromSuggestion = sanitizeFileName(stripKnownExtension(rawSuggestion), maxBase);
   const requested = options.fileName === undefined || options.fileName === null
     ? ''
     : sanctionFileNameInput(options.fileName);
-  const base = sanitizeCostFileName(stripKnownExtension(requested), maxBase) || fromSuggestion || '成本报告';
+  const base = sanitizeFileName(stripKnownExtension(requested), maxBase) || fromSuggestion || '成本报告';
 
   const withSuffix = (suffix: string): string => {
     const room = Math.max(1, maxBase - suffix.length);
-    const head = sanitizeCostFileName(base, room) || '成本报告';
+    const head = sanitizeFileName(base, room) || '成本报告';
     return `${head}${suffix}${extension}`;
   };
 
@@ -229,7 +206,7 @@ export async function buildCostExport(
   const { report } = computation;
   const now = resolveNow(args, deps);
   const projectName = deps.projectName?.trim() || '机台';
-  const suggestedName = `成本报告-${projectName}-${costExportTimestamp(now)}.${format}`;
+  const suggestedName = `成本报告-${projectName}-${exportTimestamp(now)}.${format}`;
 
   let data: string | Uint8Array;
   if (format === 'csv') {

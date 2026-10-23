@@ -1,9 +1,9 @@
-import { createHash } from 'node:crypto';
 import type {
   GeneratedFile,
   Issue,
   PlcBomInput,
   PlcGenConfig,
+  PlcTarget,
   PrecheckResult,
   StGenerateOptions,
   StStats,
@@ -22,11 +22,16 @@ import { generateSafety } from './safety.ts';
 import { createRenderContext } from './st.ts';
 import { buildTagBindings, type TagBinding } from './symbols.ts';
 import { normalizePointKey } from './io.ts';
+import { sha256Hex } from './hash.ts';
 
 export interface GenerateProjectInput extends StGenerateOptions {
   config: PlcGenConfig;
   /** 仅参与预检；不进入程序正文。 */
   bom?: PlcBomInput;
+  /** 生成目标；仅影响 README，不进入 ST 内容与 inputHash。 */
+  target?: PlcTarget;
+  /** 命名前缀；仅影响 README 与导出命名，不进入 ST 内容与 inputHash。 */
+  namePrefix?: string;
 }
 
 export interface ProjectStats extends StStats {
@@ -68,13 +73,20 @@ export const PROJECT_FILE_ORDER = [
   'README.md'
 ] as const;
 
+export const PLC_TARGET_LABELS: Record<PlcTarget, string> = {
+  generic: '通用 ST',
+  's7-1200': '西门子 S7-1200',
+  's7-1500': '西门子 S7-1500',
+  codesys: 'CODESYS'
+};
+
 interface StepUsage {
   stepNo: number;
   usage: 'set' | 'reset' | 'condition';
 }
 
 function sha256(content: string): string {
-  return createHash('sha256').update(content, 'utf8').digest('hex');
+  return sha256Hex(content);
 }
 
 function countLines(content: string): number {
@@ -193,7 +205,9 @@ function buildReadme(
   sequenceWarnings: readonly Issue[],
   tags: TagTable,
   inputHash: string,
-  version: string
+  version: string,
+  target: PlcTarget,
+  namePrefix: string
 ): string {
   const warnings = [...precheckResult.warnings, ...sequenceWarnings];
   const lines = [
@@ -203,6 +217,8 @@ function buildReadme(
     `- 机型版本：${version}`,
     `- 生成器：AutomationCAD v1.0.0`,
     `- 输入哈希：${inputHash}`,
+    `- 目标平台：${PLC_TARGET_LABELS[target]}`,
+    `- 命名前缀：${namePrefix}`,
     `- 文件数：${PROJECT_FILE_ORDER.length}`,
     `- IO 变量：${tags.rows.length}（输入 ${tags.rows.filter((row) => row.address.startsWith('I')).length} / 输出 ${tags.rows.filter((row) => row.address.startsWith('Q')).length}）`,
     `- 自动序列步数：${steps.length}`,
@@ -242,15 +258,16 @@ function fileByPath(files: readonly GeneratedFile[], path: string): GeneratedFil
  * 同一输入（JSON 键序一致）重复生成，每个文件 sha256 一致。
  */
 export function generateProject(input: GenerateProjectInput): GenerateProjectResult {
-  const ctx = createRenderContext(input);
+  const { target = 'generic', namePrefix, ...programInput } = input;
+  const ctx = createRenderContext(programInput);
   const check = precheck(ctx.config, input.bom);
   if (check.errors.length > 0) {
     return { ok: false, errors: check.errors, precheck: check };
   }
 
-  const base = generateSt(input);
-  const sequence = generateSequence(input);
-  const plan = buildSequencePlan(input);
+  const base = generateSt(programInput);
+  const sequence = generateSequence(programInput);
+  const plan = buildSequencePlan(programInput);
   const tags = buildTags(ctx.config);
   const mapping = buildMapping(ctx.config, tags, plan.steps, ctx.inputHash);
   const readme = buildReadme(
@@ -260,7 +277,9 @@ export function generateProject(input: GenerateProjectInput): GenerateProjectRes
     sequence.warnings,
     tags,
     ctx.inputHash,
-    ctx.version
+    ctx.version,
+    target,
+    namePrefix?.trim() || ctx.config.id || 'PLC'
   );
 
   const allFiles: GeneratedFile[] = [
@@ -270,8 +289,8 @@ export function generateProject(input: GenerateProjectInput): GenerateProjectRes
     fileByPath(base.files, 'src/FB_Gripper.st'),
     fileByPath(base.files, 'src/FB_RotaryAxis.st'),
     { path: 'src/FC_AutoSequence.st', content: sequence.content },
-    { path: 'src/FC_Alarms.st', content: generateAlarms(input) },
-    { path: 'src/FC_Safety.st', content: generateSafety(input) },
+    { path: 'src/FC_Alarms.st', content: generateAlarms(programInput) },
+    { path: 'src/FC_Safety.st', content: generateSafety(programInput) },
     { path: 'io-tags.csv', content: tags.csv },
     { path: 'mapping.json', content: mapping },
     { path: 'README.md', content: readme }

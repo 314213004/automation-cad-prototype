@@ -1,6 +1,6 @@
 # 设计完成后自动生成 PLC 程序 · 设计方案
 
-状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2 ✅ 已实现（自动序列 / 报警 / 安全 FC + 汇总生成）；P8-3～P8-5 待做
+状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2 ✅ 已实现（自动序列 / 报警 / 安全 FC + 汇总生成）；P8-3 ✅ 已实现（生成 UI + 文件树 + zip 导出 + 历史）；P8-4～P8-5 待做
 目标：电气设计定稿（选型 + IO 表 + 动作顺序）后，一键生成**可直接导入 PLC 工程**的程序骨架与变量表，把「画完图再手工敲程序」变成「设计即程序」。
 
 ## 1. 输入（全部来自已有模块）
@@ -206,3 +206,40 @@ plc/
 - `npm test`：**556/556**，其中新增 `desktop/test/plcgen-p82.test.ts` **32 条**（序列转移/超时/中止、安全串联与锁存、报警首故障、空步序、确定性、文件顺序、预检拦截）。
 - `npm run smoke`：`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2` → `SMOKE_OK`。
 - P8-2 边界：仍不生成 zip / UI / 厂商专用工程；模拟器联调自检留给 P8-4。
+
+## 12. P8-3 实现记录（2026-10-23）
+
+状态：✅ 完成。新增 `desktop/src/plcgen/ui.ts`、`plcgen.css`、`view-model.ts`、`export.ts`、`history.ts`，共享 `desktop/src/shared/filename.ts`、`desktop/src/shared/zip.ts`，并把面板接到电气域顶栏与 Electron IPC。
+
+### 面板与交互
+
+- 入口：电气域顶栏「PLC 程序」。面板为全屏覆盖层，沿用底板画布「电气域可见 / 关闭其他抽屉」的范式。
+- 顶部：机型名称、机型编号、`工位数 / 执行机构 / 点位数`；目标平台（通用 ST / S7-1200 / S7-1500 / CODESYS）与命名前缀（默认机型编号）。
+- 预检：错误/警告分级列表，带 issue code、消息、配置路径；能解析 `actuators[i]` 或问题中的点位，点击后高亮并滚动到对应执行机构。
+- 生成：`generateProject` 同步执行；有 error 时按钮禁用，warning 不拦截。文件树展示路径、行数、UTF-8 字节数；点文件在右侧等宽预览前 200 行，明确标注截断与总行数。
+- 底部：`N 个文件 · 变量 N · 步序 N · 生成 N ms`；「导出 zip」「复制全部」「打开导出目录」。
+- 历史：`<userData>/plc-gen-history.json`，最近 10 次；按 `inputHash` 去重并采用最新一条，记录时间、inputHash、目标、命名前缀、文件数、文件清单。点击历史记录回看文件清单（历史不保存正文）。
+
+### 目标平台与命名前缀
+
+- `GenerateProjectInput` 新增可选 `target` 与 `namePrefix`。两者只写入 `README.md`（目标平台/命名前缀），并参与导出命名；不进入 ST 正文。
+- 为保证确定性，`generateProject` 在计算 `inputHash` 与调用 `generateSt/sequence/safety/alarms` 前剥离这两个展示字段；同一配置切换目标平台时，除 README 外 10 个文件逐字节一致、SHA-256 相同。
+
+### 导出 zip
+
+- 使用已有依赖 `adm-zip`（`desktop/src/shared/zip.ts`），集中在 `createZip` 写 CRC 与中央目录；`normalizeZipPath` 拒绝绝对路径、盘符、控制字符、`.`/`..`。
+- 落盘目录：`<userData>/exports/plc/<机型>-<yyyyMMdd-HHmm>/`，同名追加 `-2`、`-3`；机型净化与时间戳统一来自 `src/shared/filename.ts`（成本导出也改用同一实现）。
+- 目录内直接写 11 个文件，并额外生成 `<目录名>.zip`；IPC 返回 `path / zipPath / bytes / files`，UI 提示落盘路径。
+- 「打开导出目录」只允许 `userData/exports/plc` 及其子目录，主进程用 `shell.openPath` 打开。
+
+### 历史与持久化
+
+- `history.ts` 为纯函数：`normalizeHistoryEntry`、`parsePlcHistory`、`mergePlcHistory`、`createHistoryEntry`；同 `inputHash` 去重、保持新→旧、上限 10。
+- 主进程 IPC：`plcgen:history`、`plcgen:recordHistory`、`plcgen:export`、`plcgen:openExportDir`；渲染层无 fs 权限。无桌面桥时 UI 退化为 `localStorage` 会话历史。
+
+### 验证证据
+
+- `npx tsc --noEmit`：通过。
+- `npm test`：**577/577**，新增 `desktop/test/plcgen-p83.test.ts` **21 条**：纯 JS SHA-256、文件树、200 行截断、UTF-8 字节、按钮禁用、问题定位、复制包、历史去重/上限/解析顺序、目录命名/冲突、ZIP 条目与 CRC + `unzip -t`、路径穿越、目标平台不影响 ST、预检拦截。
+- `npm run smoke`：新增 `SMOKE_PLCGEN_UI_OK files=11 history=1`（无机型配置时输出 `SMOKE_PLCGEN_UI_SKIP no_machine_config`）；导出目录与 zip 均经 `existsSync` 断言，zip 另用 `unzip -t` 人工复核通过。
+- P8-3 边界：仍不生成厂商专用工程文件；模拟器加载生成程序跑联调序列留给 P8-4。

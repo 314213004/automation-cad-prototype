@@ -1,7 +1,6 @@
-import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
-import { extname } from 'node:path';
-import { join } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
 import { FactoryManager } from '../src/factory/manager.ts';
 import type { TagValue } from '../src/factory/types.ts';
@@ -27,6 +26,14 @@ import { AgentSession } from '../src/agent/session.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
 import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
+import { createZip, normalizeZipPath, type ZipEntry } from '../src/shared/zip.ts';
+import { planPlcExportDirectory } from '../src/plcgen/export.ts';
+import {
+  mergePlcHistory,
+  normalizeHistoryEntry,
+  parsePlcHistory,
+  type PlcHistoryEntry
+} from '../src/plcgen/history.ts';
 
 export interface IpcContext {
   builtinDir: string;
@@ -202,6 +209,51 @@ export function createPackRegistry(context: Pick<IpcContext, 'builtinDir' | 'use
   });
 }
 
+function plcExportRoot(): string {
+  return join(app.getPath('userData'), 'exports', 'plc');
+}
+
+function plcHistoryFile(): string {
+  return join(app.getPath('userData'), 'plc-gen-history.json');
+}
+
+function readPlcGenHistory(): PlcHistoryEntry[] {
+  try {
+    return parsePlcHistory(JSON.parse(readFileSync(plcHistoryFile(), 'utf8')));
+  } catch {
+    return [];
+  }
+}
+
+function writePlcGenHistory(history: PlcHistoryEntry[]): void {
+  mkdirSync(dirname(plcHistoryFile()), { recursive: true });
+  writeFileSync(plcHistoryFile(), `${JSON.stringify(history, null, 2)}\n`, 'utf8');
+}
+
+function plcExportFiles(value: unknown): ZipEntry[] {
+  if (!Array.isArray(value) || value.length === 0) throw new Error('PLC 导出缺少文件');
+  if (value.length > 200) throw new Error('PLC 导出文件过多');
+  let total = 0;
+  const entries = value.map((item, index): ZipEntry => {
+    if (typeof item !== 'object' || item === null) throw new Error(`PLC 导出文件 ${index + 1} 格式不合法`);
+    const source = item as Record<string, unknown>;
+    const path = normalizeZipPath(source.path);
+    if (typeof source.content !== 'string') throw new Error(`PLC 导出文件 ${path} 缺少正文`);
+    total += Buffer.byteLength(source.content, 'utf8');
+    return { path, content: source.content };
+  });
+  if (total > 20 * 1024 * 1024) throw new Error('PLC 导出正文超过 20MB');
+  return entries;
+}
+
+function plcExportFailure(error: unknown): { ok: false; code: string; message: string } {
+  return {
+    ok: false,
+    code: 'PLC_EXPORT_FAILED',
+    message: error instanceof Error ? error.message : String(error)
+  };
+}
+
 export function registerIpcHandlers(context: IpcContext): PackRegistry {
   const registry = createPackRegistry(context);
   const factory = new FactoryManager({ configFile: context.factoryConfigFile });
@@ -280,6 +332,67 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
       return { ok: true, path: planned.path, bytes };
     } catch (error) {
       return costExportFailure(error);
+    }
+  });
+
+  // PLC 生成历史与导出：目录固定 userData/exports/plc，不接受任意绝对路径。
+  ipcMain.handle('plcgen:history', () => readPlcGenHistory());
+
+  ipcMain.handle('plcgen:recordHistory', (_event, value: unknown) => {
+    const entry = normalizeHistoryEntry(value);
+    if (!entry) throw new Error('PLC 生成历史条目格式不合法');
+    const next = parsePlcHistory(mergePlcHistory(readPlcGenHistory(), entry));
+    writePlcGenHistory(next);
+    return next;
+  });
+
+  ipcMain.handle('plcgen:export', (_event, payload: unknown) => {
+    try {
+      if (!isRecord(payload)) throw new Error('PLC 导出参数必须是对象');
+      const files = plcExportFiles(payload.files);
+      const plan = planPlcExportDirectory({
+        exportsRoot: plcExportRoot(),
+        machineName: payload.machineName,
+        now: new Date(),
+        exists: existsSync
+      });
+      mkdirSync(plan.path, { recursive: true });
+      for (const file of files) {
+        const target = resolve(plan.path, file.path);
+        if (!target.startsWith(resolve(plan.path) + sep)) throw new Error(`PLC 导出路径越界：${file.path}`);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, file.content);
+      }
+      const zip = createZip(files);
+      writeFileSync(plan.zipPath, zip);
+      return {
+        ok: true,
+        path: plan.path,
+        zipPath: plan.zipPath,
+        bytes: zip.byteLength,
+        files: files.length
+      };
+    } catch (error) {
+      return plcExportFailure(error);
+    }
+  });
+
+  ipcMain.handle('plcgen:openExportDir', async (_event, value: unknown) => {
+    try {
+      const root = resolve(plcExportRoot());
+      const target = typeof value === 'string' && value.trim() ? resolve(value) : root;
+      if (target !== root && !target.startsWith(root + sep)) {
+        throw new Error('只能打开 PLC 导出目录内的路径');
+      }
+      mkdirSync(target, { recursive: true });
+      const message = await shell.openPath(target);
+      return message ? { ok: false, path: target, message } : { ok: true, path: target };
+    } catch (error) {
+      return {
+        ok: false,
+        path: typeof value === 'string' ? value : '',
+        message: error instanceof Error ? error.message : String(error)
+      };
     }
   });
 

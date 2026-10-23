@@ -75,7 +75,7 @@
 - 验收（A 期）：`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3` + `SMOKE_AGENT_READONLY_UI_OK`，误写率 0（写计划不进入离线通道、预览不执行，均有单测/冒烟钉住）
 
 ### P8 设计完成后自动生成 PLC 程序
-- 状态：🔄 P8-1 / P8-2 ✅ 已完成；P8-3～P8-5 待做
+- 状态：🔄 P8-1 / P8-2 / P8-3 ✅ 已完成；P8-4 待做，P8-5 可选
 - 范围：预检（地址重复/越界/双线圈/安全缺失）→ IO 变量表 + ST 程序块（OB1/气缸 FB/夹爪/轴/自动状态机/报警/安全）→ 导出 zip 与映射表
 - 分期：P8-1 预检+变量表+FB → P8-2 序列/报警/安全 → P8-3 UI 与导出 → P8-4 模拟器自检 → P8-5 TIA Openness（可选）
 - 验收：demo 机型（补齐安全件）11 文件、预检 0 错、重复生成 sha256 一致；模拟器 6 步跑通留待 P8-4
@@ -85,6 +85,9 @@
 - 已完成（P8-2）：`sequence.ts`（步序 → `FC_AutoSequence` CASE 状态机、AND/OR 条件、5 s 缺省超时、超时报警、Abort/SafeStop 回 Step0）、`safety.ts`（急停/安全门常闭串联、SafeStop 锁存与 Reset 上升沿复位、缺点位只写注释）、`alarms.ts`（超时/传感器矛盾/安全触发统一 `AlarmWord` + `FirstFault` 首故障锁存）、`generate.ts`（预检拦截 + 固定 11 文件 + `mapping.json` + README + 逐文件 SHA-256）、`symbols.ts`（点位/地址/变量名映射）
 - 实测（P8-2）：`tsc --noEmit` 通过；`npm test` **556/556**（新增 `plcgen-p82.test.ts` 32 条）；`npm run smoke` → `SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_OK`；同输入两次生成 11 文件 sha256 全一致
 - P8-2 边界：生成 UI、zip 导出、历史记录留给 P8-3；模拟器加载生成程序跑联调序列留给 P8-4；仍不生成厂商专有工程文件
+- 已完成（P8-3）：`src/plcgen/ui.ts` 电气域顶栏「PLC 程序」全屏面板（机型规模、目标平台/命名前缀、错误/警告预检表与机构定位、文件树 + 前 200 行预览、导出 zip/复制全部/打开目录）；`view-model.ts` 纯函数（文件树/预览/按钮禁用/问题定位）；`history.ts` 最近 10 次按 inputHash 去重并可回看文件清单；`export.ts` 目录命名；`src/shared/{filename,zip}.ts` 复用文件名净化与 adm-zip 写入；IPC `plcgen:history|recordHistory|export|openExportDir`
+- 实测（P8-3）：`tsc --noEmit` 通过；`npm test` **577/577**（新增 `plcgen-p83.test.ts` 21 条：纯 JS SHA-256、文件树、预览截断、历史去重/上限、目录命名、ZIP 结构与 CRC + `unzip -t`、路径穿越、预检禁用、目标平台不影响 ST）；`npm run smoke` → `SMOKE_PLCGEN_UI_OK files=11 history=1`、`SMOKE_OK`
+- P8-3 边界：历史只保存文件清单不保存正文；仍不生成厂商专有工程文件；模拟器加载生成程序跑联调序列留给 P8-4
 
 ### P9 参数化建模（build123d 内核）
 - 状态：🔄 P9-1 / P9-2 / P9-3 已完成；P9-4 草图约束、P9-5 装配与 BOM/成本联动待做

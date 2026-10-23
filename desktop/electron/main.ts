@@ -275,6 +275,105 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        const demo = demoMachineConfig();
+        const cylindersByStation = new Map(
+          demo.actuators
+            .filter((actuator) => actuator.kind === 'cylinder')
+            .map((actuator) => [actuator.station, actuator.id])
+        );
+        const plcUiConfig = {
+          ...demo,
+          safety: { emergencyStop: 'X100', safetyDoor: 'X101' },
+          sensors: demo.sensors.map((sensor) => {
+            const cylinder = cylindersByStation.get(sensor.station);
+            return sensor.part === sensor.station && cylinder ? { ...sensor, part: cylinder } : sensor;
+          }),
+          sequence: [
+            { id: 'smoke-ui-1', name: '上料气缸伸出', action: 'set', point: 'Y0', condition: 'X0', timeoutMs: 1000 },
+            { id: 'smoke-ui-2', name: '上料夹爪夹紧', action: 'set', point: 'Y8', condition: 'X1', timeoutMs: 1000 }
+          ]
+        };
+        const plcUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const config = ${JSON.stringify(plcUiConfig)};
+            window.__PlcGenConfigProvider = () => config;
+            window.ElecDomain?.setDomain('elec');
+            await wait(30);
+            const entry = document.getElementById('plcGenEntryButton');
+            if (!entry) return { error: 'PLC 程序入口缺失' };
+            if (entry.hidden) return { error: 'PLC 程序入口在电气域不可见' };
+            entry.click();
+            await wait(60);
+            const panel = window.__PlcGenPanel;
+            if (!panel) return { error: 'PLC 面板 API 缺失' };
+            if (!panel.hasConfig()) return { skip: true };
+            const pre = await panel.precheck();
+            if (!pre) return { error: '预检未返回结果' };
+            const before = panel.uiState();
+            await panel.generate();
+            await wait(40);
+            const after = panel.uiState();
+            const exported = await panel.exportZip();
+            await wait(20);
+            return {
+              preErrors: pre.errors.length,
+              beforeDisabled: before.generateDisabled,
+              files: after.files,
+              history: after.history,
+              treeRows: after.treeRows,
+              previewPath: after.previewPath,
+              stats: after.stats,
+              exportOk: exported.ok,
+              exportPath: exported.path || '',
+              zipPath: exported.zipPath || ''
+            };
+          })()`
+        ) as {
+          error?: string;
+          skip?: boolean;
+          preErrors?: number;
+          beforeDisabled?: boolean;
+          files?: number;
+          history?: number;
+          treeRows?: number;
+          previewPath?: string | null;
+          stats?: string;
+          exportOk?: boolean;
+          exportPath?: string;
+          zipPath?: string;
+        };
+        if (plcUi.error) {
+          console.error('SMOKE_FAIL plcgen_ui', plcUi.error);
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        if (plcUi.skip) {
+          console.log('SMOKE_PLCGEN_UI_SKIP no_machine_config');
+        } else if (
+          plcUi.preErrors !== 0 ||
+          plcUi.beforeDisabled !== false ||
+          plcUi.files !== 11 ||
+          plcUi.history !== 1 ||
+          (plcUi.treeRows ?? 0) < 12 ||
+          plcUi.previewPath !== 'README.md' ||
+          !plcUi.stats?.includes('11 个文件 · 变量') ||
+          !plcUi.exportOk ||
+          !plcUi.exportPath || !existsSync(plcUi.exportPath) ||
+          !plcUi.zipPath || !existsSync(plcUi.zipPath)
+        ) {
+          console.error('SMOKE_FAIL plcgen_ui', JSON.stringify(plcUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        } else {
+          console.log(`SMOKE_PLCGEN_UI_OK files=${plcUi.files} history=${plcUi.history}`);
+        }
+      } catch (error) {
+        console.error('SMOKE_FAIL plcgen_ui_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       const fixture = resolve(desktopRoot(), 'test', 'fixtures', 'cube.stp');
       if (existsSync(fixture)) {
         try {

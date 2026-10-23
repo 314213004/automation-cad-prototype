@@ -17,6 +17,7 @@ import { initElecLibraryPanel } from './packs/elec-ui';
 import { closeEnclosure, initEnclosureUi } from './enclosure/canvas';
 import { initElecCheckPanel } from './elec/ui';
 import { initCostPanel } from './cost/ui';
+import { initPlcGenUi } from './plcgen/ui';
 import { initCommissionPanel, type CommissionPanelHandle } from './commission/ui';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel } from './agent/ui';
@@ -973,6 +974,7 @@ function init(): void {
   initElecLibraryPanel();
   initElecCheckPanel();
   initCostPanel();
+  initPlcGenUi({ getConfig: () => commission?.getMachineConfig() ?? null });
   initEnclosureUi();
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();

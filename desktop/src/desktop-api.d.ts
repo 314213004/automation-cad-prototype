@@ -302,6 +302,32 @@ interface AgentBridgeApi {
   }): Promise<{ ok: boolean; path?: string; bytes?: number; code?: string; message?: string }>;
 }
 
+interface DesktopPlcGenHistoryFile {
+  path: string;
+  lines: number;
+  bytes: number;
+}
+
+interface DesktopPlcGenHistoryEntry {
+  at: string;
+  inputHash: string;
+  files: number;
+  target: string;
+  namePrefix: string;
+  fileList: DesktopPlcGenHistoryFile[];
+  zipPath?: string;
+}
+
+interface DesktopPlcGenExportResult {
+  ok: boolean;
+  path?: string;
+  zipPath?: string;
+  bytes?: number;
+  files?: number;
+  code?: string;
+  message?: string;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -387,6 +413,17 @@ interface Window {
       onValues(callback: (values: Record<string, DesktopPlcValue>) => void): () => void;
       onStatus(callback: (status: DesktopPlcStatusInfo) => void): () => void;
     };
+    plcgen: {
+      history(): Promise<DesktopPlcGenHistoryEntry[]>;
+      recordHistory(entry: DesktopPlcGenHistoryEntry): Promise<DesktopPlcGenHistoryEntry[]>;
+      exportProject(payload: {
+        machineName: string;
+        namePrefix?: string;
+        target?: string;
+        files: Array<{ path: string; content: string }>;
+      }): Promise<DesktopPlcGenExportResult>;
+      openExportDir(directory?: string): Promise<{ ok: boolean; path: string; message?: string }>;
+    };
     sync: {
       getConfig(): Promise<DesktopSyncPublicConfig>;
       saveConfig(config: Record<string, unknown>): Promise<DesktopSyncPublicConfig>;
@@ -458,6 +495,32 @@ interface Window {
     clear(): void;
   };
   __AUTOMATION_CAD_EXTENSION_READY__?: boolean;
+  /** PLC 生成机型配置来源；优先于面板初始化参数。 */
+  __PlcGenConfigProvider?: () => import('./plcgen/types').PlcGenConfig | null;
+  /** PLC 生成面板：冒烟与命令式调用。 */
+  __PlcGenPanel?: {
+    open(): void;
+    close(): void;
+    hasConfig(): boolean;
+    precheck(): Promise<import('./plcgen/types').PrecheckResult | null>;
+    generate(): Promise<import('./plcgen/generate').GenerateProjectSuccess | null>;
+    exportZip(): Promise<{ ok: boolean; path?: string; zipPath?: string; message?: string }>;
+    openExportDir(): Promise<void>;
+    history(): import('./plcgen/history').PlcHistoryEntry[];
+    files(): import('./plcgen/types').GeneratedFile[];
+    status(): string;
+    uiState(): {
+      open: boolean;
+      hasConfig: boolean;
+      generateDisabled: boolean;
+      files: number;
+      treeRows: number;
+      history: number;
+      previewPath: string | null;
+      precheckErrors: number;
+      stats: string;
+    };
+  };
   /** 电气校验数据源：由原理图侧注入，返回 null 表示暂无数据。 */
   __ElecDocProvider?: () => import('./elec/check').ElecDocument | null;
   /** 电气校验面板：脚本化运行与 PDF 导出（冒烟与 Agent 共用）。 */

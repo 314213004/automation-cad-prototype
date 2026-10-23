@@ -102,6 +102,17 @@ const desktopApi = {
       return () => ipcRenderer.removeListener('plc:status', listener);
     }
   },
+  plcgen: {
+    history: () => ipcRenderer.invoke('plcgen:history'),
+    recordHistory: (entry: unknown) => ipcRenderer.invoke('plcgen:recordHistory', entry),
+    exportProject: (payload: {
+      machineName: string;
+      namePrefix?: string;
+      target?: string;
+      files: Array<{ path: string; content: string }>;
+    }) => ipcRenderer.invoke('plcgen:export', payload),
+    openExportDir: (directory?: string) => ipcRenderer.invoke('plcgen:openExportDir', directory)
+  },
   sync: {
     getConfig: () => ipcRenderer.invoke('sync:getConfig'),
     saveConfig: (config: unknown) => ipcRenderer.invoke('sync:saveConfig', config),

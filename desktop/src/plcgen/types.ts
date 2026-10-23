@@ -1,5 +1,8 @@
 import type { MachineConfig } from '../commission/machine-config.ts';
 
+/** 生成目标；P8-3 只影响 README 注释与命名前缀，不改变 ST 内容。 */
+export type PlcTarget = 'generic' | 's7-1200' | 's7-1500' | 'codesys';
+
 export interface Issue {
   code: string;
   message: string;
