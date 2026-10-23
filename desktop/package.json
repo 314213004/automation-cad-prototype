@@ -20,7 +20,8 @@
     "dist:win": "electron-builder --win nsis --x64",
     "build:mcp": "node scripts/build-mcp.mjs",
     "mcp": "node dist-electron/mcp.cjs",
-    "agent:live": "node scripts/agent-live.mjs"
+    "agent:live": "node scripts/agent-live.mjs",
+    "agent:report": "node scripts/agent-report.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",

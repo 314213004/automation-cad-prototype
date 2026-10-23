@@ -3,6 +3,16 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 运行报告与可视化（P7-O，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1044/1044**（1034 + 新增 10）、`npm run smoke` 全绿（`SMOKE_OK`）、`npm run agent:report` 产出 md/json/svg 三个非空文件；不 push。
+- A. 报告生成：新增 `desktop/scripts/agent-report.mjs` + `npm run agent:report`。读取 `agent-live.json` / `agent-multiturn.json` / `latest.json`，审计取 `<userData>/agent-audit.jsonl`（可用 `AGENT_REPORT_AUDIT_FILE` / `AGENT_REPORT_USER_DATA` 覆盖）；缺源文件写「缺失：<文件>」、打印 WARN、退出码 0。
+- B. 输出：`docs/desktop/AGENT-REPORT.md`（总览、查询/操作/流程/拒绝分组、离线指标、多轮场景、能力清单、已知缺口、审计摘要）、`docs/desktop/agent-report.json`（每个指标带 `source` 与 `generatedAt`）、`docs/desktop/agent-report.svg`（纯代码生成，深色底、4 组横向条形图 + 工具/测试/单轮/多轮 KPI）。
+- C. 一致性：写盘后立即读回 `agent-report.json` 并与内存对象逐字段比对；`verifyReport` 再逐项核对总览、分组、离线指标是否等于源 JSON。缺源时只降级为「缺失」，不编造数字。
+- D. 能力清单：18 个工具 + 13 项平台能力，逐条给出模块文件、验证方式（单测 / smoke / eval）与状态；多轮状态按真实 JSON 显示 `⚠️ 5/6（MT04）`，未把阈值通过写成全绿。
+- E. 测试：新增 `desktop/test/agent/report.test.mjs` 10 条，覆盖真实源数字、源变更传导、篡改拦截、缺源降级、Markdown 来源/时间、SVG 数据驱动、BACKLOG 缺口摘取、md/json/svg 文件产出。
+- F. 文档：`README.md`、`docs/desktop/MODULES.md`、本文件；`npm run kb:build` 重建知识索引。
+
 ## Agent 执行效率：去重 / 并行 / 缓存（P7-N，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1034/1034**（1001 + 新增 33）、`npm run smoke` 新增 `SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 100%（61/61）；`npm run agent:live` 因无凭据 `AGENT_LIVE_SKIP`，未伪造端到端 p50/p95；不 push。
@@ -291,7 +301,7 @@
 | D7 | 成本面板如何拿到 BOM（CAD 零件名 → 元器件物料号映射口径） | A 由底板画布/电气元件库直接给 partId，成本面板只读；B 允许「零件名规则匹配 + 人工确认」自动填 partId；C 保持手工导入 BOM JSON | 影响成本能否一键算；B 需要命名规范（如 `QF1:LC1D09`），否则匹配率低 | A 长期方向，短期用 C + 预留 B | 待定 |
 | D8 | Agent 的 `run_cost_report` 是否允许落盘导出报告 | A 保持只读，只回摘要；B 增加写工具 `export_cost_report`（PDF/CSV，走现有二次确认）；C 由面板导出，Agent 只给「点哪里」 | 影响「一句话出报价单」的体验；B 需要确认文件名/目录规则与覆盖策略 | B：`export_cost_report` 固定写 `userData/exports/`，默认不覆盖、冲突追加序号 | 已定 B，已实现（`23cd284`） |
 | D9 | 离线规则路由是否要在「模型可用时」也前置生效 | A 仅在模型失败时降级（现状）；B 高置信度只读指令直接走规则，省一次模型调用；C 全走模型 | B 更快更省 token，但规则误判时用户得不到语义纠正，且两套路径要长期保持一致 | A 先稳定；若要 B，先攒 40 条评估集对比准确率再开 | 待定 |
-| D10 | 中文评估集用哪条通道跑基线 | A 只用离线规则路由（零成本、可离线、但只覆盖规则能判的句式）；B 规则 + 真实模型双跑（能测语义理解，按 token 付费）；C 只跑模型 | 决定评估结论代表「规则上限」还是「产品上限」；B 需要一把可用的付费/自建模型 key 与预算口径 | A 先立基线并进 CI 友好（无网络），B 作为发布前手动回归；已落地离线 61 条 + 真实模型 30 条（`agent:live`，28/30；拒绝类 4/6 待修） | ✅ 已按 B 执行 |
+| D10 | 中文评估集用哪条通道跑基线 | A 只用离线规则路由（零成本、可离线、但只覆盖规则能判的句式）；B 规则 + 真实模型双跑（能测语义理解，按 token 付费）；C 只跑模型 | 决定评估结论代表「规则上限」还是「产品上限」；B 需要一把可用的付费/自建模型 key 与预算口径 | A 先立基线并进 CI 友好（无网络），B 作为发布前手动回归；已落地离线 61 条 + 真实模型 30 条（`agent:live`，30/30；拒绝/澄清 6/6） | ✅ 已按 B 执行 |
 
 ## 已知问题（记录，不阻塞）
 
@@ -304,6 +314,7 @@
 7. **前端原型限制**：3D 为固定等轴测投影，属性编辑不改拓扑（插入与撤销已真实化）。
 8. **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。
 9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
+10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
 
 ## 夜间执行约束
 

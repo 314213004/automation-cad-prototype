@@ -1,0 +1,861 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-23T14:07:08.326Z",
+  "generator": "desktop/scripts/agent-report.mjs",
+  "sources": {
+    "live": {
+      "file": "docs/desktop/eval/agent-live.json",
+      "status": "ok",
+      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "mode": "live-model",
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    "multiturn": {
+      "file": "docs/desktop/eval/agent-multiturn.json",
+      "status": "ok",
+      "generatedAt": "2026-10-23T12:28:04.526Z",
+      "mode": "live-model",
+      "model": "cn:deepseek-v4.1-flash"
+    },
+    "offline": {
+      "file": "docs/desktop/eval/latest.json",
+      "status": "ok",
+      "generatedAt": "2026-10-23T13:58:24.305Z",
+      "version": "0.3.0",
+      "mode": "offline-rules"
+    },
+    "audit": {
+      "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
+      "status": "missing",
+      "generatedAt": null
+    },
+    "backlog": {
+      "file": "docs/desktop/BACKLOG.md",
+      "status": "ok",
+      "generatedAt": "2026-10-23T14:06:37.512Z"
+    },
+    "tools": {
+      "file": "desktop/src/agent/tools.ts",
+      "status": "ok",
+      "registryCount": 18,
+      "coverageCount": 18,
+      "consistent": true
+    }
+  },
+  "overview": {
+    "toolCount": {
+      "value": 18,
+      "source": "docs/desktop/eval/latest.json#dataset.toolCoverage",
+      "generatedAt": "2026-10-23T13:58:24.305Z",
+      "missing": false
+    },
+    "testCount": {
+      "value": 1044,
+      "source": "desktop/test/**/*.test.*（`node --test` 实测）",
+      "generatedAt": "2026-10-23T14:07:02.048Z",
+      "missing": false
+    },
+    "testPassed": true,
+    "singleTurn": {
+      "total": {
+        "value": 30,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "matched": {
+        "value": 30,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "accuracy": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "toolAccuracy": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "confirmRate": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "clarifyRate": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "refusalRate": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "p50Ms": {
+        "value": 7645,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      },
+      "p95Ms": {
+        "value": 21340,
+        "source": "docs/desktop/eval/agent-live.json",
+        "generatedAt": "2026-10-23T11:49:05.535Z",
+        "missing": false
+      }
+    },
+    "multiTurn": {
+      "total": {
+        "value": 6,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "passed": {
+        "value": 5,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "accuracy": {
+        "value": 0.8333333333333334,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "turnTotal": {
+        "value": 15,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "turnPassed": {
+        "value": 13,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "p50Ms": {
+        "value": 8168,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "p95Ms": {
+        "value": 15250,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "threshold": {
+        "value": 0.8,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      },
+      "gate": {
+        "value": 1,
+        "source": "docs/desktop/eval/agent-multiturn.json",
+        "generatedAt": "2026-10-23T12:28:04.526Z",
+        "missing": false
+      }
+    },
+    "offline": {
+      "total": {
+        "value": 61,
+        "source": "docs/desktop/eval/latest.json",
+        "generatedAt": "2026-10-23T13:58:24.305Z",
+        "missing": false
+      },
+      "passed": {
+        "value": 1,
+        "source": "docs/desktop/eval/latest.json",
+        "generatedAt": "2026-10-23T13:58:24.305Z",
+        "missing": false
+      },
+      "metrics": {
+        "intent": {
+          "correct": {
+            "value": 61,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "total": {
+            "value": 61,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "rate": {
+            "value": 1,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          }
+        },
+        "tools": {
+          "correct": {
+            "value": 61,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "total": {
+            "value": 61,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "rate": {
+            "value": 1,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          }
+        },
+        "params": {
+          "correct": {
+            "value": 28,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "total": {
+            "value": 28,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "rate": {
+            "value": 1,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          }
+        },
+        "refused": {
+          "correct": {
+            "value": 5,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "total": {
+            "value": 5,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "rate": {
+            "value": 1,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          }
+        },
+        "multiStep": {
+          "correct": {
+            "value": 5,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "total": {
+            "value": 5,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          },
+          "rate": {
+            "value": 1,
+            "source": "docs/desktop/eval/latest.json",
+            "generatedAt": "2026-10-23T13:58:24.305Z",
+            "missing": false
+          }
+        }
+      }
+    }
+  },
+  "groups": [
+    {
+      "key": "query",
+      "label": "查询",
+      "total": 8,
+      "matched": 8,
+      "accuracy": 1,
+      "p50Ms": 5650,
+      "p95Ms": 12667,
+      "refusalRate": null,
+      "source": "docs/desktop/eval/agent-live.json",
+      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "missing": false
+    },
+    {
+      "key": "operation",
+      "label": "操作",
+      "total": 10,
+      "matched": 10,
+      "accuracy": 1,
+      "p50Ms": 6113,
+      "p95Ms": 21340,
+      "refusalRate": null,
+      "source": "docs/desktop/eval/agent-live.json",
+      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "missing": false
+    },
+    {
+      "key": "workflow",
+      "label": "流程",
+      "total": 6,
+      "matched": 6,
+      "accuracy": 1,
+      "p50Ms": 12320,
+      "p95Ms": 24127,
+      "refusalRate": null,
+      "source": "docs/desktop/eval/agent-live.json",
+      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "missing": false
+    },
+    {
+      "key": "refusal",
+      "label": "拒绝/澄清",
+      "total": 6,
+      "matched": 6,
+      "accuracy": 1,
+      "p50Ms": 7353,
+      "p95Ms": 20677,
+      "refusalRate": 1,
+      "source": "docs/desktop/eval/agent-live.json",
+      "generatedAt": "2026-10-23T11:49:05.535Z",
+      "missing": false
+    }
+  ],
+  "multiturnScenarios": [
+    {
+      "id": "MT01",
+      "title": "改型号 → 撤销 → 改数量",
+      "passed": true,
+      "turns": 3,
+      "passedTurns": 3
+    },
+    {
+      "id": "MT02",
+      "title": "改数量 → 撤销 → 改备注",
+      "passed": true,
+      "turns": 3,
+      "passedTurns": 3
+    },
+    {
+      "id": "MT03",
+      "title": "跨轮「刚才那个件」",
+      "passed": true,
+      "turns": 2,
+      "passedTurns": 2
+    },
+    {
+      "id": "MT04",
+      "title": "拒绝后不自动重试",
+      "passed": false,
+      "turns": 2,
+      "passedTurns": 0
+    },
+    {
+      "id": "MT05",
+      "title": "确认超时后续跑",
+      "passed": true,
+      "turns": 2,
+      "passedTurns": 2
+    },
+    {
+      "id": "MT06",
+      "title": "工程变化后重新读取",
+      "passed": true,
+      "turns": 3,
+      "passedTurns": 3
+    }
+  ],
+  "multiturnFailures": [
+    {
+      "id": "MT04",
+      "title": "拒绝后不自动重试",
+      "failedTurns": [
+        {
+          "round": 1,
+          "prompt": "把 QF1 的型号改成 NXB-63 3P C32",
+          "reason": "工具序列不符合预期：search_components -> get_project_context -> update_component",
+          "actualTools": [
+            "search_components",
+            "get_project_context",
+            "update_component"
+          ]
+        },
+        {
+          "round": 2,
+          "prompt": "继续",
+          "reason": "调用了禁止工具：update_component",
+          "actualTools": [
+            "update_component",
+            "get_project_context",
+            "get_bom",
+            "search_docs"
+          ]
+        }
+      ]
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "list_components",
+      "capability": "列出元件（按类别 / 数据包）",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "list_components"
+      ]
+    },
+    {
+      "id": "search_components",
+      "capability": "按型号 / 品牌 / 类别搜索元件",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "search_components"
+      ]
+    },
+    {
+      "id": "search_docs",
+      "capability": "本地知识检索（离线 RAG）",
+      "module": "desktop/src/agent/kb/search.ts",
+      "verification": [
+        "单测 agent/kb.test.mjs",
+        "smoke SMOKE_AGENT_KB_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "search_docs"
+      ]
+    },
+    {
+      "id": "import_cad",
+      "capability": "导入 CAD 文件",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools-v2.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_V2",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "import_cad"
+      ]
+    },
+    {
+      "id": "get_bom",
+      "capability": "读取当前装配体 BOM",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "get_bom"
+      ]
+    },
+    {
+      "id": "get_project_context",
+      "capability": "工程上下文快照",
+      "module": "desktop/src/agent/context.ts",
+      "verification": [
+        "单测 agent/context-memory-trim.test.mjs",
+        "smoke SMOKE_AGENT_CONTEXT_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "get_project_context"
+      ]
+    },
+    {
+      "id": "run_interference_check",
+      "capability": "包围盒干涉初筛",
+      "module": "desktop/src/mech/interference.ts",
+      "verification": [
+        "单测 mech/interference.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "run_interference_check"
+      ]
+    },
+    {
+      "id": "insert_component",
+      "capability": "插入标准件占位件",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "insert_component"
+      ]
+    },
+    {
+      "id": "place_component",
+      "capability": "底板放置（坐标 / 旋转 / 导轨吸附）",
+      "module": "desktop/src/agent/placement.ts",
+      "verification": [
+        "单测 agent/place-component.test.mjs",
+        "smoke SMOKE_AGENT_PLACE_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "place_component"
+      ]
+    },
+    {
+      "id": "update_component",
+      "capability": "修改型号 / 数量 / 备注",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools-v2.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_V2",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "update_component"
+      ]
+    },
+    {
+      "id": "remove_component",
+      "capability": "移除底板 / BOM 元件",
+      "module": "desktop/src/agent/tools.ts",
+      "verification": [
+        "单测 agent/tools-v2.test.mjs",
+        "smoke SMOKE_AGENT_TOOLS_V2",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "remove_component"
+      ]
+    },
+    {
+      "id": "run_electrical_check",
+      "capability": "电气校验（线号 / 载流 / 断路器）",
+      "module": "desktop/src/elec/check.ts",
+      "verification": [
+        "单测 agent/elec-check.test.mjs",
+        "smoke SMOKE_ELEC_CHECK_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "run_electrical_check"
+      ]
+    },
+    {
+      "id": "run_cost_report",
+      "capability": "硬件成本统计",
+      "module": "desktop/src/cost/agent.ts",
+      "verification": [
+        "单测 cost-agent.test.ts",
+        "smoke SMOKE_COST_AGENT_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "run_cost_report"
+      ]
+    },
+    {
+      "id": "export_cost_report",
+      "capability": "成本报告落盘（PDF / CSV）",
+      "module": "desktop/src/cost/export.ts",
+      "verification": [
+        "单测 cost-export.test.ts",
+        "smoke SMOKE_COST_AGENT_EXPORT_OK",
+        "eval 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "export_cost_report"
+      ]
+    },
+    {
+      "id": "verify_plc_program",
+      "capability": "PLC 程序模拟验证",
+      "module": "desktop/src/plcgen/verify.ts",
+      "verification": [
+        "单测 plcgen.test.ts",
+        "smoke SMOKE_PLCGEN_SIM_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "verify_plc_program"
+      ]
+    },
+    {
+      "id": "run_plc_generate",
+      "capability": "PLC 工程生成（11 文件 + ZIP）",
+      "module": "desktop/src/plcgen/generate.ts",
+      "verification": [
+        "单测 plcgen.test.ts",
+        "smoke SMOKE_PLCGEN_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "run_plc_generate"
+      ]
+    },
+    {
+      "id": "export_files",
+      "capability": "装配体导出（PDF / DXF / GLB / BOM）",
+      "module": "desktop/src/export/file.ts",
+      "verification": [
+        "单测 agent/tools-v2.test.mjs",
+        "smoke SMOKE_EXPORT_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "export_files"
+      ]
+    },
+    {
+      "id": "undo_last",
+      "capability": "撤销最近一次写操作",
+      "module": "desktop/src/agent/commands.ts",
+      "verification": [
+        "单测 agent/place-component.test.mjs",
+        "smoke SMOKE_AGENT_PLACE_OK",
+        "eval 离线评估 + 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": [
+        "undo_last"
+      ]
+    },
+    {
+      "id": "offline-router",
+      "capability": "离线意图路由（7 类意图）",
+      "module": "desktop/src/agent/router.ts",
+      "verification": [
+        "单测 agent/nl-router.test.mjs",
+        "smoke SMOKE_AGENT_NL_OK",
+        "eval 离线评估"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "planner",
+      "capability": "多步规划与执行",
+      "module": "desktop/src/agent/planner.ts",
+      "verification": [
+        "单测 agent/planner.test.mjs",
+        "smoke SMOKE_AGENT_PLAN_OK",
+        "eval 离线评估"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "multi-turn",
+      "capability": "多轮状态 / 续跑 / 拒绝记忆",
+      "module": "desktop/src/agent/thread.ts + session.ts",
+      "verification": [
+        "单测 agent/thread.test.mjs",
+        "smoke SMOKE_AGENT_THREAD_OK",
+        "eval 多轮真实模型"
+      ],
+      "status": "⚠️ 达阈值但有失败场景（5/6）",
+      "tools": []
+    },
+    {
+      "id": "security-policy",
+      "capability": "写确认 / 路径策略 / 绕过拦截",
+      "module": "desktop/src/agent/policy.ts + session.ts",
+      "verification": [
+        "单测 agent/policy.test.mjs",
+        "smoke SMOKE_AGENT_POLICY_OK",
+        "eval 单轮真实模型"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "guard",
+      "capability": "工具结果抗提示注入",
+      "module": "desktop/src/agent/guard.ts",
+      "verification": [
+        "单测 agent/guard.test.mjs"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "audit",
+      "capability": "工具审计（NDJSON / 脱敏）",
+      "module": "desktop/src/agent/audit.ts + electron/ipc.ts",
+      "verification": [
+        "单测 agent/ux.test.mjs",
+        "smoke SMOKE_AGENT_UX_OK",
+        "eval 审计文件"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "budget",
+      "capability": "上下文预算与 token 成本",
+      "module": "desktop/src/agent/budget.ts + pricing.ts",
+      "verification": [
+        "单测 agent/budget.test.mjs",
+        "smoke SMOKE_AGENT_BUDGET_OK"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "efficiency",
+      "capability": "同轮去重 / 只读并行 / 会话缓存",
+      "module": "desktop/src/agent/dedupe.ts + parallel.ts + cache.ts",
+      "verification": [
+        "单测 agent/efficiency.test.mjs",
+        "smoke SMOKE_AGENT_EFFICIENCY_OK"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "recipes",
+      "capability": "可复用流程模板",
+      "module": "desktop/src/agent/recipes.ts",
+      "verification": [
+        "单测 agent/recipes.test.mjs",
+        "smoke SMOKE_AGENT_RECIPE_OK"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "advisor",
+      "capability": "主动建议（next-best-action）",
+      "module": "desktop/src/agent/advisor.ts",
+      "verification": [
+        "单测 agent/advisor.test.mjs",
+        "smoke SMOKE_AGENT_ADVISOR_OK"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "repair",
+      "capability": "工具调用纠错与重试",
+      "module": "desktop/src/agent/repair.ts + retry.ts",
+      "verification": [
+        "单测 agent/repair.test.mjs",
+        "smoke SMOKE_AGENT_REPAIR_OK"
+      ],
+      "status": "✅ 已实现",
+      "tools": []
+    },
+    {
+      "id": "live-eval",
+      "capability": "真实模型单轮评测",
+      "module": "desktop/scripts/agent-live.mjs",
+      "verification": [
+        "eval 单轮真实模型"
+      ],
+      "status": "✅ 30/30",
+      "tools": []
+    },
+    {
+      "id": "multiturn-eval",
+      "capability": "真实模型多轮评测",
+      "module": "desktop/scripts/agent-multiturn.mjs",
+      "verification": [
+        "eval 多轮真实模型"
+      ],
+      "status": "⚠️ 5/6",
+      "tools": []
+    }
+  ],
+  "knownGaps": [
+    {
+      "text": "BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框",
+      "section": "P6 机台硬件成本自动统计",
+      "line": 190,
+      "source": "docs/desktop/BACKLOG.md",
+      "generatedAt": "2026-10-23T14:06:37.512Z"
+    },
+    {
+      "text": "**真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。",
+      "section": "已知问题（记录，不阻塞）",
+      "line": 315,
+      "source": "docs/desktop/BACKLOG.md",
+      "generatedAt": "2026-10-23T14:06:37.512Z"
+    },
+    {
+      "text": "**离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。",
+      "section": "已知问题（记录，不阻塞）",
+      "line": 316,
+      "source": "docs/desktop/BACKLOG.md",
+      "generatedAt": "2026-10-23T14:06:37.512Z"
+    },
+    {
+      "text": "**多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。",
+      "section": "已知问题（记录，不阻塞）",
+      "line": 317,
+      "source": "docs/desktop/BACKLOG.md",
+      "generatedAt": "2026-10-23T14:06:37.512Z"
+    }
+  ],
+  "audit": {
+    "status": "missing",
+    "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
+    "reason": "userData 路径可访问，但审计文件不存在：/root/.config/AutomationCAD/agent-audit.jsonl",
+    "total": null,
+    "failed": null,
+    "tools": {},
+    "malformed": [],
+    "lastAt": null,
+    "generatedAt": null
+  },
+  "missing": [
+    {
+      "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
+      "reason": "userData 路径可访问，但审计文件不存在：/root/.config/AutomationCAD/agent-audit.jsonl"
+    }
+  ]
+}
