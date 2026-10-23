@@ -31,6 +31,7 @@ import { buildFallbackReply, buildRetryPrompt } from './retry.ts';
 import {
   BYPASS_CONFIRMATION_NOTICE,
   detectBypassIntent,
+  hasExplicitConsent,
   sanitizeConfirmationClaims,
   type BypassIntent
 } from './policy.ts';
@@ -44,9 +45,15 @@ import {
   AgentThread,
   augmentContextWithThreadReference,
   completedToThreadSteps,
+  denialTarget,
+  findDenial,
   formatThreadContext,
+  normalizeDenials,
   projectFingerprint,
+  removeDenial,
+  type DenialReason,
   type PendingConfirm,
+  type ThreadDenial,
   type ThreadState
 } from './thread.ts';
 
@@ -247,6 +254,9 @@ export class AgentSession {
   private readonly memory = new AgentMemory();
   private threadPrevious: ThreadState | null = null;
   private pendingConfirm: PendingConfirm | undefined;
+  private denials: ThreadDenial[] = [];
+  private currentTurnId = 0;
+  private turnText = '';
   private turnContextReady = false;
   private messages: LlmMessage[] = [];
   private replyMode: AgentReplyMode = 'online';
@@ -377,6 +387,9 @@ export class AgentSession {
     this.thread.clear();
     this.threadPrevious = null;
     this.pendingConfirm = undefined;
+    this.denials = [];
+    this.currentTurnId = 0;
+    this.turnText = '';
     this.turnContextReady = false;
     this.turnUsage = emptyTokenUsage();
     this.sessionUsage = emptyTokenUsage();
@@ -512,6 +525,34 @@ export class AgentSession {
     }
   }
 
+  private denialTargetFor(args: Record<string, unknown>): string | undefined {
+    return denialTarget(args, this.turnContextReady ? this.turnContext : null);
+  }
+
+  /** 追加一条跨轮拒绝记忆；同工具同目标由 normalizeDenials 后者覆盖并限长。 */
+  private recordDenial(
+    reason: DenialReason,
+    tool: string,
+    target: string | undefined
+  ): ThreadDenial {
+    const denial: ThreadDenial = {
+      tool,
+      ...(target ? { target } : {}),
+      at: new Date().toISOString(),
+      reason,
+      turnId: String(this.currentTurnId)
+    };
+    this.denials = normalizeDenials([...this.denials, denial]);
+    return denial;
+  }
+
+  private clearDenial(tool: string, target: string | undefined): ThreadDenial | null {
+    const prior = findDenial(this.denials, tool, target);
+    if (!prior) return null;
+    this.denials = removeDenial(this.denials, tool, target);
+    return prior;
+  }
+
   private async executeTool(
     call: LlmToolCall,
     context: {
@@ -570,6 +611,7 @@ export class AgentSession {
     }
 
     const argsSummary = summarizeArguments(args);
+    const denialKey = this.denialTargetFor(args);
     this.emitProgress(context.onProgress, {
       runId: context.runId,
       phase: 'start',
@@ -586,7 +628,13 @@ export class AgentSession {
       ok: boolean,
       code: string,
       message?: string,
-      extras: { docsSources?: number } = {}
+      extras: {
+        docsSources?: number;
+        target?: string;
+        denialReason?: DenialReason;
+        deniedTurnId?: string;
+        consent?: boolean;
+      } = {}
     ): void => {
       const elapsedMs = Math.max(0, Date.now() - startedAt);
       this.recordAudit({
@@ -597,7 +645,11 @@ export class AgentSession {
         elapsedMs,
         ...(code !== 'OK' ? { code } : {}),
         ...(message ? { message } : {}),
-        ...(extras.docsSources !== undefined ? { docsSources: extras.docsSources } : {})
+        ...(extras.docsSources !== undefined ? { docsSources: extras.docsSources } : {}),
+        ...(extras.target ? { target: extras.target } : {}),
+        ...(extras.denialReason ? { denialReason: extras.denialReason } : {}),
+        ...(extras.deniedTurnId ? { deniedTurnId: extras.deniedTurnId } : {}),
+        ...(extras.consent !== undefined ? { consent: extras.consent } : {})
       });
       this.emitProgress(context.onProgress, {
         runId: context.runId,
@@ -630,6 +682,42 @@ export class AgentSession {
       throwIfAborted(context.signal);
       if (MUTATING_TOOLS.has(name)) {
         // 硬边界：无论用户文本、模型输出或调用路径如何，写工具必须先拿到明确确认。
+        const priorDenial = findDenial(this.denials, name, denialKey);
+        if (priorDenial && priorDenial.reason !== 'timeout') {
+          if (!hasExplicitConsent(this.turnText)) {
+            const message = priorDenial.reason === 'user'
+              ? `你在第 ${priorDenial.turnId} 轮拒绝过这个操作，需要明确同意才会重试`
+              : `该操作在第 ${priorDenial.turnId} 轮被策略拦截过，需要明确同意才会重试`;
+            this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED_PREVIOUSLY' }));
+            finish(false, 'USER_DENIED_PREVIOUSLY', message, {
+              ...(denialKey ? { target: denialKey } : {}),
+              denialReason: priorDenial.reason,
+              deniedTurnId: priorDenial.turnId
+            });
+            return {
+              ok: false,
+              code: 'USER_DENIED_PREVIOUSLY',
+              message,
+              ...(denialKey ? { target: denialKey } : {}),
+              denialReason: priorDenial.reason,
+              deniedTurnId: priorDenial.turnId
+            };
+          }
+          // 明确同意只解除拒绝记忆；下面仍要重新走确认流程，确认框不会因此被跳过。
+          this.clearDenial(name, denialKey);
+          this.recordAudit({
+            tool: name,
+            ok: true,
+            code: 'DENIAL_CLEARED',
+            source: 'llm',
+            args,
+            ...(denialKey ? { target: denialKey } : {}),
+            denialReason: priorDenial.reason,
+            deniedTurnId: priorDenial.turnId,
+            consent: true,
+            message: '用户本轮明确同意，已解除拒绝记忆并重新请求确认'
+          });
+        }
         if (this.deniedWriteTools.has(name)) {
           const message = `本轮已拒绝 ${name}，后续同名写操作不再重复弹窗`;
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
@@ -638,8 +726,13 @@ export class AgentSession {
         }
         if (typeof this.confirmWrite !== 'function') {
           const message = '写操作缺少确认回调，已拒绝执行';
+          this.recordDenial('policy', name, denialKey);
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'CONFIRMATION_REQUIRED' }));
-          finish(false, 'CONFIRMATION_REQUIRED', message);
+          finish(false, 'CONFIRMATION_REQUIRED', message, {
+            ...(denialKey ? { target: denialKey } : {}),
+            denialReason: 'policy',
+            deniedTurnId: String(this.currentTurnId)
+          });
           return { ok: false, code: 'CONFIRMATION_REQUIRED', message };
         }
 
@@ -687,19 +780,36 @@ export class AgentSession {
               message
             };
             this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'CONFIRM_TIMEOUT' }));
-            finish(false, 'CONFIRM_TIMEOUT', message);
+            const timeoutDenial = this.recordDenial('timeout', name, denialKey);
+            finish(false, 'CONFIRM_TIMEOUT', message, {
+              ...(denialKey ? { target: denialKey } : {}),
+              denialReason: 'timeout',
+              deniedTurnId: timeoutDenial.turnId
+            });
             return { ok: false, code: 'CONFIRM_TIMEOUT', message };
           }
+          const denial = this.recordDenial('user', name, denialKey);
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
-          finish(false, 'USER_DENIED', message);
+          finish(false, 'USER_DENIED', message, {
+            ...(denialKey ? { target: denialKey } : {}),
+            denialReason: denial.reason,
+            deniedTurnId: denial.turnId
+          });
           return { ok: false, code: 'USER_DENIED', message };
         }
         if (allowed !== true) {
+          const denial = this.recordDenial('user', name, denialKey);
           this.deniedWriteTools.add(name);
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
-          finish(false, 'USER_DENIED', '用户拒绝执行该工具');
+          finish(false, 'USER_DENIED', '用户拒绝执行该工具', {
+            ...(denialKey ? { target: denialKey } : {}),
+            denialReason: denial.reason,
+            deniedTurnId: denial.turnId
+          });
           return { ok: false, code: 'USER_DENIED', message: '用户拒绝执行该工具' };
         }
+        // 超时后的再次确认成功：清掉旧的超时记忆，下一轮提示不再重复催促。
+        this.clearDenial(name, denialKey);
       }
 
       if (context.signal?.aborted) {
@@ -715,12 +825,24 @@ export class AgentSession {
       );
       this.memory.record(summarizeToolCall(name, args, result));
       const code = result.ok ? 'OK' : (result.error?.code ?? 'COMMAND_FAILED');
+      const policyDenial = !result.ok && (code === 'TARGET_PATH_UNSUPPORTED' || code === 'POLICY_DENIED')
+        ? this.recordDenial('policy', name, denialKey)
+        : null;
       const sources = name === 'search_docs' ? docsSourceCount(result) : undefined;
       finish(
         result.ok,
         code,
         result.ok ? undefined : result.error?.message,
-        sources !== undefined ? { docsSources: sources } : {}
+        {
+          ...(sources !== undefined ? { docsSources: sources } : {}),
+          ...(policyDenial
+            ? {
+                ...(denialKey ? { target: denialKey } : {}),
+                denialReason: 'policy' as const,
+                deniedTurnId: policyDenial.turnId
+              }
+            : {})
+        }
       );
 
       if (name === 'run_interference_check' && result.ok && isRecord(result.data) && Array.isArray(result.data.items)) {
@@ -861,6 +983,9 @@ export class AgentSession {
     const completed: CompletedStep[] = [];
     // 先读取上一轮快照，再开始本轮；本轮结束后由 finally 路径统一覆盖。
     this.threadPrevious = this.thread.read();
+    this.currentTurnId = (this.threadPrevious?.turnId ?? 0) + 1;
+    this.turnText = text;
+    this.denials = normalizeDenials(this.threadPrevious?.denials ?? []);
     this.pendingConfirm = undefined;
     this.bypassIntent = detectBypassIntent(text);
     this.deniedWriteTools.clear();
@@ -898,6 +1023,7 @@ export class AgentSession {
       completedSteps: completedToThreadSteps(completed),
       reply,
       source: 'chat',
+      denials: this.denials,
       ...(this.pendingConfirm ? { pendingConfirm: this.pendingConfirm } : {})
     });
   }

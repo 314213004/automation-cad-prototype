@@ -8,6 +8,7 @@ import {
   BYPASS_CONFIRMATION_NOTICE,
   checkExportTargetPath,
   detectBypassIntent,
+  hasExplicitConsent,
   sanitizeConfirmationClaims
 } from '../../src/agent/policy.ts';
 
@@ -86,6 +87,18 @@ test('绕过意图负例：请确认是否覆盖', () => {
 
 test('绕过意图负例：空白文本', () => {
   assert.equal(detectBypassIntent('   '), null);
+});
+
+test('跨轮拒绝：明确同意词才解除拒绝记忆', () => {
+  for (const text of ['我同意', '确认执行', '那就改吧', '继续改', '我批准这次修改', '现在就改']) {
+    assert.equal(hasExplicitConsent(text), true, text);
+  }
+});
+
+test('跨轮拒绝：继续 / 好的 / 空白不算明确同意', () => {
+  for (const text of ['继续', '好的', '嗯', '再试一下', '   ']) {
+    assert.equal(hasExplicitConsent(text), false, text);
+  }
 });
 
 test('回复过滤：无需确认替换为已按规则请求确认', () => {

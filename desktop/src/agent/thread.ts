@@ -27,6 +27,19 @@ export const THREAD_SUMMARY_LIMIT = 420;
 
 export type PendingConfirmReason = 'timeout' | 'cancelled';
 
+/** 跨轮拒绝原因：用户拒绝 / 确认超时 / 策略拦截。 */
+export type DenialReason = 'user' | 'timeout' | 'policy';
+
+export interface ThreadDenial {
+  tool: string;
+  /** 规范化后的目标（优先位号）；无目标时省略。 */
+  target?: string;
+  at: string;
+  reason: DenialReason;
+  /** 发生拒绝的轮次；按需求以字符串保存，便于审计与提示直接展示。 */
+  turnId: string;
+}
+
 export interface PendingConfirm {
   tool: string;
   args: Record<string, unknown>;
@@ -60,6 +73,8 @@ export interface ThreadState {
   intent: string;
   targets: string[];
   pendingConfirm?: PendingConfirm;
+  /** 本会话内被拒绝/拦截的工具与目标；最多 10 条，同键后者覆盖。 */
+  denials: ThreadDenial[];
   completedSteps: ThreadCompletedStep[];
   lastReplySummary: string;
   /** targets 的结构化版本，用于跨轮指代「刚才那个件」。 */
@@ -84,6 +99,8 @@ export interface ThreadFinishInput {
   completedSteps?: readonly ThreadCompletedStep[];
   reply: string;
   pendingConfirm?: PendingConfirm;
+  /** 本轮结束后的完整拒绝快照；缺省时原样保留上一轮 denials。 */
+  denials?: readonly ThreadDenial[];
   targetRefs?: readonly ThreadTarget[];
   source?: 'chat' | 'plan';
   planSignature?: string;
@@ -186,6 +203,115 @@ function clonePending(pending: PendingConfirm | undefined): PendingConfirm | und
   };
 }
 
+function cloneDenial(denial: ThreadDenial): ThreadDenial {
+  return {
+    tool: denial.tool,
+    ...(denial.target ? { target: denial.target } : {}),
+    at: denial.at,
+    reason: denial.reason,
+    turnId: denial.turnId
+  };
+}
+
+const DENIAL_REASONS = new Set<DenialReason>(['user', 'timeout', 'policy']);
+export const DENIAL_LIMIT = 10;
+
+function denialTargetKey(target: string | undefined): string {
+  return (target ?? '').trim().toLowerCase();
+}
+
+function isThreadDenial(value: unknown): value is ThreadDenial {
+  if (!isRecord(value)) return false;
+  if (typeof value.tool !== 'string' || !value.tool.trim()) return false;
+  if (typeof value.at !== 'string' || !value.at.trim()) return false;
+  if (typeof value.turnId !== 'string' || !value.turnId.trim()) return false;
+  if (!DENIAL_REASONS.has(value.reason as DenialReason)) return false;
+  return value.target === undefined || typeof value.target === 'string';
+}
+
+/**
+ * 拒绝记忆的规范化入口：过滤非法项、按工具+目标去重（后者覆盖并移到末尾），
+ * 最后只保留最近 `DENIAL_LIMIT` 条。目标比较忽略大小写与首尾空格。
+ */
+export function normalizeDenials(denials: readonly ThreadDenial[] | null | undefined): ThreadDenial[] {
+  if (!Array.isArray(denials)) return [];
+  const byKey = new Map<string, ThreadDenial>();
+  for (const item of denials) {
+    if (!isThreadDenial(item)) continue;
+    const tool = item.tool.trim();
+    const target = item.target?.trim();
+    const denial: ThreadDenial = {
+      tool,
+      ...(target ? { target } : {}),
+      at: item.at.trim(),
+      reason: item.reason,
+      turnId: item.turnId.trim()
+    };
+    const key = `${tool}\u0000${denialTargetKey(denial.target)}`;
+    // 后出现的记录覆盖旧记录，并移动到末尾，保证“最近”顺序稳定。
+    byKey.delete(key);
+    byKey.set(key, denial);
+  }
+  return [...byKey.values()].slice(-DENIAL_LIMIT);
+}
+
+export function sameDenialTarget(left: string | undefined, right: string | undefined): boolean {
+  return denialTargetKey(left) === denialTargetKey(right);
+}
+
+/** 命中同工具同目标的拒绝记录；没有则返回 null。 */
+export function findDenial(
+  denials: readonly ThreadDenial[] | null | undefined,
+  tool: string,
+  target?: string
+): ThreadDenial | null {
+  if (!Array.isArray(denials)) return null;
+  for (let index = denials.length - 1; index >= 0; index -= 1) {
+    const denial = denials[index];
+    if (denial?.tool === tool && sameDenialTarget(denial.target, target)) return denial;
+  }
+  return null;
+}
+
+/** 删除命中记录并返回新数组；不修改调用方持有的旧数组。 */
+export function removeDenial(
+  denials: readonly ThreadDenial[],
+  tool: string,
+  target?: string
+): ThreadDenial[] {
+  return denials.filter((denial) => !(denial.tool === tool && sameDenialTarget(denial.target, target)));
+}
+
+const DENIAL_TARGET_KEYS = ['ref', 'designator', 'tag', 'target', 'partId', 'id', 'path', 'fileName', 'kind'] as const;
+
+/**
+ * 把工具参数里的目标归一成稳定指纹。位号 / id / 型号命中当前上下文里的放置件时，
+ * 一律用位号表示，避免同一目标因参数写法不同绕过拒绝记忆。
+ */
+export function denialTarget(
+  args: Record<string, unknown> | null | undefined,
+  context?: AgentContext | null
+): string | undefined {
+  const source = args ?? {};
+  for (const key of DENIAL_TARGET_KEYS) {
+    const raw = source[key];
+    if (typeof raw !== 'string' || !raw.trim()) continue;
+    const value = raw.trim();
+    const lower = value.toLowerCase();
+    const placement = context?.placements?.find((item) => {
+      const model = (item as unknown as Record<string, unknown>).model;
+      return [item.id, item.label, model].some((candidate) =>
+        typeof candidate === 'string' && candidate.trim().toLowerCase() === lower
+      );
+    });
+    if (placement) return (placement.label || placement.id || value).trim();
+    return value;
+  }
+  const selection = context?.selection;
+  if (selection) return (selection.label || selection.id || '').trim() || undefined;
+  return undefined;
+}
+
 export function cloneThreadState(state: ThreadState | null | undefined): ThreadState | null {
   if (!state) return null;
   return {
@@ -194,6 +320,7 @@ export function cloneThreadState(state: ThreadState | null | undefined): ThreadS
     intent: state.intent,
     targets: [...state.targets],
     ...(state.pendingConfirm ? { pendingConfirm: clonePending(state.pendingConfirm)! } : {}),
+    denials: normalizeDenials(state.denials ?? []),
     completedSteps: state.completedSteps.map(cloneStep),
     lastReplySummary: state.lastReplySummary,
     ...(state.targetRefs && state.targetRefs.length > 0 ? { targetRefs: state.targetRefs.map(cloneTarget) } : {}),
@@ -278,12 +405,16 @@ export class AgentThread {
       : collectThreadTargets(input.context, input.completedSteps ?? []);
     const mergedTargets = [...new Set([...(previous?.targets ?? []), ...targetSummary(targetRefs)])].slice(-8);
     const completedSteps = (input.completedSteps ?? []).map(cloneStep);
+    const denials = input.denials !== undefined
+      ? normalizeDenials(input.denials)
+      : normalizeDenials(previous?.denials ?? []);
     const state: ThreadState = {
       turnId,
       projectFingerprint: projectFingerprint(input.context ?? null),
       intent: input.intent ?? '',
       targets: mergedTargets.length > 0 ? mergedTargets : [...(previous?.targets ?? [])],
       ...(input.pendingConfirm ? { pendingConfirm: clonePending(input.pendingConfirm)! } : {}),
+      denials: denials.map(cloneDenial),
       completedSteps,
       lastReplySummary: clipSummary(input.reply),
       ...(targetRefs.length > 0 ? { targetRefs } : {}),
@@ -321,6 +452,29 @@ function pendingText(pending: PendingConfirm): string {
   return `${pending.tool} ${args}（${reason}）`;
 }
 
+function denialLabel(denial: ThreadDenial): string {
+  const reason = denial.reason === 'user' ? '用户拒绝' : denial.reason === 'policy' ? '策略拦截' : '确认超时';
+  const target = denial.target ? `(${denial.target})` : '';
+  return `${denial.tool}${target}（${reason}，第 ${denial.turnId} 轮）`;
+}
+
+/** 下一轮提示里的跨轮拒绝段落；纯函数，便于测试精确文案。 */
+export function formatDenialPrompt(denials: readonly ThreadDenial[] | null | undefined): string[] {
+  const normalized = normalizeDenials(denials ?? []);
+  if (normalized.length === 0) return [];
+  const permanent = normalized.filter((denial) => denial.reason !== 'timeout');
+  const timeouts = normalized.filter((denial) => denial.reason === 'timeout');
+  const lines: string[] = [];
+  if (permanent.length > 0) {
+    lines.push(`本会话已被拒绝：${permanent.map(denialLabel).join('；')}。`);
+    lines.push('除非用户明确说『我同意/现在就改』，不得再次调用同一工具同一目标。');
+  }
+  if (timeouts.length > 0) {
+    lines.push(`本会话曾有确认超时：${timeouts.map(denialLabel).join('；')}。超时不是永久拒绝，重试前必须先向用户说明并取得确认。`);
+  }
+  return lines;
+}
+
 /**
  * 下一轮系统提示。没有上一轮状态时返回空串；指纹变化时固定出现
  * 「工程已变化，不要沿用旧结论」。
@@ -349,6 +503,11 @@ export function formatThreadContext(
   }
   if (previous.pendingConfirm) {
     lines.push(`未确认操作：${pendingText(previous.pendingConfirm)}。下一轮必须先问用户「是否继续上次未确认的操作」，用户明确同意前不得执行，也不得自动重试。`);
+  }
+  const denialLines = formatDenialPrompt(previous.denials ?? []);
+  if (denialLines.length > 0) {
+    lines.push('[跨轮拒绝记忆]');
+    lines.push(...denialLines);
   }
   if (currentContext) {
     const current = projectFingerprint(currentContext);

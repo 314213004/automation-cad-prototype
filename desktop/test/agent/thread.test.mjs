@@ -3,9 +3,14 @@ import { test } from 'node:test';
 import {
   AgentThread,
   augmentContextWithThreadReference,
+  denialTarget,
+  findDenial,
+  formatDenialPrompt,
   formatThreadContext,
   nextIncompleteStep,
+  normalizeDenials,
   projectFingerprint,
+  removeDenial,
   resolveThreadReference,
   runPlan
 } from '../../src/agent/thread.ts';
@@ -526,4 +531,106 @@ test('会话 clear 同时清空线程状态', async () => {
   assert.equal(session.threadState()?.turnId, 1);
   session.clear();
   assert.equal(session.threadState(), null);
+});
+
+test('跨轮拒绝：同工具同目标去重，后者覆盖并忽略目标大小写', () => {
+  const normalized = normalizeDenials([
+    { tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:01Z', reason: 'user', turnId: '1' },
+    { tool: 'update_component', target: 'qf1', at: '2026-10-23T00:00:02Z', reason: 'timeout', turnId: '2' }
+  ]);
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0].reason, 'timeout');
+  assert.equal(normalized[0].turnId, '2');
+  assert.equal(normalized[0].target, 'qf1');
+});
+
+test('跨轮拒绝：只保留最近 10 条', () => {
+  const denials = Array.from({ length: 13 }, (_unused, index) => ({
+    tool: 'update_component',
+    target: `QF${index + 1}`,
+    at: `2026-10-23T00:00:${String(index).padStart(2, '0')}Z`,
+    reason: 'user',
+    turnId: String(index + 1)
+  }));
+  const normalized = normalizeDenials(denials);
+  assert.equal(normalized.length, 10);
+  assert.equal(normalized[0].target, 'QF4');
+  assert.equal(normalized.at(-1).target, 'QF13');
+});
+
+test('跨轮拒绝：partId / 型号命中放置件时归一成位号', () => {
+  const placements = context().placements.map((item, index) => index === 0
+    ? { ...item, model: 'iC65N-C16-1P' }
+    : item);
+  assert.equal(denialTarget({ partId: 'iC65N-C16-1P' }, context({ placements })), 'QF1');
+  assert.equal(denialTarget({ ref: 'qf1' }, context({ placements })), 'QF1');
+  assert.equal(denialTarget({ ref: 'KM1' }, context({ placements })), 'KM1');
+});
+
+test('跨轮拒绝：find / remove 按工具与目标精确命中', () => {
+  const denials = [{
+    tool: 'update_component',
+    target: 'QF1',
+    at: '2026-10-23T00:00:00Z',
+    reason: 'user',
+    turnId: '2'
+  }];
+  assert.equal(findDenial(denials, 'update_component', 'qf1')?.turnId, '2');
+  assert.equal(findDenial(denials, 'update_component', 'KM1'), null);
+  assert.equal(findDenial(denials, 'remove_component', 'QF1'), null);
+  assert.deepEqual(removeDenial(denials, 'update_component', 'QF1'), []);
+  assert.equal(removeDenial(denials, 'update_component', 'KM1').length, 1);
+});
+
+test('跨轮拒绝：finish 未传 denials 时保留，显式快照可清空', () => {
+  const thread = new AgentThread();
+  const denial = { tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:00Z', reason: 'user', turnId: '1' };
+  thread.finish({ reply: '第一次拒绝', context: context(), completedSteps: [], denials: [denial] });
+  assert.deepEqual(thread.read()?.denials.map((item) => item.target), ['QF1']);
+  thread.finish({ reply: '第二次保留', context: context(), completedSteps: [] });
+  assert.deepEqual(thread.read()?.denials.map((item) => item.target), ['QF1']);
+  thread.finish({ reply: '明确同意后清空', context: context(), completedSteps: [], denials: [] });
+  assert.deepEqual(thread.read()?.denials, []);
+});
+
+test('跨轮拒绝：提示注入包含工具、目标、轮次与明确同意条件', () => {
+  const prompt = formatDenialPrompt([
+    { tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:00Z', reason: 'user', turnId: '2' },
+    { tool: 'remove_component', target: 'KM1', at: '2026-10-23T00:00:01Z', reason: 'policy', turnId: '3' }
+  ]).join('\n');
+  assert.match(prompt, /本会话已被拒绝：update_component\(QF1\)（用户拒绝，第 2 轮）/);
+  assert.match(prompt, /remove_component\(KM1\)（策略拦截，第 3 轮）/);
+  assert.match(prompt, /除非用户明确说『我同意\/现在就改』，不得再次调用同一工具同一目标/);
+});
+
+test('跨轮拒绝：超时提示可重试但不进入永久拒绝文案', () => {
+  const prompt = formatDenialPrompt([
+    { tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:00Z', reason: 'timeout', turnId: '2' }
+  ]).join('\n');
+  assert.match(prompt, /本会话曾有确认超时：update_component\(QF1\)（确认超时，第 2 轮）/);
+  assert.match(prompt, /超时不是永久拒绝/);
+  assert.doesNotMatch(prompt, /本会话已被拒绝/);
+});
+
+test('跨轮拒绝：工程指纹变化后 denial 保留且提示工程已变化', () => {
+  const previous = state(projectFingerprint(context()), [], {
+    denials: [{ tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:00Z', reason: 'user', turnId: '1' }]
+  });
+  const changed = context({ machine: { name: '装盒机', stations: 3, actuators: 6, sensors: 8 }, bomRows: 9 });
+  const prompt = formatThreadContext(previous, changed);
+  assert.match(prompt, /本会话已被拒绝：update_component\(QF1\)/);
+  assert.match(prompt, /工程已变化，不要沿用旧结论/);
+});
+
+test('跨轮拒绝：cloneThreadState 深拷贝 denials', () => {
+  const thread = new AgentThread();
+  thread.finish({
+    reply: '拒绝',
+    context: context(),
+    completedSteps: [],
+    denials: [{ tool: 'update_component', target: 'QF1', at: '2026-10-23T00:00:00Z', reason: 'user', turnId: '1' }]
+  });
+  const read = thread.read();
+  read.denials[0].target = 'KM1';
+  assert.equal(thread.read()?.denials[0]?.target, 'QF1');
 });

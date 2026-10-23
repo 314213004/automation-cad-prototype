@@ -172,3 +172,205 @@ test('历史只保留最近 20 条消息', async () => {
   assert.equal(history.at(-1).role, 'assistant');
   assert.equal(history.at(-2).content, '消息 11');
 });
+
+function denialContext() {
+  return {
+    domain: 'elec',
+    view: '底板',
+    selection: { kind: 'placement', id: 'p1', label: 'QF1' },
+    machine: { name: '烟包机', stations: 3, actuators: 6, sensors: 8 },
+    plate: { width: 600, height: 400, placed: 2, overlaps: 0 },
+    recentActions: [],
+    units: 'mm',
+    bomRows: 2,
+    hasCadModel: true,
+    placements: [
+      { id: 'p1', label: 'QF1', model: 'iC65N-C16-1P', x: 20, y: 30, w: 36, h: 80 },
+      { id: 'p2', label: 'KM1', model: 'LC1D09', x: 80, y: 30, w: 45, h: 80 }
+    ]
+  };
+}
+
+test('跨轮拒绝：用户拒绝后写入 denials 并带审计字段', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('d1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已取消修改。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  const audit = [];
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => false,
+    audit: (record) => audit.push(record)
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  const denial = session.threadState()?.denials?.[0];
+  assert.equal(denial?.tool, 'update_component');
+  assert.equal(denial?.target, 'QF1');
+  assert.equal(denial?.reason, 'user');
+  assert.equal(denial?.turnId, '1');
+  assert.match(denial?.at ?? '', /^\d{4}-\d{2}-\d{2}T/);
+  const record = audit.find((entry) => entry.code === 'USER_DENIED' && entry.tool === 'update_component');
+  assert.equal(record?.target, 'QF1');
+  assert.equal(record?.denialReason, 'user');
+  assert.equal(record?.deniedTurnId, '1');
+  assert.equal(bus.calls.length, 0);
+});
+
+test('跨轮拒绝：下一轮不带明确同意时执行层短路且不弹确认', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('d1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已取消修改。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('d2', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '这次没有执行，需要你明确同意。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  const audit = [];
+  let confirms = 0;
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => {
+      confirms += 1;
+      return false;
+    },
+    audit: (record) => audit.push(record)
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  await session.run('继续');
+  assert.equal(confirms, 1);
+  assert.equal(bus.calls.length, 0);
+  const toolMessage = llm.calls[3].filter((message) => message.role === 'tool').at(-1);
+  const parsed = parseToolResultData(toolMessage.content);
+  assert.equal(parsed?.code, 'USER_DENIED_PREVIOUSLY');
+  assert.match(parsed?.message ?? '', /你在第 1 轮拒绝过这个操作，需要明确同意才会重试/);
+  const prompt = llm.calls[2][0].content;
+  assert.match(prompt, /跨轮拒绝记忆/);
+  assert.match(prompt, /update_component\(QF1\)（用户拒绝，第 1 轮）/);
+  const blocked = audit.find((entry) => entry.code === 'USER_DENIED_PREVIOUSLY');
+  assert.equal(blocked?.target, 'QF1');
+  assert.equal(blocked?.denialReason, 'user');
+  assert.equal(blocked?.deniedTurnId, '1');
+});
+
+test('跨轮拒绝：用户明确同意后清除 denial 并重新走确认', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('d1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已取消修改。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('d2', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已重新确认并执行。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  const audit = [];
+  let confirms = 0;
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => {
+      confirms += 1;
+      return confirms > 1;
+    },
+    audit: (record) => audit.push(record)
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  await session.run('我同意，现在就改');
+  assert.equal(confirms, 2);
+  assert.deepEqual(bus.calls.map((call) => call.name), ['update_component']);
+  assert.deepEqual(session.threadState()?.denials, []);
+  const cleared = audit.find((entry) => entry.code === 'DENIAL_CLEARED');
+  assert.equal(cleared?.consent, true);
+  assert.equal(cleared?.target, 'QF1');
+  assert.equal(cleared?.deniedTurnId, '1');
+});
+
+test('跨轮拒绝：确认超时只留下可重试提示，下一轮可直接重新确认', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('t1', 'update_component', { ref: 'QF1', qty: 2 })] },
+    { content: '确认超时。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('t2', 'update_component', { ref: 'QF1', qty: 2 })] },
+    { content: '已执行。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  let confirms = 0;
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => {
+      confirms += 1;
+      if (confirms === 1) throw new Error('确认超时');
+      return true;
+    }
+  });
+  await session.run('把 QF1 数量改成 2');
+  assert.equal(session.threadState()?.denials?.[0]?.reason, 'timeout');
+  await session.run('继续');
+  assert.match(llm.calls[2][0].content, /超时不是永久拒绝/);
+  assert.equal(confirms, 2);
+  assert.deepEqual(bus.calls.map((call) => call.name), ['update_component']);
+  assert.deepEqual(session.threadState()?.denials, []);
+});
+
+test('跨轮拒绝：换目标不触发短路', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('g1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已取消。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('g2', 'update_component', { ref: 'KM1', model: 'NXB-63' })] },
+    { content: '已修改 KM1。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  let confirms = 0;
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => {
+      confirms += 1;
+      return confirms > 1;
+    }
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  await session.run('继续');
+  assert.equal(confirms, 2);
+  assert.deepEqual(bus.calls.map((call) => [call.name, call.args.ref]), [['update_component', 'KM1']]);
+  assert.deepEqual(session.threadState()?.denials.map((item) => item.target), ['QF1']);
+});
+
+test('跨轮拒绝：换工具不触发短路', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('h1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '已取消。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('h2', 'remove_component', { ref: 'QF1' })] },
+    { content: '已移除 QF1。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  let confirms = 0;
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: async () => {
+      confirms += 1;
+      return confirms > 1;
+    }
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  await session.run('继续');
+  assert.equal(confirms, 2);
+  assert.deepEqual(bus.calls.map((call) => call.name), ['remove_component']);
+  assert.deepEqual(session.threadState()?.denials.map((item) => item.tool), ['update_component']);
+});
+
+test('跨轮拒绝：策略拦截写为 policy 并同样短路', async () => {
+  const llm = createLlm([
+    { content: '', toolCalls: [toolCall('p1', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '写操作缺少确认。', toolCalls: [] },
+    { content: '', toolCalls: [toolCall('p2', 'update_component', { ref: 'QF1', model: 'NXB-63' })] },
+    { content: '需要明确同意。', toolCalls: [] }
+  ]);
+  const bus = createBus();
+  const session = createSession(llm, bus, {
+    contextProvider: async () => denialContext(),
+    confirmWrite: undefined
+  });
+  await session.run('把 QF1 改成 NXB-63');
+  assert.equal(session.threadState()?.denials?.[0]?.reason, 'policy');
+  await session.run('继续');
+  const toolMessage = llm.calls[3].filter((message) => message.role === 'tool').at(-1);
+  const parsed = parseToolResultData(toolMessage.content);
+  assert.equal(parsed?.code, 'USER_DENIED_PREVIOUSLY');
+  assert.match(parsed?.message ?? '', /被策略拦截过，需要明确同意才会重试/);
+  assert.equal(bus.calls.length, 0);
+});

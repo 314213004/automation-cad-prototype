@@ -16,6 +16,18 @@ export interface BypassIntent {
 
 export const BYPASS_CONFIRMATION_NOTICE = '用户要求跳过确认，但写操作必须确认';
 
+const EXPLICIT_CONSENT_PATTERN = /同意|确认|就改|继续改|我批准/;
+
+/**
+ * 判断用户本轮是否明确同意重试此前被拒绝的操作。
+ *
+ * 只接受固定同意词；「继续」「好的」等模糊搭话不算授权，避免拒绝记忆被
+ * 自动重试绕过。该函数只用于解除拒绝记忆，不替代写操作的确认弹窗。
+ */
+export function hasExplicitConsent(text: string): boolean {
+  return typeof text === 'string' && EXPLICIT_CONSENT_PATTERN.test(text);
+}
+
 const BYPASS_PATTERNS: RegExp[] = [
   /别(?:再)?问(?:我)?(?:了|啦|啊)?/,
   /不(?:用|需要|必)(?:再)?(?:向我)?确认/,

@@ -24,6 +24,14 @@ export interface AgentAuditRecord {
   repairs?: string[];
   /** 策略事件命中的用户原短语（如 BYPASS_ATTEMPT）。 */
   phrase?: string;
+  /** 写操作规范化后的目标（位号 / 型号等），用于跨轮拒绝审计。 */
+  target?: string;
+  /** 跨轮拒绝原因；与 USER_DENIED / USER_DENIED_PREVIOUSLY 一起出现。 */
+  denialReason?: 'user' | 'timeout' | 'policy';
+  /** 最初发生拒绝的轮次。 */
+  deniedTurnId?: string;
+  /** 本轮是否由用户明确同意解除了拒绝记忆。 */
+  consent?: boolean;
   /** 本轮模型请求的输入/输出 tokens；端点回传时 estimated=false。 */
   promptTokens?: number;
   completionTokens?: number;
@@ -85,6 +93,10 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
       ? { repairs: record.repairs.map((item) => maskSecrets(item)) }
       : {}),
     ...(record.phrase ? { phrase: maskSecrets(record.phrase) } : {}),
+    ...(record.target ? { target: maskSecrets(record.target) } : {}),
+    ...(record.denialReason ? { denialReason: record.denialReason } : {}),
+    ...(record.deniedTurnId ? { deniedTurnId: maskSecrets(record.deniedTurnId) } : {}),
+    ...(typeof record.consent === 'boolean' ? { consent: record.consent } : {}),
     ...(typeof record.promptTokens === 'number' && Number.isFinite(record.promptTokens) && record.promptTokens >= 0
       ? { promptTokens: Math.trunc(record.promptTokens) }
       : {}),

@@ -1701,6 +1701,7 @@ function createWindow(): BrowserWindow {
           projectFingerprint: projectFingerprint(uiContext),
           intent: 'modify',
           targets: ['QF1'],
+          denials: [],
           completedSteps: [{ step: 1, index: 0, tool: 'get_bom', ok: true, wrote: false }],
           lastReplySummary: '已读取 BOM'
         });
@@ -2016,6 +2017,73 @@ function createWindow(): BrowserWindow {
         console.log('SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1');
       } catch (error) {
         console.error('SMOKE_FAIL agent_policy_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        // P7-M：跨轮拒绝记忆——第 2 轮硬短路（blocked=1），明确同意后第 3 轮放行（allowed=1）。
+        const denialContext = {
+          domain: 'elec' as const,
+          view: '底板',
+          selection: { kind: 'placement' as const, id: 'p1', label: 'QF1' },
+          machine: { name: '烟包机', stations: 3, actuators: 6, sensors: 8 },
+          plate: { width: 600, height: 400, placed: 2, overlaps: 0 },
+          recentActions: [],
+          units: 'mm' as const,
+          bomRows: 2,
+          hasCadModel: true,
+          placements: [{ id: 'p1', label: 'QF1', x: 20, y: 30, w: 36, h: 80 }]
+        };
+        const denialResponses = [
+          { content: '', toolCalls: [{ id: 'deny-1', type: 'function' as const, function: { name: 'update_component', arguments: JSON.stringify({ ref: 'QF1', model: 'NXB-63' }) } }] },
+          { content: '已取消修改。', toolCalls: [] },
+          { content: '', toolCalls: [{ id: 'deny-2', type: 'function' as const, function: { name: 'update_component', arguments: JSON.stringify({ ref: 'QF1', model: 'NXB-63' }) } }] },
+          { content: '需要明确同意。', toolCalls: [] },
+          { content: '', toolCalls: [{ id: 'deny-3', type: 'function' as const, function: { name: 'update_component', arguments: JSON.stringify({ ref: 'QF1', model: 'NXB-63' }) } }] },
+          { content: '已执行修改。', toolCalls: [] }
+        ];
+        let denialTurn = 0;
+        let denialConfirms = 0;
+        let denialExecuted = 0;
+        const denialPrompts: string[] = [];
+        const denialAudit = createAuditLog({ write: () => {} });
+        const denialSession = new AgentSession({
+          llm: {
+            async chat(messages) {
+              denialPrompts.push(String(messages[0]?.content ?? ''));
+              return denialResponses[Math.min(denialTurn++, denialResponses.length - 1)]!;
+            }
+          },
+          bus: {
+            async execute() {
+              denialExecuted += 1;
+              return { ok: true, data: { updated: true } };
+            },
+            async undoLast() {
+              return { ok: true, data: {} };
+            }
+          },
+          contextProvider: () => denialContext,
+          confirmWrite: async () => {
+            denialConfirms += 1;
+            return denialConfirms > 1;
+          },
+          audit: (record) => denialAudit.record(record)
+        });
+        await denialSession.run('把 QF1 的型号改成 NXB-63');
+        await denialSession.run('继续');
+        const blocked = denialAudit.entries.filter((entry) => entry.code === 'USER_DENIED_PREVIOUSLY').length;
+        const promptInjected = denialPrompts.some((prompt) =>
+          prompt.includes('跨轮拒绝记忆') && prompt.includes('update_component(QF1)（用户拒绝，第 1 轮）')
+        );
+        await denialSession.run('我同意，现在就改');
+        const remaining = denialSession.threadState()?.denials.length ?? -1;
+        if (blocked !== 1 || denialExecuted !== 1 || denialConfirms !== 2 || remaining !== 0 || !promptInjected) {
+          throw new Error(JSON.stringify({ blocked, allowed: denialExecuted, confirms: denialConfirms, remaining, promptInjected }));
+        }
+        console.log(`SMOKE_AGENT_DENIAL_OK blocked=${blocked} allowed=${denialExecuted}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_denial_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }
