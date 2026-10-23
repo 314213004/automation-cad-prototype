@@ -225,7 +225,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <h1>AutomationCAD<span>智能电气设计平台</span></h1>
     <div class="subtitle">从 CAD 设计到智慧工厂数据贯通</div>
     <div class="desc">一个桌面软件，覆盖机械、电气、成本、PLC 与数据交付。设计完成后，图纸、BOM、3D 模型与成本一次性推送到智慧工厂系统，替代手工转录与邮件传包。</div>
-    <div class="kw"><span>Windows 11 桌面版</span><span>离线可用</span><span>301 项自动化测试</span><span>已打通设计同步接口</span></div>
+    <div class="kw"><span>Windows 11 桌面版</span><span>离线可用</span><span>674 项自动化测试</span><span>已打通设计同步接口</span></div>
     <div class="chain">
       <div class="cn"><b>① 设计</b><span>机械 · 电气 · 成本 · PLC<br>五域在同一工作台</span></div>
       <i>→</i>
@@ -237,11 +237,11 @@ figcaption b{color:var(--navy-2);font-weight:600}
     </div>
     <div class="meta">
       <div><b>2026-10-23</b>汇报日期</div>
-      <div><b>v0.2</b>文档版本</div>
-      <div><b>v0.2.0</b>软件版本</div>
+      <div><b>v0.3</b>文档版本</div>
+      <div><b>v0.3.0</b>软件版本</div>
       <div><b>设计端 → 智慧工厂</b>数据链路</div>
     </div>
-    <div class="foot"><span>AutomationCAD 智能电气设计平台</span><span>第 1 页 / 共 18 页</span></div>
+    <div class="foot"><span>AutomationCAD 智能电气设计平台</span><span>第 1 页 / 共 19 页</span></div>
   </div>
 </section>
 
@@ -250,25 +250,25 @@ figcaption b{color:var(--navy-2);font-weight:600}
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">摘要</span></div>
   <p class="kicker">Executive Summary</p>
   <h2><span class="no">01</span>一页纸摘要</h2>
-  <p class="lead">项目已完成从网页原型到 Windows 桌面软件的升级，并首次打通<strong>设计端到智慧工厂的数据链路</strong>。当前状态：桌面端功能可用、自动化测试全绿、设计同步接口双方联调通过；下一阶段的增量价值集中在自然语言交互、PLC 程序自动生成与委外加工协同。</p>
+  <p class="lead">项目已完成从网页原型到 Windows 桌面软件的升级，并首次打通<strong>设计端到智慧工厂的数据链路</strong>。当前状态：桌面端功能可用、674 项自动化测试全绿、设计同步接口双方联调通过；P6–P8 的成本闭环、自然语言交互与 PLC 程序生成已落地，P9 参数化建模完成主体，草图约束与委外协同仍待推进。</p>
 
   <div class="kpis">
-    <div class="kpi"><div class="n">301<em>项</em></div><div class="l">自动化测试全部通过<br>npm test 301 / 301</div></div>
+    <div class="kpi"><div class="n">674<em>项</em></div><div class="l">自动化测试全部通过<br>npm test 674 / 674</div></div>
     <div class="kpi"><div class="n">371<em>型号</em></div><div class="l">电气元件库，26 个分类<br>其中 219 个带原理图符号</div></div>
     <div class="kpi"><div class="n">191<em>个</em></div><div class="l">元件的真实外形尺寸<br>可直接用于底板排布</div></div>
     <div class="kpi alt"><div class="n">559<em>ms</em></div><div class="l">424 KB STEP 装配体解析<br>输出 5,040 个三角面</div></div>
     <div class="kpi alt"><div class="n">30<em>项</em></div><div class="l">智慧工厂侧接口测试<br>material-flow 0.22.0</div></div>
-    <div class="kpi alt"><div class="n">186<em>MB</em></div><div class="l">Windows 便携包已发布<br>186,901,656 字节</div></div>
+    <div class="kpi alt"><div class="n">12<em>个</em></div><div class="l">智能体工具注册表<br>JSON-RPC / MCP 共用</div></div>
   </div>
 
   <h3>四条核心结论</h3>
   <table>
     <thead><tr><th style="width:6mm">#</th><th style="width:44mm">结论</th><th>依据</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td><b>设计端已形成闭环，可直接试用</b></td><td>五个域全部落地：CAD 导入与运动学标注、电气元件库与底板布置、电气合规校验与功率统计、机械干涉与受力、成本自动统计、PLC 联调与故障诊断。工程导出一套产物（A3 PDF / DXF / GLB / BOM / 成本）。</td></tr>
+      <tr><td>1</td><td><b>设计端已形成闭环，可直接试用</b></td><td>能力域已形成闭环：CAD 导入与运动学标注、电气元件库与底板布置、电气合规校验与功率统计、机械干涉与受力、成本自动统计、PLC 联调与程序生成、参数化建模。工程导出一套产物（A3 PDF / DXF / GLB / BOM / 成本）。</td></tr>
       <tr><td>2</td><td><b>设计到生产的数据链路已打通</b></td><td>设计包经 <span class="mono">/api/v1/design-sync/*</span> 直传智慧工厂：机器鉴权 <span class="mono">X-Design-Key</span>、zip SHA-256 幂等去重、版本 diff 与绑定。对方 0.22.0 已实现，30 项后端测试通过。</td></tr>
       <tr><td>3</td><td><b>选型、校验、成本从事后前移到设计时</b></td><td>元件带真实尺寸，布置时 1 mm 吸附与重叠标红；线号与载流量在设计阶段即校验；BOM 直接乘阶梯价出成本，缺价项单列待询价，不再等报价回来才发现超预算。</td></tr>
-      <tr><td>4</td><td><b>下一步价值在自动化与外部协同</b></td><td>P7 自然语言 Agent（15 工具、写操作确认、审计）、P8 PLC 程序自动生成（ST 代码 + IO 变量表 + 预检）、P9 委外加工数据智能系统联动，三项均在规划中，已有设计与工具集基础。</td></tr>
+      <tr><td>4</td><td><b>P6–P8 已落地，P9 主体完成</b></td><td>P6 成本面板、P7 自然语言 Agent（12 工具、写操作确认、审计、多步计划）、P8 PLC 程序自动生成（ST + IO 变量表 + 预检 + 模拟验证）已完成；P9 参数化建模完成主体，草图约束规划中；委外加工联动仍为规划项。</td></tr>
     </tbody>
   </table>
 
@@ -282,7 +282,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div><b>7 条规则</b><span>PLC 故障诊断 + 兜底</span></div>
     <div><b>6 个接口</b><span>设计同步 endpoint</span></div>
   </div>
-  <div class="sheet-ft"><span>一页纸摘要</span><span>第 2 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>一页纸摘要</span><span>第 2 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 03 业务痛点 ============ -->
@@ -321,7 +321,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div class="card tint"><div class="t">经验 → 规则</div><p>选型、线号、载流量、干涉、受力全部固化为可执行校验，结果可复核、可导出。</p></div>
     <div class="card tint"><div class="t">事后 → 事前</div><p>成本随 BOM 实时计算，缺价项在提交前就暴露，而不是在报价之后。</p></div>
   </div>
-  <div class="sheet-ft"><span>业务痛点</span><span>第 3 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>业务痛点</span><span>第 3 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 04 总体方案 ============ -->
@@ -335,11 +335,11 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div class="layer d1">
       <div class="lh"><span class="lt">① 设计端 · AutomationCAD 桌面软件</span><span class="ls">WINDOWS 11 · 离线可用 · 五域协同</span></div>
       <div class="subs c5">
-        <div class="sub"><b>CAD / 3D</b><span>STEP·IGES·BREP<br>STL·OBJ·GLTF</span></div>
+        <div class="sub"><b>CAD / 3D</b><span>STEP·参数化<br>STL·OBJ·GLTF</span></div>
         <div class="sub"><b>电气设计</b><span>原理图·IO 规划<br>底板布置</span></div>
         <div class="sub"><b>机械校核</b><span>干涉·受力<br>运动学标注</span></div>
         <div class="sub"><b>成本</b><span>阶梯价·BOM<br>人工·税运</span></div>
-        <div class="sub"><b>PLC</b><span>Modbus TCP<br>联调·诊断</span></div>
+        <div class="sub"><b>PLC</b><span>ST 生成·联调<br>Modbus TCP</span></div>
       </div>
     </div>
     <div class="arrow"></div>
@@ -367,10 +367,10 @@ figcaption b{color:var(--navy-2);font-weight:600}
       </div>
     </div>
     <div class="arrow dash"></div>
-    <div class="flow-label"><span>按件派工 · 工序与质检回传（规划中）</span><span>P9</span></div>
+    <div class="flow-label"><span>按件派工 · 工序与质检回传（规划中）</span><span>后续</span></div>
 
     <div class="layer d4">
-      <div class="lh"><span class="lt">④ 委外加工数据智能系统 · 规划中</span><span class="ls">OUTSOURCING · P9 ROADMAP</span></div>
+      <div class="lh"><span class="lt">④ 委外加工数据智能系统 · 规划中</span><span class="ls">OUTSOURCING · LATER ROADMAP</span></div>
       <div class="subs c4">
         <div class="sub"><b>工序进度</b><span>外协件逐序跟踪</span></div>
         <div class="sub"><b>质检数据</b><span>结果与批次归档</span></div>
@@ -386,12 +386,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <li><b>契约先于接口。</b>先定 manifest 的字段与校验规则（数量必须正整数、时间必须带时区、文件必须带指纹），再谈传输；字段错了，接口再稳也没用。</li>
     <li><b>幂等先于并发。</b>同一个 zip 上传两次只入库一次，用内容指纹而不是文件名去重，避免"设计包 v2 最终版 真的最终.zip"这类混乱。</li>
   </ul>
-  <div class="sheet-ft"><span>总体方案</span><span>第 4 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>总体方案</span><span>第 4 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 05 CAD ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 1 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 1 / 7</span></div>
   <p class="kicker">Capability · CAD</p>
   <h2><span class="no">04</span>CAD 导入与运动学标注</h2>
   <p class="lead">装配体可以直接拖进来：STEP / IGES / BREP 走 occt-import-js 解析，STL / OBJ / GLTF 走 three.js 加载。<strong>实测 424 KB 装配体（18 个零件）解析 559 ms，输出 5,040 个三角面</strong>，在普通办公机上打开即用，不需要工作站。</p>
@@ -422,12 +422,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
       <tr><td>降级路径</td><td>无 WebGL 环境</td><td>退化为解析统计，功能不中断</td></tr>
     </tbody>
   </table>
-  <div class="sheet-ft"><span>核心能力 · CAD 导入与运动学标注</span><span>第 5 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · CAD 导入与运动学标注</span><span>第 5 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 06 电气库 + 底板 ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 2 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 2 / 7</span></div>
   <p class="kicker">Capability · Electrical Library</p>
   <h2><span class="no">05</span>电气元件库与底板布置</h2>
   <p class="lead">元件库不是一张型号清单，而是<strong>371 个型号、26 个分类，其中 219 个带可直接插入原理图的符号、191 个带真实外形尺寸</strong>。有尺寸才能排版，有符号才能出图，两者齐备才叫"库"。</p>
@@ -504,12 +504,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div class="card teal"><div class="t">为什么 191 个真实尺寸很关键</div><p>没有尺寸的库只能用来"选型填表"，有尺寸的库才能"排布并校验"。导轨长度、模数宽、散热间距都依赖外形数据，否则底板图只能等供应商图纸回来再画。</p></div>
     <div class="card teal"><div class="t">插件化：库是长出来的</div><p>第三方元件包以 ZIP 导入，按清单校验、拦截路径穿越，启停即时影响检索与插入。新增品牌不需要改代码，也不需要重新发版。</p></div>
   </div>
-  <div class="sheet-ft"><span>核心能力 · 电气元件库与底板布置</span><span>第 6 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · 电气元件库与底板布置</span><span>第 6 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 07 合规校验 ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 3 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 3 / 7</span></div>
   <p class="kicker">Capability · Compliance</p>
   <h2><span class="no">06</span>电气合规校验与功率统计</h2>
   <p class="lead">把电气工程师脑子里的检查项写成规则：线号、载流量、相平衡、主断路器与进线截面、24 V 余量。<strong>设计阶段跑一遍，问题在图纸上改，而不是在配电柜前改。</strong></p>
@@ -559,12 +559,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
   <div class="callout">
     <b>边界说明：</b>当前校验基于元件库参数与项目内数据，属于"设计自检"，不替代第三方认证机构的合规检测；输出报告用于内部评审与交付附件，不作为认证文件。
   </div>
-  <div class="sheet-ft"><span>核心能力 · 电气合规校验与功率统计</span><span>第 7 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · 电气合规校验与功率统计</span><span>第 7 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 08 机械 ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 4 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 4 / 7</span></div>
   <p class="kicker">Capability · Mechanical</p>
   <h2><span class="no">07</span>机械干涉与受力校核</h2>
   <p class="lead">干涉检测用 AABB 初筛，一次跑出候选并按严重度分级；受力校核把气缸推力、悬臂梁挠度、螺栓预紧的公式直接摆在界面上。<strong>校核结果带公式与安全系数，不黑箱。</strong></p>
@@ -601,12 +601,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
   <div class="callout warn">
     <b>使用边界：</b>AABB 结果偏保守（包围盒大于实体），可能存在误报；对薄壁、斜面配合等精细场合，仍需在三维 CAD 中复核。系统将其定位为"早期发现明显碰撞"，不替代详细设计验证。
   </div>
-  <div class="sheet-ft"><span>核心能力 · 机械干涉与受力校核</span><span>第 8 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · 机械干涉与受力校核</span><span>第 8 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 09 成本 ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 5 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 5 / 7</span></div>
   <p class="kicker">Capability · Costing</p>
   <h2><span class="no">08</span>成本自动统计</h2>
   <p class="lead">成本不是一张手工汇总表，而是一条可重算的链路：<strong>BOM × 阶梯价 → 底板推算线缆/端子/导轨/线槽 → 人工 → 税/加成/运费</strong>。任何一项设计变更，成本立刻跟着变；没有价格的物料单列"待询价"，不猜数。</p>
@@ -652,14 +652,14 @@ figcaption b{color:var(--navy-2);font-weight:600}
   </div>
 
   <div class="callout">
-    <b>当前状态：</b>成本引擎（纯函数、可单测）与价格簿数据包已完成，成本面板的完整交互（P6）在进行中；成本 CSV 导出在进行中。已完成的引擎部分不依赖界面，可被其他模块直接调用。
+    <b>当前状态：</b>P6-1～P6-4 已完成：价格簿与纯函数引擎、9 卡成本面板、A4 PDF / UTF-8 BOM CSV 导出、Agent 工具 <span class="mono">run_cost_report</span> 与 <span class="mono">export_cost_report</span> 均已落地。P6-5 与智慧工厂采购价对接仍为规划项，依赖生产部署决策。
   </div>
-  <div class="sheet-ft"><span>核心能力 · 成本自动统计</span><span>第 9 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · 成本自动统计</span><span>第 9 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 10 PLC ============ -->
 <section class="sheet">
-  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 6 / 6</span></div>
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 6 / 7</span></div>
   <p class="kicker">Capability · PLC</p>
   <h2><span class="no">09</span>PLC 联调与故障诊断</h2>
   <p class="lead">设计软件里直接连 PLC：Modbus TCP 客户端 + 内置仿真器，点位表与 3D 模型联动，联调序列可跑通 demo 场景（4 工位 / 12 执行机构 / 16 传感器），<strong>异常按 7 条规则给出中文诊断</strong>。</p>
@@ -689,14 +689,52 @@ figcaption b{color:var(--navy-2);font-weight:600}
     </tbody>
   </table>
   <p class="tbl-note">诊断规则面向常见非标场景，输出为中文提示与排查顺序建议，不替代电气工程师判断。</p>
-  <div class="sheet-ft"><span>核心能力 · PLC 联调与故障诊断</span><span>第 10 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>核心能力 · PLC 联调与故障诊断</span><span>第 10 页 / 共 19 页</span></div>
+</section>
+
+<!-- ============ 11 PLC 生成 + 参数化 ============ -->
+<section class="sheet">
+  <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">核心能力 7 / 7</span></div>
+  <p class="kicker">Capability · PLC Codegen &amp; Parametric</p>
+  <h2><span class="no">10</span>PLC 程序自动生成与参数化建模</h2>
+  <p class="lead">一条链路把点位变成可执行 ST，把特征参数变成可重建几何。两项能力都已接入桌面 UI，但边界必须写清楚：<strong>PLC 输出通用 ST，不是厂商工程文件；参数化依赖本机 Python + build123d sidecar</strong>。</p>
+
+  <div class="fig-row">
+    <figure>
+      <img src="assets/11-plcgen.png" alt="PLC 程序生成面板">
+      <figcaption><b>证据：</b>PLC 程序面板：预检 0 错误、11 个文件树、README 预览与 zip 导出入口。截图来自真实 Electron。</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/12-parametric.png" alt="参数化建模抽屉">
+      <figcaption><b>证据：</b>参数化抽屉：4 个特征、孔位参数表单、重建统计与 sidecar 状态同屏可用。</figcaption>
+    </figure>
+  </div>
+
+  <div class="grid2">
+    <div class="card"><div class="t">PLC：从点位到可执行 ST</div><p>由机型配置与 IO 点位生成 IEC 61131-3 ST：先做地址冲突 / 类型不符 / 互锁缺失预检，再输出 IO 变量表、五个基础块、自动序列 / 报警 / 安全 FC 与 <span class="mono">mapping.json</span>，固定 11 文件并逐文件 SHA-256；内置模拟器按生成序列跑 6 步联调验证。</p></div>
+    <div class="card"><div class="t">参数化：特征树驱动重建</div><p>build123d sidecar 执行 box / holes / slot / fillet / cylinder 特征；右侧抽屉编辑参数后 300 ms 防抖重建，返回 STL 载入 three.js，并给出面数 / 体积统计。多实体按 X/Y/Z/RZ 合并，BOM 按 partId 合并后可送成本。</p></div>
+  </div>
+
+  <h3>能力边界（汇报口径）</h3>
+  <table>
+    <thead><tr><th style="width:34mm">边界</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><b>PLC 语言</b></td><td>输出通用 ST + IO 变量表，可在 TIA Portal、CODESYS 等平台手工导入或少量适配；<b>不生成厂商专有工程文件</b>，TIA Openness（P8-5）仍为规划项。</td></tr>
+      <tr><td><b>模拟验证</b></td><td>模拟器只执行生成程序的动作 / 等待 / 超时 / 安全 / 传感器语义，<b>不解析任意 ST</b>，不能替代真实 PLC 联调。</td></tr>
+      <tr><td><b>参数化运行时</b></td><td>build123d Python sidecar，需要本机 Python 运行时与 build123d 依赖；sidecar 启动失败时明确报错，不伪造几何。</td></tr>
+      <tr><td><b>建模范围</b></td><td>静态多实体合并，不做配合约束 / 自由度求解；<b>草图约束（P9-4）未做</b>；BOM 按实体汇总、不拆特征明细，<span class="mono">partId</span> 需人工填写。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn"><b>口径：</b>P8-1～P8-4 与 P9-1/2/3/5 已完成并有单测 / 冒烟证据；P8-5（TIA Openness）与 P9-4（草图约束）仍是规划项，本次汇报不作为已交付能力。</div>
+  <div class="sheet-ft"><span>核心能力 · PLC 生成与参数化建模</span><span>第 11 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 11 联动 前/后 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
   <p class="kicker">Integration · Before / After</p>
-  <h2><span class="no">10</span>设计交付：从"传文件"到"传数据包"</h2>
+  <h2><span class="no">11</span>设计交付：从"传文件"到"传数据包"</h2>
   <p class="lead">这是本项目与普通 CAD 工具的分水岭。联动之前，设计成果以文件和口头说明的形式流向生产；联动之后，<strong>一个带指纹、带清单、带版本的设计包直接落进智慧工厂的机台档案</strong>。</p>
 
   <div class="ba">
@@ -735,14 +773,14 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <img src="assets/05-factory.png" alt="智慧工厂数据面板">
     <figcaption><b>证据：</b>智慧工厂侧数据在桌面端可见：工位、点位、实时值统一呈现，写点位需二次确认。设计与生产不是两套界面，而是同一条链路的两端。</figcaption>
   </figure>
-  <div class="sheet-ft"><span>智慧工厂联动 · 流程对比</span><span>第 11 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>智慧工厂联动 · 流程对比</span><span>第 12 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 12 接口 + 契约 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
   <p class="kicker">Integration · API</p>
-  <h2><span class="no">11</span>接口清单与数据契约</h2>
+  <h2><span class="no">12</span>接口清单与数据契约</h2>
   <p class="lead">六个 endpoint 覆盖"传上去、查得到、比得出、绑得上、拿得回"。<strong>契约先定死，接口才稳</strong>——以下五条是联调中最容易出错、也最容易被忽略的地方。</p>
 
   <table>
@@ -770,7 +808,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
   </table>
 
   <div class="callout">
-    <b>联调结论：</b>对方 material-flow-system 0.22.0 已实现 <span class="mono">/api/v1/design-sync/*</span>，<b>30 项后端测试通过</b>；本项目客户端在 301 项测试中包含同步用例——manifest 固定路径与 SHA-256、zip 只含约定产物、createdAt 无时区时拒绝打包、BOM 数量 1.5 与字符串 "1" 被拒绝、合法正整数原样写入。
+    <b>联调结论：</b>对方 material-flow-system 0.22.0 已实现 <span class="mono">/api/v1/design-sync/*</span>，<b>30 项后端测试通过</b>；本项目客户端在 674 项测试中包含同步用例——manifest 固定路径与 SHA-256、zip 只含约定产物、createdAt 无时区时拒绝打包、BOM 数量 1.5 与字符串 "1" 被拒绝、合法正整数原样写入。
   </div>
 
   <h3>安全与边界</h3>
@@ -779,14 +817,14 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <li>单包上限 200 MB，manifest 上限 1 MB，文件数上限 500；解压前校验条目路径与总解压体积，防路径穿越与 zip bomb。</li>
     <li>写入审计日志（谁、何时、哪个机台、包指纹），与管理台审计同表。</li>
   </ul>
-  <div class="sheet-ft"><span>智慧工厂联动 · 接口与契约</span><span>第 12 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>智慧工厂联动 · 接口与契约</span><span>第 13 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 13 diff / 实测 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">智慧工厂联动</span></div>
   <p class="kicker">Integration · Versioning</p>
-  <h2><span class="no">12</span>版本 diff、回滚与联调实测</h2>
+  <h2><span class="no">13</span>版本 diff、回滚与联调实测</h2>
   <p class="lead">设计变更在生产端最怕两件事：不知道改了什么，以及改错了退不回去。<strong>diff 回答第一个问题，zip 原样留存回答第二个。</strong></p>
 
   <h3>版本 diff 的四个维度</h3>
@@ -806,7 +844,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
   <h3>联调实测</h3>
   <div class="metric-strip">
     <div><b>30 项</b><span>智慧工厂后端测试通过</span></div>
-    <div><b>301 项</b><span>本项目管理端测试通过</span></div>
+    <div><b>674 项</b><span>本项目客户端测试通过</span></div>
     <div><b>0.22.0</b><span>对方已发布版本</span></div>
     <div><b>6 个</b><span>已实现 endpoint</span></div>
   </div>
@@ -823,19 +861,19 @@ figcaption b{color:var(--navy-2);font-weight:600}
       <tr><td>BOM 数量 1.5 / "1"</td><td>拒绝</td><td class="ok">仅正整数通过并原样写入</td></tr>
     </tbody>
   </table>
-  <p class="tbl-note">上表为双方联调与自动化测试覆盖的验收项；其中客户端侧用例计入 301 项测试，服务端侧计入对方 30 项测试。</p>
+  <p class="tbl-note">上表为双方联调与自动化测试覆盖的验收项；其中客户端侧用例计入 674 项测试，服务端侧计入对方 30 项测试。</p>
 
   <div class="callout">
-    <b>当前边界：</b>同步为<b>手动触发</b>（设置页"测试连接 / 立即同步"），没有后台自动上传——这是刻意设计，避免设计过程中的半成品被推到生产。双向回传（生产状态回设计端）在 P9 范围内，尚未实现。
+    <b>当前边界：</b>同步为<b>手动触发</b>（设置页"测试连接 / 立即同步"），没有后台自动上传——这是刻意设计，避免设计过程中的半成品被推到生产。双向回传（生产状态回设计端）仍在后续规划中，尚未实现。
   </div>
-  <div class="sheet-ft"><span>智慧工厂联动 · 版本与实测</span><span>第 13 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>智慧工厂联动 · 版本与实测</span><span>第 14 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 14 对比表 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">项目优点</span></div>
   <p class="kicker">Comparison</p>
-  <h2><span class="no">13</span>与传统"CAD + Excel + 手工编程"的对比</h2>
+  <h2><span class="no">14</span>与传统"CAD + Excel + 手工编程"的对比</h2>
   <p class="lead">不比"功能多少"，只比<strong>同一件事的做法与可验证依据</strong>。下表中"本平台"一列的每条陈述都能在软件里点出来，或由测试用例覆盖。</p>
 
   <table>
@@ -901,15 +939,15 @@ figcaption b{color:var(--navy-2);font-weight:600}
 
   <div class="callout"><b>与"再买一套软件"的区别：</b>采购软件解决的是"画得更快"，本项目解决的是"数据流得通"。前者按席位计价、按版本升级；后者把交付物变成结构化的、可被下游系统消费的资产，收益随项目数量累积。
   </div>
-  <div class="sheet-ft"><span>项目优点 · 对比</span><span>第 14 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>项目优点 · 对比</span><span>第 15 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 15 工程质量 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">工程质量</span></div>
   <p class="kicker">Quality &amp; Delivery</p>
-  <h2><span class="no">14</span>工程质量与交付状态</h2>
-  <p class="lead">软件能不能用，取决于出问题时能不能快速定位。<strong>301 项自动化测试全绿、多条冒烟断言、便携包已发布</strong>——这三件事分别回答"逻辑对不对""整体跑不跑得起来""用户拿不拿得到"。</p>
+  <h2><span class="no">15</span>工程质量与交付状态</h2>
+  <p class="lead">软件能不能用，取决于出问题时能不能快速定位。<strong>674 项自动化测试全绿、多条冒烟断言、v0.2.0 安装包已发布</strong>——这三件事分别回答"逻辑对不对""整体跑不跑得起来""用户拿不拿得到"。</p>
 
   <figure style="width:86%;margin:0 auto 2mm">
     <img src="assets/01-home.png" alt="主界面">
@@ -918,16 +956,16 @@ figcaption b{color:var(--navy-2);font-weight:600}
 
   <div class="grid2">
     <div class="card">
-      <div class="t">测试：301 / 301 通过</div>
-      <p>覆盖 CAD 解析、机械校核、电气库、成本引擎、价格簿、导出、PLC、联调、同步、数据包十个模块，用 <span class="mono">node --test</span> 直接跑，无需浏览器。同步模块的用例专门盯契约细节：时区、数量类型、文件指纹、zip 内容白名单。</p>
+      <div class="t">测试：674 / 674 通过</div>
+      <p>覆盖 CAD 解析、运动学、机械校核、电气库与校验、底板布置、成本、导出、PLC 联调、PLC 代码生成、参数化装配与 BOM、智能体、同步、数据包，用 <span class="mono">node --test</span> 直接跑，无需浏览器。同步模块的用例专门盯契约细节：时区、数量类型、文件指纹、zip 内容白名单。</p>
     </div>
     <div class="card">
       <div class="t">冒烟：整体可运行</div>
       <p><span class="mono">npm run smoke</span> 在无头 Electron 中启动应用并断言关键路径（窗口创建、模块加载、主要 IPC 通道），防止"单测全绿但应用起不来"这类集成问题。</p>
     </div>
     <div class="card">
-      <div class="t">交付：Windows 便携包</div>
-      <p>v0.1.0 便携包 186,901,656 字节已发布，解压即用、免管理员权限，适合先在产线机器上试。NSIS 安装包由 GitHub Actions 工作流手动触发构建，按需出正式安装版。</p>
+      <div class="t">交付：Windows 安装包</div>
+      <p>v0.2.0 NSIS 安装包已随 tag 发布，未做代码签名，SmartScreen 会拦一次。v0.3.0 本次只做版本与文档准备，<b>未构建安装包</b>；需要安装包时由老王通知后手动触发 <span class="mono">windows-build</span>。</p>
     </div>
     <div class="card">
       <div class="t">扩展：插件化元件包</div>
@@ -940,46 +978,46 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <thead><tr><th style="width:38mm">做法</th><th>说明</th><th style="width:40mm">收益</th></tr></thead>
     <tbody>
       <tr><td>渲染层零改动</td><td>桌面能力通过注入扩展叠加在网页原型之上，原型文件保持原样</td><td>原型仍可双击打开，降低回归风险</td></tr>
-      <tr><td>能力按域分包</td><td>CAD / 电气 / 机械 / 成本 / PLC / 同步各自独立模块，接口收敛</td><td>单模块改动不影响其他域</td></tr>
+      <tr><td>能力按域分包</td><td>CAD / 电气 / 机械 / 成本 / PLC / 参数化 / 同步各自独立模块，接口收敛</td><td>单模块改动不影响其他域</td></tr>
       <tr><td>纯函数优先</td><td>成本、校验、契约校验尽量写成纯函数，输入输出确定</td><td>可直接单测，便于复核</td></tr>
     </tbody>
   </table>
   <p class="tbl-note">另有降级设计：无 WebGL 时退化为解析统计面板，无 PLC 时用内置仿真器，环境缺失不中断使用。</p>
-  <div class="sheet-ft"><span>工程质量与交付</span><span>第 15 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>工程质量与交付</span><span>第 16 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 16 路线图 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">路线图</span></div>
   <p class="kicker">Roadmap</p>
-  <h2><span class="no">15</span>路线图：已完成的能力与下一步</h2>
-  <p class="lead">P1–P5 已完成并可用（CAD、电气、机械、成本引擎、PLC 与同步）。<strong>后续四项按"先省人力、再通外部"的顺序推进</strong>：成本面板让报价闭环，Agent 降低操作门槛，PLC 代码生成直接省编程工时，委外联动打通最后一环。</p>
+  <h2><span class="no">16</span>路线图：已完成的能力与下一步</h2>
+  <p class="lead">P1–P5 已完成并可用（CAD、电气、机械、成本引擎、PLC 与同步）。<strong>P6–P8 已完成，P9 参数化建模完成主体</strong>：成本闭环、Agent 与 PLC 生成已交付；草图约束与委外协同仍待推进。</p>
 
   <div class="timeline">
     <div class="tl-items">
-      <div class="tl-item doing">
-        <div class="tl-phase">P6 · 进行中</div>
-        <span class="pill doing">进行中</span>
-        <div class="tl-title">成本面板</div>
-        <div class="tl-desc">把已完成的成本引擎接到界面：阶梯价浏览、成本分解视图、缺价待询价清单、成本 CSV 导出。引擎与价格簿已完成，剩余为交互与导出。</div>
+      <div class="tl-item done">
+        <div class="tl-phase">P6 · 已完成</div>
+        <span class="pill done">已完成</span>
+        <div class="tl-title">成本闭环</div>
+        <div class="tl-desc">P6-1～P6-4 已完成：价格簿 / 引擎、9 卡面板、A4 PDF / CSV 导出、Agent 报告与落盘。P6-5 对接智慧工厂采购价仍为规划项。</div>
       </div>
-      <div class="tl-item plan">
-        <div class="tl-phase">P7 · 规划中</div>
-        <span class="pill plan">规划中</span>
+      <div class="tl-item done">
+        <div class="tl-phase">P7 · 已完成</div>
+        <span class="pill done">已完成</span>
         <div class="tl-title">自然语言 Agent</div>
-        <div class="tl-desc">15 个工具、写操作二次确认、操作审计。现有 7 工具（JSON-RPC 127.0.0.1:7420 / MCP）已落地，P7 在此之上扩展工具面与安全边界。</div>
+        <div class="tl-desc">12 个工具、写操作二次确认、NDJSON 审计、离线规则路由、上下文裁剪、侧栏问答与多步计划执行；46 条中文评估集 100% 通过。</div>
       </div>
-      <div class="tl-item plan">
-        <div class="tl-phase">P8 · 规划中</div>
-        <span class="pill plan">规划中</span>
+      <div class="tl-item done">
+        <div class="tl-phase">P8 · 已完成</div>
+        <span class="pill done">已完成</span>
         <div class="tl-title">PLC 程序自动生成</div>
-        <div class="tl-desc">由点位表与动作序列生成 ST 代码、IO 变量表，生成前做预检（地址冲突、类型不符、互锁缺失），同一输入确定性输出同一代码。</div>
+        <div class="tl-desc">P8-1～P8-4 已完成：预检、IO 变量表、11 文件 ST、生成 UI / zip、最近 10 次历史与内置模拟器验证。TIA Openness（P8-5）仍为规划项。</div>
       </div>
-      <div class="tl-item plan">
-        <div class="tl-phase">P9 · 规划中</div>
-        <span class="pill plan">规划中</span>
-        <div class="tl-title">委外加工联动</div>
-        <div class="tl-desc">BOM 与图纸输出后按件派工，回传工序进度、质检结果、交期与实际成本，在设计端与智慧工厂看板可见外协件状态。</div>
+      <div class="tl-item doing">
+        <div class="tl-phase">P9 · 进行中</div>
+        <span class="pill doing">进行中</span>
+        <div class="tl-title">参数化建模</div>
+        <div class="tl-desc">P9-1/2/3/5 已完成：build123d sidecar、特征树 / 参数表单、多实体装配与 BOM / 成本联动。草图约束（P9-4）仍为规划项。</div>
       </div>
     </div>
   </div>
@@ -989,34 +1027,35 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <thead><tr><th style="width:20mm">阶段</th><th style="width:48mm">内容</th><th>状态与依据</th></tr></thead>
     <tbody>
       <tr><td>P1</td><td>桌面化与 CAD 查看</td><td class="ok">已完成 · 424 KB / 559 ms / 5,040 面实测</td></tr>
-      <tr><td>P2</td><td>电气元件库、数据包、智能体骨架、同步客户端</td><td class="ok">已完成 · 371 型号库、ZIP 导入、7 工具、manifest 打包</td></tr>
+      <tr><td>P2</td><td>电气元件库、数据包、智能体骨架、同步客户端</td><td class="ok">已完成 · 371 型号库、ZIP 导入、manifest 打包</td></tr>
       <tr><td>P3</td><td>机械校核（干涉 / 受力）与运动学标注</td><td class="ok">已完成 · AABB 分级、三类受力公式、中文校验</td></tr>
       <tr><td>P4</td><td>电气合规校验、功率统计、底板布置</td><td class="ok">已完成 · 六类线号规则、分相电流、A3 PDF</td></tr>
       <tr><td>P5</td><td>PLC 联调、诊断、设计同步联调</td><td class="ok">已完成 · 7 条诊断 + 兜底；后端 30 项测试通过</td></tr>
     </tbody>
   </table>
 
-  <h3>P7 的现有基础与推进理由</h3>
+  <h3>P7 已落地：工具面与安全边界</h3>
   <div style="display:grid;grid-template-columns:45% 1fr;gap:4mm;align-items:start">
     <figure style="margin:0">
       <img src="assets/09-agent.png" alt="智能体面板">
-      <figcaption><b>证据：</b>智能体面板已可用：对话与工具调用、模型设置（密钥仅回显掩码）、本机 RPC 端口与工具数。P7 是扩面与加固，不是从零开始。</figcaption>
+      <figcaption><b>证据：</b>智能体面板：对话与工具调用、模型设置（密钥仅回显掩码）、本机 RPC 端口与 12 个工具。P7-A/B/C 已完成。</figcaption>
     </figure>
     <div style="font-size:8.3pt;line-height:1.6;color:#3a4c5e">
-      <p><b>P6 先做</b>：成本引擎已完成，只差界面——投入最小、见效最快，直接支撑报价。</p>
-      <p><b>P7 次之</b>：工具集与 RPC 通道已存在，边际成本低，能把"会用软件"的门槛降下来。</p>
-      <p><b>P8 再次</b>：PLC 代码生成需要点位模型与联调数据做校验闭环，下层稳定后才可靠。</p>
-      <p><b>P9 最后</b>：依赖委外方的排产与质检数据结构，需双方对齐口径，不是单方面能定的。</p>
+      <p><b>P6 已完成</b>：成本引擎、面板、PDF / CSV 与 Agent 落盘闭环，直接支撑报价。</p>
+      <p><b>P7 已完成</b>：12 工具、离线路由、审计、多步计划；真实模型兼容性仍需逐家验证。</p>
+      <p><b>P8 已完成</b>：通用 ST + IO 表 + 模拟验证；厂商工程文件（TIA Openness）未做。</p>
+      <p><b>P9 进行中</b>：参数化主体可用；草图约束、配合约束 / 自由度求解未做。</p>
+      <p><b>仍未完成</b>：TIA Openness、草图约束、委外加工联动、生产部署，保持规划中 / 待决策。</p>
     </div>
   </div>
-  <div class="sheet-ft"><span>路线图</span><span>第 16 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>路线图</span><span>第 17 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 17 收益 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">预期收益</span></div>
   <p class="kicker">Expected Value</p>
-  <h2><span class="no">16</span>预期收益：口径先定，数值待试点</h2>
+  <h2><span class="no">17</span>预期收益：口径先定，数值待试点</h2>
   <p class="lead">收益必须能被测量，否则只是说法。下表给出<strong>可量化的口径与验证方式</strong>；目标值为工程判断，<b>尚未经试点验证，不作对外承诺</b>。</p>
 
   <table>
@@ -1049,8 +1088,8 @@ figcaption b{color:var(--navy-2);font-weight:600}
       <tr>
         <td><b>PLC 编程工时</b></td>
         <td>单机台编写点位表、变量与动作逻辑的人时</td>
-        <td>P8 落地后目标 −40%（当前为规划）</td>
-        <td>P8 完成后对比同类机台编程工时</td>
+        <td>P8 已落地，目标 −40%（待试点验证）</td>
+        <td>试点时对比同类机台编程工时</td>
       </tr>
     </tbody>
   </table>
@@ -1060,7 +1099,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
   <div class="grid2">
     <div class="card"><div class="t">省的是"解释成本"</div><p>同一份 BOM 不再被三个人分别录入三次。每次转录都是一次解释，每次解释都可能失真；消除转录环节，错误率不是"降低"，而是"没有这个入口"。</p></div>
     <div class="card"><div class="t">省的是"返工时点"</div><p>干涉与选型问题在设计阶段发现，改动是移动一个零件；在装配阶段发现，改动是拆机重装。同样的错误，越晚发现越贵——这是前置校验的主要价值。</p></div>
-    <div class="card"><div class="t">省的是"等待"</div><p>报价不再等采购逐项询价，成本随设计出来；外协进度不再打电话问。等待时间不体现在工时里，但体现在交期上。</p></div>
+    <div class="card"><div class="t">省的是"等待"</div><p>报价不再等采购逐项询价，成本随设计出来；外协进度回传落地后，等待不再靠电话追问。等待时间不体现在工时里，但体现在交期上。</p></div>
     <div class="card"><div class="t">沉淀的是"资产"</div><p>元件库、规则、价格簿、诊断经验都留在系统里。人员流动带走的是人，不是判断标准。</p></div>
   </div>
 
@@ -1071,16 +1110,16 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div class="card tint"><div class="t">③ 回填后决策</div><p>用实测替换本页目标值，再决定是否推广。若指标不达预期，也应如实记录原因，而不是继续扩大范围。</p></div>
   </div>
 
-  <div class="callout warn"><b>诚实边界：</b>本页所有数值为目标值，未经试点验证。建议先在 1–2 个真实项目上试用，采集基线后回填本表，再据此决定推广范围。软件当前为 v0.2.0，适合试点，不建议直接全面替换现有流程。
+  <div class="callout warn"><b>诚实边界：</b>本页所有数值为目标值，未经试点验证。建议先在 1–2 个真实项目上试用，采集基线后回填本表，再据此决定推广范围。软件当前为 v0.3.0，适合试点，不建议直接全面替换现有流程。
   </div>
-  <div class="sheet-ft"><span>预期收益</span><span>第 17 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>预期收益</span><span>第 18 页 / 共 19 页</span></div>
 </section>
 
 <!-- ============ 18 附录 ============ -->
 <section class="sheet">
   <div class="sheet-hd"><b>AutomationCAD 智能电气设计平台 · 项目简介</b><span class="tag">附录</span></div>
   <p class="kicker">Appendix</p>
-  <h2><span class="no">17</span>附录：技术栈、仓库与文档索引</h2>
+  <h2><span class="no">18</span>附录：技术栈、仓库与文档索引</h2>
 
   <h3>技术栈</h3>
   <table>
@@ -1089,11 +1128,12 @@ figcaption b{color:var(--navy-2);font-weight:600}
       <tr><td>桌面壳</td><td>Electron 45 · TypeScript · Vite · 原生 HTML/CSS</td><td>Windows 11 x64；主进程管文件与网络，渲染进程管界面；原型零改动</td></tr>
       <tr><td>三维渲染</td><td>three.js</td><td>STL / OBJ / GLTF / GLB 加载、轨道控制、线框、拾取、包围盒</td></tr>
       <tr><td>几何解析</td><td>occt-import-js（WASM）</td><td>STEP / IGES / BREP 解析，输出三角面与零件层级</td></tr>
+      <tr><td>参数化建模</td><td>build123d · Python sidecar</td><td>本机 Python 运行时；特征树驱动重建，输出 STEP / STL</td></tr>
       <tr><td>图纸与导出</td><td>SVG（毫米坐标）· PDF · DXF · XLSX</td><td>A3 报告、底板画布、BOM 表、成本表</td></tr>
       <tr><td>工业通讯</td><td>Modbus TCP（FC01–06）· OPC UA · MQTT</td><td>统一适配器接口；无设备时用内置仿真器</td></tr>
       <tr><td>智能体</td><td>JSON-RPC 127.0.0.1:7420 · MCP stdio</td><td>同一工具注册表；仅监听本机，Bearer token</td></tr>
       <tr><td>数据契约</td><td>design-sync manifest schemaVersion=1</td><td>multipart 上传、zip SHA-256 幂等、版本 diff</td></tr>
-      <tr><td>质量</td><td>node --test · headless smoke</td><td>301 项测试；无头 Electron 冒烟</td></tr>
+      <tr><td>质量</td><td>node --test · headless smoke</td><td>674 项测试；无头 Electron 冒烟</td></tr>
     </tbody>
   </table>
 
@@ -1103,7 +1143,7 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <tbody>
       <tr><td>代码仓库</td><td><span class="mono">github.com/owlco001/automation-cad-prototype</span>（Gitee 同名镜像）</td></tr>
       <tr><td>工程结构</td><td><span class="mono">desktop/</span>（Electron 主进程、渲染注入、测试与构建）；<span class="mono">index.html</span> / <span class="mono">app.js</span> / <span class="mono">electrical.*</span> 为网页原型（零依赖，双击即开）</td></tr>
-      <tr><td>发布物</td><td>Windows 便携包 v0.1.0（186,901,656 字节）；NSIS 安装包由 CI 手动触发</td></tr>
+      <tr><td>发布物</td><td>v0.2.0 NSIS 安装包已发布；v0.3.0 本次未打包，构建需老王通知后手动触发</td></tr>
       <tr><td>关联系统</td><td>material-flow-system 0.22.0，生产环境 <span class="mono">http://221.231.106.194:5556</span></td></tr>
     </tbody>
   </table>
@@ -1121,15 +1161,16 @@ figcaption b{color:var(--navy-2);font-weight:600}
     <div><span class="mono">NL-AGENT.md</span>自然语言 Agent 工具与安全（P7）</div>
     <div><span class="mono">PHASE2.md</span>第二阶段范围与交付计划</div>
     <div><span class="mono">PLC-CODEGEN.md</span>PLC 生成规则与预检项（P8）</div>
+    <div><span class="mono">PARAMETRIC-CAD.md</span>参数化建模：build123d sidecar 与特征树（P9）</div>
     <div><span class="mono">CI.md</span>构建与发布流程（windows.yml）</div>
     <div><span class="mono">BACKLOG.md</span>待办与已知限制</div>
     <div><span class="mono">screenshots/</span>桌面端实跑截图（1440×873）</div>
   </div>
 
-  <div class="rule"></div>
-  <p class="small" style="margin-bottom:1mm"><b>版本说明：</b>本文档对应软件版本 v0.2.0，编写日期 2026-10-23。文中"已完成"指代码实现并有测试覆盖；"进行中"指部分实现；"规划中"指仅有设计与范围，尚未交付。性能数字为本机实测，产线环境可能不同。</p>
+  <div class="rule" style="margin:2mm 0"></div>
+  <p class="small" style="margin-bottom:1mm"><b>版本说明：</b>本文档对应软件版本 v0.3.0，编写日期 2026-10-23。文中"已完成"指代码实现并有测试覆盖；"进行中"指部分实现；"规划中"指仅有设计与范围，尚未交付。性能数字为本机实测，产线环境可能不同。</p>
   <p class="small"><b>致谢：</b>智慧工厂侧 design-sync 接口由 material-flow-system 团队实现并完成 30 项后端测试，本文的联调结论基于双方共同验证。</p>
-  <div class="sheet-ft"><span>附录</span><span>第 18 页 / 共 18 页</span></div>
+  <div class="sheet-ft"><span>附录</span><span>第 19 页 / 共 19 页</span></div>
 </section>
 
 </body>

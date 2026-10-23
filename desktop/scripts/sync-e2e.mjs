@@ -103,7 +103,7 @@ async function run() {
   const v1 = buildDesignPackage({
     projectId,
     projectName: '设计同步端到端测试',
-    appVersion: '0.2.0',
+    appVersion: '0.3.0',
     createdAt: '2026-10-23T00:00:00+08:00',
     bom: bomRows(2),
     bomCsv: bomCsv(2),
@@ -112,7 +112,7 @@ async function run() {
   const v2 = buildDesignPackage({
     projectId,
     projectName: '设计同步端到端测试',
-    appVersion: '0.2.0',
+    appVersion: '0.3.0',
     createdAt: '2026-10-23T00:00:00+08:00',
     bom: bomRows(5),
     bomCsv: bomCsv(5),

@@ -3,6 +3,14 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 发版准备 0.3.0（2026-10-23）
+
+- 状态：✅ 代码与文档准备完成；**未打包、未触发 CI、未打 tag、未 push**
+- 已完成：`desktop/package.json` / `package-lock.json` 版本升至 `0.3.0`；新建根目录 `CHANGELOG.md`（按 Added / Changed / Fixed 归类，逐条带提交号）；README 版本与能力表同步；汇报材料扩至 19 页并重导 PDF。
+- 汇报材料：测试基线 674、元件 371 型号 / 191 真实尺寸、Agent 12 工具、PLC 生成 P8-1～P8-4、参数化 P9-1/2/3/5；新增「PLC 程序自动生成与参数化建模」页；明确 ST 通用、无厂商工程文件、build123d Python sidecar 依赖。
+- 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
+- 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
+
 ## 待办（按优先级）
 
 ### P1 电气智能辅助（线号合规 + 功率统计）

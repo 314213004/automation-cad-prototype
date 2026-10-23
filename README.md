@@ -1,8 +1,8 @@
 # AutomationCAD · 非标自动化整机设计软件（Windows 11 桌面版）
 
-面向非标自动化整机的**机械 + 电气协同设计工作台**：机械域覆盖机构选型 → 标准件调用 → 装配 → 干涉校核 → 受力校核 → 出图 → BOM；电气域覆盖原理图 → IO 规划 → 柜体底板布置 → 合规校验 → 成本统计；桌面版在此基础上叠加 **CAD 轻量化查看与运动学标注、电气元件库、PLC 程序生成、PLC 通电联调、智慧工厂数据同步、智能体（JSON-RPC / MCP / 应用内对话）**，单机离线可用。
+面向非标自动化整机的**机械 + 电气协同设计工作台**：机械域覆盖机构选型 → 标准件调用 → 装配 → 干涉校核 → 受力校核 → 出图 → BOM；电气域覆盖原理图 → IO 规划 → 柜体底板布置 → 合规校验 → 成本统计；桌面版在此基础上叠加 **CAD 轻量化查看与运动学标注、电气元件库、PLC 程序生成、PLC 通电联调、参数化建模、智慧工厂数据同步、智能体（JSON-RPC / MCP / 应用内对话）**，单机离线可用。
 
-- 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
+- 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
 - 质量基线：**674 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
@@ -143,6 +143,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | **电气合规校验** | 线号（缺号 / 格式 / 同网重复 / 跨网重号 / 相线电位不符 / 跳号）、功率统计（kW / kVA / 分相电流 / 不平衡度 / 主断路器与进线截面建议 / 24V 余量）、导线截面 vs 载流量；A3 PDF 报告 | ✅ 桌面 |
 | **参数化建模（P9-5）** | build123d sidecar + 右侧「参数化」抽屉：多实体装配（独立特征树 + X/Y/Z/RZ + partId，旧单件文档自动包装）、特征树增删/排序/抑制/改名、按类型参数表单（box/holes/slot/fillet/cylinder）、300 ms 防抖自动重建、旧模型半透明对比、特征包围盒高亮、STEP/STL 导出；BOM 按相同 partId / 未映射名称合并，导出 UTF-8 BOM CSV 并一键送成本（未映射走 `NO_PART_ID`，不猜物料号） | ✅ 生命周期 + IPC + 装配/BOM 联动 |
 | **硬件成本统计** | 价格簿（阶梯价 / 来源 / 更新日期 / 示例价自动排除）+ 纯函数引擎：BOM × 阶梯价 + 底板推算线缆 / 端子 / 导轨 / 线槽 + 人工 + 税 / 加成 / 运费；缺价单列「待询价」；成本面板（9 张统计卡 + 明细表 + 缺价告警）导出 A4 PDF 与 UTF-8 BOM 的 CSV；Agent 工具 `run_cost_report` 只读返回同一份报告摘要，`export_cost_report` 按一句话把 PDF/CSV 落到 `userData/exports/` | ✅ 引擎 + 面板 + 导出 + Agent 问答/落盘 |
+| **PLC 程序自动生成** | 由机型配置与 IO 点位生成 IEC 61131-3 ST：全量预检（地址冲突 / 类型不符 / 互锁缺失）+ IO 变量表 + 五个基础块 + 自动序列 / 报警 / 安全 FC + `mapping.json`，固定 11 文件与逐文件 SHA-256；生成 UI、zip 导出、最近 10 次历史；内置模拟器执行生成序列（超时 / SafeStop / 传感器矛盾）。边界：通用 ST，不生成厂商专有工程文件；TIA Openness 仍为规划项 | ✅ P8-1～P8-4 |
 
 ### CAD 与数据
 
@@ -207,6 +208,8 @@ xdg-open index.html
 ### 方式二：桌面版（Windows 11）
 
 **安装包**：从 [Releases · v0.2.0](https://github.com/owlco001/automation-cad-prototype/releases/tag/v0.2.0) 下载 `AutomationCAD-Setup-0.2.0.exe`，双击安装。未做代码签名，SmartScreen 会拦一次，选「更多信息 → 仍要运行」。
+
+> v0.3.0 本次只做版本与文档准备，未构建安装包；需要安装包时由老王通知后手动触发 `windows-build`。
 
 **从源码运行**（需 Node 22+）：
 
@@ -337,7 +340,7 @@ smoke 覆盖并断言：
 | [docs/desktop/SMART-FACTORY-INTEGRATION.md](docs/desktop/SMART-FACTORY-INTEGRATION.md) | 智慧工厂接口契约与联调口径 |
 | [docs/desktop/PLUGIN-PACKS.md](docs/desktop/PLUGIN-PACKS.md) | 数据包格式与加载规则 |
 | [docs/desktop/CI.md](docs/desktop/CI.md) | Windows 安装包构建与手动触发方式 |
-| [docs/report/PROJECT-INTRO.html](docs/report/PROJECT-INTRO.html) | 领导汇报用项目简介（18 页，可打印 A4） |
+| [docs/report/PROJECT-INTRO.html](docs/report/PROJECT-INTRO.html) | 领导汇报用项目简介（19 页，可打印 A4） |
 | [docs/reference/electrical-components.md](docs/reference/electrical-components.md) | 电气元件参数参考 |
 | [desktop/README.md](desktop/README.md) | 桌面版命令、MCP 接入、JSON-RPC 与各面板细节 |
 
