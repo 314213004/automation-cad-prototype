@@ -1,11 +1,14 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS, renderCostReportPdf } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
+import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
+import { buildAgentContext } from '../src/agent/context';
+import { createAuditLog, parseAuditLines } from '../src/agent/audit';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
@@ -879,6 +882,77 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_CHAT_UI_OK fields=${chatUi.fields} log=${chatUi.log}`);
+
+        // P7-A：离线规则路由 + 上下文裁剪 + 审计脱敏（无网络也必须是真实覆盖）
+        const nlSamples = [
+          '列一下所有接触器',
+          '搜一下 SMC 气缸',
+          '读一下当前 BOM',
+          '这台机台成本多少',
+          '检查有没有干涉',
+          '电气校验线号有没有重复',
+          '上电跑一遍联调序列',
+          '把设计包同步到智慧工厂',
+          '导出报价单 CSV',
+          '插入一个气缸',
+          '今天天气怎么样'
+        ];
+        const intents = nlSamples.map((sample) => routeIntent(sample));
+        const intentKinds = new Set(intents.map((item) => item.intent));
+        const readOnlyPlans = nlSamples
+          .map((sample) => ({ sample, plan: planTool(sample), readOnly: planReadOnly(sample) }))
+          .filter((item) => item.plan !== null);
+        const leakedWrite = nlSamples.filter((sample) => {
+          const plan = planTool(sample);
+          return plan !== null && !plan.readOnly && planReadOnly(sample) !== null;
+        });
+        const costPlan = planReadOnly('这台机台成本多少');
+        const listPlan = planReadOnly('列一下所有接触器');
+        if (
+          intentKinds.size !== 7 ||
+          leakedWrite.length > 0 ||
+          readOnlyPlans.length < 8 ||
+          costPlan?.tool !== 'run_cost_report' ||
+          listPlan?.tool !== 'list_components' ||
+          listPlan.args.category !== '接触器'
+        ) {
+          console.error('SMOKE_FAIL agent_nl_router', JSON.stringify({
+            intents: Array.from(intentKinds),
+            leakedWrite,
+            plans: readOnlyPlans.map((item) => `${item.sample}->${item.plan?.tool}`)
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+
+        const packed = buildAgentContext({
+          project: '烟包机',
+          deviceNo: 'SF-2026-01',
+          domain: '电气',
+          view: '底板',
+          selection: { id: 'iC65N-C16-1P', tag: 'QF1' },
+          recent: Array.from({ length: 6 }, (_unused, index) => ({ name: `op-${index}`, ok: index % 2 === 0 })),
+          tools: (agentTools?.summaries() ?? []).map((tool) => ({ name: tool.name, description: tool.description }))
+        });
+        if (packed.bytes > 2048 || packed.toolCount === 0) {
+          console.error('SMOKE_FAIL agent_context', JSON.stringify({ bytes: packed.bytes, tools: packed.toolCount }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+
+        const auditPath = join(app.getPath('userData'), 'agent-audit-smoke.jsonl');
+        const auditLog = createAuditLog({ write: (line) => appendFileSync(auditPath, `${line}\n`, 'utf8') });
+        auditLog.record({ tool: 'run_cost_report', ok: true, source: 'offline', args: { bom: [], apiKey: 'sk-live-abcdef123456' } });
+        auditLog.record({ tool: 'search_components', ok: false, code: 'NO_RESULT', source: 'llm', args: { q: '接触器' } });
+        auditLog.record({ tool: 'export_cost_report', ok: true, source: 'llm', args: { format: 'csv', token: 'tp-9f8e7d6c5b4a' } });
+        const auditRaw = readFileSync(auditPath, 'utf8');
+        const auditEntries = parseAuditLines(auditRaw);
+        if (auditEntries.length !== 3 || auditRaw.includes('abcdef123456') || auditRaw.includes('9f8e7d6c5b4a')) {
+          console.error('SMOKE_FAIL agent_audit', JSON.stringify({ count: auditEntries.length, leaked: true }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_NL_OK intents=${intentKinds.size} tools=${summaries.length} audit=${auditEntries.length} ctx=${packed.bytes}`);
       } catch (error) {
         console.error('SMOKE_FAIL agent_exception', error);
         setTimeout(() => app.exit(1), 100);

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { join } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
@@ -24,6 +24,7 @@ import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentSession } from '../src/agent/session.ts';
+import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
 import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
 
@@ -590,10 +591,17 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       model: config.model,
       tools: tools.summaries()
     });
+    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
+    const audit = createAuditLog({
+      write: (line) => {
+        appendFileSync(auditFile, `${line}\n`, 'utf8');
+      }
+    });
     session = new AgentSession({
       llm,
       bus,
       maxIterations: config.maxIterations,
+      audit: (record) => audit.record(record),
       confirmWrite: async (name, args) => {
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
@@ -636,6 +644,18 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   });
 
   ipcMain.handle('agent:chat:history', () => ({ ok: true, messages: session?.history() ?? [] }));
+
+  // 审计只读接口：最近 50 条，凭据已在写入前脱敏。
+  ipcMain.handle('agent:audit:read', () => {
+    const file = join(context.userDataDir, 'agent-audit.jsonl');
+    try {
+      if (!existsSync(file)) return { ok: true, entries: [], summary: summarizeAudit([]) };
+      const entries = parseAuditLines(readFileSync(file, 'utf8')).slice(-50);
+      return { ok: true, entries, summary: summarizeAudit(entries) };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
 
   ipcMain.handle('agent:chat:clear', () => {
     clearSession();
