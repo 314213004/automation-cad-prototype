@@ -40,11 +40,18 @@ const desktopApi = {
     testLlm: (config?: unknown) => ipcRenderer.invoke('agent:llm:test', config),
     chat: {
       send: (text: string) => ipcRenderer.invoke('agent:chat:send', text),
+      cancel: () => ipcRenderer.invoke('agent:chat:cancel'),
       history: () => ipcRenderer.invoke('agent:chat:history'),
       clear: () => ipcRenderer.invoke('agent:chat:clear')
     },
     plan: {
-      execute: (payload: unknown) => ipcRenderer.invoke('agent:plan:execute', payload)
+      execute: (payload: unknown) => ipcRenderer.invoke('agent:plan:execute', payload),
+      cancel: () => ipcRenderer.invoke('agent:plan:cancel')
+    },
+    onProgress: (callback: (progress: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, progress: unknown) => callback(progress);
+      ipcRenderer.on('agent:progress', listener);
+      return () => ipcRenderer.removeListener('agent:progress', listener);
     },
     audit: {
       read: () => ipcRenderer.invoke('agent:audit:read')

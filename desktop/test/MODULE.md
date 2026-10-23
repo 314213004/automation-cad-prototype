@@ -19,6 +19,7 @@
 | 模型配置 | `test/agent/llm-config.test.mjs` | 同上 | 默认值、apiKey 掩码、600 权限、掩码保存保留原密钥 |
 | LLM 客户端 | `test/agent/llm.test.mjs` | 同上 | 本地假 HTTP：tool_calls、最终文本、401 中文错误、超时、ping max_tokens=8 |
 | 会话循环 | `test/agent/session.test.mjs` | 同上 | 0/1/2 次工具调用、超轮、失败回灌、确认拒绝、20 条历史上限 |
+| 执行体验 | `test/agent/ux.test.mjs` | 同上 | 六类错误码建议与未知码回落、耗时格式、参数掩码、进度事件、取消状态、审计筛选/CSV/200 条上限/完整 JSON 脱敏 |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | PLC 代码生成 | `test/plcgen*.test.ts` | 同上 | 预检/变量表/ST/序列/安全/报警、生成 UI 与 zip 历史、mapping 模拟执行与 `verifyGenerated` |
@@ -55,6 +56,7 @@ SMOKE_AGENT_PLACE_OK placed=1 undo=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
 SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0
 SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541
+SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -80,7 +82,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 717 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、底板放置/撤销、元件修改/移除、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
+- ✅ 766 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
 - ✅ smoke 含智能体 17 工具/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立

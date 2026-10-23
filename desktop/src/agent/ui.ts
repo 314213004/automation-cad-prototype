@@ -9,10 +9,29 @@ import {
   auditSummaryText,
   buildPlanPreview,
   buildReceipt,
-  describeAuditEntry,
   summarizeTurn,
   type Receipt
 } from './preview.ts';
+import { suggestFailure } from './suggest.ts';
+import {
+  aggregateDurationText,
+  formatDuration,
+  runningDurationText,
+  stepLabel,
+  stepResultText,
+  summarizeArguments,
+  type AgentProgressEvent
+} from './feedback.ts';
+import {
+  auditArgsText,
+  auditCsv,
+  auditEntryJson,
+  auditExportFileName,
+  auditToolNames,
+  filterAuditEntries,
+  limitAuditEntries,
+  type AuditResultFilter
+} from './audit-view.ts';
 import {
   describePlanStep,
   plan as buildAgentPlan,
@@ -56,6 +75,28 @@ let apiKeyDirty = false;
 let lastReceipt: Receipt | null = null;
 let auditState: DesktopAgentAuditResult | null = null;
 let auditLoading = false;
+let auditFilterTool = '';
+let auditFilterResult: AuditResultFilter = 'all';
+let progressSteps: LiveProgress[] = [];
+let progressTimer = 0;
+let progressMetrics = new Map<string, { elapsedMs: number; ok: boolean; code: string }>();
+let cancelRequested = false;
+let disposeProgress: (() => void) | null = null;
+let activeRunId = '';
+
+interface LiveProgress {
+  key: string;
+  runId: string;
+  index: number;
+  total: number;
+  tool: string;
+  argsSummary: string;
+  startedAt: number;
+  elapsedMs?: number;
+  ok?: boolean;
+  code?: string;
+  message?: string;
+}
 
 interface MultiPlanState {
   input: string;
@@ -108,10 +149,18 @@ function renderShell(): void {
       <textarea class="acp-textarea acp-chat-input" id="agentChatInput" rows="3" maxlength="20000" placeholder="例如：搜索 SMC 气缸并插入一个占位件"></textarea>
       <div class="acp-row">
         <button type="button" class="acp-btn acp-btn-primary" id="agentChatSend">发送</button>
+        <button type="button" class="acp-btn acp-btn-danger" id="agentChatCancel" hidden>取消执行</button>
         <button type="button" class="acp-btn" id="agentChatClear">清空</button>
         <span class="acp-pill" id="agentChatStatus">就绪</span>
       </div>
       <div class="acp-note acp-chat-feedback" id="agentChatFeedback" hidden></div>
+      <div class="acp-progress" id="agentProgress" hidden>
+        <div class="acp-progress-head">
+          <span>执行进度</span>
+          <span class="acp-progress-clock" id="agentProgressClock"></span>
+        </div>
+        <div class="acp-progress-list" id="agentProgressList"></div>
+      </div>
       <div class="acp-plan-preview is-none" id="agentPlanPreview">
         <div class="acp-plan-title" id="agentPlanTitle">等待输入</div>
         <div class="acp-plan-detail" id="agentPlanDetail">预览不会执行任何命令；输入后会显示将要调用的工具。</div>
@@ -187,12 +236,23 @@ function renderShell(): void {
       </div>`).join('')}
 
     <div class="acp-section-title">审计 <b id="agentAuditCount">—</b></div>
+    <div class="acp-audit-controls">
+      <select class="acp-input acp-audit-select" id="agentAuditToolFilter" aria-label="按工具筛选">
+        <option value="">全部工具</option>
+      </select>
+      <select class="acp-input acp-audit-select" id="agentAuditResultFilter" aria-label="按结果筛选">
+        <option value="all">全部结果</option>
+        <option value="ok">仅成功</option>
+        <option value="fail">仅失败</option>
+      </select>
+      <button type="button" class="acp-btn" id="agentAuditExport">导出 CSV</button>
+    </div>
     <div class="acp-audit-list" id="agentAuditList"><div class="acp-empty">正在读取审计…</div></div>
     <div class="acp-row">
       <button type="button" class="acp-btn" id="agentAuditRefresh">刷新审计</button>
       <span class="acp-note" id="agentAuditSummary"></span>
     </div>
-    <div class="acp-note">审计只记录工具名、结果与脱敏后的参数摘要，最近 50 条。</div>
+    <div class="acp-note" id="agentAuditHint">审计只记录工具名、结果、耗时与脱敏后的参数；最多显示最近 200 条。</div>
   `;
 
   bindControls();
@@ -228,31 +288,232 @@ function summaryText(value: string, limit: number): string {
   return value.length > limit ? `${value.slice(0, limit)}…` : value;
 }
 
+function argumentsSummary(raw: string): string {
+  if (!raw.trim()) return '无参数';
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return summarizeArguments(parsed);
+  } catch {
+    return summarizeArguments(raw);
+  }
+}
+
+interface ToolOutcome {
+  ok: boolean;
+  code: string;
+  message: string;
+  detail: string;
+}
+
+function parseToolOutcome(content: string | null | undefined): ToolOutcome {
+  const raw = content ?? '';
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const record = parsed as Record<string, unknown>;
+      const ok = record.ok !== false;
+      const error = typeof record.error === 'object' && record.error !== null
+        ? record.error as Record<string, unknown>
+        : null;
+      const code = typeof record.code === 'string'
+        ? record.code
+        : error && typeof error.code === 'string'
+          ? error.code
+          : ok ? 'OK' : 'FAILED';
+      const message = typeof record.message === 'string'
+        ? record.message
+        : error && typeof error.message === 'string'
+          ? error.message
+          : '';
+      return { ok, code, message, detail: summaryText(raw, 260) };
+    }
+  } catch {
+    // 非 JSON 结果按成功展示原文，不臆断错误码。
+  }
+  return { ok: true, code: 'OK', message: '', detail: summaryText(raw, 260) };
+}
+
+function failureSuggestionHtml(input: {
+  tool: string;
+  args: Record<string, unknown>;
+  code: string;
+  message?: string;
+}): string {
+  const suggestion = suggestFailure(input);
+  return `<div class="acp-tool-advice">
+        <div class="acp-tool-advice-title">建议：${escapeHtml(suggestion.advice)}</div>
+        <ul>${suggestion.alternatives.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      </div>`;
+}
+
 function renderToolCard(call: DesktopAgentToolCall, result: DesktopAgentChatMessage | undefined): string {
   let status = '待执行';
   let tone = 'is-warn';
   let detail = '';
+  let meta = `参数：${argumentsSummary(call.function.arguments)}`;
+  let advice = '';
+  let args: Record<string, unknown> = {};
+  try {
+    const parsed = JSON.parse(call.function.arguments || '{}') as unknown;
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+  } catch {
+    args = {};
+  }
   if (result) {
-    let ok = true;
-    try {
-      const parsed = JSON.parse(result.content ?? '') as unknown;
-      ok = !(typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false);
-      detail = summaryText(result.content ?? '', 260);
-    } catch {
-      detail = summaryText(result.content ?? '', 260);
+    const outcome = parseToolOutcome(result.content);
+    const metrics = progressMetrics.get(call.id);
+    status = outcome.ok ? '成功' : '失败';
+    tone = outcome.ok ? 'is-ok' : 'is-error';
+    detail = outcome.detail;
+    meta = `参数：${argumentsSummary(call.function.arguments)} · 耗时 ${formatDuration(metrics?.elapsedMs)} · 结果码 ${outcome.code}`;
+    if (!outcome.ok) {
+      advice = failureSuggestionHtml({
+        tool: call.function.name,
+        args,
+        code: outcome.code,
+        ...(outcome.message ? { message: outcome.message } : {})
+      });
     }
-    status = ok ? '成功' : '失败';
-    tone = ok ? 'is-ok' : 'is-error';
   }
   return `
     <div class="acp-chat-tool ${tone}" data-tool-call-id="${escapeHtml(call.id)}">
       <div class="acp-chat-tool-head">
-        <span class="acp-pack-name">${escapeHtml(call.function.name)}</span>
+        <span class="acp-pack-name">${result ? (tone === 'is-ok' ? '✓ ' : '× ') : ''}${escapeHtml(call.function.name)}</span>
         <span class="acp-pill ${tone}">${status}</span>
       </div>
-      <div class="acp-pack-meta">参数：${escapeHtml(summaryText(call.function.arguments, 180))}</div>
+      <div class="acp-pack-meta">${escapeHtml(meta)}</div>
       ${detail ? `<div class="acp-pack-meta">结果：${escapeHtml(detail)}</div>` : ''}
+      ${advice}
     </div>`;
+}
+
+function progressKey(event: DesktopAgentProgressEvent): string {
+  return `${event.runId}:${event.callId ?? event.index}`;
+}
+
+function stopProgressTicker(): void {
+  if (!progressTimer) return;
+  window.clearInterval(progressTimer);
+  progressTimer = 0;
+}
+
+function startProgressTicker(): void {
+  if (progressTimer) return;
+  progressTimer = window.setInterval(() => {
+    if (!progressSteps.some((step) => step.elapsedMs === undefined)) {
+      stopProgressTicker();
+      return;
+    }
+    renderProgress();
+  }, 500);
+}
+
+function applyProgress(event: DesktopAgentProgressEvent): void {
+  if (!event || typeof event.runId !== 'string' || typeof event.tool !== 'string') return;
+  if (activeRunId && activeRunId !== event.runId) return;
+  activeRunId = event.runId;
+  const key = progressKey(event);
+  const existing = progressSteps.find((step) => step.key === key);
+  const next: LiveProgress = {
+    key,
+    runId: event.runId,
+    index: event.index,
+    total: event.total,
+    tool: event.tool,
+    argsSummary: event.argsSummary || '无参数',
+    startedAt: event.startedAt,
+    ...(event.elapsedMs !== undefined ? { elapsedMs: event.elapsedMs } : {}),
+    ...(event.ok !== undefined ? { ok: event.ok } : {}),
+    ...(event.code ? { code: event.code } : {}),
+    ...(event.message ? { message: event.message } : {})
+  };
+  if (existing) Object.assign(existing, next);
+  else progressSteps.push(next);
+  if (event.phase === 'end' && event.callId) {
+    progressMetrics.set(event.callId, {
+      elapsedMs: event.elapsedMs ?? 0,
+      ok: event.ok === true,
+      code: event.code ?? (event.ok ? 'OK' : 'FAILED')
+    });
+  }
+  renderProgress();
+  if (progressSteps.some((step) => step.elapsedMs === undefined)) startProgressTicker();
+}
+
+function renderProgress(): void {
+  const box = body?.querySelector<HTMLElement>('#agentProgress');
+  const list = body?.querySelector<HTMLElement>('#agentProgressList');
+  const clock = body?.querySelector<HTMLElement>('#agentProgressClock');
+  if (!box || !list) return;
+  box.hidden = progressSteps.length === 0;
+  if (progressSteps.length === 0) {
+    list.innerHTML = '';
+    if (clock) clock.textContent = '';
+    return;
+  }
+  const running = progressSteps.find((step) => step.elapsedMs === undefined);
+  if (clock) {
+    clock.textContent = running ? runningDurationText(running.startedAt) : '';
+    clock.classList.toggle('is-long', Boolean(running && Date.now() - running.startedAt >= 10_000));
+  }
+  const completed: number[] = [];
+  const cards: string[] = [];
+  for (const step of progressSteps) {
+    if (step.elapsedMs === undefined) {
+      cards.push(`<div class="acp-progress-step is-running" data-tool="${escapeHtml(step.tool)}">
+        <div class="acp-progress-step-head">
+          <span class="acp-progress-icon">…</span>
+          <span class="acp-progress-title">${escapeHtml(stepLabel(step.index, step.total, step.tool))}</span>
+          <span class="acp-progress-time">${escapeHtml(runningDurationText(step.startedAt))}</span>
+        </div>
+        <div class="acp-progress-args">参数：${escapeHtml(step.argsSummary)}</div>
+      </div>`);
+      continue;
+    }
+    const ok = step.ok === true;
+    const cancelled = step.code === 'CANCELLED';
+    completed.push(step.elapsedMs);
+    cards.push(`<div class="acp-progress-step ${cancelled ? 'is-warn' : ok ? 'is-ok' : 'is-error'}" data-tool="${escapeHtml(step.tool)}" data-code="${escapeHtml(step.code ?? '')}">
+      <div class="acp-progress-step-head">
+        <span class="acp-progress-icon">${cancelled ? '!' : ok ? '✓' : '×'}</span>
+        <span class="acp-progress-title">${escapeHtml(cancelled
+          ? `${step.tool} · 已取消 · 耗时 ${formatDuration(step.elapsedMs)}`
+          : stepResultText({ tool: step.tool, ok, elapsedMs: step.elapsedMs, ...(step.code ? { code: step.code } : {}) }))}</span>
+      </div>
+      <div class="acp-progress-args">参数：${escapeHtml(step.argsSummary)}</div>
+      ${step.message ? `<div class="acp-progress-message">${escapeHtml(step.message)}</div>` : ''}
+    </div>`);
+    if (completed.length > 0 && completed.length % 3 === 0) {
+      const aggregate = aggregateDurationText(completed);
+      if (aggregate) cards.push(`<div class="acp-progress-aggregate">${escapeHtml(aggregate)}</div>`);
+    }
+  }
+  list.innerHTML = cards.join('');
+}
+
+function resetProgress(): void {
+  stopProgressTicker();
+  progressSteps = [];
+  progressMetrics = new Map();
+  activeRunId = '';
+  renderProgress();
+}
+
+async function cancelExecution(): Promise<void> {
+  if (!window.desktop || cancelRequested) return;
+  const planRunning = multiPlan?.running === true;
+  if (!thinking && !planRunning) return;
+  cancelRequested = true;
+  chatFeedback('正在取消当前工具…');
+  updateBusyState();
+  try {
+    if (planRunning) await window.desktop.agent.plan.cancel();
+    else await window.desktop.agent.chat.cancel();
+  } catch (error) {
+    chatFeedback(`取消失败：${errorMessage(error)}`, true);
+    cancelRequested = false;
+    updateBusyState();
+  }
 }
 
 function renderMessages(): void {
@@ -415,7 +676,7 @@ function renderMultiPlan(): void {
     } else {
       list.innerHTML = state.plan.steps.map((step, index) => {
         const status = stepTone(state, index);
-        const args = Object.keys(step.args).length > 0 ? JSON.stringify(step.args) : '无参数';
+        const args = summarizeArguments(step.args);
         const missing = step.missing && step.missing.length > 0
           ? `<span class="acp-plan-missing">缺 ${escapeHtml(step.missing.join('、'))}</span>`
           : '';
@@ -453,19 +714,22 @@ function renderMultiPlan(): void {
     runStep.textContent = state.next === 0 ? '逐步执行' : (completed ? '已完成' : `下一步（${state.next + 1}/${state.plan.steps.length}）`);
   }
   if (cancel) {
-    cancel.disabled = state.running;
-    cancel.textContent = refused ? '关闭' : '取消';
+    cancel.disabled = false;
+    cancel.textContent = refused ? '关闭' : (state.running ? '取消执行' : '取消');
   }
 }
 
 async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
   const state = multiPlan;
-  if (!state || state.running || state.plan.refused || !window.desktop) return;
+  if (!state || state.running || thinking || state.plan.refused || !window.desktop) return;
   if (state.next >= state.plan.steps.length) return;
   state.running = true;
   state.feedback = '';
   state.tone = '';
+  cancelRequested = false;
+  resetProgress();
   renderMultiPlan();
+  updateBusyState();
   try {
     const result = await window.desktop.agent.plan.execute({
       plan: state.plan,
@@ -480,14 +744,25 @@ async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
       state.feedback = result.summary || '计划已拒绝';
       state.tone = 'error';
     } else if (result.cancelled) {
-      state.feedback = `${result.summary || '已取消'}（未执行写操作）`;
+      state.feedback = result.summary || '已取消，未写入任何更改';
+      if (result.undoHint) state.feedback += `；${result.undoHint}`;
       state.tone = 'error';
+      chatFeedback(state.feedback, true);
     } else if (!result.ok) {
       const failed = result.results?.find((item) => !item.ok);
       state.next = typeof result.failedIndex === 'number' ? result.failedIndex : state.next;
       state.feedback = failed
         ? `第 ${failed.step} 步 ${failed.tool} 失败（${failed.code}）${failed.message ? `：${failed.message}` : ''}；后续步骤已停止`
         : (result.summary || '计划执行失败');
+      if (failed) {
+        const advice = suggestFailure({
+          code: failed.code,
+          ...(failed.message ? { message: failed.message } : {}),
+          tool: failed.tool
+        });
+        state.feedback += `；建议：${advice.advice}`;
+        if (advice.alternatives.length > 0) state.feedback += `；可选：${advice.alternatives.slice(0, 2).join(' / ')}`;
+      }
       if (result.undoHint) state.feedback += `；${result.undoHint}`;
       state.tone = 'error';
       chatFeedback(state.feedback, true);
@@ -505,24 +780,57 @@ async function runMultiPlan(mode: 'all' | 'step'): Promise<void> {
     chatFeedback(state.feedback, true);
   } finally {
     state.running = false;
+    cancelRequested = false;
     renderMultiPlan();
+    updateBusyState();
     void loadAudit();
   }
 }
 
-function cancelMultiPlan(): void {
+async function cancelMultiPlan(): Promise<void> {
   if (!multiPlan) return;
+  if (multiPlan.running) {
+    if (!cancelRequested) {
+      cancelRequested = true;
+      multiPlan.feedback = '正在取消当前工具…';
+      multiPlan.tone = 'error';
+      renderMultiPlan();
+      updateBusyState();
+      try {
+        await window.desktop?.agent.plan.cancel();
+      } catch (error) {
+        chatFeedback(`取消失败：${errorMessage(error)}`, true);
+        cancelRequested = false;
+        updateBusyState();
+      }
+    }
+    return;
+  }
   multiPlan.dismissed = true;
   multiPlan.feedback = '';
   multiPlan.tone = '';
   renderMultiPlan();
 }
 
-/** 审计面板：最近 8 条 + 汇总，读不到时给中文原因，不静默空白。 */
+/** 审计面板：筛选 + 时间倒序 + 最近 200 条 + 单条 JSON + CSV 导出。 */
+function auditEntriesForView(): DesktopAgentAuditEntry[] {
+  const all = Array.isArray(auditState?.entries) ? auditState.entries : [];
+  return filterAuditEntries(all, { result: auditFilterResult, ...(auditFilterTool ? { tool: auditFilterTool } : {}) });
+}
+
+function setAuditHint(text: string, isError = false): void {
+  const hint = body?.querySelector<HTMLElement>('#agentAuditHint');
+  if (!hint) return;
+  hint.textContent = text;
+  hint.classList.toggle('is-error', isError);
+}
+
 function renderAudit(): void {
   const list = body?.querySelector<HTMLElement>('#agentAuditList');
   const count = body?.querySelector<HTMLElement>('#agentAuditCount');
   const summaryElement = body?.querySelector<HTMLElement>('#agentAuditSummary');
+  const toolSelect = body?.querySelector<HTMLSelectElement>('#agentAuditToolFilter');
+  const resultSelect = body?.querySelector<HTMLSelectElement>('#agentAuditResultFilter');
   if (!list) return;
   if (auditLoading) {
     list.innerHTML = '<div class="acp-empty">正在读取审计…</div>';
@@ -536,22 +844,66 @@ function renderAudit(): void {
     list.innerHTML = `<div class="acp-note is-error">读取审计失败：${escapeHtml(auditState.message ?? '未知错误')}</div>`;
     if (count) count.textContent = '—';
     if (summaryElement) summaryElement.textContent = '';
+    setAuditHint('读取审计失败，未展示任何记录。', true);
     return;
   }
-  const entries = Array.isArray(auditState.entries) ? auditState.entries.slice(-8).reverse() : [];
-  if (count) count.textContent = String(auditState.summary?.total ?? entries.length);
+  const all = Array.isArray(auditState.entries) ? auditState.entries : [];
+  const tools = auditToolNames(all);
+  if (auditFilterTool && !tools.includes(auditFilterTool)) auditFilterTool = '';
+  if (toolSelect) {
+    toolSelect.innerHTML = '<option value="">全部工具</option>' +
+      tools.map((tool) => `<option value="${escapeHtml(tool)}">${escapeHtml(tool)}</option>`).join('');
+    toolSelect.value = auditFilterTool;
+  }
+  if (resultSelect) resultSelect.value = auditFilterResult;
+  if (count) count.textContent = String(auditState.total ?? auditState.summary?.total ?? all.length);
   if (summaryElement) summaryElement.textContent = auditSummaryText(auditState.summary);
-  if (entries.length === 0) {
-    list.innerHTML = '<div class="acp-empty">还没有工具调用记录。离线问答与模型调用都会写入审计。</div>';
+
+  const filtered = auditEntriesForView();
+  const limited = limitAuditEntries(filtered, 200);
+  const dropped = (auditState.dropped ?? 0) + limited.dropped;
+  const filterText = auditFilterTool || auditFilterResult !== 'all' ? `筛选后 ${filtered.length} 条` : `最近 ${limited.entries.length} 条`;
+  if (dropped > 0) {
+    setAuditHint(`已显示${filterText}；超过 200 条上限，更早 ${dropped} 条已丢弃（审计文件仍保留）。`);
+  } else {
+    setAuditHint(`审计只记录工具名、结果、耗时与脱敏后的参数；当前${filterText}。`);
+  }
+  if (limited.entries.length === 0) {
+    list.innerHTML = all.length === 0
+      ? '<div class="acp-empty">还没有工具调用记录。离线问答与模型调用都会写入审计。</div>'
+      : '<div class="acp-empty">当前筛选条件下没有记录。</div>';
     return;
   }
-  list.innerHTML = entries.map((entry) => {
-    const row = describeAuditEntry(entry);
-    return `<div class="acp-audit-row ${row.tone}">
-      <span class="acp-pack-name">${escapeHtml(row.title)}</span>
-      <span class="acp-pack-meta">${escapeHtml(row.meta)}</span>
-    </div>`;
+  list.innerHTML = limited.entries.map((entry) => {
+    const ok = entry.ok === true;
+    const code = entry.code ?? (ok ? 'OK' : 'FAILED');
+    return `<details class="acp-audit-row ${ok ? 'is-ok' : 'is-error'}">
+      <summary>
+        <span class="acp-audit-time">${escapeHtml(timeText(entry.at))}</span>
+        <span class="acp-audit-tool">${escapeHtml(entry.tool)}</span>
+        <span class="acp-audit-args">${escapeHtml(auditArgsText(entry))}</span>
+        <span class="acp-audit-code">${escapeHtml(code)}</span>
+        <span class="acp-audit-elapsed">${escapeHtml(formatDuration(entry.elapsedMs))}</span>
+      </summary>
+      <pre class="acp-audit-json">${escapeHtml(auditEntryJson(entry))}</pre>
+    </details>`;
   }).join('');
+}
+
+async function exportAuditCsv(): Promise<void> {
+  if (!window.desktop) return;
+  const entries = auditEntriesForView();
+  if (entries.length === 0) {
+    setAuditHint('当前筛选结果为空，没有可导出的审计记录。', true);
+    return;
+  }
+  try {
+    const result = await window.desktop.exportFile(auditExportFileName(), auditCsv(entries));
+    if (result.canceled) setAuditHint('已取消导出，未写入文件。');
+    else setAuditHint(`已导出 ${entries.length} 条审计记录：${result.path ?? auditExportFileName()}`);
+  } catch (error) {
+    setAuditHint(`导出失败：${errorMessage(error)}`, true);
+  }
 }
 
 async function loadAudit(): Promise<void> {
@@ -571,12 +923,19 @@ async function loadAudit(): Promise<void> {
 function updateBusyState(): void {
   const send = body?.querySelector<HTMLButtonElement>('#agentChatSend');
   const clear = body?.querySelector<HTMLButtonElement>('#agentChatClear');
+  const cancel = body?.querySelector<HTMLButtonElement>('#agentChatCancel');
+  const busy = thinking || multiPlan?.running === true;
   if (send) {
-    send.disabled = thinking;
+    send.disabled = busy;
     send.textContent = thinking ? '思考中…' : '发送';
   }
-  if (clear) clear.disabled = thinking;
-  setStatus('agentChatStatus', thinking ? '思考中…' : '就绪');
+  if (clear) clear.disabled = busy;
+  if (cancel) {
+    cancel.hidden = !busy;
+    cancel.disabled = cancelRequested;
+    cancel.textContent = cancelRequested ? '取消中…' : '取消执行';
+  }
+  setStatus('agentChatStatus', busy ? (cancelRequested ? '取消中…' : '执行中…') : '就绪');
 }
 
 function chatFeedback(message: string, isError = false): void {
@@ -600,7 +959,7 @@ function lastTurnMessages(): Array<{ role: string; content?: string | null }> {
 }
 
 async function sendMessage(): Promise<void> {
-  if (!body || thinking) return;
+  if (!body || thinking || multiPlan?.running) return;
   const input = fieldElement('agentChatInput');
   const text = input?.value.trim() ?? '';
   if (!text) return;
@@ -611,6 +970,8 @@ async function sendMessage(): Promise<void> {
   thinking = true;
   chatFeedback('');
   if (input) input.value = '';
+  cancelRequested = false;
+  resetProgress();
   renderPreview();
   updateBusyState();
   const started = Date.now();
@@ -625,17 +986,22 @@ async function sendMessage(): Promise<void> {
         toolCalls: turn.toolCalls,
         failures: turn.failures
       });
+    } else if (result.cancelled) {
+      lastReceipt = null;
+      chatFeedback(result.message || '已取消，未写入任何更改', true);
+      void loadAudit();
     }
     renderMessages();
-    if (!result.ok) {
+    if (!result.ok && !result.cancelled) {
       chatFeedback(result.message || '智能体请求失败', true);
-    } else {
+    } else if (result.ok) {
       void loadAudit();
     }
   } catch (error) {
     chatFeedback(`智能体请求失败：${errorMessage(error)}`, true);
   } finally {
     thinking = false;
+    cancelRequested = false;
     updateBusyState();
   }
 }
@@ -703,10 +1069,20 @@ function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
   body?.querySelector<HTMLButtonElement>('#agentPlanRunAll')?.addEventListener('click', () => { void runMultiPlan('all'); });
   body?.querySelector<HTMLButtonElement>('#agentPlanRunStep')?.addEventListener('click', () => { void runMultiPlan('step'); });
-  body?.querySelector<HTMLButtonElement>('#agentPlanCancel')?.addEventListener('click', () => { cancelMultiPlan(); });
+  body?.querySelector<HTMLButtonElement>('#agentPlanCancel')?.addEventListener('click', () => { void cancelMultiPlan(); });
+  body?.querySelector<HTMLButtonElement>('#agentChatCancel')?.addEventListener('click', () => { void cancelExecution(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmSave')?.addEventListener('click', () => { void saveSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmTest')?.addEventListener('click', () => { void testSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditRefresh')?.addEventListener('click', () => { void loadAudit(); });
+  body?.querySelector<HTMLButtonElement>('#agentAuditExport')?.addEventListener('click', () => { void exportAuditCsv(); });
+  body?.querySelector<HTMLSelectElement>('#agentAuditToolFilter')?.addEventListener('change', (event) => {
+    auditFilterTool = (event.target as HTMLSelectElement).value;
+    renderAudit();
+  });
+  body?.querySelector<HTMLSelectElement>('#agentAuditResultFilter')?.addEventListener('change', (event) => {
+    auditFilterResult = (event.target as HTMLSelectElement).value as AuditResultFilter;
+    renderAudit();
+  });
   body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('input', () => { renderPreview(); });
   body?.querySelector<HTMLInputElement>('#agentLlmApiKey')?.addEventListener('input', () => { apiKeyDirty = true; });
   body?.querySelector<HTMLTextAreaElement>('#agentChatInput')?.addEventListener('keydown', (event) => {
@@ -745,6 +1121,8 @@ async function refresh(): Promise<void> {
 export function initAgentPanel(): void {
   if (drawer) return;
   ensurePanelStyles();
+  disposeProgress?.();
+  disposeProgress = window.desktop?.agent.onProgress?.(applyProgress) ?? null;
   buildEntryButton('agentEntryButton', '智能体', AGENT_ICON, () => {
     if (!drawer) return;
     drawer.open();

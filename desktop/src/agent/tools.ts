@@ -19,8 +19,8 @@ export interface AgentToolSummary {
 }
 
 export interface AgentCommandExecutor {
-  execute(name: string, args?: Record<string, unknown>): Promise<CommandResult>;
-  undoLast(): Promise<CommandResult>;
+  execute(name: string, args?: Record<string, unknown>, signal?: AbortSignal): Promise<CommandResult>;
+  undoLast(signal?: AbortSignal): Promise<CommandResult>;
   history?(): CommandHistoryEntry[];
 }
 
@@ -366,6 +366,7 @@ export class AgentTools {
   private readonly registry: PackRegistry;
   private readonly commands: AgentCommandExecutor | undefined;
   private readonly tools = new Map<string, AgentTool>();
+  private signal: AbortSignal | undefined;
 
   constructor(registry: PackRegistry, commands?: AgentCommandExecutor) {
     this.registry = registry;
@@ -385,10 +386,16 @@ export class AgentTools {
     return this.tools.has(name);
   }
 
-  async call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  async call(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<unknown> {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`工具不存在：${name}`);
-    return await tool.handler(args);
+    const previous = this.signal;
+    this.signal = signal;
+    try {
+      return await tool.handler(args);
+    } finally {
+      this.signal = previous;
+    }
   }
 
   private add(tool: AgentTool): void {
@@ -417,7 +424,7 @@ export class AgentTools {
 
   private async execute(name: string, args: Record<string, unknown> = {}): Promise<CommandResult | null> {
     if (!this.commands) return null;
-    return await this.commands.execute(name, args);
+    return await this.commands.execute(name, args, this.signal);
   }
 
   private registerDefaults(): void {

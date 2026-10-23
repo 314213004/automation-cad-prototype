@@ -71,7 +71,7 @@
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
 ### P7 自然语言交互 Agent
-- 状态：✅ P7-A / P7-B / P7-C / P7-D 完成（P7-A：离线规则路由 + 上下文裁剪 + 审计 + 侧栏只读问答 UI + 评估集；P7-B：`place_component` 底板放置 + 二次确认 + 撤销联动；P7-C：离线多步规划 + 计划卡片 + 顺序执行 + 失败停止；P7-D：Agent 工具扩展 v1，12 → 17 个工具）
+- 状态：✅ P7-A / P7-B / P7-C / P7-D / P7-E / P7-F 完成（P7-A：离线规则路由 + 上下文裁剪 + 审计 + 侧栏只读问答 UI + 评估集；P7-B：`place_component` 底板放置 + 二次确认 + 撤销联动；P7-C：离线多步规划 + 计划卡片 + 顺序执行 + 失败停止；P7-D：Agent 工具扩展 v1，12 → 17 个工具；P7-E：上下文快照与指代；P7-F：执行进度/取消/失败建议/审计增强）
 - 已完成（P7-A-1，`424711c`）：
   - `src/agent/router.ts`：7 类意图关键词计分（写操作同分优先）、`planTool` 中文→工具+参数、`planReadOnly` 只读白名单、类别同义词按长度倒序（热继电器不被继电器吃掉）、`extractQuery` 去客套/动词/疑问词
   - `src/agent/context.ts`：`buildAgentContext` 默认 ≤2048 字节，降级顺序「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」，回报 `bytes/truncated/droppedTools/droppedRecent`
@@ -112,6 +112,15 @@
   - 错误码：`PART_NOT_FOUND`、`NOT_PLACED`、`PRECHECK_FAILED`、`UNSUPPORTED_FORMAT`、`INVALID_ARGUMENT` 均为稳定结构化返回
   - 测试：新增 `desktop/test/agent/tools-v2.test.mjs` 30 条（schema 完整性、参数校验、未知型号、无尺寸告警、移除不存在、预检拦截不落盘、导出白名单/路径净化/覆盖序号、确认拒绝）
 - 实测（P7-D）：`tsc --noEmit` 通过；`npm test` **717/717**（687 → 717，新增 30 条）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`npm run smoke` → `SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_OK`
+- 已完成（P7-F，提交号待补）：
+  - `src/agent/feedback.ts`：进度事件类型、参数摘要（`redactValue` + `maskSecrets`）、耗时格式化、n/N 与 10 s 提示、连续 3 步汇总、取消文案
+  - `src/agent/suggest.ts`：`PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED` 中文建议与替代方案；未知码明确「无法判断具体原因」
+  - `session.ts` / `planner.ts`：`run(text, {signal,onProgress,runId})`、`executePlan(..., {signal,onProgress})`；每步 start/end 事件；`AbortController` 中断当前等待；`AgentCancelledError.completedSteps` 只记录已结束步骤
+  - `ipc.ts` / `preload.ts` / `desktop-api.d.ts`：`agent:progress` 事件、`agent:chat:cancel`、`agent:plan:cancel`、`agent.onProgress()`
+  - `ui.ts` / `panels.css`：执行前进度、500 ms 秒表、>10 s 可取消、结果卡片（✓/×、耗时、结果码）、3 步汇总、取消按钮与取消文案、失败建议卡片
+  - `audit-view.ts`：工具/结果筛选、时间倒序、最近 200 条上限与丢弃提示、CSV（UTF-8 BOM、统一文件名净化）、单条完整 JSON 递归脱敏；`AgentAuditRecord.elapsedMs`
+  - `test/agent/ux.test.mjs`：21 条新单测；main smoke 新增 `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`
+- 实测（P7-F）：`tsc --noEmit` 通过；`npm test` **766/766**（745 → 766，新增 21 条）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`npm run smoke` → `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、既有智能体断言全绿、`SMOKE_OK`
 - 下一步：联调/同步工具注册后把 `tool: null` 用例替换为真实工具；单步模型工具调用仍使用一次性确认，逐步确认 UI 可在后续补齐
 - 验收（A/B/C 期）：`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028` + `SMOKE_AGENT_READONLY_UI_OK` + `SMOKE_AGENT_PLACE_OK placed=1 undo=1` + `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`，误写率 0（写计划不进入离线通道、预览不执行、拒绝确认不执行，均有单测/冒烟钉住）
 
@@ -183,7 +192,7 @@
 5. **CI 为手动触发**：按老王要求，不自动构建；要包时 `gh workflow run windows-build`。
 6. **数据准确性**：元器件参数为公开样本汇总，定型前以铭牌/最新样本为准（manifest 已声明）。
 7. **前端原型限制**：3D 为固定等轴测投影，属性编辑不改拓扑（插入与撤销已真实化）。
-8. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板只列最近 8 条、无筛选/导出，回执不含 token 用量（网关未回传 usage）。
+8. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
 
 ## 夜间执行约束
 

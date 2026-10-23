@@ -23,8 +23,11 @@ tools.ts（AgentTools + 17 个 AgentTool）
  │    ├─ reference.ts → 选中/最近操作/几何三级指代消解（<0.6 不猜）
  │    ├─ memory.ts  → 最近 5 次工具调用摘要（仅内存）
  │    ├─ trim.ts    → 列表 20 条 / 文本 2 KB / 单结果 10 KB 裁剪
- │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
- │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执 / 审计行）
+ │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏 + 耗时）
+ │    ├─ audit-view.ts → 审计筛选 / 时间倒序 / 200 条上限 / CSV
+ │    ├─ feedback.ts → 进度事件 / 参数摘要 / 耗时 / 取消文案
+ │    ├─ suggest.ts → 失败建议纯函数（六类错误码 + 未知码回落）
+ │    └─ preview.ts → 侧栏视图模型（计划预览 / 统一回执）
 ```
 
 渲染层通过 `extension.ts` 暴露受控的 `window.__AgentBridge`，不暴露 DOM。主进程命令总线只允许调用白名单方法。
@@ -149,8 +152,33 @@ auditSummaryText(summary): string                        // 空审计 → 「暂
 
 - 预览：输入框 `input` 事件即算，把结果写进 `#agentPlanPreview` 的 `data-tool / data-read-only / data-offline`，只展示不执行；写操作在提示里点名缺的参数（如 `partId`）。
 - 回执：`agent:chat:send` 返回 `mode` 与 `elapsedMs`（`AgentSession.mode()` 记录本轮是否降级），UI 用同一套字段渲染，离线是告警色而非错误色。
-- 审计面板：打开抽屉/发送后调 `window.desktop.agent.audit.read()`，展示最近 8 条与汇总；读取失败给中文原因，不静默空白。
+- 审计面板：打开抽屉/发送后调 `window.desktop.agent.audit.read()`；P7-F 起为最近 200 条、时间倒序，支持工具/结果筛选、CSV 导出与单条完整 JSON 展开；读取失败给中文原因，不静默空白。
 - 冒烟钉住三条：只读指令 `offline=1`、写指令 `offline=0` 且提示含 `partId`、预览前后场景零件数不变（预览不执行）。
+
+## 执行反馈 / 取消 / 失败建议（P7-F）
+
+```ts
+interface AgentProgressEvent {
+  runId: string; phase: 'start'|'end'; index: number; total: number;
+  tool: string; argsSummary: string; startedAt: number; callId?: string;
+  elapsedMs?: number; ok?: boolean; code?: string; message?: string;
+  source?: 'chat'|'plan';
+}
+suggestFailure({ code, message, tool, args }): { advice: string; alternatives: string[] }
+formatDuration / stepLabel / runningDurationText / aggregateDurationText / cancellationText
+filterAuditEntries / auditToolNames / limitAuditEntries / auditCsv / auditEntryJson / auditExportFileName
+```
+
+- **进度通道**：`AgentSession.run(text, { signal, onProgress, runId })` 与 `executePlan(..., { signal, onProgress })` 在每步开始/结束发事件；`ipc.ts` 通过 `agent:progress` 推给渲染层，`preload.ts` 暴露 `agent.onProgress()`。
+- **执行前**：`feedback.ts` 用 `redactValue` + `maskSecrets` 生成参数摘要，事件先于确认与命令执行发出；UI 显示「正在执行 `tool` · 第 n/N 步」。
+- **执行中**：UI 500 ms 刷新秒表；`runningDurationText` 在 ≥10 s 时追加「仍在执行，可取消」。
+- **完成**：结果卡片包含 `✓/×`、耗时、结果码；每 3 个完成步骤输出「连续 3 步汇总耗时」。
+- **取消**：`agent:chat:cancel` / `agent:plan:cancel` 触发 `AbortController.abort()`；会话与计划都在步骤边界检查信号，并把当前工具的等待用 `withAbort` 中断。`AgentCancelledError.completedSteps` 只含已结束步骤。
+- **取消文案**：无写步骤 → 「已取消，未写入任何更改」；已有写步骤 → 逐条列出并提示 `undo_last`；当前写工具中断但结果未知 → 明确要求核对，不谎称未写入。
+- **失败建议**：`suggest.ts` 覆盖 `PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED`；`PRECHECK_FAILED` 取第一条错误并指向点位/执行机构/传感器修复位置；未知码只复述消息。
+- **审计增强**：`AgentAuditRecord.elapsedMs` 由会话与计划写盘；`audit-view.ts` 负责筛选、倒序、200 条上限、CSV（UTF-8 BOM）与整条 JSON 脱敏。CSV 文件名复用 `sanitizeFileName`，导出仍经主进程 `export:saveFile` 校验扩展名与路径。
+
+单测：`test/agent/ux.test.mjs` 21 条（六类错误码、未知码、耗时格式、参数掩码、取消状态、审计筛选/CSV/上限/JSON 脱敏）。冒烟：`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`。
 
 ## 多步规划与执行（P7-C）
 
@@ -282,7 +310,7 @@ window.__AgentBridge = {
 - ✅ P7-E 上下文快照（选中/机型/底板/最近 3 条，≤1.5 KB）+ 三级指代消解 + 最近 5 次工具记忆 + 列表/文本/10 KB 结果裁剪
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 745/745（新增 `context-memory-trim.test.mjs` 28 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 766/766（`context-memory-trim.test.mjs` 28 条；P7-F `ux.test.mjs` 21 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 

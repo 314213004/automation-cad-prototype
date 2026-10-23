@@ -77,7 +77,7 @@ interface CommandRunResult extends CommandResult {
 
 export interface Command {
   name: string;
-  run(args: Record<string, unknown>, ctx: CommandContext): Promise<CommandRunResult>;
+  run(args: Record<string, unknown>, ctx: CommandContext, signal?: AbortSignal): Promise<CommandRunResult>;
   undo?(token: unknown, ctx: CommandContext): Promise<unknown>;
 }
 
@@ -289,18 +289,27 @@ export class CommandBus {
     this.commands.set(command.name, command);
   }
 
-  async execute(name: string, args: Record<string, unknown> = {}): Promise<CommandResult> {
+  async execute(name: string, args: Record<string, unknown> = {}, signal?: AbortSignal): Promise<CommandResult> {
     const command = this.commands.get(name);
     if (!command) {
       return failed('UNKNOWN_COMMAND', `未知命令：${name}`);
     }
+    if (signal?.aborted) return failed('CANCELLED', '已取消，未执行该命令');
 
     let result: CommandRunResult;
     try {
-      result = await command.run(args, this.context);
+      result = await command.run(args, this.context, signal);
     } catch (error) {
+      if (signal?.aborted) {
+        this.record(name, false, summarizeCommandResult(name, args, { ok: false }));
+        return failed('CANCELLED', '已取消，未执行该命令');
+      }
       this.record(name, false, summarizeCommandResult(name, args, { ok: false }));
       return errorResult(error);
+    }
+    if (signal?.aborted) {
+      this.record(name, false, summarizeCommandResult(name, args, { ok: false }));
+      return failed('CANCELLED', '已取消');
     }
 
     const ok = result.ok === true;
@@ -321,7 +330,8 @@ export class CommandBus {
     };
   }
 
-  async undoLast(): Promise<CommandResult> {
+  async undoLast(signal?: AbortSignal): Promise<CommandResult> {
+    if (signal?.aborted) return failed('CANCELLED', '已取消，未执行撤销');
     const record = this.undoStack.pop();
     if (!record) {
       return failed('NOTHING_TO_UNDO', '没有可撤销的命令');

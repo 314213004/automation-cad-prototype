@@ -22,6 +22,8 @@ import {
 import { resolveReference } from '../src/agent/reference';
 import { trimListResult } from '../src/agent/trim';
 import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
+import { AgentCancelledError, AgentSession } from '../src/agent/session';
+import { suggestFailure } from '../src/agent/suggest';
 import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage } from '../src/sync/package';
@@ -1569,6 +1571,104 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_NL_OK intents=${intentKinds.size} tools=${summaries.length} audit=${auditEntries.length} ctx=${packed.bytes}`);
+
+        // P7-F：执行进度、失败建议、取消与审计面板数据源
+        const uxProgress: Array<{ phase: string; index: number; total: number; tool: string; argsSummary: string }> = [];
+        let uxTurn = 0;
+        const uxLlm = {
+          async chat() {
+            uxTurn += 1;
+            if (uxTurn === 1) {
+              return {
+                content: '',
+                toolCalls: [
+                  { id: 'ux-1', type: 'function' as const, function: { name: 'search_components', arguments: JSON.stringify({ q: 'SMC', apiKey: 'sk-live-ux-secret' }) } },
+                  { id: 'ux-2', type: 'function' as const, function: { name: 'get_bom', arguments: '{}' } },
+                  { id: 'ux-3', type: 'function' as const, function: { name: 'run_electrical_check', arguments: '{}' } }
+                ]
+              };
+            }
+            return { content: '三步完成', toolCalls: [] };
+          }
+        };
+        const uxBus = {
+          async execute(name: string) {
+            return { ok: true, data: { name } };
+          },
+          async undoLast() {
+            return { ok: true, data: {} };
+          }
+        };
+        const uxAudit = createAuditLog({ write: () => {} });
+        const uxSession = new AgentSession({
+          llm: uxLlm,
+          bus: uxBus,
+          confirmWrite: async () => true,
+          audit: (record) => uxAudit.record(record)
+        });
+        const uxReply = await uxSession.run('执行三步', {
+          runId: 'smoke-ux',
+          onProgress: (event) => uxProgress.push({
+            phase: event.phase,
+            index: event.index,
+            total: event.total,
+            tool: event.tool,
+            argsSummary: event.argsSummary
+          })
+        });
+        const uxStarts = uxProgress.filter((event) => event.phase === 'start');
+        const uxEnds = uxProgress.filter((event) => event.phase === 'end');
+
+        const uxController = new AbortController();
+        const uxCancelSession = new AgentSession({
+          llm: {
+            async chat() {
+              return {
+                content: '',
+                toolCalls: [{ id: 'ux-cancel', type: 'function' as const, function: { name: 'get_bom', arguments: '{}' } }]
+              };
+            }
+          },
+          bus: {
+            async execute() {
+              return await new Promise(() => {});
+            },
+            async undoLast() {
+              return { ok: true, data: {} };
+            }
+          },
+          confirmWrite: async () => true
+        });
+        const uxCancelRun = uxCancelSession.run('取消', { signal: uxController.signal, runId: 'smoke-cancel' });
+        setTimeout(() => uxController.abort(), 15);
+        let uxCancelOk = 0;
+        try {
+          await uxCancelRun;
+        } catch (error) {
+          if (error instanceof AgentCancelledError && /已取消，未写入任何更改/.test(error.message)) uxCancelOk = 1;
+        }
+        const uxSuggestion = suggestFailure({ code: 'PART_NOT_FOUND', args: { model: 'MXQ99' }, tool: 'update_component' });
+        if (
+          uxReply !== '三步完成' ||
+          uxStarts.length !== 3 ||
+          uxEnds.length !== 3 ||
+          uxStarts.some((event) => event.total !== 3 || !event.argsSummary) ||
+          uxStarts[0]?.argsSummary.includes('ux-secret') ||
+          uxAudit.entries.length !== 3 ||
+          uxCancelOk !== 1 ||
+          !uxSuggestion.advice.includes('search_components')
+        ) {
+          console.error('SMOKE_FAIL agent_ux', JSON.stringify({
+            reply: uxReply,
+            starts: uxStarts.length,
+            ends: uxEnds.length,
+            audit: uxAudit.entries.length,
+            cancel: uxCancelOk
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_UX_OK steps=${uxStarts.length} audit=${uxAudit.entries.length} cancel=${uxCancelOk}`);
       } catch (error) {
         console.error('SMOKE_FAIL agent_exception', error);
         setTimeout(() => app.exit(1), 100);

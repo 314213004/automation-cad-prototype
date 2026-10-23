@@ -10,6 +10,12 @@ import {
 } from './context.ts';
 import { AgentMemory, summarizeToolCall } from './memory.ts';
 import { serializeToolResult } from './trim.ts';
+import {
+  cancellationText,
+  summarizeArguments,
+  type AgentProgressEvent,
+  type CompletedStep
+} from './feedback.ts';
 
 export interface AgentSessionOptions {
   llm: LlmClient;
@@ -26,6 +32,13 @@ export interface AgentSessionOptions {
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
+
+export interface AgentRunOptions {
+  signal?: AbortSignal;
+  onProgress?: (event: AgentProgressEvent) => void;
+  /** 由主进程生成，用于 UI 丢弃上一轮迟到的进度事件。 */
+  runId?: string;
+}
 
 /** 最近一次回复的通道：在线模型 / 离线规则。UI 用它显示统一回执。 */
 export type AgentReplyMode = 'online' | 'offline';
@@ -44,6 +57,52 @@ const MUTATING_TOOLS = new Set([
 const COMMAND_ALIASES: Record<string, string> = {
   run_interference_check: 'run_interference'
 };
+
+class AgentAborted extends Error {
+  constructor() {
+    super('aborted');
+    this.name = 'AgentAborted';
+  }
+}
+
+/** 会话被取消时抛出；completed 只包含已结束的步骤，不含被中断的当前步。 */
+export class AgentCancelledError extends Error {
+  readonly completedSteps: CompletedStep[];
+  readonly currentTool: string | undefined;
+  readonly currentToolMayWrite: boolean;
+
+  constructor(completedSteps: CompletedStep[], currentTool?: string, currentToolMayWrite = false) {
+    super(cancellationText({ completed: completedSteps, ...(currentTool ? { currentTool } : {}), currentToolMayWrite }));
+    this.name = 'AgentCancelledError';
+    this.completedSteps = completedSteps.map((item) => ({ ...item }));
+    this.currentTool = currentTool;
+    this.currentToolMayWrite = currentToolMayWrite;
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new AgentAborted();
+}
+
+/** 只用于中断「等待」；底层命令若已越过不可中断点，按已完成结果处理。 */
+function withAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new AgentAborted());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(new AgentAborted());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 
 const SYSTEM_PROMPT = [
   '你是 AutomationCAD 的桌面智能体。',
@@ -144,100 +203,272 @@ export class AgentSession {
     ];
   }
 
-  private async executeTool(call: LlmToolCall): Promise<unknown> {
-    let args: Record<string, unknown>;
+  private emitProgress(
+    onProgress: AgentRunOptions['onProgress'],
+    event: AgentProgressEvent
+  ): void {
+    if (!onProgress) return;
+    try {
+      onProgress(event);
+    } catch {
+      // 进度展示失败不能影响工具执行。
+    }
+  }
+
+  private async executeTool(
+    call: LlmToolCall,
+    context: {
+      runId: string;
+      index: number;
+      total: number;
+      completed: CompletedStep[];
+      signal?: AbortSignal;
+      onProgress?: AgentRunOptions['onProgress'];
+    }
+  ): Promise<unknown> {
+    const name = call.function.name;
+    const startedAt = Date.now();
+    let args: Record<string, unknown> = {};
     try {
       args = parseArguments(call.function.arguments);
     } catch (error) {
-      this.memory.record(summarizeToolCall(call.function.name, {}, failedTool('INVALID_ARGUMENT', '参数不是合法 JSON')));
-      this.recordAudit({
-        tool: call.function.name,
-        ok: false,
-        code: 'INVALID_ARGUMENT',
-        source: 'llm',
-        message: error instanceof Error ? error.message : String(error)
+      this.emitProgress(context.onProgress, {
+        runId: context.runId,
+        phase: 'start',
+        index: context.index,
+        total: context.total,
+        tool: name,
+        argsSummary: summarizeArguments(call.function.arguments),
+        startedAt,
+        callId: call.id,
+        source: 'chat'
       });
-      return failedTool('INVALID_ARGUMENT', `工具参数不是合法 JSON：${error instanceof Error ? error.message : String(error)}`);
-    }
-
-    const name = call.function.name;
-    if (MUTATING_TOOLS.has(name)) {
-      let allowed = false;
-      try {
-        allowed = await this.confirmWrite(name, args);
-      } catch (error) {
-        const message = `确认对话框失败：${error instanceof Error ? error.message : String(error)}`;
-        this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
-        this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args, message });
-        return { ok: false, code: 'USER_DENIED', message };
-      }
-      if (!allowed) {
-        this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
-        this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args });
-        return { ok: false, code: 'USER_DENIED', message: '用户拒绝执行该工具' };
-      }
-    }
-
-    let result: CommandResult;
-    try {
-      result = name === 'undo_last'
-        ? await this.bus.undoLast()
-        : await this.bus.execute(COMMAND_ALIASES[name] ?? name, args);
-    } catch (error) {
-      this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'TOOL_EXECUTION_FAILED' }));
+      const message = `工具参数不是合法 JSON：${error instanceof Error ? error.message : String(error)}`;
+      this.memory.record(summarizeToolCall(name, {}, failedTool('INVALID_ARGUMENT', '参数不是合法 JSON')));
       this.recordAudit({
         tool: name,
         ok: false,
-        code: 'TOOL_EXECUTION_FAILED',
+        code: 'INVALID_ARGUMENT',
+        source: 'llm',
+        message,
+        elapsedMs: Date.now() - startedAt
+      });
+      this.emitProgress(context.onProgress, {
+        runId: context.runId,
+        phase: 'end',
+        index: context.index,
+        total: context.total,
+        tool: name,
+        argsSummary: summarizeArguments(call.function.arguments),
+        startedAt,
+        callId: call.id,
+        elapsedMs: Date.now() - startedAt,
+        ok: false,
+        code: 'INVALID_ARGUMENT',
+        message,
+        source: 'chat'
+      });
+      context.completed.push({ step: context.index, tool: name, ok: false, code: 'INVALID_ARGUMENT', wrote: false });
+      return failedTool('INVALID_ARGUMENT', message);
+    }
+
+    const argsSummary = summarizeArguments(args);
+    this.emitProgress(context.onProgress, {
+      runId: context.runId,
+      phase: 'start',
+      index: context.index,
+      total: context.total,
+      tool: name,
+      argsSummary,
+      startedAt,
+      callId: call.id,
+      source: 'chat'
+    });
+
+    const finish = (ok: boolean, code: string, message?: string): void => {
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      this.recordAudit({
+        tool: name,
+        ok,
         source: 'llm',
         args,
-        message: error instanceof Error ? error.message : String(error)
+        elapsedMs,
+        ...(code !== 'OK' ? { code } : {}),
+        ...(message ? { message } : {})
       });
-      return failedTool('TOOL_EXECUTION_FAILED', error instanceof Error ? error.message : String(error));
-    }
+      this.emitProgress(context.onProgress, {
+        runId: context.runId,
+        phase: 'end',
+        index: context.index,
+        total: context.total,
+        tool: name,
+        argsSummary,
+        startedAt,
+        callId: call.id,
+        elapsedMs,
+        ok,
+        code,
+        ...(message ? { message } : {}),
+        source: 'chat'
+      });
+      if (code !== 'CANCELLED') {
+        context.completed.push({
+          step: context.index,
+          tool: name,
+          ok,
+          code,
+          wrote: ok && MUTATING_TOOLS.has(name)
+        });
+      }
+    };
 
-    this.recordAudit({
-      tool: name,
-      ok: result.ok,
-      source: 'llm',
-      args,
-      ...(result.ok ? {} : { code: result.error?.code ?? 'COMMAND_FAILED' })
-    });
-    this.memory.record(summarizeToolCall(name, args, result));
+    try {
+      throwIfAborted(context.signal);
+      if (MUTATING_TOOLS.has(name)) {
+        let allowed = false;
+        try {
+          allowed = await withAbort(this.confirmWrite(name, args), context.signal);
+        } catch (error) {
+          if (error instanceof AgentAborted) {
+            finish(false, 'CANCELLED', '已取消');
+            throw new AgentCancelledError(context.completed, name, false);
+          }
+          const message = `确认对话框失败：${error instanceof Error ? error.message : String(error)}`;
+          this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
+          finish(false, 'USER_DENIED', message);
+          return { ok: false, code: 'USER_DENIED', message };
+        }
+        if (!allowed) {
+          this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
+          finish(false, 'USER_DENIED', '用户拒绝执行该工具');
+          return { ok: false, code: 'USER_DENIED', message: '用户拒绝执行该工具' };
+        }
+      }
 
-    if (name === 'run_interference_check' && result.ok && isRecord(result.data) && Array.isArray(result.data.items)) {
-      return {
-        ok: true,
-        hits: Number(result.data.hits ?? result.data.items.length),
-        items: result.data.items.slice(0, 20)
-      };
+      if (context.signal?.aborted) {
+        finish(false, 'CANCELLED', '已取消');
+        throw new AgentCancelledError(context.completed, name, false);
+      }
+      const command = COMMAND_ALIASES[name] ?? name;
+      const result = await withAbort(
+        name === 'undo_last'
+          ? this.bus.undoLast(context.signal)
+          : this.bus.execute(command, args, context.signal),
+        context.signal
+      );
+      this.memory.record(summarizeToolCall(name, args, result));
+      const code = result.ok ? 'OK' : (result.error?.code ?? 'COMMAND_FAILED');
+      finish(result.ok, code, result.ok ? undefined : result.error?.message);
+
+      if (name === 'run_interference_check' && result.ok && isRecord(result.data) && Array.isArray(result.data.items)) {
+        return {
+          ok: true,
+          hits: Number(result.data.hits ?? result.data.items.length),
+          items: result.data.items.slice(0, 20)
+        };
+      }
+      return result;
+    } catch (error) {
+      if (error instanceof AgentCancelledError) throw error;
+      if (error instanceof AgentAborted) {
+        finish(false, 'CANCELLED', '已取消');
+        throw new AgentCancelledError(context.completed, name, MUTATING_TOOLS.has(name));
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'TOOL_EXECUTION_FAILED' }));
+      finish(false, 'TOOL_EXECUTION_FAILED', message);
+      return failedTool('TOOL_EXECUTION_FAILED', message);
     }
-    return result;
   }
 
   /**
    * 模型不可用（断网/超时/未配密钥）时的离线通道：只走规则路由的只读工具。
    * 写操作一律不执行，只回一句“需要联网确认”，避免离线状态下误改文档。
    */
-  private async runOffline(text: string): Promise<string | null> {
+  private async runOffline(
+    text: string,
+    options: AgentRunOptions,
+    completed: CompletedStep[]
+  ): Promise<string | null> {
     if (!this.offlineFallback) return null;
     const plan = planReadOnly(text, this.turnContext);
     if (!plan) return null;
+    const startedAt = Date.now();
+    const runId = options.runId ?? 'offline';
+    const argsSummary = summarizeArguments(plan.args);
+    this.emitProgress(options.onProgress, {
+      runId,
+      phase: 'start',
+      index: 1,
+      total: 1,
+      tool: plan.tool,
+      argsSummary,
+      startedAt,
+      source: 'chat'
+    });
     let result: CommandResult;
     try {
-      result = plan.tool === 'undo_last' ? await this.bus.undoLast() : await this.bus.execute(plan.tool, plan.args);
+      throwIfAborted(options.signal);
+      result = await withAbort(
+        plan.tool === 'undo_last'
+          ? this.bus.undoLast(options.signal)
+          : this.bus.execute(plan.tool, plan.args, options.signal),
+        options.signal
+      );
     } catch (error) {
+      if (error instanceof AgentAborted) {
+        this.emitProgress(options.onProgress, {
+          runId,
+          phase: 'end',
+          index: 1,
+          total: 1,
+          tool: plan.tool,
+          argsSummary,
+          startedAt,
+          elapsedMs: Date.now() - startedAt,
+          ok: false,
+          code: 'CANCELLED',
+          message: '已取消',
+          source: 'chat'
+        });
+        throw new AgentCancelledError(completed, plan.tool, MUTATING_TOOLS.has(plan.tool));
+      }
       const message = error instanceof Error ? error.message : String(error);
-      this.recordAudit({ tool: plan.tool, ok: false, code: 'OFFLINE_FAILED', source: 'offline', args: plan.args, message });
+      this.recordAudit({
+        tool: plan.tool,
+        ok: false,
+        code: 'OFFLINE_FAILED',
+        source: 'offline',
+        args: plan.args,
+        message,
+        elapsedMs: Date.now() - startedAt
+      });
       return `模型暂不可用，已按离线规则尝试 ${plan.tool}，但执行失败：${message}`;
     }
+    const code = result.ok ? 'OK' : (result.error?.code ?? 'COMMAND_FAILED');
     this.recordAudit({
       tool: plan.tool,
       ok: result.ok,
       source: 'offline',
       args: plan.args,
-      ...(result.ok ? {} : { code: result.error?.code ?? 'COMMAND_FAILED' })
+      elapsedMs: Date.now() - startedAt,
+      ...(result.ok ? {} : { code })
     });
+    this.emitProgress(options.onProgress, {
+      runId,
+      phase: 'end',
+      index: 1,
+      total: 1,
+      tool: plan.tool,
+      argsSummary,
+      startedAt,
+      elapsedMs: Date.now() - startedAt,
+      ok: result.ok,
+      code,
+      ...(result.ok ? {} : { message: result.error?.message ?? '未知错误' }),
+      source: 'chat'
+    });
+    completed.push({ step: 1, tool: plan.tool, ok: result.ok, code, wrote: result.ok && MUTATING_TOOLS.has(plan.tool) });
     this.memory.record(summarizeToolCall(plan.tool, plan.args, result));
     if (!result.ok) {
       return `模型暂不可用，离线规则已调用 ${plan.tool}，但返回失败：${result.error?.message ?? '未知错误'}`;
@@ -255,9 +486,11 @@ export class AgentSession {
     ].filter(Boolean).join('\n');
   }
 
-  async run(userText: string): Promise<string> {
+  async run(userText: string, options: AgentRunOptions = {}): Promise<string> {
     const text = userText.trim();
     if (!text) throw new Error('请输入要发送给智能体的内容');
+    const runId = options.runId ?? `chat-${Date.now()}`;
+    const completed: CompletedStep[] = [];
     this.replyMode = 'online';
     this.turnContext = emptyAgentContext();
     if (this.contextProvider) {
@@ -270,11 +503,13 @@ export class AgentSession {
     this.push({ role: 'user', content: text });
 
     for (let iteration = 0; iteration < this.maxIterations; iteration += 1) {
+      if (options.signal?.aborted) throw new AgentCancelledError(completed);
       let response;
       try {
-        response = await this.llm.chat(this.context());
+        response = await withAbort(this.llm.chat(this.context()), options.signal);
       } catch (error) {
-        const offline = await this.runOffline(text);
+        if (error instanceof AgentAborted || options.signal?.aborted) throw new AgentCancelledError(completed);
+        const offline = await this.runOffline(text, { ...options, runId }, completed);
         if (offline) {
           this.replyMode = 'offline';
           this.push({ role: 'assistant', content: offline });
@@ -297,8 +532,17 @@ export class AgentSession {
         }))
       });
 
-      for (const call of response.toolCalls) {
-        const result = await this.executeTool(call);
+      const total = response.toolCalls.length;
+      for (const [index, call] of response.toolCalls.entries()) {
+        if (options.signal?.aborted) throw new AgentCancelledError(completed);
+        const result = await this.executeTool(call, {
+          runId,
+          index: index + 1,
+          total,
+          completed,
+          ...(options.signal ? { signal: options.signal } : {}),
+          ...(options.onProgress ? { onProgress: options.onProgress } : {})
+        });
         this.push({
           role: 'tool',
           tool_call_id: call.id,
@@ -306,6 +550,7 @@ export class AgentSession {
           content: serializeToolResult(result).text
         });
       }
+      if (options.signal?.aborted) throw new AgentCancelledError(completed);
     }
 
     const reply = `已达到最大工具调用轮数（${this.maxIterations}），请缩小任务范围`;

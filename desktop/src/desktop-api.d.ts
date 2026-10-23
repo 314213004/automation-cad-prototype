@@ -230,6 +230,8 @@ interface DesktopAgentChatResult {
   ok: boolean;
   reply?: string;
   message?: string;
+  cancelled?: boolean;
+  completedSteps?: AgentCompletedStep[];
   /** 本轮走的通道：在线模型 / 离线规则（P7-A-2 统一回执） */
   mode?: 'online' | 'offline';
   elapsedMs?: number;
@@ -287,11 +289,16 @@ interface DesktopAgentAuditEntry {
   source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan';
   args?: Record<string, unknown>;
   message?: string;
+  elapsedMs?: number;
 }
 
 interface DesktopAgentAuditResult {
   ok: boolean;
   entries?: DesktopAgentAuditEntry[];
+  /** 文件中的总条数；entries 只保留最近 200 条。 */
+  total?: number;
+  /** 因 200 条上限而丢弃的更早记录数。 */
+  dropped?: number;
   summary?: {
     total: number;
     failed: number;
@@ -305,6 +312,30 @@ interface DesktopAgentLlmTestResult {
   ok: boolean;
   message: string;
   model?: string;
+}
+
+interface AgentCompletedStep {
+  step: number;
+  tool: string;
+  ok: boolean;
+  code?: string;
+  wrote: boolean;
+}
+
+interface DesktopAgentProgressEvent {
+  runId: string;
+  phase: 'start' | 'end';
+  index: number;
+  total: number;
+  tool: string;
+  argsSummary: string;
+  startedAt: number;
+  callId?: string;
+  elapsedMs?: number;
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  source?: 'chat' | 'plan';
 }
 
 interface AgentBridgeFailure {
@@ -505,6 +536,7 @@ interface Window {
       testLlm(config?: Record<string, unknown>): Promise<DesktopAgentLlmTestResult>;
       chat: {
         send(text: string): Promise<DesktopAgentChatResult>;
+        cancel(): Promise<{ ok: boolean; cancelled: boolean; message?: string }>;
         history(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
         clear(): Promise<{ ok: boolean; messages: DesktopAgentChatMessage[] }>;
       };
@@ -514,7 +546,9 @@ interface Window {
           startAt?: number;
           maxSteps?: number;
         }): Promise<DesktopAgentPlanExecuteResult>;
+        cancel(): Promise<{ ok: boolean; cancelled: boolean; message?: string }>;
       };
+      onProgress(callback: (progress: DesktopAgentProgressEvent) => void): () => void;
       audit: {
         read(): Promise<DesktopAgentAuditResult>;
       };

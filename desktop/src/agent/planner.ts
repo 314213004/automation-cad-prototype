@@ -19,6 +19,12 @@ import {
 import { extractPlacementSpec, isPlacementInstruction } from './placement.ts';
 import type { AgentContext } from './context.ts';
 import type { ReferenceSource } from './reference.ts';
+import {
+  cancellationText,
+  summarizeArguments,
+  type AgentProgressEvent,
+  type CompletedStep
+} from './feedback.ts';
 
 export interface PlanStep {
   tool: string;
@@ -405,7 +411,7 @@ export interface PlanStepResult {
 }
 
 export interface ExecutePlanDeps {
-  execute(step: PlanStep, index: number): Promise<unknown> | unknown;
+  execute(step: PlanStep, index: number, signal?: AbortSignal): Promise<unknown> | unknown;
   /** 存在写步骤时调用一次；返回 false / 抛错都按取消处理。 */
   confirmPlan?(request: ConfirmPlanRequest): Promise<boolean> | boolean;
   /** 注入时钟，测试可给固定序列。 */
@@ -414,6 +420,10 @@ export interface ExecutePlanDeps {
   startAt?: number;
   /** 最多执行几步；默认执行到结尾。 */
   maxSteps?: number;
+  /** 中断当前计划；已完成的步骤仍会返回。 */
+  signal?: AbortSignal;
+  /** 步骤开始/结束事件，供侧栏显示进度与秒表。 */
+  onProgress?: (event: AgentProgressEvent) => void;
 }
 
 export interface ExecutePlanResult {
@@ -448,6 +458,33 @@ const UNDOABLE_WRITE_TOOLS = new Set([
   'update_component',
   'remove_component'
 ]);
+
+class PlanAborted extends Error {
+  constructor() {
+    super('aborted');
+    this.name = 'PlanAborted';
+  }
+}
+
+function withAbort<T>(promise: Promise<T> | T, signal?: AbortSignal): Promise<T> {
+  const value = Promise.resolve(promise);
+  if (!signal) return value;
+  if (signal.aborted) return Promise.reject(new PlanAborted());
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(new PlanAborted());
+    signal.addEventListener('abort', onAbort, { once: true });
+    value.then(
+      (result) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(result);
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      }
+    );
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -491,6 +528,14 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const elapsed = (): number => Math.max(0, now() - startedAt);
+  const runId = `plan-${startedAt}`;
+  const emit = (event: AgentProgressEvent): void => {
+    try {
+      deps.onProgress?.(event);
+    } catch {
+      // 进度展示失败不能影响计划执行。
+    }
+  };
 
   if (plan.refused || plan.steps.length === 0) {
     return {
@@ -525,6 +570,31 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
     .map(({ index }) => index - startAt);
   const confirmationRequired = writeIndexes.length > 0;
   let confirmed = true;
+  const completed: CompletedStep[] = [];
+  const results: PlanStepResult[] = [];
+  const undoHint = (): string | undefined => completed.some((item) => item.ok && item.wrote && UNDOABLE_WRITE_TOOLS.has(item.tool))
+    ? '已执行的装配写操作可用 undo_last 回退'
+    : undefined;
+  const cancelledResult = (currentTool?: string, currentToolMayWrite = false): ExecutePlanResult => {
+    const summary = cancellationText({
+      completed,
+      ...(currentTool ? { currentTool } : {}),
+      currentToolMayWrite
+    });
+    const hint = undoHint();
+    return {
+      ok: false,
+      confirmationRequired,
+      confirmed,
+      cancelled: true,
+      results,
+      totalMs: elapsed(),
+      summary,
+      ...(hint ? { undoHint: hint } : {})
+    };
+  };
+
+  if (deps.signal?.aborted) return cancelledResult();
   if (confirmationRequired) {
     const writeSteps = selected.filter(({ step }) => !READ_ONLY_TOOLS.has(step.tool));
     const message = `我准备做这 ${selected.length} 步：${selected
@@ -542,13 +612,14 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
       };
     }
     try {
-      confirmed = await deps.confirmPlan({
+      confirmed = await withAbort(deps.confirmPlan({
         message,
         steps: selected.map(({ step }) => step),
         writeIndexes,
         totalSteps: plan.steps.length
-      });
+      }), deps.signal);
     } catch (error) {
+      if (error instanceof PlanAborted) return cancelledResult();
       return {
         ok: false,
         confirmationRequired,
@@ -570,17 +641,48 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         summary: '已取消：用户拒绝执行该计划'
       };
     }
+    if (deps.signal?.aborted) return cancelledResult();
   }
 
-  const results: PlanStepResult[] = [];
   let undoAvailable = false;
   let failed: PlanStepResult | undefined;
-  for (const { step, index } of selected) {
+  for (const [position, { step, index }] of selected.entries()) {
+    if (deps.signal?.aborted) return cancelledResult();
     const stepStarted = now();
+    const argsSummary = summarizeArguments(step.args);
+    emit({
+      runId,
+      phase: 'start',
+      index: position + 1,
+      total: selected.length,
+      tool: step.tool,
+      argsSummary,
+      startedAt: stepStarted,
+      callId: `plan:${index}`,
+      source: 'plan'
+    });
     let outcome: NormalizedResult;
     try {
-      outcome = normalizeToolResult(await deps.execute(step, index));
+      outcome = normalizeToolResult(await withAbort(deps.execute(step, index, deps.signal), deps.signal));
     } catch (error) {
+      if (error instanceof PlanAborted) {
+        emit({
+          runId,
+          phase: 'end',
+          index: position + 1,
+          total: selected.length,
+          tool: step.tool,
+          argsSummary,
+          startedAt: stepStarted,
+          callId: `plan:${index}`,
+          elapsedMs: Math.max(0, now() - stepStarted),
+          ok: false,
+          code: 'CANCELLED',
+          message: '已取消',
+          source: 'plan'
+        });
+        return cancelledResult(step.tool, !READ_ONLY_TOOLS.has(step.tool));
+      }
       outcome = {
         ok: false,
         code: 'TOOL_EXCEPTION',
@@ -598,6 +700,28 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
       ...(outcome.data !== undefined ? { data: outcome.data } : {})
     };
     results.push(result);
+    completed.push({
+      step: index + 1,
+      tool: step.tool,
+      ok: outcome.ok,
+      code: outcome.code,
+      wrote: outcome.ok && !READ_ONLY_TOOLS.has(step.tool)
+    });
+    emit({
+      runId,
+      phase: 'end',
+      index: position + 1,
+      total: selected.length,
+      tool: step.tool,
+      argsSummary,
+      startedAt: stepStarted,
+      callId: `plan:${index}`,
+      elapsedMs: result.elapsedMs,
+      ok: outcome.ok,
+      code: outcome.code,
+      ...(outcome.message ? { message: outcome.message } : {}),
+      source: 'plan'
+    });
     if (!outcome.ok) {
       failed = result;
       break;

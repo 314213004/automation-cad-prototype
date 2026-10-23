@@ -14,6 +14,8 @@ export interface AgentAuditRecord {
   source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan';
   args?: Record<string, unknown>;
   message?: string;
+  /** 工具执行耗时（毫秒）；旧记录没有该字段时按「—」展示。 */
+  elapsedMs?: number;
 }
 
 export interface AgentAuditEntry extends AgentAuditRecord {
@@ -58,6 +60,9 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
     ok: record.ok,
     ...(record.code ? { code: record.code } : {}),
     ...(record.source ? { source: record.source } : {}),
+    ...(typeof record.elapsedMs === 'number' && Number.isFinite(record.elapsedMs) && record.elapsedMs >= 0
+      ? { elapsedMs: Math.round(record.elapsedMs) }
+      : {}),
     ...(record.message ? { message: maskSecrets(record.message) } : {}),
     ...(record.args ? { args: redactValue(record.args) as Record<string, unknown> } : {})
   };

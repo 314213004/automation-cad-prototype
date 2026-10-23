@@ -22,10 +22,12 @@ import type { AgentTools } from '../src/agent/tools.ts';
 import type { CommandBus } from '../src/agent/commands.ts';
 import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '../src/agent/llm-config.ts';
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
-import { AgentSession } from '../src/agent/session.ts';
+import { AgentCancelledError, AgentSession } from '../src/agent/session.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
+import { AUDIT_DISPLAY_LIMIT, limitAuditEntries } from '../src/agent/audit-view.ts';
+import type { AgentProgressEvent } from '../src/agent/feedback.ts';
 import type { FeatureDoc } from '../src/parametric/features.ts';
 import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
 import { createZip, normalizeZipPath, type ZipEntry } from '../src/shared/zip.ts';
@@ -701,6 +703,8 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
 
 export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   let session: AgentSession | null = null;
+  let activeChat: AbortController | null = null;
+  let activePlan: AbortController | null = null;
 
   const clearSession = (): void => {
     session = null;
@@ -782,13 +786,16 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
 
   ipcMain.handle('agent:chat:history', () => ({ ok: true, messages: session?.history() ?? [] }));
 
-  // 审计只读接口：最近 50 条，凭据已在写入前脱敏。
+  // 审计只读接口：最近 200 条，凭据已在写入前脱敏；更早记录用 total/dropped 如实回报。
   ipcMain.handle('agent:audit:read', () => {
     const file = join(context.userDataDir, 'agent-audit.jsonl');
     try {
-      if (!existsSync(file)) return { ok: true, entries: [], summary: summarizeAudit([]) };
-      const entries = parseAuditLines(readFileSync(file, 'utf8')).slice(-50);
-      return { ok: true, entries, summary: summarizeAudit(entries) };
+      if (!existsSync(file)) {
+        return { ok: true, entries: [], total: 0, dropped: 0, summary: summarizeAudit([]) };
+      }
+      const all = parseAuditLines(readFileSync(file, 'utf8'));
+      const limited = limitAuditEntries(all, AUDIT_DISPLAY_LIMIT);
+      return { ok: true, ...limited, summary: summarizeAudit(all) };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -800,7 +807,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   });
 
   // P7-C：计划执行。规划在渲染层离线完成；主进程只接受已注册工具并再次校验。
-  ipcMain.handle('agent:plan:execute', async (_event, payload: unknown) => {
+  ipcMain.handle('agent:plan:execute', async (event, payload: unknown) => {
     const tools = context.getTools();
     const bus = context.getBus();
     if (!tools || !bus) {
@@ -883,9 +890,16 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
     const audit = createAuditLog({ write: (line) => appendFileSync(auditFile, `${line}\n`, 'utf8') });
     let confirmCount = 0;
+    const controller = new AbortController();
+    activePlan = controller;
+    const emitProgress = (progress: AgentProgressEvent): void => {
+      if (!event.sender.isDestroyed()) event.sender.send('agent:progress', progress);
+    };
     const result = await executePlan(plan, {
       ...(startAt !== undefined ? { startAt } : {}),
       ...(maxSteps !== undefined ? { maxSteps } : {}),
+      signal: controller.signal,
+      onProgress: emitProgress,
       confirmPlan: async (request) => {
         confirmCount += 1;
         const window = context.getWindow();
@@ -905,8 +919,9 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         });
         return response.response === 0;
       },
-      execute: async (step) => {
-        const outcome = await tools.call(step.tool, step.args);
+      execute: async (step, _index, signal) => {
+        const stepStarted = Date.now();
+        const outcome = await tools.call(step.tool, step.args, signal);
         const record = typeof outcome === 'object' && outcome !== null
           ? outcome as Record<string, unknown>
           : null;
@@ -921,15 +936,29 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
           ok,
           source: 'plan',
           args: step.args,
+          elapsedMs: Math.max(0, Date.now() - stepStarted),
           ...(code ? { code } : {})
         });
         return outcome;
       }
     });
+    if (activePlan === controller) activePlan = null;
     return { ...result, confirmations: confirmCount };
   });
 
-  ipcMain.handle('agent:chat:send', async (_event, text: unknown) => {
+  ipcMain.handle('agent:chat:cancel', () => {
+    if (!activeChat) return { ok: true, cancelled: false, message: '当前没有执行中的对话' };
+    activeChat.abort();
+    return { ok: true, cancelled: true };
+  });
+
+  ipcMain.handle('agent:plan:cancel', () => {
+    if (!activePlan) return { ok: true, cancelled: false, message: '当前没有执行中的计划' };
+    activePlan.abort();
+    return { ok: true, cancelled: true };
+  });
+
+  ipcMain.handle('agent:chat:send', async (event, text: unknown) => {
     if (typeof text !== 'string' || !text.trim()) {
       return { ok: false, message: '请输入要发送给智能体的内容', messages: session?.history() ?? [] };
     }
@@ -939,7 +968,18 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     try {
       const current = getSession();
       const started = Date.now();
-      const reply = await current.run(text);
+      const controller = new AbortController();
+      activeChat = controller;
+      const runId = `chat-${started}-${Math.random().toString(36).slice(2, 8)}`;
+      const emitProgress = (progress: AgentProgressEvent): void => {
+        if (!event.sender.isDestroyed()) event.sender.send('agent:progress', progress);
+      };
+      const reply = await current.run(text, {
+        signal: controller.signal,
+        onProgress: emitProgress,
+        runId
+      });
+      if (activeChat === controller) activeChat = null;
       return {
         ok: true,
         reply,
@@ -948,6 +988,19 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         messages: current.history()
       };
     } catch (error) {
+      if (activeChat) {
+        activeChat = null;
+      }
+      if (error instanceof AgentCancelledError) {
+        return {
+          ok: false,
+          cancelled: true,
+          message: error.message,
+          completedSteps: error.completedSteps,
+          elapsedMs: 0,
+          messages: session?.history() ?? []
+        };
+      }
       return {
         ok: false,
         message: error instanceof Error ? error.message : String(error),
