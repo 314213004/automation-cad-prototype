@@ -51,10 +51,16 @@
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
 ### P7 自然语言交互 Agent
-- 状态：🔄 设计完成（`docs/desktop/NL-AGENT.md`）
-- 范围：16 个工具、上下文注入、意图路由、写操作确认、审计、40 条中文评估集
-- 分期：A 只读问答 → B 单步写 → C 多步规划 → D 联调/同步/语音
-- 验收：`SMOKE_AGENT_NL_OK intents=7 tools=16 audit=3`，误写率 0
+- 状态：🔄 P7-A 第一段 ✅（`424711c`：离线规则路由 + 上下文裁剪 + 审计）；侧栏只读问答 UI 与评估集待做
+- 已完成（P7-A-1，`424711c`）：
+  - `src/agent/router.ts`：7 类意图关键词计分（写操作同分优先）、`planTool` 中文→工具+参数、`planReadOnly` 只读白名单、类别同义词按长度倒序（热继电器不被继电器吃掉）、`extractQuery` 去客套/动词/疑问词
+  - `src/agent/context.ts`：`buildAgentContext` 默认 ≤2048 字节，降级顺序「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」，回报 `bytes/truncated/droppedTools/droppedRecent`
+  - `src/agent/audit.ts`：NDJSON 审计、`maskSecrets`（sk-/Bearer/token=/X-Design-Key）、`redactValue` 按字段名脱敏、坏行跳过、写失败不阻断
+  - `session.ts`：`llm.chat()` 抛错才降级离线；写指令不执行并抛原错误；每次工具调用（含 `USER_DENIED`/参数非法/离线）写审计
+  - `electron/ipc.ts`：审计落 `userData/agent-audit.jsonl`，新增 `agent:audit:read`（最近 50 条 + 汇总）
+- 实测（P7-A-1）：`./node_modules/.bin/tsc --noEmit` 通过；`npm test` **457/457**（新增 18 条，覆盖意图/计划/只读隔离/上下文/脱敏/离线降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、既有 `SMOKE_AGENT_TOOLS_OK tools=10`／`SMOKE_AGENT_CHAT_UI_OK`／成本四条断言全绿、`SMOKE_OK`
+- 下一步：P7-A-2 侧栏只读问答（计划预览 + 在线/离线统一回执 + 审计面板入口）、40 条中文评估集与 `npm run eval:agent`
+- 验收（A 期）：`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3`，误写率 0（写计划不进入离线通道，已有单测钉住）
 
 ### P8 设计完成后自动生成 PLC 程序
 - 状态：🔄 设计完成（`docs/desktop/PLC-CODEGEN.md`）
@@ -82,6 +88,7 @@
 | D6 | 参数化建模首期范围 | A 只做单件结构件；B 单件+多体装配；C 直接上草图约束 | 工期（A≈3 周，B≈6 周） | A 先交付，B/C 分期 | 待定 |
 | D7 | 成本面板如何拿到 BOM（CAD 零件名 → 元器件物料号映射口径） | A 由底板画布/电气元件库直接给 partId，成本面板只读；B 允许「零件名规则匹配 + 人工确认」自动填 partId；C 保持手工导入 BOM JSON | 影响成本能否一键算；B 需要命名规范（如 `QF1:LC1D09`），否则匹配率低 | A 长期方向，短期用 C + 预留 B | 待定 |
 | D8 | Agent 的 `run_cost_report` 是否允许落盘导出报告 | A 保持只读，只回摘要；B 增加写工具 `export_cost_report`（PDF/CSV，走现有二次确认）；C 由面板导出，Agent 只给「点哪里」 | 影响「一句话出报价单」的体验；B 需要确认文件名/目录规则与覆盖策略 | B：`export_cost_report` 固定写 `userData/exports/`，默认不覆盖、冲突追加序号 | 已定 B，已实现（`23cd284`） |
+| D9 | 离线规则路由是否要在「模型可用时」也前置生效 | A 仅在模型失败时降级（现状）；B 高置信度只读指令直接走规则，省一次模型调用；C 全走模型 | B 更快更省 token，但规则误判时用户得不到语义纠正，且两套路径要长期保持一致 | A 先稳定；若要 B，先攒 40 条评估集对比准确率再开 | 待定 |
 
 ## 已知问题（记录，不阻塞）
 
@@ -92,6 +99,7 @@
 5. **CI 为手动触发**：按老王要求，不自动构建；要包时 `gh workflow run windows-build`。
 6. **数据准确性**：元器件参数为公开样本汇总，定型前以铭牌/最新样本为准（manifest 已声明）。
 7. **前端原型限制**：3D 为固定等轴测投影，属性编辑不改拓扑（插入与撤销已真实化）。
+8. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；`agent:audit:read` 尚无面板入口（下一步 P7-A-2）。
 
 ## 夜间执行约束
 

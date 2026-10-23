@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：设计完成，待实现（P7）
+状态：P7-A 第一段已落地（离线规则路由 / 上下文裁剪 / 审计，`424711c`），侧栏聊天与评估集待做
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -66,6 +66,8 @@
 
 指代消解：「这个」「刚才那个」「左边的接触器」→ 优先用选中对象，其次最近操作，最后追问一次（只追问一次，避免来回）。
 
+已实现（`desktop/src/agent/context.ts`）：`buildAgentContext()` 输出 `[工程上下文]` 文本块，默认上限 2048 字节；超限按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，并回报 `bytes / truncated / droppedTools / droppedRecent`。smoke 实测 `ctx=1776`。
+
 ## 5. 意图分类与路由
 
 一级意图（规则 + 小模型分类，不依赖大模型也能跑）：
@@ -78,6 +80,12 @@
 7. 闲聊/超纲 → 明确说「这个我做不了」并给替代路径
 
 多步任务：Planner 输出 `[{tool, args, why}]`，执行前展示「我准备做这 3 步」，写操作逐步确认（可设置「本次全部允许」）。
+
+已实现（`desktop/src/agent/router.ts`，规则层，不依赖模型）：
+- `routeIntent()` 关键词计分判 7 类（含 `out_of_scope`），同分按 `modify > generate > sync > commission > compute > query` 裁决；
+- `planTool()` 把中文指令映射成 `{tool, args, readOnly, missing, why}`：先判写（导出成本报告/插入/撤销/导入），再按「干涉 → 电气校验 → 成本 → BOM → 元件」由具体到泛；类别同义词（空开→断路器、热继→热继电器、触摸屏→HMI）按长度倒序匹配；
+- `planReadOnly()` 只放行 `READ_ONLY_TOOLS` 内的计划；`session.run()` 仅在 `llm.chat()` 抛错时降级到它，写操作一律不执行并如实报错；
+- 未命中任何关键词 → `out_of_scope`，回「这个我做不了 + 可问范围」，不猜。
 
 ## 6. 安全与权限
 
@@ -123,8 +131,8 @@
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具
-- 断网时给出明确提示，不静默失败
-- 审计文件可查，凭据掩码正确
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入
-- smoke：`SMOKE_AGENT_NL_OK intents=7 tools=15 audit=3`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`
+- 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
+- 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 新增 18 条（`test/agent/nl-router.test.mjs`），全套 457/457
+- 待补：侧栏聊天的「计划预览/逐步确认」UI、40 条中文评估集与 `npm run eval:agent`

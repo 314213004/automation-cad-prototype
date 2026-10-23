@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
-| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio |
+| Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、上下文裁剪、审计 |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -61,7 +61,7 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 ## 当前总体进度（2026-10-23）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 413 个单测 + 完整 smoke 断言全绿
+- ✅ 457 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -70,6 +70,7 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 - ✅ PLC 抽象 + 仿真/Modbus TCP + 通电联调（6 步 + 3 用例）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/撤销/BOM/干涉）+ MCP 本机代理 + 应用内对话面板
+- ✅ Agent 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

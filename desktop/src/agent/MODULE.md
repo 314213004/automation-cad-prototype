@@ -16,7 +16,10 @@ tools.ts（AgentTools + 10 个 AgentTool）
 应用内对话
  ├─ llm-config.ts  → userData/agent-llm.json（600，UI 只读掩码）
  ├─ llm.ts         → OpenAI 兼容 /chat/completions + tools
- └─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
+ ├─ session.ts     → 工具调用循环（最多 maxIterations，历史 20 条）
+ │    ├─ router.ts  → 离线规则意图路由（7 类 + 只读工具计划）
+ │    ├─ context.ts → 工程上下文打包（≤2 KB 分级降级）
+ │    └─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏）
 ```
 
 渲染层通过 `extension.ts` 暴露受控的 `window.__AgentBridge`，不暴露 DOM。主进程命令总线只允许调用白名单方法。
@@ -56,6 +59,35 @@ interface Bridge {
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
 
 `get_bom` 的 BOM 由「当前 CAD 零件 + 已插入占位件」生成：序号递增、名称/型号取零件名、数量 1、材料 `—`，并带 `note` 说明这是简化 BOM。没有模型时返回空数组。
+
+## 离线路由 / 上下文 / 审计（P7-A）
+
+断网或模型未配置时不能「什么都问不了」，也不能偷偷执行写操作，因此这三块独立成纯函数模块。
+
+```ts
+type IntentKind = 'query'|'compute'|'modify'|'generate'|'commission'|'sync'|'out_of_scope';
+
+interface IntentMatch { intent: IntentKind; confidence: 'high'|'medium'|'low'; score: number; hits: string[]; reason: string }
+interface ToolPlan { tool: string; args: Record<string,unknown>; readOnly: boolean; missing: string[]; why: string }
+
+routeIntent(text): IntentMatch            // 关键词计分，写操作优先裁决
+planTool(text): ToolPlan | null           // 中文指令 → 工具 + 参数
+planReadOnly(text): ToolPlan | null       // 仅 readOnly 且在白名单内，离线通道只认这个
+extractQuery(text): string                // 去客套话/动词/疑问词/类别词
+
+buildAgentContext(input, limit = 2048): { text, bytes, truncated, toolCount, droppedTools, droppedRecent }
+createAuditLog({ write, now?, onError? }): { record, entries }
+maskSecrets(text): string                 // sk- / Bearer / token= / X-Design-Key
+redactValue(value): unknown               // 按字段名脱敏，数组截 20 项，深度 4
+parseAuditLines(text): AgentAuditEntry[]  // 坏行跳过
+summarizeAudit(entries): { total, failed, tools, lastAt }
+```
+
+- 意图规则：`query / compute / modify / generate / commission / sync`，全 0 命中判 `out_of_scope`；同分按 `modify > generate > sync > commission > compute > query`，保证「搜索并插入」不会被当成只读查询。
+- `planTool` 先判写（导出成本报告、插入、撤销、导入），再按 `干涉 → 电气校验 → 成本 → BOM → 元件` 的具体到泛顺序；类别同义词（空开→断路器、热继→热继电器…）按长度倒序匹配，避免「继电器」吃掉「热继电器」。
+- 离线降级：`session.run()` 里 `llm.chat()` 抛错才触发 `runOffline()`；只执行 `planReadOnly`，写计划直接抛回原错误，由 UI 提示需要联网。
+- 上下文：`buildAgentContext` 超限时按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，`truncated/droppedTools/droppedRecent` 如实回报。
+- 审计：`session` 每次工具调用（含 `USER_DENIED`/参数非法/离线）回调 `audit`；`ipc.ts` 写 `userData/agent-audit.jsonl` 并暴露 `agent:audit:read`（最近 50 条 + 汇总）。写失败只回调 `onError`，不影响对话。
 
 ## 命令总线与撤销
 
@@ -118,6 +150,9 @@ window.__AgentBridge = {
 5. **Codex/Claude 的 MCP 配置**要写绝对路径（`npm run mcp` 的输出目录），见 `desktop/README.md`。
 6. **不要把大对象直接 JSON.stringify 回传**：网格数据会撑爆 body 上限（2 MB），工具只回摘要。
 7. **渲染桥参数必须走 JSON 白名单**：不允许任意表达式拼接，避免 Agent 代码进入渲染进程。
+8. **意图关键词不要把单字塞进去**：`查` 会被「检查」误命中、`列` 会被「列举/列出」重复计分；用 `查一下/列一下/搜一下` 这类最短完整词，并让类别词按长度倒序剔除，否则「继电器」会把「热继电器」拆成「热」。
+9. **离线通道只能用 `planReadOnly`**：直接调 `planTool` 会把 `export_cost_report` 这类写工具在断网时执行掉；`READ_ONLY_TOOLS`/`WRITE_TOOLS` 两个集合之和必须等于工具总数（现有单测钉住）。
+10. **审计数据先脱敏再写**：`maskSecrets` 只处理文本，结构化参数必须走 `redactValue`（按字段名），否则 `{apiKey}` 会原样落盘；写文件失败要吞掉，不能让审计把对话打断。
 
 ## 进度
 
@@ -127,8 +162,9 @@ window.__AgentBridge = {
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
-- ✅ 单测：全套 439/439；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
-- ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources
+- ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
+- ✅ 单测：全套 457/457；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ⏳ 更多可撤销写操作（属性修改、删除节点）与 MCP resources；审计面板 UI
 
 ## 待办
 

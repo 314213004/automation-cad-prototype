@@ -41,9 +41,10 @@ SMOKE_COMMISSION_PDF_OK path=.../report.pdf
 SMOKE_COMMISSION_3D_OK ticks=... parts=16
 SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16 ticks=...
 SMOKE_DIAGNOSE_OK codes=1
-SMOKE_AGENT_TOOLS_OK tools=7 implemented=7
+SMOKE_AGENT_TOOLS_OK tools=10 implemented=10
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
+SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776
 SMOKE_OK
 ```
 任一断言失败 → 退出码 1，并打印 `SMOKE_FAIL <原因>`。
@@ -69,8 +70,8 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 169 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、数据包、同步、联调诊断与配置驱动 3D）
-- ✅ smoke 含智能体 7 工具/场景/BOM/对话面板、电气元件面板、PLC、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
+- ✅ 457 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、命令总线、离线意图路由、上下文裁剪、审计脱敏、数据包、同步、联调诊断与配置驱动 3D）
+- ✅ smoke 含智能体 10 工具/场景/BOM/对话面板/离线路由与审计、电气元件面板、PLC、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
 
