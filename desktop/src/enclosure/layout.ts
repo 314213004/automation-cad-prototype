@@ -29,6 +29,13 @@ export interface PlateSpec {
   rails: Rail[];
 }
 
+export type PlacementWarningCode = 'OVERLAP' | 'OUT_OF_BOUNDS';
+
+export interface PlacementWarning {
+  code: PlacementWarningCode;
+  message: string;
+}
+
 export function snapMm(value: number, grid = 1): number {
   if (!Number.isFinite(value) || !Number.isFinite(grid) || grid <= 0) return 0;
   const snapped = Math.round(value / grid) * grid;
@@ -117,4 +124,73 @@ export function clampToPlate(p: Placement, plate: PlateSpec): Placement {
 /** DIN 导轨元件的底部与 35mm 导轨底边对齐。 */
 export function railSnapY(rail: Rail, partHeight: number): number {
   return rail.y + rail.height - partHeight;
+}
+
+/** 旋转 90°：宽高互换。 */
+export function rotateSize(width: number, height: number): { w: number; h: number } {
+  return { w: height, h: width };
+}
+
+/** 离矩形中心最近的导轨；没有导轨时返回 undefined。 */
+export function nearestRail(plate: PlateSpec, rect: { y: number; h: number }): Rail | undefined {
+  const center = rect.y + rect.h / 2;
+  let best: Rail | undefined;
+  let distance = Number.POSITIVE_INFINITY;
+  for (const rail of plate.rails) {
+    const current = Math.abs(center - (rail.y + rail.height / 2));
+    if (current < distance) {
+      distance = current;
+      best = rail;
+    }
+  }
+  return best;
+}
+
+/** 吸附到最近导轨：返回贴住导轨底边的 y 与导轨 id。 */
+export function railSnapPlacement(
+  plate: PlateSpec,
+  rect: { y: number; h: number }
+): { y: number; railId: string } | undefined {
+  const rail = nearestRail(plate, rect);
+  if (!rail) return undefined;
+  return { y: railSnapY(rail, rect.h), railId: rail.id };
+}
+
+function formatMm(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+/**
+ * 放置告警：越界与重叠都不阻止放置（画布会钳制/贴边），只把风险交给调用方。
+ * `intended` 是吸附后、钳制前的矩形，用于判断用户请求是否超出底板。
+ */
+export function placementWarnings(
+  existing: Placement[],
+  placement: Placement,
+  plate: PlateSpec,
+  intended: Placement = placement
+): PlacementWarning[] {
+  const warnings: PlacementWarning[] = [];
+  if (
+    intended.x < 0 ||
+    intended.y < 0 ||
+    intended.x + intended.w > plate.width + 1e-9 ||
+    intended.y + intended.h > plate.height + 1e-9
+  ) {
+    warnings.push({
+      code: 'OUT_OF_BOUNDS',
+      message:
+        `元件超出底板范围（X ${formatMm(intended.x)}–${formatMm(intended.x + intended.w)} / ` +
+        `Y ${formatMm(intended.y)}–${formatMm(intended.y + intended.h)} mm，` +
+        `底板 ${formatMm(plate.width)}×${formatMm(plate.height)} mm），已贴边放置`
+    });
+  }
+  for (const item of existing) {
+    if (!collision(item, placement)) continue;
+    warnings.push({
+      code: 'OVERLAP',
+      message: `与已放置元件 ${item.model}（${item.id}）重叠`
+    });
+  }
+  return warnings;
 }

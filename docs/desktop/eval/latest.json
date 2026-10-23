@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-23T04:50:38.531Z",
+  "generatedAt": "2026-10-23T05:53:29.476Z",
   "version": "0.2.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "desktop/eval/agent-cases.json",
-    "count": 40,
+    "count": 46,
     "references": 16,
-    "ambiguous": 5,
+    "ambiguous": 7,
     "multiStep": 5,
     "outOfScope": 5
   },
@@ -20,18 +20,18 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 40,
-      "total": 40,
+      "correct": 46,
+      "total": 46,
       "rate": 1
     },
     "tools": {
-      "correct": 40,
-      "total": 40,
+      "correct": 46,
+      "total": 46,
       "rate": 1
     },
     "params": {
-      "correct": 14,
-      "total": 14,
+      "correct": 20,
+      "total": 20,
       "rate": 1
     },
     "refused": {
@@ -607,6 +607,216 @@
           "args": {},
           "readOnly": false,
           "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p01",
+      "input": "把 iC65N-C16-1P 放到 12, 40 位置",
+      "tags": [],
+      "note": "底板放置：精确物料号 + 逗号坐标；写操作需确认。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "partId": "iC65N-C16-1P",
+            "x": 12,
+            "y": 40
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p02",
+      "input": "在底板上放一个 iC65N 1P C16",
+      "tags": [],
+      "note": "带空格的完整型号应整体保留并由工具唯一命中；缺坐标要追问。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "partId": "iC65N 1P C16"
+          },
+          "readOnly": false,
+          "missing": [
+            "x",
+            "y"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p03",
+      "input": "摆一个 iC65N 断路器在 120, 180",
+      "tags": [
+        "ambiguous"
+      ],
+      "note": "「摆一个…在…」句式；型号候选多义，坐标必须正确抽取。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "partId": "iC65N",
+            "x": 120,
+            "y": 180
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p04",
+      "input": "放一个 CDM3-100S-3300 在 40, 80",
+      "tags": [],
+      "note": "无 dims 的元件也要先进入放置计划，由工具在执行期回 NO_DIMENSIONS。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "partId": "CDM3-100S-3300",
+            "x": 40,
+            "y": 80
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p05",
+      "input": "把 LC1D18M7C 放在底板 700, 900",
+      "tags": [],
+      "note": "越界坐标不改变工具选择，执行期以 OUT_OF_BOUNDS 告警并贴边放置。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "partId": "LC1D18M7C",
+            "x": 700,
+            "y": 900
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "p06",
+      "input": "在底板上加一个到 120, 180",
+      "tags": [
+        "ambiguous"
+      ],
+      "note": "缺少型号时仍规划放置工具并在确认前点名缺 partId。",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "place_component"
+      ],
+      "actualTools": [
+        "place_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "place_component",
+          "args": {
+            "rotate": false,
+            "railSnap": true,
+            "x": 120,
+            "y": 180
+          },
+          "readOnly": false,
+          "missing": [
+            "partId"
+          ]
         }
       ],
       "passed": true

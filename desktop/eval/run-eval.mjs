@@ -89,7 +89,7 @@ function actualPlans(testCase) {
 function validateCases(cases) {
   const errors = [];
   if (!Array.isArray(cases)) return ['评估集必须是 JSON 数组'];
-  if (cases.length !== 40) errors.push(`评估集应为 40 条，实际 ${cases.length} 条`);
+  if (cases.length !== 46) errors.push(`评估集应为 46 条，实际 ${cases.length} 条`);
 
   const ids = new Set();
   const intents = new Set();

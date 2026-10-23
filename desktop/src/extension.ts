@@ -14,7 +14,12 @@ import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
 import { initElecLibraryPanel } from './packs/elec-ui';
-import { closeEnclosure, initEnclosureUi } from './enclosure/canvas';
+import {
+  closeEnclosure,
+  initEnclosureUi,
+  placePartInEnclosure,
+  removeEnclosurePart
+} from './enclosure/canvas';
 import { initElecCheckPanel } from './elec/ui';
 import { initCostPanel } from './cost/ui';
 import { initPlcGenUi } from './plcgen/ui';
@@ -806,6 +811,37 @@ function initAgentBridge(): void {
           return { ok: false, message: `零件索引不存在：${meshIndex}` };
         }
         return { ok: true };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    placeEnclosurePart: async (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') return { ok: false, code: 'INVALID_ARGUMENT', message: '放置参数不合法' };
+      const source = payload as Record<string, unknown>;
+      const partId = typeof source.partId === 'string' ? source.partId.trim() : '';
+      const x = Number(source.x);
+      const y = Number(source.y);
+      if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: 'partId 不能为空' };
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return { ok: false, code: 'INVALID_ARGUMENT', message: 'x/y 坐标必须是毫米数值' };
+      }
+      try {
+        return await placePartInEnclosure(partId, x, y, {
+          rotate: source.rotate === true,
+          railSnap: source.railSnap !== false
+        });
+      } catch (error) {
+        return { ok: false, code: 'RENDERER_ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    removeEnclosurePart: (placementId: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (typeof placementId !== 'string' || !placementId.trim()) {
+        return { ok: false, message: 'placementId 不能为空' };
+      }
+      try {
+        return removeEnclosurePart(placementId.trim());
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }

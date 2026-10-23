@@ -25,6 +25,7 @@ const LOCAL_READ_TOOLS = new Set(['list_components', 'search_components']);
 const DESKTOP_REQUIRED_TOOLS = new Set([
   'import_cad',
   'insert_component',
+  'place_component',
   'undo_last',
   'get_bom',
   'run_interference_check',

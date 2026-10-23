@@ -290,6 +290,21 @@ interface AgentBridgeApi {
   getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
+  placeEnclosurePart(payload: {
+    partId: string;
+    x: number;
+    y: number;
+    rotate?: boolean;
+    railSnap?: boolean;
+  }): Promise<
+    | {
+        ok: true;
+        placement: { id: string; partId: string; model: string; x: number; y: number; w: number; h: number; railId?: string };
+        warnings: Array<{ code: 'OVERLAP' | 'OUT_OF_BOUNDS'; message: string }>;
+      }
+    | { ok: false; code?: string; message: string }
+  >;
+  removeEnclosurePart(placementId: string): { ok: boolean; message?: string };
   runInterference(): { hits: number; items: { a: string; b: string; volume: number; severity: string }[] } | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
   exportCostFile(payload: {
@@ -481,6 +496,15 @@ interface Window {
       h: number;
       railId?: string;
     } | null>;
+    place(partId: string, x?: number, y?: number, options?: { rotate?: boolean; railSnap?: boolean }): Promise<
+      | {
+          ok: true;
+          placement: { id: string; partId: string; model: string; x: number; y: number; w: number; h: number; railId?: string };
+          warnings: Array<{ code: 'OVERLAP' | 'OUT_OF_BOUNDS'; message: string }>;
+        }
+      | { ok: false; code: 'PART_NOT_FOUND' | 'NO_DIMENSIONS'; message: string }
+    >;
+    remove(placementId: string): { ok: boolean; message?: string };
     state(): {
       placed: number;
       overlap: number;

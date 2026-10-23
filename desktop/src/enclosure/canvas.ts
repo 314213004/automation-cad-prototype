@@ -3,10 +3,14 @@ import { buildEntryButton, ensurePanelStyles, escapeHtml, notify } from '../ui/p
 import {
   clampToPlate,
   findCollisions,
+  placementWarnings,
+  railSnapPlacement,
   railSnapY,
+  rotateSize,
   snapMm,
   utilization,
   type Placement,
+  type PlacementWarning,
   type PlateSpec,
   type Rail
 } from './layout';
@@ -43,6 +47,15 @@ export interface EnclosureState {
   plate: { width: number; height: number; rails: Rail[] };
   placements: Placement[];
 }
+
+export interface EnclosurePlaceOptions {
+  rotate?: boolean;
+  railSnap?: boolean;
+}
+
+export type EnclosurePlaceOutcome =
+  | { ok: true; placement: Placement; warnings: PlacementWarning[] }
+  | { ok: false; code: 'PART_NOT_FOUND' | 'NO_DIMENSIONS'; message: string };
 
 interface DragPoint {
   x: number;
@@ -197,20 +210,6 @@ function modelLabel(placement: Placement): string {
   if (placement.w > 60) return placement.model;
   const token = placement.model.trim().split(/\s+/)[0] ?? placement.model;
   return token.length > 10 ? `${token.slice(0, 9)}…` : token;
-}
-
-function nearestRail(plate: PlateSpec, placement: Placement): Rail | undefined {
-  const center = placement.y + placement.h / 2;
-  let best: Rail | undefined;
-  let distance = Number.POSITIVE_INFINITY;
-  for (const rail of plate.rails) {
-    const current = Math.abs(center - (rail.y + rail.height / 2));
-    if (current < distance) {
-      distance = current;
-      best = rail;
-    }
-  }
-  return best;
 }
 
 function svgText(value: string): string {
@@ -395,18 +394,39 @@ export class EnclosureCanvas {
   }
 
   async addPart(partId: string, x?: number, y?: number): Promise<Placement | null> {
-    const parts = await loadEnclosureParts();
-    const part = parts.find((item) => partKey(item) === partId || item.id === partId);
-    const dims = part?.dims;
-    if (!part || !dims || !(dims.w > 0) || !(dims.h > 0)) {
-      notify('该元件缺少外形尺寸，无法放置', true);
+    const outcome = await this.placePart(partId, x, y);
+    if (!outcome.ok) {
+      notify(outcome.message, true);
       return null;
     }
+    return { ...outcome.placement };
+  }
 
+  async placePart(
+    partId: string,
+    x?: number,
+    y?: number,
+    options: EnclosurePlaceOptions = {}
+  ): Promise<EnclosurePlaceOutcome> {
+    const parts = await loadEnclosureParts();
+    const part = parts.find((item) => partKey(item) === partId || item.id === partId);
+    if (!part) {
+      return { ok: false, code: 'PART_NOT_FOUND', message: `元器件不存在：${partId}` };
+    }
+    const dims = part.dims;
+    if (!dims || !(dims.w > 0) || !(dims.h > 0)) {
+      return {
+        ok: false,
+        code: 'NO_DIMENSIONS',
+        message: `元件 ${part.model} 缺少外形尺寸，无法放置到底板`
+      };
+    }
+
+    const size = options.rotate === true ? rotateSize(dims.w, dims.h) : { w: dims.w, h: dims.h };
     let left = x;
     let top = y;
     if (left === undefined || top === undefined) {
-      const auto = this.autoPosition(part, dims.w, dims.h);
+      const auto = this.autoPosition(part, size.w, size.h);
       left = auto.x;
       top = auto.y;
     }
@@ -417,22 +437,24 @@ export class EnclosureCanvas {
       model: part.model,
       x: snapMm(left),
       y: snapMm(top),
-      w: dims.w,
-      h: dims.h
+      w: size.w,
+      h: size.h
     };
-    if (part.railMount) {
-      const rail = nearestRail(this.plate, placement);
-      if (rail) {
-        placement.y = railSnapY(rail, placement.h);
-        placement.railId = rail.id;
+    if (part.railMount && options.railSnap !== false) {
+      const snap = railSnapPlacement(this.plate, placement);
+      if (snap) {
+        placement.y = snap.y;
+        placement.railId = snap.railId;
       }
     }
+    const intended = placement;
     placement = clampToPlate(placement, this.plate);
+    const warnings = placementWarnings(this.placements, placement, this.plate, intended);
     this.placements.push(placement);
     this.selectedId = placement.id;
     this.sync();
     this.render();
-    return { ...placement };
+    return { ok: true, placement: { ...placement }, warnings };
   }
 
   private autoPosition(part: DesktopComponentPart, width: number, height: number): { x: number; y: number } {
@@ -474,6 +496,17 @@ export class EnclosureCanvas {
     this.selectedId = null;
     this.sync();
     this.render();
+  }
+
+  /** 按放置 id 移除（Agent 撤销用），返回是否真的删掉了。 */
+  removePlacement(id: string): boolean {
+    const index = this.placements.findIndex((item) => item.id === id);
+    if (index < 0) return false;
+    this.placements.splice(index, 1);
+    if (this.selectedId === id) this.selectedId = null;
+    this.sync();
+    this.render();
+    return true;
   }
 
   private rotateSelected(): void {
@@ -928,11 +961,33 @@ export function isEnclosureOpen(): boolean {
   return Boolean(overlayElement && !overlayElement.hidden);
 }
 
-export async function addPartToEnclosure(partId: string, x?: number, y?: number): Promise<Placement | null> {
+export async function placePartInEnclosure(
+  partId: string,
+  x?: number,
+  y?: number,
+  options: EnclosurePlaceOptions = {}
+): Promise<EnclosurePlaceOutcome> {
+  initEnclosureUi();
   openEnclosure();
-  const placement = await canvasInstance?.addPart(partId, x, y) ?? null;
-  if (placement) notify(`已放入底板：${placement.model}`, false);
-  return placement;
+  if (!canvasInstance) {
+    return { ok: false, code: 'PART_NOT_FOUND', message: '底板画布尚未就绪' };
+  }
+  const outcome = await canvasInstance.placePart(partId, x, y, options);
+  if (outcome.ok) notify(`已放入底板：${outcome.placement.model}`, false);
+  return outcome;
+}
+
+export async function addPartToEnclosure(partId: string, x?: number, y?: number): Promise<Placement | null> {
+  const outcome = await placePartInEnclosure(partId, x, y);
+  return outcome.ok ? outcome.placement : null;
+}
+
+export function removeEnclosurePart(placementId: string): { ok: boolean; message?: string } {
+  if (!canvasInstance) return { ok: false, message: '底板画布尚未就绪' };
+  if (!canvasInstance.removePlacement(placementId)) {
+    return { ok: false, message: `底板元件不存在：${placementId}` };
+  }
+  return { ok: true };
 }
 
 export function enclosureState(): EnclosureState | null {
@@ -992,6 +1047,9 @@ export function initEnclosureUi(): void {
 
   window.__Enclosure = {
     add: (partId: string, x?: number, y?: number) => addPartToEnclosure(partId, x, y),
+    place: (partId: string, x?: number, y?: number, options?: EnclosurePlaceOptions) =>
+      placePartInEnclosure(partId, x, y, options),
+    remove: (placementId: string) => removeEnclosurePart(placementId),
     state: () => enclosureState(),
     open: openEnclosure,
     close: closeEnclosure,

@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 10 个 AgentTool）
+tools.ts（AgentTools + 11 个 AgentTool）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
  ├─ mcp.ts        → MCP stdio server，工具定义直接复用
  ├─ mcp-proxy.ts  → stdio MCP → 桌面 RPC 写工具代理（10 秒超时）
@@ -54,6 +54,7 @@ interface Bridge {
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
 | `run_interference_check` | 无 | `run_interference` | ✅ 前 20 条 |
 | `insert_component` | `partId / name?` | `insert_component` | ✅ 可撤销 |
+| `place_component` | `partId / x / y / rotate? / railSnap?` | `place_component` | ✅ 底板放置，可撤销；越界/重叠只告警 |
 | `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条 |
 | `run_cost_report` | `bom? / pricebook? / placements? / plate? / plc? / options? / overrides? / wireSection? / now?` | `run_cost_report` | ✅ 只读，明细前 50 行、缺价/告警各 20 条 |
 | `export_cost_report` | `format / fileName? / overwrite?` + 同上成本参数 | `export_cost_report` | ✅ 写工具：PDF/CSV 落盘到 `userData/exports/`，需确认 |
@@ -119,22 +120,23 @@ auditSummaryText(summary): string                        // 空审计 → 「暂
 - 导出 PDF 的字节由主进程 `renderCostPdf`（复用 `printToPDF`）生成，base64 过桥；渲染层不接触文件系统。
 - 该命令通过构造参数 `createAgentCommandBus(registry, bridge, { loadBuiltinPricebook })` 拿到内置价格簿读取器（主进程读 `packs/builtin/pricebook-cn/pricebook.json`），与 `cost:pricebook` IPC 同源。
 - `insert_component` 成功后将 `meshIndex` 作为 undo token 入栈；`undo_last` 调用 `removeComponent` 后索引会重排。
+- `place_component` 先由 `placement.ts` 做型号解析（精确 id → 唯一模糊命中；多义返回 `AMBIGUOUS` + 候选），再由命令总线校验 `dims`，经渲染桥 `placeEnclosurePart` 调用真实 `window.__Enclosure.place`。放置 id 作为 undo token；`undo_last` 调 `removeEnclosurePart` 并返回 `{command:'place_component',removed:<placementId>}`。越界/重叠不拒绝，返回 `warnings[{code:'OUT_OF_BOUNDS'|'OVERLAP'}]`。
 - `PART_NOT_FOUND`、`UNSUPPORTED_FORMAT`、`FILE_NOT_FOUND`、`RENDERER_TIMEOUT`、`RENDERER_UNAVAILABLE` 均为结构化错误码。
 
 ## MCP 写工具代理
 
 - 独立 stdio MCP 启动时读取 `userData/agent-token`，调用 `POST http://127.0.0.1:7420/rpc` 的 `tools/call`，工具名和参数原样转发，默认 10 秒超时。
 - 桌面可达时所有已知工具都转发，写操作走主进程 CommandBus 与渲染桥。
-- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 8 个工具（含 `export_cost_report`）返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
+- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 9 个工具（含 `place_component`、`export_cost_report`）返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
 - 代理错误不包含 token；401 单独返回鉴权错误，不降级成“桌面未运行”。
 
 ## 应用内智能体对话
 
 - `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
 - UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
-- `llm.ts` 以 OpenAI 兼容格式发送 10 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `llm.ts` 以 OpenAI 兼容格式发送 11 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
 - `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
-- `insert_component`、`import_cad`、`undo_last`、`export_cost_report` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
+- `insert_component`、`place_component`、`import_cad`、`undo_last`、`export_cost_report` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
 - 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
 
 ## JSON-RPC 协议
@@ -154,6 +156,8 @@ Authorization: Bearer <token>
 window.__AgentBridge = {
   ready(), getScene(), getSelection(), getBom(),
   insertComponent(part), removeComponent(meshIndex),
+  placeEnclosurePart({ partId, x, y, rotate?, railSnap? }),
+  removeEnclosurePart(placementId),
   runInterference(), importPath(path)
 }
 ```
@@ -176,19 +180,20 @@ window.__AgentBridge = {
 10. **预览绝不能顺手执行**：`buildPlanPreview` 只允许读 `router.ts` 的纯函数，不要为了「省一次点击」在预览里调命令总线——冒烟已钉住预览前后场景零件数不变。
 11. **回执的通道要由主进程给**：`mode` 从 `AgentSession.mode()` 取，别在渲染层用「回复文案里有没有『离线』」猜，否则离线失败回包会被误标成在线。
 12. **审计数据先脱敏再写**：`maskSecrets` 只处理文本，结构化参数必须走 `redactValue`（按字段名），否则 `{apiKey}` 会原样落盘；写文件失败要吞掉，不能让审计把对话打断。
+13. **放置告警要在钳制前判断**：`placementWarnings` 的 `intended` 是吸附后、`clampToPlate` 前的矩形；用钳制后的坐标判越界会永远没有 `OUT_OF_BOUNDS`。旋转必须先交换宽高，再算导轨吸附与碰撞。
 
 ## 进度
 
-- ✅ 注册表 + 10 工具 + 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 10 个）
+- ✅ 注册表 + 11 工具（只读 6 / 写 5）+ 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 11 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
-- ✅ 渲染桥：场景、选择、BOM、插入、移除、干涉、导入
+- ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
 - ✅ 应用内智能体对话（LLM 客户端、会话循环、设置与确认）
 - ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
-- ✅ 单测：全套 466/466；smoke：`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
-- ✅ P7-A-3：40 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
+- ✅ 单测：全套 598/598；smoke：`SMOKE_AGENT_TOOLS_OK tools=11 implemented=11`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
 - ⏳ 更多可撤销写操作（属性修改、删除节点）、MCP resources、写操作逐步确认 UI；联调/同步工具注册后补充真实工具用例
 
 ## 待办

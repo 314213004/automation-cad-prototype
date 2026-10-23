@@ -164,6 +164,54 @@
     "note": "指代上一次插入；撤销判断必须优先于插入关键词。"
   },
   {
+    "id": "p01",
+    "input": "把 iC65N-C16-1P 放到 12, 40 位置",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "partId": "iC65N-C16-1P", "x": 12, "y": 40 } },
+    "tags": [],
+    "note": "底板放置：精确物料号 + 逗号坐标；写操作需确认。"
+  },
+  {
+    "id": "p02",
+    "input": "在底板上放一个 iC65N 1P C16",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "partId": "iC65N 1P C16" } },
+    "tags": [],
+    "note": "带空格的完整型号应整体保留并由工具唯一命中；缺坐标要追问。"
+  },
+  {
+    "id": "p03",
+    "input": "摆一个 iC65N 断路器在 120, 180",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "partId": "iC65N", "x": 120, "y": 180 } },
+    "tags": ["ambiguous"],
+    "note": "「摆一个…在…」句式；型号候选多义，坐标必须正确抽取。"
+  },
+  {
+    "id": "p04",
+    "input": "放一个 CDM3-100S-3300 在 40, 80",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "partId": "CDM3-100S-3300", "x": 40, "y": 80 } },
+    "tags": [],
+    "note": "无 dims 的元件也要先进入放置计划，由工具在执行期回 NO_DIMENSIONS。"
+  },
+  {
+    "id": "p05",
+    "input": "把 LC1D18M7C 放在底板 700, 900",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "partId": "LC1D18M7C", "x": 700, "y": 900 } },
+    "tags": [],
+    "note": "越界坐标不改变工具选择，执行期以 OUT_OF_BOUNDS 告警并贴边放置。"
+  },
+  {
+    "id": "p06",
+    "input": "在底板上加一个到 120, 180",
+    "intent": "modify",
+    "expect": { "tool": "place_component", "argsContains": { "x": 120, "y": 180 } },
+    "tags": ["ambiguous"],
+    "note": "缺少型号时仍规划放置工具并在确认前点名缺 partId。"
+  },
+  {
     "id": "g01",
     "input": "导出一份 CSV 报价单",
     "intent": "generate",

@@ -714,6 +714,60 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        // P7-B：Agent 单步放置 + 撤销。走真实命令总线与 __Enclosure，不模拟几何。
+        if (!commandBus) throw new Error('命令总线尚未就绪');
+        const cleared = await window.webContents.executeJavaScript(
+          `(() => { window.__Enclosure?.clear(); return window.__Enclosure?.state()?.placed ?? -1; })()`
+        ) as number;
+        const placed = await commandBus.execute('place_component', {
+          partId: 'iC65N-C16-1P',
+          x: 12,
+          y: 40,
+          rotate: false,
+          railSnap: true
+        });
+        const placementId = placed.ok && placed.data && typeof placed.data === 'object'
+          ? (placed.data as Record<string, unknown>).placementId
+          : null;
+        const afterPlace = await window.webContents.executeJavaScript(
+          `(() => {
+            const state = window.__Enclosure?.state();
+            const item = state?.placements?.[0];
+            return {
+              placed: state?.placed ?? -1,
+              x: item?.x ?? -1,
+              y: item?.y ?? -1,
+              w: item?.w ?? -1,
+              h: item?.h ?? -1,
+              railId: item?.railId ?? ''
+            };
+          })()`
+        ) as { placed: number; x: number; y: number; w: number; h: number; railId: string };
+        const undone = await commandBus.undoLast();
+        const removed = undone.ok && undone.data && typeof undone.data === 'object'
+          ? (undone.data as Record<string, unknown>).removed
+          : null;
+        const afterUndo = await window.webContents.executeJavaScript(
+          `(() => window.__Enclosure?.state()?.placed ?? -1)()`
+        ) as number;
+        if (
+          cleared !== 0 || !placed.ok || typeof placementId !== 'string' ||
+          afterPlace.placed !== 1 || afterPlace.w !== 18 || afterPlace.h !== 85 ||
+          !afterPlace.railId || !undone.ok || removed !== placementId || afterUndo !== 0
+        ) {
+          console.error('SMOKE_FAIL agent_place', JSON.stringify({
+            cleared, placed, placementId, afterPlace, undone, removed, afterUndo
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_PLACE_OK placed=${afterPlace.placed} undo=${removed ? 1 : 0}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL agent_place_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         // 电气校验规则引擎：用一段含跨网络重号 + 截面不足的样例电路自检。
         const result = runElectricalCheck({
           wires: [
@@ -993,10 +1047,11 @@ function createWindow(): BrowserWindow {
       try {
         const summaries = agentTools?.summaries() ?? [];
         if (
-          summaries.length !== 10 ||
+          summaries.length !== 11 ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
-          !summaries.some((tool) => tool.name === 'export_cost_report')
+          !summaries.some((tool) => tool.name === 'export_cost_report') ||
+          !summaries.some((tool) => tool.name === 'place_component')
         ) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);

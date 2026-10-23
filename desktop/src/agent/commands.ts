@@ -60,7 +60,7 @@ interface CommandRunResult extends CommandResult {
 export interface Command {
   name: string;
   run(args: Record<string, unknown>, ctx: CommandContext): Promise<CommandRunResult>;
-  undo?(token: unknown, ctx: CommandContext): Promise<void>;
+  undo?(token: unknown, ctx: CommandContext): Promise<unknown>;
 }
 
 interface UndoRecord {
@@ -99,6 +99,23 @@ interface InterferenceBridgeResult {
   items: InterferenceBridgeItem[];
 }
 
+interface PlacementBridgeResult {
+  ok: boolean;
+  placement?: {
+    id: string;
+    partId: string;
+    model: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    railId?: string;
+  };
+  warnings?: Array<{ code: 'OVERLAP' | 'OUT_OF_BOUNDS'; message: string }>;
+  code?: string;
+  message?: string;
+}
+
 export interface BridgeWindow {
   isDestroyed(): boolean;
   webContents: {
@@ -114,6 +131,8 @@ const BRIDGE_METHODS = new Set([
   'getBom',
   'insertComponent',
   'removeComponent',
+  'placeEnclosurePart',
+  'removeEnclosurePart',
   'runInterference',
   'importPath',
   'exportCostFile'
@@ -165,6 +184,14 @@ function requiredString(args: Record<string, unknown>, key: string, label: strin
 function optionalString(args: Record<string, unknown>, key: string): string | undefined {
   const value = args[key];
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function requiredNumber(args: Record<string, unknown>, key: string, label: string): number {
+  const value = args[key];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new CommandFailure('INVALID_ARGUMENT', `${label}必须是毫米数值`);
+  }
+  return value;
 }
 
 export class CommandBus {
@@ -225,8 +252,14 @@ export class CommandBus {
       return failed('UNDO_UNAVAILABLE', `命令不可撤销：${record.command.name}`);
     }
     try {
-      await record.command.undo(record.token, this.context);
-      return { ok: true, data: { command: record.command.name } };
+      const detail = await record.command.undo(record.token, this.context);
+      return {
+        ok: true,
+        data: {
+          command: record.command.name,
+          ...(isRecord(detail) ? detail : {})
+        }
+      };
     } catch (error) {
       this.undoStack.push(record);
       return errorResult(error, 'UNDO_FAILED');
@@ -338,6 +371,64 @@ function registerInsertCommand(bus: CommandBus): void {
       if (!result || result.ok !== true) {
         throw new CommandFailure('UNDO_FAILED', bridgeFailureMessage(result, '撤销插入失败'));
       }
+    }
+  });
+}
+
+function registerPlaceCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'place_component',
+    async run(args, ctx) {
+      const partId = requiredString(args, 'partId', 'partId');
+      const part = ctx.registry.listParts().find((candidate) => candidate.id === partId);
+      if (!part) {
+        throw new CommandFailure('PART_NOT_FOUND', `元器件不存在：${partId}`);
+      }
+      const dims = part.dims;
+      if (!dims || !(dims.w > 0) || !(dims.h > 0)) {
+        throw new CommandFailure(
+          'NO_DIMENSIONS',
+          `元器件 ${part.model} 缺少外形尺寸（dims.w/dims.h），无法放置到底板`
+        );
+      }
+      const x = requiredNumber(args, 'x', 'x 坐标');
+      const y = requiredNumber(args, 'y', 'y 坐标');
+      const rotate = args.rotate === true;
+      const railSnap = args.railSnap !== false;
+      const result = await ctx.bridge.call<PlacementBridgeResult>('placeEnclosurePart', {
+        partId,
+        x,
+        y,
+        rotate,
+        railSnap
+      });
+      if (!result || result.ok !== true) {
+        const code = result?.code === 'NO_DIMENSIONS' ? 'NO_DIMENSIONS' : 'RENDERER_ERROR';
+        throw new CommandFailure(code, bridgeFailureMessage(result, `放置元器件失败：${part.model}`));
+      }
+      const placement = result.placement;
+      if (!placement || typeof placement.id !== 'string' || !placement.id.trim()) {
+        throw new CommandFailure('RENDERER_ERROR', '渲染层未返回有效的放置 id');
+      }
+      return {
+        ok: true,
+        data: {
+          partId,
+          placementId: placement.id,
+          placement,
+          warnings: Array.isArray(result.warnings) ? result.warnings : []
+        },
+        undoToken: placement.id
+      };
+    },
+    async undo(token, ctx) {
+      const placementId = typeof token === 'string' ? token.trim() : '';
+      if (!placementId) throw new CommandFailure('UNDO_FAILED', '撤销令牌无效');
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string }>('removeEnclosurePart', [placementId]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure('UNDO_FAILED', bridgeFailureMessage(result, '撤销底板放置失败'));
+      }
+      return { removed: placementId };
     }
   });
 }
@@ -669,6 +760,7 @@ export function createAgentCommandBus(
   if (options.renderCostPdf) context.renderCostPdf = options.renderCostPdf;
   const bus = new CommandBus(context);
   registerInsertCommand(bus);
+  registerPlaceCommand(bus);
   registerImportCommand(bus);
   registerReadCommands(bus);
   registerElectricalCheckCommand(bus);

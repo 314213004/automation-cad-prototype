@@ -10,6 +10,8 @@
  * - 写工具一律标 `readOnly: false`，离线通道只执行 `readOnly: true` 的计划。
  */
 
+import { extractPlacementSpec, isPlacementInstruction } from './placement.ts';
+
 export type IntentKind =
   | 'query'
   | 'compute'
@@ -58,8 +60,12 @@ const INTENT_PRIORITY: Record<Exclude<IntentKind, 'out_of_scope'>, number> = {
 const RULES: IntentRule[] = [
   {
     intent: 'modify',
-    strong: ['插入', '放置', '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '换成', '换掉', '替换', '导入'],
-    normal: ['放一个', '放两个', '加一个', '添加', '修改', '改成', '改一下', '移走']
+    strong: [
+      '插入', '放置', '放到', '放在', '摆到', '摆在', '摆一个', '放一个', '加一个',
+      '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '换成', '换掉',
+      '替换', '导入'
+    ],
+    normal: ['放两个', '加个', '添加', '摆', '修改', '改成', '改一下', '移走']
   },
   {
     intent: 'generate',
@@ -186,7 +192,7 @@ export interface ToolPlan {
   why: string;
 }
 
-/** 目前注册的 10 个工具里，只读的那 6 个（写操作 4 个）。 */
+/** 目前注册的 11 个工具里，只读 6 个、写操作 5 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
@@ -196,7 +202,13 @@ export const READ_ONLY_TOOLS = new Set([
   'run_cost_report'
 ]);
 
-export const WRITE_TOOLS = new Set(['import_cad', 'insert_component', 'undo_last', 'export_cost_report']);
+export const WRITE_TOOLS = new Set([
+  'import_cad',
+  'insert_component',
+  'place_component',
+  'undo_last',
+  'export_cost_report'
+]);
 
 /** 类别同义词 → 数据包里的真实 category。 */
 const CATEGORY_SYNONYMS: Record<string, string> = {
@@ -430,6 +442,30 @@ export function planTool(text: string): ToolPlan | null {
       readOnly: false,
       missing: path ? [] : ['path'],
       why: path ? `导入 CAD 文件 ${path}（需确认）` : '导入 CAD 需要本机文件绝对路径'
+    };
+  }
+  const placementSpec = extractPlacementSpec(value);
+  if (isPlacementInstruction(value, placementSpec)) {
+    const args: Record<string, unknown> = {
+      rotate: placementSpec.rotate,
+      railSnap: placementSpec.railSnap
+    };
+    if (placementSpec.partRef) args.partId = placementSpec.partRef;
+    if (placementSpec.x !== undefined) args.x = placementSpec.x;
+    if (placementSpec.y !== undefined) args.y = placementSpec.y;
+    const missing: string[] = [];
+    if (!placementSpec.partRef) missing.push('partId');
+    if (placementSpec.x === undefined) missing.push('x');
+    if (placementSpec.y === undefined) missing.push('y');
+    const at = placementSpec.x !== undefined && placementSpec.y !== undefined
+      ? `${placementSpec.x}, ${placementSpec.y} mm`
+      : '坐标待定';
+    return {
+      tool: 'place_component',
+      args,
+      readOnly: false,
+      missing,
+      why: `在底板放置 ${placementSpec.partRef ?? '元件'}（${at}${placementSpec.rotate ? '，旋转 90°' : ''}，需确认）`
     };
   }
   if (/(插入|放一个|放置|添加)/.test(value)) {

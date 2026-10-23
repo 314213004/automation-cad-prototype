@@ -42,7 +42,7 @@ after(async () => {
   rmSync(sandbox, { recursive: true, force: true });
 });
 
-test('MCP server 通过 in-memory transport 列出 10 个复用工具', async () => {
+test('MCP server 通过 in-memory transport 列出 11 个复用工具', async () => {
   const result = await client.listTools();
   assert.deepEqual(result.tools.map((tool) => tool.name).sort(), [
     'export_cost_report',
@@ -50,6 +50,7 @@ test('MCP server 通过 in-memory transport 列出 10 个复用工具', async ()
     'import_cad',
     'insert_component',
     'list_components',
+    'place_component',
     'run_cost_report',
     'run_electrical_check',
     'run_interference_check',

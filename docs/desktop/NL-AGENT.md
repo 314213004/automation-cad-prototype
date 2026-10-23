@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（`424711c` 离线规则路由 / 上下文裁剪 / 审计；`b3b9aee` 侧栏只读问答 UI；P7-A-3 40 条中文评估集 + `npm run eval:agent`）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动，评估集扩至 46 条）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -36,15 +36,26 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（16 个：现有 10 + 规划新增 6）
+## 3. 工具清单（已实现 11 个：只读 6 + 写 5；规划新增 5 个）
 
-现有：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`run_electrical_check`、`run_cost_report`、`export_cost_report`、`undo_last`
+| 工具 | 类型 | 说明 |
+|---|---|---|
+| `list_components` | 只读 | 按类别 / 数据包列出元件 |
+| `search_components` | 只读 | 型号、品牌、类别、规格全文检索 |
+| `get_bom` | 只读 | 当前装配体简化 BOM |
+| `run_interference_check` | 只读 | 包围盒干涉初筛 |
+| `run_electrical_check` | 只读 | 线号 / 功率 / 截面 / 断路器校验 |
+| `run_cost_report` | 只读 | 按 BOM 与价格簿计算成本 |
+| `import_cad` | 写 | 导入 CAD 文件（需确认） |
+| `insert_component` | 写 | 插入装配体占位件（需确认，可撤销） |
+| `place_component` | 写 | 底板指定坐标放置（旋转 / 导轨吸附；越界/重叠只告警；需确认，可撤销） |
+| `export_cost_report` | 写 | 成本报告落盘 PDF/CSV（需确认） |
+| `undo_last` | 写 | 撤销最近一次可撤销写操作（需确认） |
 
-规划新增 6 个：
+规划新增 5 个：
 | 工具 | 类型 | 说明 |
 |---|---|---|
 | `get_project_context` | 只读 | 当前机型、域、视图、选中对象、底板尺寸、单位制 |
-| `place_component` | 写 | 在底板/原理图指定位置放元件（含吸附与冲突返回） |
 | `export_files` | 写 | 导出 PDF/DXF/GLB/BOM，返回文件路径 |
 | `start_commission` | 写 | 启动联调序列（需确认） |
 | `diagnose_fault` | 只读 | 按当前点位/报警码给故障建议 |
@@ -53,6 +64,17 @@
 已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。
 
 每个工具：JSON Schema 入参、结构化返回、`error.code` 可读中文、幂等键（写操作）。
+
+### 写操作分级
+
+| 级别 | 范围 | 约束 |
+|---|---|---|
+| 只读 | 6 个查询/计算工具 | 可离线直接执行，不产生副作用 |
+| W1 可撤销装配写 | `insert_component`、`place_component` | 执行前二次确认；成功后写入撤销栈，`undo_last` 回滚并返回 `removed` id |
+| W2 文件写 | `import_cad`、`export_cost_report` | 执行前二次确认；固定路径/格式，不接受任意写入路径 |
+| W3 外部副作用 | 规划的 `start_commission` / `sync_design_package` | 除二次确认外，还需明文展示目标地址与机台编号 |
+
+`undo_last` 本身也走确认，但只回滚栈顶的一条可撤销写，不会删除文件或撤销外部操作。
 
 ## 4. 上下文注入
 
@@ -66,7 +88,7 @@
 
 指代消解：「这个」「刚才那个」「左边的接触器」→ 优先用选中对象，其次最近操作，最后追问一次（只追问一次，避免来回）。
 
-已实现（`desktop/src/agent/context.ts`）：`buildAgentContext()` 输出 `[工程上下文]` 文本块，默认上限 2048 字节；超限按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，并回报 `bytes / truncated / droppedTools / droppedRecent`。smoke 实测 `ctx=1776`。
+已实现（`desktop/src/agent/context.ts`）：`buildAgentContext()` 输出 `[工程上下文]` 文本块，默认上限 2048 字节；超限按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，并回报 `bytes / truncated / droppedTools / droppedRecent`。smoke 实测 `ctx=2028`。
 
 ## 5. 意图分类与路由
 
@@ -83,13 +105,14 @@
 
 已实现（`desktop/src/agent/router.ts`，规则层，不依赖模型）：
 - `routeIntent()` 关键词计分判 7 类（含 `out_of_scope`），同分按 `modify > generate > sync > commission > compute > query` 裁决；
-- `planTool()` 把中文指令映射成 `{tool, args, readOnly, missing, why}`：先判写（导出成本报告/插入/撤销/导入），再按「干涉 → 电气校验 → 成本 → BOM → 元件」由具体到泛；类别同义词（空开→断路器、热继→热继电器、触摸屏→HMI）按长度倒序匹配；
+- `planTool()` 把中文指令映射成 `{tool, args, readOnly, missing, why}`：先判写（导出成本报告/底板放置/插入/撤销/导入），再按「干涉 → 电气校验 → 成本 → BOM → 元件」由具体到泛；类别同义词（空开→断路器、热继→热继电器、触摸屏→HMI）按长度倒序匹配；
+- `placement.ts` 从「放/摆/加 + 型号 + 在 x, y」抽取 `partId/x/y/rotate/railSnap`；路由只填型号候选，工具层再做唯一模糊匹配，多义回 `AMBIGUOUS` 并列出候选；
 - `planReadOnly()` 只放行 `READ_ONLY_TOOLS` 内的计划；`session.run()` 仅在 `llm.chat()` 抛错时降级到它，写操作一律不执行并如实报错；
 - 未命中任何关键词 → `out_of_scope`，回「这个我做不了 + 可问范围」，不猜。
 
 ## 6. 安全与权限
 
-- **写操作分级**：只读默认放行；影响文档或本地文件的写操作需确认（`import_cad`、`insert_component`、`undo_last`、`export_cost_report`，其中导出只写 `userData/exports/` 且不弹保存对话框）；影响对外系统（上传、下发 PLC）需二次确认并显示目标地址
+- **写操作分级**：只读默认放行；可撤销装配写（`insert_component`、`place_component`）与文件写（`import_cad`、`export_cost_report`）需确认，前者进入撤销栈；影响对外系统（上传、下发 PLC）需二次确认并显示目标地址
 - **路径白名单**：仅项目工作区与用户数据目录
 - **审计**：每次工具调用写 `agent-audit.jsonl`（时间、工具、参数摘要、结果码），可在设置页查看/导出
 - **敏感信息**：`X-Design-Key` 等凭据不出现在日志与回执里，只显示掩码
@@ -113,7 +136,7 @@
 
 ## 9. 质量评估
 
-固定 40 条中文用例，位于 `desktop/eval/agent-cases.json`：覆盖 7 类意图，其中 16 条含指代、5 条歧义、5 条多步、5 条超纲；工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`。
+固定 46 条中文用例，位于 `desktop/eval/agent-cases.json`：覆盖 7 类意图，其中 16 条含指代、7 条歧义、5 条多步、5 条超纲；新增 6 条底板放置用例（精确型号、多义型号、缺尺寸件、越界坐标、缺参）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`。
 
 在 `desktop/` 下运行：
 
@@ -134,9 +157,9 @@ npm run eval:agent
 任一指标低于上述阈值时脚本退出码为 1；当前离线基线（2026-10-23，v0.2.0）：
 
 ```
-意图准确率   100.0%  (40/40)
-工具选择率   100.0%  (40/40)
-参数抽取率   100.0%  (14/14)
+意图准确率   100.0%  (46/46)
+工具选择率   100.0%  (46/46)
+参数抽取率   100.0%  (20/20)
 超纲拒绝率   100.0%  (5/5)
 多步完成率   100.0%  (5/5)
 EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
@@ -153,10 +176,11 @@ EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 新增 18 条（`test/agent/nl-router.test.mjs`），全套 457/457
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变，全套 466/466
-- 评估集与回归 —— ✅ P7-A-3：40 条中文用例 + 离线规则基线，`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（40/40 意图、40/40 工具、14/14 参数、5/5 超纲拒绝、5/5 多步）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 598/598，其中放置类 21 条（`test/agent/place-component.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 598/598）
+- 评估集与回归 —— ✅ P7-A-3 + P7-B：46 条中文用例 + 离线规则基线，`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（46/46 意图、46/46 工具、20/20 参数、5/5 超纲拒绝、5/5 多步）
+- 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 待补：写操作的逐步确认 UI（当前仍是一次性弹窗）

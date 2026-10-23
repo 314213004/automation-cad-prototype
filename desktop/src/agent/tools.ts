@@ -1,6 +1,7 @@
 import type { PackRegistry } from '../packs/registry';
 import type { ComponentPart } from '../shared/types';
 import type { CommandResult } from './commands';
+import { resolvePartReference } from './placement.ts';
 
 export interface AgentTool {
   name: string;
@@ -36,8 +37,25 @@ const EMPTY_SCHEMA = {
   additionalProperties: false
 };
 
+const PLACE_COMPONENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    partId: { type: 'string', description: '数据包中的元器件 id；也接受唯一命中的型号' },
+    x: { type: 'number', description: '放置位置左上角 X（mm）' },
+    y: { type: 'number', description: '放置位置左上角 Y（mm）' },
+    rotate: { type: 'boolean', description: '是否旋转 90°（宽高互换）', default: false },
+    railSnap: { type: 'boolean', description: '导轨安装件是否吸附到最近导轨', default: true }
+  },
+  required: ['partId', 'x', 'y'],
+  additionalProperties: false
+};
+
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function getNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -390,6 +408,48 @@ export class AgentTools {
     });
 
     this.add({
+      name: 'place_component',
+      description:
+        '把元器件放到电箱底板指定坐标（mm）：可旋转 90°、导轨件可吸附；越界与重叠以 warnings 返回而不是直接拒绝。需要用户确认，可用 undo_last 撤销。',
+      inputSchema: PLACE_COMPONENT_SCHEMA,
+      handler: async (args) => {
+        const partId = getString(args.partId);
+        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: 'place_component 需要 partId 参数' };
+        const x = getNumber(args.x);
+        const y = getNumber(args.y);
+        if (x === undefined || y === undefined) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'place_component 需要 x/y 坐标（mm）' };
+        }
+        const resolution = resolvePartReference(this.registry.listParts(), partId);
+        if (!resolution.ok) {
+          return {
+            ok: false,
+            code: resolution.code,
+            message: resolution.message,
+            ...(resolution.candidates ? { candidates: resolution.candidates } : {})
+          };
+        }
+        const part = resolution.part;
+        const dims = part.dims;
+        if (!dims || !(dims.w > 0) || !(dims.h > 0)) {
+          return {
+            ok: false,
+            code: 'NO_DIMENSIONS',
+            message: `元器件 ${part.model} 缺少外形尺寸（dims.w/dims.h），无法放置到底板`
+          };
+        }
+        const result = await this.execute('place_component', {
+          partId: part.id,
+          x,
+          y,
+          rotate: args.rotate === true,
+          railSnap: args.railSnap !== false
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
       name: 'run_electrical_check',
       description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。',
       inputSchema: ELEC_CHECK_SCHEMA,
@@ -439,7 +499,7 @@ export class AgentTools {
 
     this.add({
       name: 'undo_last',
-      description: '撤销最近一次可撤销的写操作（当前支持占位件插入）。',
+      description: '撤销最近一次可撤销的写操作（当前支持占位件插入与底板放置），返回 removed id。',
       inputSchema: EMPTY_SCHEMA,
       handler: async () => {
         if (!this.commands) return this.unavailable();
