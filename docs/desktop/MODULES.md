@@ -15,6 +15,7 @@
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
+| PLC 代码生成 | [desktop/src/plcgen/MODULE.md](../../desktop/src/plcgen/MODULE.md) | 全量预检、IO 变量表 CSV、五个 ST 基础块与确定性 inputHash |
 | 通电联调 | [desktop/src/commission/MODULE.md](../../desktop/src/commission/MODULE.md) | 6 步上电、3 条用例、序列执行与报告 |
 | 机械校核 | [desktop/src/mech/MODULE.md](../../desktop/src/mech/MODULE.md) | 包围盒干涉初筛 + 气缸/悬臂梁/螺栓计算 |
 | 电气校验 | [desktop/src/elec/MODULE.md](../../desktop/src/elec/MODULE.md) | 线号合规、功率统计、导线截面与断路器配合、校验面板与 PDF |
@@ -61,13 +62,14 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 ## 当前总体进度（2026-10-23）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 466 个单测 + 完整 smoke 断言全绿
+- ✅ 505 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
 - ✅ 电气校验面板（9 卡 + 问题表 + A3 PDF）与成本估算面板（9 卡 + 明细 + 缺价 + A4 PDF/CSV）
 - ✅ 成本 Agent 工具 `run_cost_report`（只读，与面板共用同一份 `CostReport`，明细/缺价窄输出）
 - ✅ PLC 抽象 + 仿真/Modbus TCP + 通电联调（6 步 + 3 用例）
+- ✅ PLC 代码生成 P8-1：预检 + IO 变量表 + 气缸/夹爪/旋转轴/DB_IO/OB1 五个 ST 文件（`SMOKE_PLCGEN_OK files=5 tags=32`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/撤销/BOM/干涉）+ MCP 本机代理 + 应用内对话面板
 - ✅ Agent 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`

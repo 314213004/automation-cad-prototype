@@ -16,6 +16,8 @@ import { describeCheck, runElectricalCheck } from '../src/elec/check';
 import { computeCost, type CostInput } from '../src/cost/engine';
 import { validatePricebook } from '../src/cost/pricebook';
 import { planExportName } from '../src/cost/export';
+import { demoMachineConfig } from '../src/commission/machine-config';
+import { generateSt } from '../src/plcgen/st';
 import { ParametricManager } from './parametric.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
@@ -179,6 +181,25 @@ function createWindow(): BrowserWindow {
       console.error('[desktop] 扩展脚本注入失败', error);
     }
     if (HEADLESS_SMOKE) {
+      try {
+        const generated = generateSt({ config: demoMachineConfig() });
+        const repeated = generateSt({ config: demoMachineConfig() });
+        if (
+          generated.stats.files !== 5 ||
+          generated.stats.tags !== 32 ||
+          !/^[a-f0-9]{12}$/.test(generated.stats.inputHash) ||
+          JSON.stringify(generated.files) !== JSON.stringify(repeated.files)
+        ) {
+          console.error('SMOKE_FAIL plcgen', JSON.stringify(generated.stats));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PLCGEN_OK files=${generated.stats.files} tags=${generated.stats.tags}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL plcgen_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       let extensionReady = false;
       for (let attempt = 0; attempt < 50; attempt += 1) {
         extensionReady = await window.webContents.executeJavaScript('window.__AUTOMATION_CAD_EXTENSION_READY__ === true');

@@ -1,6 +1,6 @@
 # 设计完成后自动生成 PLC 程序 · 设计方案
 
-状态：设计完成，待实现（P8）
+状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2～P8-5 待做
 目标：电气设计定稿（选型 + IO 表 + 动作顺序）后，一键生成**可直接导入 PLC 工程**的程序骨架与变量表，把「画完图再手工敲程序」变成「设计即程序」。
 
 ## 1. 输入（全部来自已有模块）
@@ -110,3 +110,55 @@ plc/
 - P8-3：生成 UI + 导出 zip + 历史记录
 - P8-4：模拟器联调自检 + 设计包上传集成
 - P8-5（可选）：TIA Openness 导出
+
+## 10. P8-1 实现记录（2026-10-23）
+
+状态：✅ 核心完成（无 UI）。交付 `desktop/src/plcgen/`：`precheck.ts`、`tags.ts`、`st.ts`，共享的 `io.ts` / `types.ts` / `hash.ts` 与统一导出 `index.ts`。
+
+### 输入扩展
+
+`precheck` / `buildTags` / `generateSt` 接受原 `MachineConfig`，并可附加以下可选字段（不改原有配置格式）：
+
+```ts
+{
+  version?: string | number,
+  safety?: { emergencyStop?, estop?, safetyDoor?, safetyDoors?, reset? },
+  sequence?: Step[] | steps?: Step[],
+  ioPoints?: { point, area?, address?, name?, station?, role? }[]
+}
+```
+
+- 安全点位也可用传感器 `role: 'estop' | 'safetyDoor'`，或 `part` 中的「急停 / 安全门 / 光栅」识别；安全传感器不参与“未绑定执行机构”检查。
+- 步序支持 `point`、`points`、`setPoints`、`resetPoints`、`waitPoints` 与 `condition` 表达式。
+- BOM 兼容现有 `BomRow[]`、`{ modules }` / `{ bom }` / `{ plc.modules }`；点数可用 `inputPoints`/`outputPoints`/`points`，或从 `16DI/16DO`、`8 点` 等文本解析。
+
+### 预检（全量返回，不遇错即停）
+
+`precheck(config, bom?) → { errors, warnings }`，错误码：`ADDRESS_DUPLICATE`、`ADDRESS_OUT_OF_RANGE`、`POINT_MULTI_ACTUATOR`、`ACTUATOR_SENSOR_MISSING`、`SENSOR_UNBOUND`、`ESTOP_UNDEFINED`、`SAFETY_DOOR_UNDEFINED`、`SEQUENCE_POINT_NOT_FOUND`、`DOUBLE_COIL`、`BOM_PLC_INPUT_POINTS_INSUFFICIENT`、`BOM_PLC_OUTPUT_POINTS_INSUFFICIENT`、`BOM_PLC_POINTS_INSUFFICIENT`。I/Q 各自上限 256 点；旧命名 `X0/Y0` 与 `I0.0/Q0.0` 按同一物理地址归一化。
+
+### IO 变量表
+
+`buildTags(config) → { rows, csv }`：输入先于输出，按点位自然序稳定排序后分别从 `I0.0` / `Q0.0` 分配；名称 `<工位>_<机构>_<用途>`，非法字符替换为 `_`、最长 32 字符、重名追加 `_2`。CSV 为 UTF-8 BOM + `地址,名称,数据类型,注释,工位`，换行 `CRLF`。
+
+### ST 生成
+
+`generateSt({ config, version?, timeoutTimeMs?, toleranceDeg? })` 或直接 `generateSt(config)`，输出：
+
+| 文件 | 内容 |
+|---|---|
+| `src/FB_Cylinder.st` | `R_TRIG` 上升沿、伸出/缩回互斥、到位 `Done`、`TON` 超时 `Error` |
+| `src/FB_Gripper.st` | 开/合两路输出互斥、开合传感器冲突、超时 |
+| `src/FB_RotaryAxis.st` | `ABS(ActualAngle - TargetAngle) <= Tolerance` 到位判断 + 超时 |
+| `src/DB_IO.st` | 变量表逐条映射为 `AT %I... / %Q...` 声明 |
+| `src/OB1_Main.st` | 手动、自动、报警占位调用注释，P8-2 接线 |
+
+- 默认 `TimeoutTime = T#3s`，默认角度容差 `0.5`；超时必须是正整数毫秒，容差必须为非负有限数。
+- 每个文件头含机型、机型版本、`inputHash`（输入 JSON 的 SHA-256 前 12 位）与生成器版本 `v1.0.0`；正文不含时间戳，连续生成逐字节一致。
+- `stats = { files, lines, tags, inputs, outputs, actuators, stations, inputHash, timeoutTimeMs, toleranceDeg }`。
+
+### 验证证据
+
+- `npx tsc --noEmit`：通过。
+- `npm test`：**505/505**，其中 `desktop/test/plcgen.test.ts` **35 条**。
+- `npm run smoke`：`SMOKE_PLCGEN_OK files=5 tags=32` → `SMOKE_OK`。
+- demo 机型（4 工位 / 12 执行机构 / 16 传感器）生成 5 文件、32 个变量；demo 未带安全点位，因此直接跑 P8-1 预检会如实报 `ESTOP_UNDEFINED` / `SAFETY_DOOR_UNDEFINED`，接入安全件后为 0 错误。
