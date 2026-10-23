@@ -79,6 +79,8 @@ export class CadViewer {
   private readonly group = new THREE.Group();
   /** 实例化与 LOD 代理的渲染对象放这里；原始 mesh 仍保留，负责拾取、导出与运动学 */
   private readonly batchGroup = new THREE.Group();
+  /** 参数化重建前的旧模型，半透明叠加对比。不参与拾取。 */
+  private readonly ghostGroup = new THREE.Group();
   private metas: PartMeta[] = [];
   private metaByIndex = new Map<number, PartMeta>();
   private renderOps: RenderOps | null = null;
@@ -90,6 +92,7 @@ export class CadViewer {
   private planCount = 0;
   private readonly selectionBox = new THREE.Box3();
   private selectionHelper: THREE.Box3Helper | null = null;
+  private featureHelper: THREE.Box3Helper | null = null;
   private grid: THREE.GridHelper | null = null;
   private parts: LoadedPart[] = [];
   private modelParts: InterferencePart[] = [];
@@ -113,6 +116,8 @@ export class CadViewer {
     this.scene.background = new THREE.Color(0x2a2d31);
     this.scene.add(this.group);
     this.scene.add(this.batchGroup);
+    this.ghostGroup.name = 'parametric-ghost';
+    this.scene.add(this.ghostGroup);
     this.scene.add(new THREE.HemisphereLight(0xf1f5f9, 0x2a2d31, 1.35));
     const key = new THREE.DirectionalLight(0xffffff, 2.1);
     key.position.set(1, -1.4, 2);
@@ -168,6 +173,16 @@ export class CadViewer {
     this.selectionHelper = selectionHelper;
     this.scene.add(selectionHelper);
 
+    const featureHelper = new THREE.Box3Helper(new THREE.Box3(), 0xf5b942);
+    featureHelper.visible = false;
+    featureHelper.renderOrder = 21;
+    const featureMaterial = featureHelper.material as THREE.LineBasicMaterial;
+    featureMaterial.depthTest = false;
+    featureMaterial.transparent = true;
+    featureMaterial.opacity = 0.95;
+    this.featureHelper = featureHelper;
+    this.scene.add(featureHelper);
+
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.container);
     renderer.domElement.addEventListener('pointerdown', this.handlePointerDown);
@@ -189,7 +204,9 @@ export class CadViewer {
     if (active) this.resize();
   }
 
-  load(result: CadImportResult, fileName: string): void {
+  load(result: CadImportResult, fileName: string, options: { ghost?: boolean } = {}): void {
+    if (options.ghost === true) this.captureGhost();
+    else this.clearGhost();
     this.clearModel();
     this.importedResult = result;
     this.modelParts = result.meshes.map((mesh) => ({
@@ -242,6 +259,83 @@ export class CadViewer {
       `${size.x.toFixed(3)} × ${size.y.toFixed(3)} × ${size.z.toFixed(3)} mm · ${result.stats.format}`
     );
     this.renderDetail(null);
+  }
+
+  /** 把当前模型复制为半透明幽灵层，用于参数化重建前后对比。 */
+  captureGhost(): void {
+    this.clearGhost();
+    const datas: CadMeshData[] = this.parts.length > 0
+      ? this.parts.map((part) => ({ ...part.data }))
+      : this.importedResult?.meshes ?? [];
+    datas.forEach((data, index) => {
+      if (data.positions.length < 9) return;
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(data.positions.slice(), 3));
+      if (data.normals) geometry.setAttribute('normal', new THREE.BufferAttribute(data.normals.slice(), 3));
+      if (data.indices) geometry.setIndex(new THREE.BufferAttribute(data.indices.slice(), 1));
+      if (!data.normals) geometry.computeVertexNormals();
+      if (this.parts[index]) geometry.applyMatrix4(this.parts[index]!.mesh.matrixWorld);
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x9aa6b2,
+        metalness: 0.1,
+        roughness: 0.8,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.name = `ghost-${data.name}`;
+      mesh.renderOrder = 2;
+      this.ghostGroup.add(mesh);
+    });
+    this.ghostGroup.visible = true;
+  }
+
+  clearGhost(): void {
+    for (const child of [...this.ghostGroup.children]) {
+      this.ghostGroup.remove(child);
+      const mesh = child as THREE.Mesh;
+      mesh.geometry.dispose();
+      const material = mesh.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material.dispose();
+    }
+  }
+
+  setGhostVisible(visible: boolean): void {
+    this.ghostGroup.visible = visible;
+  }
+
+  ghostVisible(): boolean {
+    return this.ghostGroup.visible && this.ghostGroup.children.length > 0;
+  }
+
+  /** 高亮参数化特征的大致包围盒（无独立网格时的最小可用反馈）。 */
+  highlightBounds(bounds: { min: [number, number, number]; max: [number, number, number] } | null, focus = false): boolean {
+    if (this.degraded || !this.featureHelper) return false;
+    if (!bounds) {
+      this.featureHelper.visible = false;
+      return false;
+    }
+    const box = new THREE.Box3(
+      new THREE.Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
+      new THREE.Vector3(bounds.max[0], bounds.max[1], bounds.max[2])
+    );
+    if (box.isEmpty()) {
+      this.featureHelper.visible = false;
+      return false;
+    }
+    this.featureHelper.box.copy(box);
+    this.featureHelper.visible = true;
+    if (focus && this.controls) {
+      const center = box.getCenter(new THREE.Vector3());
+      const offset = this.camera.position.clone().sub(this.controls.target);
+      this.controls.target.copy(center);
+      this.camera.position.copy(center).add(offset);
+      this.controls.update();
+    }
+    return true;
   }
 
   fit(): void {
@@ -853,6 +947,7 @@ export class CadViewer {
     }
     this.partsElement.removeEventListener('click', this.handlePartClick);
     this.clearModel();
+    this.clearGhost();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fallbackElement?.remove();
@@ -1008,6 +1103,7 @@ export class CadViewer {
     this.modelParts = [];
     this.importedResult = null;
     if (this.selectionHelper) this.selectionHelper.visible = false;
+    if (this.featureHelper) this.featureHelper.visible = false;
     this.parts.forEach((part, index) => {
       const original = this.originalGeometries.get(index);
       if (original && original !== part.mesh.geometry) {

@@ -98,6 +98,7 @@ function userPacksDir(): string {
 async function runParametricSmoke(window: BrowserWindow): Promise<void> {
   if (!process.env.AUTOMATIONCAD_PARAMETRIC_CMD) {
     console.log('SMOKE_PARAMETRIC_SIDECAR_SKIP');
+    console.log('SMOKE_PARAMETRIC_UI_SKIP');
     return;
   }
   try {
@@ -105,8 +106,9 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
       `(async () => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
         const api = window.__Parametric;
+        const ui = window.AutomationCadParametric;
         const button = document.querySelector('[data-cad-action="parametric"]');
-        if (!api || !button) return { error: '参数化入口缺失' };
+        if (!api || !ui || !button) return { error: '参数化入口缺失' };
         button.click();
         let status = await api.status();
         const deadline = Date.now() + 6000;
@@ -115,7 +117,12 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
           await wait(50);
           status = await api.status();
         }
-        const build = await api.build({
+        const auto = document.querySelector('[data-param-auto]');
+        if (auto) {
+          auto.checked = false;
+          auto.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        ui.setDoc({
           schemaVersion: 1,
           updatedAt: '2026-10-23T12:00:00+08:00',
           features: [
@@ -123,13 +130,30 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
             { id: 'f2', type: 'holes', name: '安装孔', params: { diameter: 6, positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]] } }
           ]
         });
-        return { button: true, status, build };
+        const build = await ui.build();
+        await wait(80);
+        const state = ui.state();
+        const drawer = document.getElementById('cadParametricDrawer');
+        const rows = document.querySelectorAll('[data-param-feature]').length;
+        return {
+          button: true,
+          status,
+          build,
+          state,
+          rows,
+          drawerOpen: Boolean(drawer && !drawer.hidden),
+          buildStatus: document.querySelector('[data-param-build-status]')?.textContent || ''
+        };
       })()`
     ) as {
       error?: string;
       button?: boolean;
       status?: { status: string; message: string; version?: string };
       build?: { ok: boolean; stats?: { faces?: number }; message?: string };
+      state?: { features: number; status: string; statusLabel: string; stlLoaded: boolean; ghost: boolean };
+      rows?: number;
+      drawerOpen?: boolean;
+      buildStatus?: string;
     };
     if (result.error || !result.button || result.status?.status !== 'ready' || !result.status.version?.endsWith('-fake')) {
       throw new Error(`参数化入口状态异常：${JSON.stringify(result)}`);
@@ -137,7 +161,14 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
     if (!result.build?.ok || result.build.stats?.faces !== 19) {
       throw new Error(`参数化构建异常：${JSON.stringify(result.build)}`);
     }
+    if (!result.drawerOpen || result.rows !== 2 || result.state?.features !== 2 ||
+        result.state.status !== 'ready' || result.state.statusLabel !== '就绪' ||
+        !result.state.stlLoaded || !result.buildStatus?.includes('面 19') ||
+        !result.buildStatus?.includes('体积 71.5 cm³')) {
+      throw new Error(`参数化 UI 异常：${JSON.stringify(result)}`);
+    }
     console.log('SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1');
+    console.log(`SMOKE_PARAMETRIC_UI_OK features=${result.state.features} status=${result.state.status}`);
   } finally {
     if (parametric) await parametric.stop();
   }

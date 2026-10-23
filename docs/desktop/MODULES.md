@@ -80,6 +80,9 @@ Electron 实跑 + CDP 抓取，1440×873，不是设计稿。文件名与内容�
 
 - `desktop/electron/parametric.ts`：sidecar 生命周期（随机端口/令牌、健康检查、30 s 构建超时、10 min 空闲退出、崩溃重启一次、进程树清理）
 - `desktop/src/parametric/features.ts`：特征树 `FeatureDoc`、中文全量校验、`compileOps`（跳过抑制、稳定顺序）、`summarize`
+- `desktop/src/parametric/model.ts`：编辑操作（新建/删除/上移/下移/抑制/改名/参数更新）、300 ms 防抖计划、`localStorage` 按 `sourceFile` 分桶、JSON 序列化往返、特征包围盒与状态文案
+- `desktop/src/parametric/ui.ts`：右侧「参数化」抽屉（与运动学二选一）、按类型参数表单、逐条校验、重建/STEP/STL 导出、保存/载入特征树
+- `desktop/src/cad/viewer.ts`：参数化重建后的 STL 载入、旧模型半透明幽灵层（可开关）、特征包围盒高亮
 - `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet）
 - 内核选型与分期见 [PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；实测见 [PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
 

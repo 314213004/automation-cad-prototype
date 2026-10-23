@@ -542,6 +542,26 @@ interface Window {
     status(): Promise<DesktopParametricStatusInfo>;
     build(doc: unknown): Promise<DesktopParametricBuildResult>;
   };
+  AutomationCadParametric?: {
+    open(): void;
+    close(): void;
+    state(): {
+      sourceFile: string;
+      features: number;
+      selected: string | null;
+      validationErrors: number;
+      status: DesktopParametricStatus;
+      statusLabel: string;
+      buildStatus: string;
+      building: boolean;
+      stlLoaded: boolean;
+      ghost: boolean;
+    };
+    setSource(sourceFile: string): void;
+    setDoc(doc: unknown): void;
+    getDoc(): unknown;
+    build(): Promise<DesktopParametricBuildResult>;
+  };
   AutomationCadCommission?: {
     open(): void;
     getReport(): {

@@ -9,6 +9,7 @@ import {
   pointOptionsFromMachineConfig,
   type KinematicsUiHandle
 } from './cad/kinematics-ui';
+import { initParametricUi, type ParametricUiHandle } from './parametric/ui';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
 import { initPackPanel } from './packs/ui';
@@ -53,7 +54,7 @@ let stressConclusions: StressConclusion[] = [];
 let interference: InterferencePanelHandle | null = null;
 let commission: CommissionPanelHandle | null = null;
 let kinematics: KinematicsUiHandle | null = null;
-let parametricStarting = false;
+let parametric: ParametricUiHandle | null = null;
 let mechUiReady = false;
 let stressTabObserver: MutationObserver | null = null;
 type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
@@ -159,6 +160,7 @@ function buildOverlay(): void {
         <div class="cad-inspector-body" id="cadInterferencePanel"></div>
       </aside>
       <aside class="cad-kinematics-drawer" id="cadKinematicsDrawer" hidden></aside>
+      <aside class="cad-parametric-drawer" id="cadParametricDrawer" hidden></aside>
     </main>
     <footer class="cad-footer">
       <span id="cadStats">就绪 · <strong>0</strong> 个零件</span>
@@ -194,9 +196,17 @@ function buildOverlay(): void {
     } else if (action === 'kinematics') {
       const handle = ensureKinematicsUi();
       if (handle.isOpen()) handle.close();
-      else handle.open();
+      else {
+        parametric?.close();
+        handle.open();
+      }
     } else if (action === 'parametric') {
-      void startParametric();
+      const handle = ensureParametricUi();
+      if (handle.isOpen()) handle.close();
+      else {
+        kinematics?.close();
+        handle.open();
+      }
     } else if (action === 'export-menu') {
       toggleExportMenu();
     } else if (action === 'close') closeOverlay();
@@ -438,6 +448,26 @@ function ensureKinematicsUi(): KinematicsUiHandle {
   return kinematics;
 }
 
+function ensureParametricUi(): ParametricUiHandle {
+  if (parametric) return parametric;
+  const container = requiredElement('cadParametricDrawer');
+  parametric = initParametricUi({
+    container,
+    viewer: ensureViewer(),
+    getSourceFile: () => currentFileName,
+    loadStl: async (filePath: string): Promise<CadImportResult> => {
+      if (!window.desktop) throw new Error('桌面文件接口不可用');
+      const bytes = await window.desktop.readFileBuffer(filePath);
+      return await parseBuffer(toArrayBuffer(bytes), 'parametric.stl');
+    },
+    notify: showNotice,
+    onOpenChange: (open) => {
+      document.getElementById('cadParametricToggle')?.classList.toggle('is-active', open);
+    }
+  });
+  return parametric;
+}
+
 interface ParametricStateView {
   status: 'stopped' | 'starting' | 'ready' | 'unavailable' | 'crashed';
   message: string;
@@ -463,33 +493,6 @@ function setParametricStatus(state: ParametricStateView): void {
   button?.setAttribute('aria-busy', String(state.status === 'starting'));
 }
 
-async function startParametric(): Promise<void> {
-  const api = window.desktop?.parametric;
-  if (!api) {
-    setParametricStatus({ status: 'unavailable', message: '参数化建模仅桌面端可用' });
-    showNotice('参数化建模仅桌面端可用', true);
-    return;
-  }
-  if (parametricStarting) return;
-  parametricStarting = true;
-  setParametricStatus({ status: 'starting', message: '正在启动参数化建模内核…' });
-  try {
-    const result = await api.start();
-    setParametricStatus({
-      status: result.status,
-      message: result.message,
-      ...(result.version ? { version: result.version } : {})
-    });
-    showNotice(`参数化建模：${result.message}`, !result.ok);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    setParametricStatus({ status: 'unavailable', message: `参数化建模启动失败：${message}` });
-    showNotice(`参数化建模启动失败：${message}`, true);
-  } finally {
-    parametricStarting = false;
-  }
-}
-
 function requiredElement(id: string): HTMLElement {
   const element = document.getElementById(id);
   if (!element) throw new Error(`缺少 CAD UI 节点：${id}`);
@@ -504,7 +507,8 @@ function openOverlay(): void {
   root.hidden = false;
   initMechUi();
   ensureViewer().setActive(true);
-  ensureKinematicsUi().open();
+  if (parametric?.isOpen()) kinematics?.close();
+  else ensureKinematicsUi().open();
   document.getElementById(CAD_ENTRY)?.classList.add('is-active');
 }
 
@@ -632,6 +636,7 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     currentFileName = name;
     ensureViewer().load(result, name);
     ensureKinematicsUi().setSource(name, ensureViewer().getKinematicsMeshes());
+    parametric?.setSource(name);
     interference?.run([]);
     displayFileInfo(name);
     const partCount = document.getElementById('cadPartCount');
@@ -978,8 +983,9 @@ function init(): void {
   Object.defineProperty(window, 'AutomationCadKinematics', {
     value: Object.freeze({
       open: (): void => {
+        parametric?.close();
         if (!overlayOpen) openOverlay();
-        ensureKinematicsUi().open();
+        else ensureKinematicsUi().open();
       },
       close: (): void => ensureKinematicsUi().close(),
       state: () => ensureKinematicsUi().state(),
@@ -990,6 +996,24 @@ function init(): void {
       save: (): boolean => ensureKinematicsUi().save(),
       getAnnotation: () => ensureKinematicsUi().getAnnotation(),
       getValidation: () => ensureKinematicsUi().getValidation()
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+  Object.defineProperty(window, 'AutomationCadParametric', {
+    value: Object.freeze({
+      open: (): void => {
+        if (!overlayOpen) openOverlay();
+        kinematics?.close();
+        ensureParametricUi().open();
+      },
+      close: (): void => ensureParametricUi().close(),
+      state: () => ensureParametricUi().state(),
+      setSource: (sourceFile: string): void => ensureParametricUi().setSource(sourceFile),
+      setDoc: (doc: Parameters<ParametricUiHandle['setDoc']>[0]): void => ensureParametricUi().setDoc(doc),
+      getDoc: () => ensureParametricUi().getDoc(),
+      build: () => ensureParametricUi().build()
     }),
     writable: false,
     configurable: false,

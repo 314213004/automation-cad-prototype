@@ -1,4 +1,4 @@
-export const EXPORT_EXTENSIONS = ['.pdf', '.dxf', '.glb', '.obj', '.csv', '.xlsx'] as const;
+export const EXPORT_EXTENSIONS = ['.pdf', '.dxf', '.glb', '.obj', '.csv', '.xlsx', '.step', '.stl', '.json'] as const;
 export type ExportExtension = (typeof EXPORT_EXTENSIONS)[number];
 
 export interface ValidatedExportName {

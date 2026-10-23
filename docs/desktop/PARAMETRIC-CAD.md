@@ -202,3 +202,67 @@ AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run 
 # SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1
 # 未设置环境变量时输出 SMOKE_PARAMETRIC_SIDECAR_SKIP
 ```
+
+## P9-3 实现记录
+
+日期：2026-10-23。本轮完成特征树 UI、参数编辑、防抖重建、视口联动与本地/JSON 持久化；不改 `index.html` / `app.js` / `styles.css` / `electrical.*`。
+
+### 新增与修改
+
+| 文件 | 职责 |
+|------|------|
+| `desktop/src/parametric/model.ts` | 纯逻辑：新建/删除/上移/下移/抑制/改名/参数更新、300 ms 防抖计划、`localStorage` 分桶、序列化/反序列化、底部状态与特征包围盒；无 DOM / IPC |
+| `desktop/src/parametric/ui.ts` | 右侧「参数化」抽屉：特征树、按类型参数表单、校验提示、重建/导出/保存/载入、旧模型对比开关 |
+| `desktop/src/cad/viewer.ts` | 新增幽灵层（旧模型半透明叠加、可开关）、`highlightBounds()` 特征包围盒高亮、`load(..., { ghost: true })` |
+| `desktop/src/extension.ts` | 与「运动学」抽屉二选一挂载；载入 CAD 后同步来源文件；暴露 `window.AutomationCadParametric` 调试入口 |
+| `desktop/src/cad.css` | 参数化抽屉样式（复用现有 CAD token，未新增主色） |
+| `desktop/src/export/file.ts` | `exportFile` 白名单补充 `.step` / `.stl` / `.json`，STEP/STL 导出与特征树 JSON 保存复用同一 IPC |
+| `desktop/test/parametric-model.test.ts` | 18 条模型/持久化/防抖/格式化单测 |
+| `desktop/scripts/fake-parametric-sidecar.mjs` | 假内核额外写出真实二进制 STL 与 STEP 临时文件，便于 smoke 验证视口载入 |
+
+### 面板行为
+
+- 顶栏「参数化」与「运动学」并列；打开一个会收起另一个，右侧同时只显示一个抽屉。
+- 特征树行：类型图标 + 名称 + 类型；操作支持上移 / 下移 / 抑制（可恢复）/ 删除 / 改名（行内输入，Enter 提交、Esc 取消）。
+- 参数表单按 `type` 渲染：
+  - `box`：长度、宽度、高度、XY 居中；
+  - `holes`：孔径、深度、孔位 `[x, y]` 列表，可逐行增删；
+  - `slot`：长度、宽度；
+  - `fillet`：半径、边选择（`|Z` / `all`）；
+  - `cylinder`：直径、高度、位置 X/Y/Z。
+- 参数改动写入文档后默认 300 ms 防抖重建；关闭「自动重建」后仅手动点「重建」。
+- 校验失败时逐条展示 `validateFeatures` 的中文错误并禁用重建；sidecar `unavailable/crashed` 时显示原因、禁用建模按钮，但特征树仍可查看/编辑/导出 JSON。
+- 底部状态显示 `<就绪/启动中/不可用> · 重建 50 ms · 面 19 · 体积 71.5 cm³`；`volumeMm3` 转 cm³ 保留 1 位小数。
+
+### 视口联动
+
+- 重建成功后经主进程 IPC 返回 `files.stl.path`，渲染层用现有 `readFileBuffer` + `parseStandardCadBuffer`（STLLoader）路径载入 three.js；不新增第二套解析器。
+- 载入新 STL 前把当前模型复制到幽灵层（灰色、透明 0.22、不参与拾取），可勾选「叠加旧模型」开关显示/隐藏。
+- 选中特征时按参数估算包围盒并用黄色 `Box3Helper` 高亮；`fillet` 没有独立实体时回退整树包围盒。
+
+### 持久化
+
+- `localStorage` 键固定为 `automationcad.parametric.v1`，内部 `{version:1,buckets:{...}}` 按 `sourceFile` 分桶；无来源文件落到 `untitled`。
+- 每次编辑、重建、保存都会写回当前桶；载入 CAD 时自动读取对应桶。
+- 「保存特征树」先写 `localStorage`，再走 `desktop.exportFile` 导出 `<name>.parametric.json`；「载入特征树」走文件选择器解析 JSON。无桌面桥时退回复制 JSON 到剪贴板。
+
+### 测试与验收
+
+```bash
+cd desktop
+npx tsc --noEmit
+node --test test/parametric-model.test.ts   # 18
+npm test                                    # 524
+AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
+# SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1
+# SMOKE_PARAMETRIC_UI_OK features=2 status=ready
+# 未设置环境变量：SMOKE_PARAMETRIC_SIDECAR_SKIP / SMOKE_PARAMETRIC_UI_SKIP
+```
+
+smoke 使用假 sidecar，不依赖 Python；同时断言抽屉可见、特征行数 2、状态 `ready`、STL 已载入视口、底部包含「面 19 / 体积 71.5 cm³」。
+
+### 边界
+
+- 首期仍是单件结构件；草图与约束（P9-4）、多实体装配/BOM/成本联动（P9-5）未做。
+- 特征高亮是参数估算包围盒，不是精确 B-rep 面组；重建后如 sidecar 能按特征分组网格，再升级为网格级高亮。
+- 旧模型幽灵层来自当前视口模型，不额外读取 STEP；载入新文件时默认清空。

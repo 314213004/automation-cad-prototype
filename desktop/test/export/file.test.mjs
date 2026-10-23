@@ -17,6 +17,12 @@ test('非法扩展名与路径穿越被拒绝', () => {
   assert.throws(() => assertAllowedTargetPath('/tmp/report.sh'), /不支持的导出扩展名/);
 });
 
+test('参数化导出格式 step / stl / json 通过白名单', () => {
+  assert.deepEqual(validateExportFileName('bracket.STEP'), { name: 'bracket.STEP', extension: '.step' });
+  assert.deepEqual(validateExportFileName('bracket.stl'), { name: 'bracket.stl', extension: '.stl' });
+  assert.deepEqual(validateExportFileName('bracket.parametric.json'), { name: 'bracket.parametric.json', extension: '.json' });
+});
+
 test('保存路径缺少扩展名时补齐，已有扩展名则替换', () => {
   assert.equal(ensureExportExtension('/tmp/report', '.csv'), '/tmp/report.csv');
   assert.equal(ensureExportExtension('/tmp/report.txt', '.csv'), '/tmp/report.csv');
