@@ -433,7 +433,12 @@ interface NormalizedResult {
   data?: unknown;
 }
 
-const UNDOABLE_WRITE_TOOLS = new Set(['insert_component', 'place_component']);
+const UNDOABLE_WRITE_TOOLS = new Set([
+  'insert_component',
+  'place_component',
+  'update_component',
+  'remove_component'
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

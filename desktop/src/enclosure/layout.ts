@@ -14,6 +14,12 @@ export interface Placement {
   w: number;
   h: number;
   railId?: string;
+  /** 位号（如 QF1）；缺省时调用方可用放置 id 代替。 */
+  tag?: string;
+  /** BOM 数量；缺省视为 1。 */
+  qty?: number;
+  /** BOM 备注。 */
+  note?: string;
 }
 
 export interface Rail {

@@ -142,6 +142,19 @@ export async function renderCostReportPdf(html: string): Promise<Uint8Array> {
   }
 }
 
+/** Agent 导出装配报告 PDF：复用 A3 横向打印管线，返回字节；临时目录用完即删。 */
+export async function renderAssemblyReportPdf(html: string): Promise<Uint8Array> {
+  const root = join(app.getPath('userData'), 'exports');
+  mkdirSync(root, { recursive: true });
+  const directory = mkdtempSync(join(root, '.render-'));
+  try {
+    const { pdf } = await printHtmlToPdf(html, { size: 'A3', landscape: true }, directory);
+    return pdf;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

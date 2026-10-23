@@ -16,9 +16,12 @@ import { initPackPanel } from './packs/ui';
 import { initElecLibraryPanel } from './packs/elec-ui';
 import {
   closeEnclosure,
+  enclosureState,
   initEnclosureUi,
   placePartInEnclosure,
-  removeEnclosurePart
+  removeEnclosurePart,
+  restoreEnclosurePlacement,
+  updateEnclosurePlacement
 } from './enclosure/canvas';
 import { initElecCheckPanel } from './elec/ui';
 import { initCostPanel } from './cost/ui';
@@ -65,6 +68,11 @@ let mechUiReady = false;
 let stressTabObserver: MutationObserver | null = null;
 type ExportFormat = 'pdf' | 'dxf' | 'glb' | 'obj' | 'csv' | 'xlsx';
 const pendingWorker = new Map<number, { resolve(result: CadImportResult): void; reject(error: Error): void }>();
+type RemovedComponentSnapshot =
+  | { location: 'plate'; placement: import('./enclosure/layout').Placement }
+  | { location: 'bom'; snapshot: NonNullable<ReturnType<CadViewer['detachPart']>> };
+const removedComponentSnapshots = new Map<string, RemovedComponentSnapshot>();
+let removedComponentSequence = 0;
 
 function injectStyles(): void {
   if (document.getElementById('automation-cad-styles')) return;
@@ -745,6 +753,74 @@ async function importPack(path: string): Promise<void> {
   }
 }
 
+function persistedEnclosurePlate(): { width: number; height: number; rails: unknown[]; placed?: number } | null {
+  try {
+    const raw = window.localStorage.getItem('automationcad.enclosure.v1');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const source = parsed as Record<string, unknown>;
+    const plate = source.plate && typeof source.plate === 'object' ? source.plate as Record<string, unknown> : null;
+    if (!plate) return null;
+    const width = Number(plate.width);
+    const height = Number(plate.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    return {
+      width,
+      height,
+      rails: Array.isArray(plate.rails) ? plate.rails : [],
+      ...(Array.isArray(source.placements) ? { placed: source.placements.length } : {})
+    };
+  } catch {
+    return null;
+  }
+}
+
+function findEnclosurePlacement(
+  ref: string | undefined,
+  partId: string | undefined
+): import('./enclosure/layout').Placement | null {
+  const state = enclosureState();
+  if (!state) return null;
+  if (ref) {
+    const byId = state.placements.find((item) => item.id === ref || item.tag === ref);
+    if (byId) return byId;
+  }
+  if (partId) {
+    return state.placements.find((item) => item.partId === partId) ?? null;
+  }
+  return null;
+}
+
+function findBomIndex(
+  target: CadViewer,
+  ref: string | undefined,
+  partId: string | undefined
+): number {
+  const rows = target.getBomRows();
+  if (ref) {
+    if (/^\d+$/.test(ref)) {
+      const index = Number(ref) - 1;
+      if (index >= 0 && index < rows.length) return index;
+    }
+    const byName = rows.findIndex((row) => row.name === ref || row.spec === ref);
+    if (byName >= 0) return byName;
+    const byRowPart = rows.findIndex((row) => row.partId === ref);
+    if (byRowPart >= 0) return byRowPart;
+  }
+  if (partId) return rows.findIndex((row) => row.partId === partId);
+  return -1;
+}
+
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunk));
+  }
+  return btoa(binary);
+}
+
 function agentBridgeReady(): boolean {
   return Boolean(root && window.__AUTOMATION_CAD_EXTENSION_READY__ === true);
 }
@@ -793,6 +869,56 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    getProjectContext: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const domainButton = document.querySelector<HTMLElement>('.domsw-btn.is-active');
+        const domain = domainButton?.dataset.domain ?? document.body.dataset.domain ?? null;
+        const activeView = Array.from(document.querySelectorAll<HTMLElement>('.view')).find((element) => !element.hidden);
+        const view = activeView?.dataset.view ?? null;
+        let selection: { name: string; bbox: number[] } | null = null;
+        try {
+          selection = viewer?.getSelectionSnapshot() ?? null;
+        } catch {
+          selection = null;
+        }
+        let machine: { id: string; name: string; stations: number; actuators: number; sensors: number } | null = null;
+        try {
+          const config = commission?.getMachineConfig();
+          if (config) {
+            machine = {
+              id: config.id,
+              name: config.name,
+              stations: config.stations.length,
+              actuators: config.actuators.length,
+              sensors: config.sensors.length
+            };
+          }
+        } catch {
+          machine = null;
+        }
+        const enclosure = enclosureState();
+        const storedPlate = enclosure ? null : persistedEnclosurePlate();
+        const plate = enclosure
+          ? {
+              width: enclosure.plate.width,
+              height: enclosure.plate.height,
+              rails: enclosure.plate.rails,
+              placed: enclosure.placed
+            }
+          : storedPlate;
+        return {
+          domain,
+          view,
+          selection,
+          machine,
+          plate,
+          units: root ? 'mm' : null
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
     insertComponent: (part: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (!part || typeof part !== 'object') return { ok: false, message: '零件参数不合法' };
@@ -803,7 +929,7 @@ function initAgentBridge(): void {
       if (!id || !model || !category) return { ok: false, message: '缺少必填参数：零件 id/model/category' };
       try {
         const name = model || id;
-        const meshIndex = ensureViewer().addPlaceholderPart(name);
+        const meshIndex = ensureViewer().addPlaceholderPart(name, id);
         return { ok: true, meshIndex, name };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
@@ -852,6 +978,177 @@ function initAgentBridge(): void {
         return removeEnclosurePart(placementId.trim());
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    updateComponent: (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') return { ok: false, code: 'INVALID_ARGUMENT', message: '更新参数不合法' };
+      const source = payload as Record<string, unknown>;
+      const target = source.target === 'plate' || source.target === 'bom' ? source.target : 'auto';
+      const ref = typeof source.ref === 'string' && source.ref.trim() ? source.ref.trim() : undefined;
+      const matchPartId = typeof source.matchPartId === 'string' && source.matchPartId.trim()
+        ? source.matchPartId.trim()
+        : undefined;
+      const model = typeof source.model === 'string' && source.model.trim() ? source.model.trim() : undefined;
+      const newPartId = typeof source.newPartId === 'string' && source.newPartId.trim() ? source.newPartId.trim() : undefined;
+      const qty = Number.isInteger(source.qty) && Number(source.qty) > 0 ? Number(source.qty) : undefined;
+      const remark = typeof source.remark === 'string' ? source.remark : undefined;
+
+      const placement = target !== 'bom' ? findEnclosurePlacement(ref, matchPartId) : null;
+      if (placement) {
+        const before = { ...placement };
+        const result = updateEnclosurePlacement(placement.id, {
+          ...(model ? { model } : {}),
+          ...(newPartId ? { partId: newPartId } : {}),
+          ...(qty !== undefined ? { qty } : {}),
+          ...(remark !== undefined ? { note: remark } : {}),
+          ...(Number.isFinite(source.w) && Number(source.w) > 0 ? { w: Number(source.w) } : {}),
+          ...(Number.isFinite(source.h) && Number(source.h) > 0 ? { h: Number(source.h) } : {})
+        });
+        if (!result.ok) return result;
+        return {
+          ok: true,
+          location: 'plate',
+          targetRef: placement.id,
+          before,
+          updated: result.placement,
+          warnings: []
+        };
+      }
+
+      if (target === 'plate') {
+        return { ok: false, code: 'NOT_PLACED', message: '底板中没有匹配的元器件' };
+      }
+      try {
+        const targetViewer = ensureViewer();
+        const index = findBomIndex(targetViewer, ref, matchPartId);
+        if (index < 0) {
+          return { ok: false, code: 'NOT_PLACED', message: 'BOM 中没有匹配的元器件' };
+        }
+        const beforeRow = targetViewer.getBomRows()[index];
+        if (!beforeRow) return { ok: false, code: 'NOT_PLACED', message: 'BOM 行不存在' };
+        const before = {
+          model: beforeRow.name,
+          ...(beforeRow.partId ? { partId: beforeRow.partId } : {}),
+          qty: beforeRow.qty,
+          ...(beforeRow.note ? { note: beforeRow.note } : {})
+        };
+        const updated = targetViewer.updateBomRow(index, {
+          ...(model ? { model } : {}),
+          ...(newPartId ? { partId: newPartId } : {}),
+          ...(qty !== undefined ? { qty } : {}),
+          ...(remark !== undefined ? { note: remark } : {})
+        });
+        if (!updated) return { ok: false, code: 'NOT_PLACED', message: 'BOM 行不存在' };
+        return {
+          ok: true,
+          location: 'bom',
+          targetRef: String(index + 1),
+          before,
+          updated,
+          warnings: []
+        };
+      } catch (error) {
+        return { ok: false, code: 'RENDERER_ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    removeProjectComponent: (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') return { ok: false, code: 'INVALID_ARGUMENT', message: '移除参数不合法' };
+      const source = payload as Record<string, unknown>;
+      const target = source.target === 'plate' || source.target === 'bom' ? source.target : 'auto';
+      const ref = typeof source.ref === 'string' && source.ref.trim() ? source.ref.trim() : undefined;
+      const matchPartId = typeof source.matchPartId === 'string' && source.matchPartId.trim()
+        ? source.matchPartId.trim()
+        : undefined;
+
+      const placement = target !== 'bom' ? findEnclosurePlacement(ref, matchPartId) : null;
+      if (placement) {
+        const settled = removeEnclosurePart(placement.id);
+        if (!settled.ok) return { ok: false, code: 'NOT_PLACED', message: settled.message ?? '移除失败' };
+        const token = `plate-${Date.now().toString(36)}-${++removedComponentSequence}`;
+        removedComponentSnapshots.set(token, { location: 'plate', placement: { ...placement } });
+        return {
+          ok: true,
+          location: 'plate',
+          targetRef: placement.id,
+          removed: { id: placement.id, partId: placement.partId, model: placement.model },
+          undoToken: token
+        };
+      }
+      if (target === 'plate') {
+        return { ok: false, code: 'NOT_PLACED', message: '底板中没有匹配的元器件' };
+      }
+      try {
+        const targetViewer = ensureViewer();
+        const index = findBomIndex(targetViewer, ref, matchPartId);
+        if (index < 0) {
+          return { ok: false, code: 'NOT_PLACED', message: 'BOM 中没有匹配的元器件' };
+        }
+        const row = targetViewer.getBomRows()[index];
+        const snapshot = targetViewer.detachPart(index);
+        if (!snapshot) return { ok: false, code: 'NOT_PLACED', message: 'BOM 行不存在' };
+        const token = `bom-${Date.now().toString(36)}-${++removedComponentSequence}`;
+        removedComponentSnapshots.set(token, { location: 'bom', snapshot });
+        return {
+          ok: true,
+          location: 'bom',
+          targetRef: String(index + 1),
+          removed: row
+            ? { no: row.no, name: row.name, partId: row.partId ?? null, qty: row.qty }
+            : { no: index + 1 },
+          undoToken: token
+        };
+      } catch (error) {
+        return { ok: false, code: 'RENDERER_ERROR', message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    restoreProjectComponent: (value: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      const token = Array.isArray(value) ? value[0] : value;
+      if (typeof token !== 'string' || !token.trim()) {
+        return { ok: false, code: 'NOT_PLACED', message: '撤销令牌不能为空' };
+      }
+      const snapshot = removedComponentSnapshots.get(token.trim());
+      if (!snapshot) {
+        return { ok: false, code: 'NOT_PLACED', message: '撤销快照不存在或已使用' };
+      }
+      const ok = snapshot.location === 'plate'
+        ? restoreEnclosurePlacement(snapshot.placement)
+        : Boolean(viewer?.restoreDetachedPart(snapshot.snapshot));
+      if (!ok) return { ok: false, code: 'NOT_PLACED', message: '恢复元器件失败' };
+      removedComponentSnapshots.delete(token.trim());
+      return { ok: true };
+    },
+    exportArtifact: async (payload: unknown) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      if (!payload || typeof payload !== 'object') return { ok: false, code: 'INVALID_ARGUMENT', message: '导出参数不合法' };
+      const source = payload as Record<string, unknown>;
+      const kind = source.kind;
+      if (kind !== 'pdf' && kind !== 'dxf' && kind !== 'glb' && kind !== 'bom') {
+        return { ok: false, code: 'UNSUPPORTED_FORMAT', message: '导出格式仅支持 pdf / dxf / glb / bom' };
+      }
+      try {
+        const format: ExportFormat = kind === 'bom' ? 'csv' : kind;
+        const built = await buildExport(format);
+        if (kind === 'glb') {
+          if (!(built.data instanceof Uint8Array)) {
+            return { ok: false, code: 'EXPORT_FAILED', message: 'GLB 导出结果不是字节数组' };
+          }
+          return {
+            ok: true,
+            kind,
+            data: base64FromBytes(built.data),
+            encoding: 'base64',
+            suggestedName: built.name
+          };
+        }
+        if (typeof built.data !== 'string') {
+          return { ok: false, code: 'EXPORT_FAILED', message: '文本导出结果不是字符串' };
+        }
+        return { ok: true, kind, data: built.data, encoding: 'utf8', suggestedName: built.name };
+      } catch (error) {
+        return { ok: false, code: 'EXPORT_FAILED', message: error instanceof Error ? error.message : String(error) };
       }
     },
     exportCostFile: async (payload: unknown) => {

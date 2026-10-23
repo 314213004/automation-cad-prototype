@@ -74,6 +74,16 @@ function stripKnownExtension(value: string): string {
   return value.replace(/\.(pdf|csv)$/i, '');
 }
 
+type GenericExportKind = CostExportFormat | 'dxf' | 'glb' | 'bom';
+
+const GENERIC_EXTENSIONS: Record<GenericExportKind, string> = {
+  pdf: '.pdf',
+  csv: '.csv',
+  dxf: '.dxf',
+  glb: '.glb',
+  bom: '.csv'
+};
+
 export interface PlanExportNameOptions {
   directory: string;
   format: CostExportFormat;
@@ -90,32 +100,49 @@ export interface PlannedExportName {
   path: string;
 }
 
-/**
- * 计算最终落盘路径。
- *
- * - 文件名只允许纯文件名：非法字符被删除，路径分隔符/`..` 不会逃出 directory；
- * - 扩展名按 format 强制为 `.pdf` / `.csv`；
- * - `overwrite=false` 时自动追加 ` (1)`、` (2)`…；
- * - 最终文件名（含扩展名）不超过 maxLength。
- */
-export function planExportName(options: PlanExportNameOptions): PlannedExportName {
+export interface PlanArtifactExportNameOptions {
+  directory: string;
+  kind: GenericExportKind;
+  fileName?: unknown;
+  suggestedName?: unknown;
+  overwrite?: boolean;
+  exists?: (path: string) => boolean;
+  /** 最终文件名上限（含扩展名），默认 80。 */
+  maxLength?: number;
+}
+
+function stripArtifactExtension(value: string): string {
+  return value.replace(/\.(pdf|csv|dxf|glb|bom)$/i, '');
+}
+
+function planFileName(options: {
+  directory: string;
+  extension: string;
+  fileName?: unknown;
+  suggestedName?: unknown;
+  overwrite?: boolean;
+  exists?: (path: string) => boolean;
+  maxLength?: number;
+  fallback: string;
+  strip: (value: string) => string;
+}): PlannedExportName {
   const directory = resolve(options.directory);
-  const extension = `.${options.format}`;
+  const extension = options.extension;
   const maxLength = Math.max(extension.length + 1, Math.trunc(options.maxLength ?? 80));
   const maxBase = maxLength - extension.length;
   const overwrite = options.overwrite === true;
   const exists = options.exists ?? (() => false);
 
   const rawSuggestion = typeof options.suggestedName === 'string' ? options.suggestedName : '';
-  const fromSuggestion = sanitizeFileName(stripKnownExtension(rawSuggestion), maxBase);
+  const fromSuggestion = sanitizeFileName(options.strip(rawSuggestion), maxBase);
   const requested = options.fileName === undefined || options.fileName === null
     ? ''
     : sanctionFileNameInput(options.fileName);
-  const base = sanitizeFileName(stripKnownExtension(requested), maxBase) || fromSuggestion || '成本报告';
+  const base = sanitizeFileName(options.strip(requested), maxBase) || fromSuggestion || options.fallback;
 
   const withSuffix = (suffix: string): string => {
     const room = Math.max(1, maxBase - suffix.length);
-    const head = sanitizeFileName(base, room) || '成本报告';
+    const head = sanitizeFileName(base, room) || options.fallback;
     return `${head}${suffix}${extension}`;
   };
 
@@ -134,6 +161,47 @@ export function planExportName(options: PlanExportNameOptions): PlannedExportNam
     fail('WRITE_FAILED', '文件名不合法：不能写入导出目录之外');
   }
   return { name, path: target };
+}
+
+/**
+ * 计算最终落盘路径。
+ *
+ * - 文件名只允许纯文件名：非法字符被删除，路径分隔符/`..` 不会逃出 directory；
+ * - 扩展名按 format 强制为 `.pdf` / `.csv`；
+ * - `overwrite=false` 时自动追加 ` (1)`、` (2)`…；
+ * - 最终文件名（含扩展名）不超过 maxLength。
+ */
+export function planExportName(options: PlanExportNameOptions): PlannedExportName {
+  return planFileName({
+    directory: options.directory,
+    extension: `.${options.format}`,
+    ...(options.fileName !== undefined ? { fileName: options.fileName } : {}),
+    ...(options.suggestedName !== undefined ? { suggestedName: options.suggestedName } : {}),
+    ...(options.overwrite !== undefined ? { overwrite: options.overwrite } : {}),
+    ...(options.exists !== undefined ? { exists: options.exists } : {}),
+    ...(options.maxLength !== undefined ? { maxLength: options.maxLength } : {}),
+    fallback: '成本报告',
+    strip: stripKnownExtension
+  });
+}
+
+/**
+ * 通用导出（PDF / DXF / GLB / BOM）的命名规则。
+ * 与 `planExportName` 共用同一套净化、扩展名强制、冲突序号与目录逃逸检查。
+ * `kind=bom` 固定输出 `.csv`。
+ */
+export function planArtifactExportName(options: PlanArtifactExportNameOptions): PlannedExportName {
+  return planFileName({
+    directory: options.directory,
+    extension: GENERIC_EXTENSIONS[options.kind],
+    ...(options.fileName !== undefined ? { fileName: options.fileName } : {}),
+    ...(options.suggestedName !== undefined ? { suggestedName: options.suggestedName } : {}),
+    ...(options.overwrite !== undefined ? { overwrite: options.overwrite } : {}),
+    ...(options.exists !== undefined ? { exists: options.exists } : {}),
+    ...(options.maxLength !== undefined ? { maxLength: options.maxLength } : {}),
+    fallback: '导出文件',
+    strip: stripArtifactExtension
+  });
 }
 
 function sanctionFileNameInput(value: unknown): string {

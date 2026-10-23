@@ -4,8 +4,8 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`），本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**687/687 全绿**（本轮起点 674，加固新增 13 条边界用例）。
-- 冒烟：`npm run smoke` 全绿；源码定义 46 个 `SMOKE_*` 断言名（含条件分支），本轮无 fake sidecar 实跑 42 个（40 个 `_OK` + 2 个预期 `_SKIP`），最终 `SMOKE_OK`。
+- 测试：**717/717 全绿**（P7-D 新增 30 条工具扩展用例）。
+- 冒烟：`npm run smoke` 全绿；源码定义 47 个 `SMOKE_*` 断言名（含条件分支），本轮无 fake sidecar 实跑 43 个（41 个 `_OK` + 2 个预期 `_SKIP`），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（46/46 意图、46/46 工具、20/20 参数、5/5 超纲、5/5 多步）。
 - 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
 
@@ -14,14 +14,14 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 687 pass / 0 fail / 0 skipped |
+| `npm test` | 717 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；无 fake sidecar 时输出 `SMOKE_PARAMETRIC_SIDECAR_SKIP` / `SMOKE_PARAMETRIC_UI_SKIP`，最终 `SMOKE_OK` |
 | `npm run eval:agent` | `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
 
 ## Smoke 断言清单
 
-以下 46 个断言名均从 `desktop/electron/main.ts` 实际 grep 得到（另含 `SMOKE_OK`、`SMOKE_FAIL`、`SMOKE_SHOTS_FAIL` 三个控制标记，未计入断言）；参数为本轮实跑输出（路径类断言只校验文件存在与非空）。本轮未启用 fake sidecar，因此 3 个参数化 `_OK` 未出现、2 个参数化分支输出 `_SKIP`。
+以下 47 个断言名均从 `desktop/electron/main.ts` 实际 grep 得到（另含 `SMOKE_OK`、`SMOKE_FAIL`、`SMOKE_SHOTS_FAIL` 三个控制标记，未计入断言）；参数为本轮实跑输出（路径类断言只校验文件存在与非空）。本轮未启用 fake sidecar，因此 3 个参数化 `_OK` 未出现、2 个参数化分支输出 `_SKIP`。
 
 | 断言 | 本轮实测 / 含义 |
 |------|-----------------|
@@ -59,11 +59,12 @@
 | `SMOKE_COST_AGENT_OK` | `bomSource=argument lines=6 missing=1 grand=1398.64` |
 | `SMOKE_COST_AGENT_EXPORT_OK` | `format=csv bytes=737 name=sanitized` |
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
-| `SMOKE_AGENT_TOOLS_OK` | `tools=12 implemented=12` |
+| `SMOKE_AGENT_TOOLS_OK` | `tools=17 implemented=17` |
+| `SMOKE_AGENT_TOOLS_V2` | `tools=17`，新增工具全部注册 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
 | `SMOKE_AGENT_READONLY_UI_OK` | `preview=2 offline=1 rows=2 summary=ok scene=0` |
-| `SMOKE_AGENT_NL_OK` | `intents=7 tools=12 audit=3 ctx=447` |
+| `SMOKE_AGENT_NL_OK` | `intents=7 tools=17 audit=3 ctx=541` |
 | `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
 | `SMOKE_AGENT_PLAN_OK` | `steps=3 confirm=1` |
 | `SMOKE_PROTO_INSERT_OK` | `parts=7→8 dof=+2` |
@@ -85,7 +86,7 @@
 | P4 大模型性能 | ✅ | 渲染规划（合批/视锥/LOD）与视图器接入、10 万面基准 | `f6962b3`、`71c0e9b` | 纯函数规划 + 批次层 |
 | P5 智慧工厂服务端 | 🔄 | 设计包 ZIP/manifest/幂等/上传/列表/diff/下载；本地端到端 | `0a1733e`、`ce11575` | 生产实例不可达，待 D2 |
 | P6 硬件成本统计 | 🔄 | 价格簿、引擎、面板、A4/CSV 导出、Agent 工具与落盘 | `a8c1e5f`、`6d70ae7`、`a66b26e`、`23cd284` | P6-5 采购价对接待 D2 |
-| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 12 工具；真实模型仅按 OpenAI 兼容协议验证 |
+| P7 自然语言交互 Agent | ✅ | 离线路由、上下文裁剪、审计、只读问答、底板放置、多步规划、工具扩展 v1 | `424711c`、`b3b9aee`、`1c356e9`、`e70ef77` | 17 工具（只读 8 / 写 9）；真实模型仅按 OpenAI 兼容协议验证 |
 | P8 PLC 程序生成 | 🔄 | 预检、变量表、五个基础块、自动序列/报警/安全、11 文件、UI/zip/历史、模拟器 | `b36635b`、`ccbd0fc`、`1f50bac`、`a6b0534` | P8-5 厂商工程文件未做 |
 | P9 参数化建模 | 🔄 | build123d sidecar、特征树、防抖重建、STEP/STL、多实体装配与 BOM/成本联动 | `5c2a8c3`、`9eda660`、`8867853`、`449d060` | P9-4 草图约束未做；依赖 Python |
 
@@ -129,7 +130,7 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 687 条单测/集成测试
+npm test                            # 717 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke

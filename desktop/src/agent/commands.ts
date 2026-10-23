@@ -1,5 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
-import { basename, extname } from 'node:path';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
 import {
@@ -12,13 +12,18 @@ import {
   type Wire
 } from '../elec/check.ts';
 import { runCostTool, CostToolError } from '../cost/agent.ts';
-import type { PlcGenConfig } from '../plcgen/types.ts';
+import type { Issue, PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
+import { generateProject } from '../plcgen/generate.ts';
+import { planPlcExportDirectory } from '../plcgen/export.ts';
 import {
   buildCostExport,
   CostExportError,
+  planArtifactExportName,
   type CostExportSaveResult
 } from '../cost/export.ts';
+import { createZip } from '../shared/zip.ts';
+import { resolvePartReference } from './placement.ts';
 
 export interface Bridge {
   call<T>(method: string, args?: unknown): Promise<T>;
@@ -48,11 +53,20 @@ export interface CommandContext {
   loadBuiltinPricebook?: () => unknown;
   /** HTML → PDF 字节（主进程注入，复用 A4 打印管线）；PDF 导出用。 */
   renderCostPdf?: (html: string) => Promise<Uint8Array>;
+  /** 固定导出根目录（userData/exports）；export_files 与 run_plc_generate 用。 */
+  exportsRoot?: string;
+  /** HTML → PDF 字节（A3 横向装配报告）；export_files 的 pdf 用。 */
+  renderReportPdf?: (html: string) => Promise<Uint8Array>;
+  /** 可注入的时钟；测试用，缺省当前时间。 */
+  now?: () => Date;
 }
 
 export interface CommandBusOptions {
   loadBuiltinPricebook?: () => unknown;
   renderCostPdf?: (html: string) => Promise<Uint8Array>;
+  exportsRoot?: string;
+  renderReportPdf?: (html: string) => Promise<Uint8Array>;
+  now?: () => Date;
 }
 
 interface CommandRunResult extends CommandResult {
@@ -138,7 +152,12 @@ const BRIDGE_METHODS = new Set([
   'runInterference',
   'getPlcGenConfig',
   'importPath',
-  'exportCostFile'
+  'exportCostFile',
+  'getProjectContext',
+  'updateComponent',
+  'removeProjectComponent',
+  'restoreProjectComponent',
+  'exportArtifact'
 ]);
 
 export const SIMPLE_BOM_NOTE = '简化 BOM：由当前 CAD 零件与已插入占位件生成；型号取零件名称，材料统一记为“—”。';
@@ -720,6 +739,373 @@ function registerPlcVerifyCommand(bus: CommandBus): void {
   });
 }
 
+function optionalBoolean(args: Record<string, unknown>, key: string, label: string): boolean | undefined {
+  const value = args[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'boolean') throw new CommandFailure('INVALID_ARGUMENT', `${label} 必须是布尔值`);
+  return value;
+}
+
+const COMPONENT_TARGETS = new Set(['auto', 'plate', 'bom']);
+const EXPORT_KINDS = new Set(['pdf', 'dxf', 'glb', 'bom']);
+const PLC_TARGETS = new Set(['generic', 's7-1200', 's7-1500', 'codesys']);
+
+function componentTarget(args: Record<string, unknown>): 'auto' | 'plate' | 'bom' {
+  const value = args.target;
+  if (value === undefined || value === null) return 'auto';
+  if (typeof value !== 'string' || !COMPONENT_TARGETS.has(value)) {
+    throw new CommandFailure('INVALID_ARGUMENT', 'target 只能是 auto / plate / bom');
+  }
+  return value as 'auto' | 'plate' | 'bom';
+}
+
+function componentReference(args: Record<string, unknown>): { partId?: string; ref?: string } {
+  const partId = optionalString(args, 'partId');
+  const ref = optionalString(args, 'ref') ?? optionalString(args, 'designator') ?? optionalString(args, 'tag');
+  if (!partId && !ref) {
+    throw new CommandFailure('INVALID_ARGUMENT', '必须提供 partId 或位号（ref / designator / tag）之一');
+  }
+  return {
+    ...(partId ? { partId } : {}),
+    ...(ref ? { ref } : {})
+  };
+}
+
+function registerProjectContextCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'get_project_context',
+    async run(_args, ctx) {
+      const raw = await ctx.bridge.call<unknown>('getProjectContext');
+      if (isRecord(raw) && isBridgeFailure(raw)) {
+        throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(raw, '读取工程上下文失败'));
+      }
+      const data = isRecord(raw) ? raw : {};
+      const nullable = (value: unknown): unknown => (value === undefined ? null : value);
+      return {
+        ok: true,
+        data: {
+          domain: nullable(data.domain),
+          view: nullable(data.view),
+          selection: nullable(data.selection),
+          machine: nullable(data.machine),
+          plate: nullable(data.plate),
+          units: nullable(data.units),
+          recentActions: []
+        }
+      };
+    }
+  });
+}
+
+function registerUpdateComponentCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'update_component',
+    async run(args, ctx) {
+      const target = componentTarget(args);
+      const reference = componentReference(args);
+      const model = optionalString(args, 'model') ?? optionalString(args, 'newModel');
+      const rawQty = args.qty;
+      const qty = rawQty === undefined || rawQty === null ? undefined : numberOf(rawQty, 'qty');
+      if (qty !== undefined && (!Number.isInteger(qty) || qty <= 0)) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'qty 必须是大于 0 的整数');
+      }
+      const remarkValue = typeof args.remark === 'string'
+        ? args.remark
+        : typeof args.note === 'string'
+          ? args.note
+          : undefined;
+      const remark = remarkValue === undefined ? undefined : remarkValue.trim();
+      if (model === undefined && qty === undefined && remark === undefined) {
+        throw new CommandFailure('INVALID_ARGUMENT', '至少提供 model / qty / remark 之一');
+      }
+
+      const warnings: Issue[] = [];
+      let replacement: { id: string; model: string; dims?: { w: number; h: number } } | undefined;
+      if (model !== undefined) {
+        const resolution = resolvePartReference(ctx.registry.listParts(), model);
+        if (!resolution.ok) {
+          throw new CommandFailure(resolution.code, resolution.message);
+        }
+        const dims = resolution.part.dims;
+        if (!dims || !(dims.w > 0) || !(dims.h > 0)) {
+          warnings.push({
+            code: 'NO_DIMENSIONS',
+            message: `新件 ${resolution.part.model} 缺少外形尺寸（dims.w/dims.h），底板尺寸保持原值，请人工复核`
+          });
+          replacement = { id: resolution.part.id, model: resolution.part.model };
+        } else {
+          replacement = {
+            id: resolution.part.id,
+            model: resolution.part.model,
+            dims: { w: dims.w, h: dims.h }
+          };
+        }
+      }
+
+      const payload: Record<string, unknown> = {
+        target,
+        ...(reference.partId ? { matchPartId: reference.partId } : {}),
+        ...(reference.ref ? { ref: reference.ref } : {}),
+        ...(qty !== undefined ? { qty } : {}),
+        ...(remark !== undefined ? { remark } : {}),
+        ...(replacement
+          ? {
+              model: replacement.model,
+              newPartId: replacement.id,
+              ...(replacement.dims ? { w: replacement.dims.w, h: replacement.dims.h } : {})
+            }
+          : {})
+      };
+      const result = await ctx.bridge.call<unknown>('updateComponent', payload);
+      if (!isRecord(result) || result.ok !== true) {
+        throw new CommandFailure(
+          isRecord(result) && typeof result.code === 'string' ? result.code : 'RENDERER_ERROR',
+          bridgeFailureMessage(result, '更新元器件失败')
+        );
+      }
+      const before = isRecord(result.before) ? result.before : null;
+      const location = result.location === 'bom' ? 'bom' : 'plate';
+      const targetRef = typeof result.targetRef === 'string' ? result.targetRef : reference.ref ?? reference.partId ?? '';
+      const bridgeWarnings = Array.isArray(result.warnings) ? result.warnings : [];
+      return {
+        ok: true,
+        data: {
+          location,
+          updated: isRecord(result.updated) ? result.updated : {},
+          warnings: [...warnings, ...bridgeWarnings]
+        },
+        undoToken: before ? { target: location, targetRef, before } : undefined
+      };
+    },
+    async undo(token, ctx) {
+      if (!isRecord(token) || !isRecord(token.before)) {
+        throw new CommandFailure('UNDO_FAILED', '撤销令牌无效');
+      }
+      const before = token.before;
+      const payload: Record<string, unknown> = {
+        target: token.target === 'bom' ? 'bom' : 'plate',
+        ref: typeof token.targetRef === 'string' ? token.targetRef : '',
+        restore: true,
+        ...(typeof before.model === 'string' ? { model: before.model } : {}),
+        ...(typeof before.partId === 'string' ? { newPartId: before.partId } : {}),
+        ...(typeof before.qty === 'number' ? { qty: before.qty } : {}),
+        ...(typeof before.note === 'string' ? { remark: before.note } : { remark: '' }),
+        ...(typeof before.w === 'number' ? { w: before.w } : {}),
+        ...(typeof before.h === 'number' ? { h: before.h } : {})
+      };
+      const result = await ctx.bridge.call<unknown>('updateComponent', payload);
+      if (!isRecord(result) || result.ok !== true) {
+        throw new CommandFailure('UNDO_FAILED', bridgeFailureMessage(result, '撤销元器件修改失败'));
+      }
+    }
+  });
+}
+
+function registerRemoveComponentCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'remove_component',
+    async run(args, ctx) {
+      const target = componentTarget(args);
+      const reference = componentReference(args);
+      const result = await ctx.bridge.call<unknown>('removeProjectComponent', {
+        target,
+        ...(reference.partId ? { matchPartId: reference.partId } : {}),
+        ...(reference.ref ? { ref: reference.ref } : {})
+      });
+      if (!isRecord(result) || result.ok !== true) {
+        throw new CommandFailure(
+          isRecord(result) && typeof result.code === 'string' ? result.code : 'NOT_PLACED',
+          bridgeFailureMessage(result, '元器件不在底板或 BOM 中')
+        );
+      }
+      return {
+        ok: true,
+        data: {
+          location: result.location === 'bom' ? 'bom' : 'plate',
+          ref: typeof result.targetRef === 'string' ? result.targetRef : reference.ref ?? reference.partId ?? '',
+          removed: isRecord(result.removed) ? result.removed : {}
+        },
+        undoToken: typeof result.undoToken === 'string' ? result.undoToken : undefined
+      };
+    },
+    async undo(token, ctx) {
+      if (typeof token !== 'string' || !token.trim()) {
+        throw new CommandFailure('UNDO_FAILED', '撤销令牌无效');
+      }
+      const result = await ctx.bridge.call<unknown>('restoreProjectComponent', [token]);
+      if (!isRecord(result) || result.ok !== true) {
+        throw new CommandFailure('UNDO_FAILED', bridgeFailureMessage(result, '恢复元器件失败'));
+      }
+    }
+  });
+}
+
+function plcConfigFromArgs(args: Record<string, unknown>, ctx: CommandContext): Promise<PlcGenConfig> | PlcGenConfig {
+  if (isRecord(args.config)) return args.config as unknown as PlcGenConfig;
+  return (async () => {
+    const current = await ctx.bridge.call<unknown>('getPlcGenConfig');
+    if (isRecord(current) && isBridgeFailure(current)) {
+      throw new CommandFailure('RENDERER_ERROR', bridgeFailureMessage(current, '读取当前 PLC 机型配置失败'));
+    }
+    if (!isRecord(current)) {
+      throw new CommandFailure('NO_CONFIG', '桌面当前没有可生成的 PLC 机型配置；请先完成机型/联调配置');
+    }
+    return current as unknown as PlcGenConfig;
+  })();
+}
+
+function registerPlcGenerateCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'run_plc_generate',
+    async run(args, ctx) {
+      const config = await plcConfigFromArgs(args, ctx);
+      const target = args.target === undefined ? undefined : args.target;
+      if (target !== undefined && (typeof target !== 'string' || !PLC_TARGETS.has(target))) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'target 只能是 generic / s7-1200 / s7-1500 / codesys');
+      }
+      const namePrefix = optionalString(args, 'namePrefix');
+      const sequenceTimeoutMs = numberOf(args.sequenceTimeoutMs, 'sequenceTimeoutMs');
+      if (sequenceTimeoutMs !== undefined && sequenceTimeoutMs <= 0) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'sequenceTimeoutMs 必须大于 0');
+      }
+      const generated = generateProject({
+        config,
+        ...(target ? { target: target as 'generic' | 's7-1200' | 's7-1500' | 'codesys' } : {}),
+        ...(namePrefix ? { namePrefix } : {}),
+        ...(sequenceTimeoutMs !== undefined ? { sequenceTimeoutMs } : {})
+      });
+      if (!generated.ok) {
+        const first = generated.errors[0];
+        throw new CommandFailure(
+          'PRECHECK_FAILED',
+          `PLC 预检未通过（${generated.errors.length} 个错误）${first ? `：${first.message}` : ''}，未写入任何文件`
+        );
+      }
+      if (!ctx.exportsRoot) {
+        throw new CommandFailure('WRITE_FAILED', '导出目录未配置，无法写入 PLC 工程');
+      }
+      const exportsRoot = join(ctx.exportsRoot, 'plc');
+      const plan = planPlcExportDirectory({
+        exportsRoot,
+        machineName: config.name || config.id || 'PLC',
+        now: ctx.now?.() ?? new Date(),
+        exists: existsSync
+      });
+      try {
+        mkdirSync(plan.path, { recursive: true });
+        const files = generated.files.map((file) => {
+          const targetPath = resolve(plan.path, file.path);
+          if (!targetPath.startsWith(resolve(plan.path) + sep)) {
+            throw new CommandFailure('WRITE_FAILED', `PLC 文件路径越界：${file.path}`);
+          }
+          mkdirSync(dirname(targetPath), { recursive: true });
+          writeFileSync(targetPath, file.content, 'utf8');
+          const normalized = file.content.endsWith('\n') ? file.content.slice(0, -1) : file.content;
+          return {
+            path: file.path,
+            bytes: Buffer.byteLength(file.content, 'utf8'),
+            lines: normalized.split('\n').length
+          };
+        });
+        const zip = createZip(generated.files);
+        writeFileSync(plan.zipPath, zip);
+        return {
+          ok: true,
+          data: {
+            path: plan.path,
+            zipPath: plan.zipPath,
+            fileCount: files.length,
+            files,
+            precheck: {
+              errors: generated.precheck.errors,
+              warnings: generated.precheck.warnings
+            },
+            stats: generated.stats
+          }
+        };
+      } catch (error) {
+        if (error instanceof CommandFailure) throw error;
+        throw new CommandFailure('WRITE_FAILED', `PLC 工程写入失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  });
+}
+
+function registerExportFilesCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'export_files',
+    async run(args, ctx) {
+      const kind = args.kind;
+      if (typeof kind !== 'string' || !EXPORT_KINDS.has(kind)) {
+        throw new CommandFailure('UNSUPPORTED_FORMAT', '导出格式仅支持 pdf / dxf / glb / bom');
+      }
+      if (args.fileName !== undefined && args.fileName !== null && typeof args.fileName !== 'string') {
+        throw new CommandFailure('INVALID_ARGUMENT', 'fileName 必须是字符串');
+      }
+      const overwrite = optionalBoolean(args, 'overwrite', 'overwrite') ?? false;
+      if (!ctx.exportsRoot) {
+        throw new CommandFailure('WRITE_FAILED', '导出目录未配置，无法写入文件');
+      }
+
+      const built = await ctx.bridge.call<unknown>('exportArtifact', { kind });
+      if (!isRecord(built) || built.ok !== true) {
+        throw new CommandFailure(
+          isRecord(built) && typeof built.code === 'string' ? built.code : 'EXPORT_FAILED',
+          bridgeFailureMessage(built, '生成导出内容失败')
+        );
+      }
+      if (typeof built.data !== 'string') {
+        throw new CommandFailure('EXPORT_FAILED', '导出内容必须由渲染层以字符串返回');
+      }
+      const suggestedName = typeof built.suggestedName === 'string' && built.suggestedName.trim()
+        ? built.suggestedName.trim()
+        : `导出文件.${kind === 'bom' ? 'csv' : kind}`;
+      try {
+        mkdirSync(ctx.exportsRoot, { recursive: true });
+        const planned = planArtifactExportName({
+          directory: ctx.exportsRoot,
+          kind: kind as 'pdf' | 'dxf' | 'glb' | 'bom',
+          fileName: args.fileName,
+          suggestedName,
+          overwrite,
+          exists: existsSync
+        });
+        let bytes: Uint8Array;
+        if (kind === 'pdf') {
+          if (!ctx.renderReportPdf) {
+            throw new CommandFailure('WRITE_FAILED', 'PDF 渲染管线不可用，请改用 dxf / glb / bom');
+          }
+          bytes = await ctx.renderReportPdf(built.data);
+        } else if (kind === 'glb') {
+          if (built.encoding !== 'base64') {
+            throw new CommandFailure('EXPORT_FAILED', 'GLB 导出必须使用 base64 编码');
+          }
+          bytes = new Uint8Array(Buffer.from(built.data, 'base64'));
+        } else {
+          bytes = new TextEncoder().encode(built.data);
+        }
+        if (bytes.byteLength === 0) {
+          throw new CommandFailure('EXPORT_FAILED', '导出内容为空，未写入文件');
+        }
+        writeFileSync(planned.path, bytes);
+        return {
+          ok: true,
+          data: {
+            path: planned.path,
+            bytes: bytes.byteLength,
+            kind,
+            fileName: planned.name
+          }
+        };
+      } catch (error) {
+        if (error instanceof CommandFailure) throw error;
+        if (error instanceof CostExportError) throw new CommandFailure(error.code, error.message);
+        throw new CommandFailure('WRITE_FAILED', `导出写入失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  });
+}
+
 function registerCostExportCommand(bus: CommandBus): void {
   bus.register({
     name: 'export_cost_report',
@@ -798,15 +1184,23 @@ export function createAgentCommandBus(
   const context: CommandContext = { registry, bridge };
   if (options.loadBuiltinPricebook) context.loadBuiltinPricebook = options.loadBuiltinPricebook;
   if (options.renderCostPdf) context.renderCostPdf = options.renderCostPdf;
+  if (options.exportsRoot) context.exportsRoot = options.exportsRoot;
+  if (options.renderReportPdf) context.renderReportPdf = options.renderReportPdf;
+  if (options.now) context.now = options.now;
   const bus = new CommandBus(context);
   registerInsertCommand(bus);
   registerPlaceCommand(bus);
   registerImportCommand(bus);
   registerReadCommands(bus);
+  registerProjectContextCommand(bus);
+  registerUpdateComponentCommand(bus);
+  registerRemoveComponentCommand(bus);
   registerElectricalCheckCommand(bus);
   registerCostCommand(bus);
   registerCostExportCommand(bus);
   registerPlcVerifyCommand(bus);
+  registerPlcGenerateCommand(bus);
+  registerExportFilesCommand(bus);
   return bus;
 }
 

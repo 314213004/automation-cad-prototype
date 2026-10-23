@@ -1,6 +1,6 @@
 import type { PackRegistry } from '../packs/registry';
 import type { ComponentPart } from '../shared/types';
-import type { CommandResult } from './commands';
+import type { CommandHistoryEntry, CommandResult } from './commands';
 import { resolvePartReference } from './placement.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
@@ -21,6 +21,7 @@ export interface AgentToolSummary {
 export interface AgentCommandExecutor {
   execute(name: string, args?: Record<string, unknown>): Promise<CommandResult>;
   undoLast(): Promise<CommandResult>;
+  history?(): CommandHistoryEntry[];
 }
 
 const COMPONENT_FILTER_SCHEMA = {
@@ -49,6 +50,83 @@ const PLACE_COMPONENT_SCHEMA = {
     railSnap: { type: 'boolean', description: '导轨安装件是否吸附到最近导轨', default: true }
   },
   required: ['partId', 'x', 'y'],
+  additionalProperties: false
+};
+
+const UPDATE_COMPONENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    partId: { type: 'string', description: '目标元件的物料号；与位号 ref 二选一' },
+    ref: { type: 'string', description: '位号：底板放置 id 或 BOM 行号/零件名' },
+    designator: { type: 'string', description: '位号别名，等同 ref' },
+    tag: { type: 'string', description: '位号别名，等同 ref' },
+    model: { type: 'string', description: '改后的型号或物料号；必须在已启用数据包中存在' },
+    newModel: { type: 'string', description: 'model 的别名' },
+    qty: { type: 'integer', minimum: 1, description: '改后的数量（正整数）' },
+    remark: { type: 'string', description: '改后的备注；空字符串表示清空' },
+    note: { type: 'string', description: 'remark 的别名' },
+    target: {
+      type: 'string',
+      enum: ['auto', 'plate', 'bom'],
+      description: '目标位置：auto 先找底板再找 BOM；默认 auto'
+    }
+  },
+  additionalProperties: false
+};
+
+const REMOVE_COMPONENT_SCHEMA = {
+  type: 'object',
+  properties: {
+    partId: { type: 'string', description: '目标元件的物料号；与位号 ref 二选一' },
+    ref: { type: 'string', description: '位号：底板放置 id 或 BOM 行号/零件名' },
+    designator: { type: 'string', description: '位号别名，等同 ref' },
+    tag: { type: 'string', description: '位号别名，等同 ref' },
+    target: {
+      type: 'string',
+      enum: ['auto', 'plate', 'bom'],
+      description: '移除位置：auto 先找底板再找 BOM；默认 auto'
+    }
+  },
+  additionalProperties: false
+};
+
+const PLC_GENERATE_SCHEMA = {
+  type: 'object',
+  properties: {
+    config: {
+      type: 'object',
+      description: '机型 + PLC 配置；缺省读取桌面当前机型',
+      additionalProperties: true
+    },
+    target: {
+      type: 'string',
+      enum: ['generic', 's7-1200', 's7-1500', 'codesys'],
+      description: '生成目标；默认 generic，仅影响 README 与命名，不改变 ST 内容'
+    },
+    namePrefix: { type: 'string', description: '命名前缀；缺省按机型生成' },
+    sequenceTimeoutMs: { type: 'number', description: '自动序列单步默认超时（ms），默认 5000' }
+  },
+  additionalProperties: false
+};
+
+const EXPORT_FILES_SCHEMA = {
+  type: 'object',
+  properties: {
+    kind: {
+      type: 'string',
+      enum: ['pdf', 'dxf', 'glb', 'bom'],
+      description: '导出内容：pdf 为 A3 装配报告，dxf 为三视图，glb 为网格，bom 为 CSV'
+    },
+    fileName: {
+      type: 'string',
+      description: '可选，不含扩展名；非法字符会被移除，扩展名按 kind 强制为 .pdf/.dxf/.glb/.csv'
+    },
+    overwrite: {
+      type: 'boolean',
+      description: '可选，默认 false；同名文件存在时追加 (1)、(2)，为 true 时直接覆盖'
+    }
+  },
+  required: ['kind'],
   additionalProperties: false
 };
 
@@ -552,8 +630,132 @@ export class AgentTools {
     });
 
     this.add({
+      name: 'get_project_context',
+      description:
+        '只读获取当前工程上下文：设计域、当前视图、选中对象、机型概要、底板尺寸与单位制，以及最近操作；缺失项返回 null，不猜测或编造。',
+      inputSchema: EMPTY_SCHEMA,
+      handler: async () => {
+        const result = await this.execute('get_project_context');
+        if (!result) return this.unavailable();
+        if (!result.ok) return commandFailure(result);
+        const data = isRecord(result.data) ? result.data : {};
+        const history = this.commands?.history?.() ?? [];
+        const recentActions = history
+          .filter((entry) => entry.name !== 'get_project_context')
+          .slice(-5)
+          .map((entry) => ({ name: entry.name, at: entry.at, ok: entry.ok }));
+        return {
+          ok: true,
+          domain: data.domain ?? null,
+          view: data.view ?? null,
+          selection: data.selection ?? null,
+          machine: data.machine ?? null,
+          plate: data.plate ?? null,
+          units: data.units ?? null,
+          recentActions
+        };
+      }
+    });
+
+    this.add({
+      name: 'update_component',
+      description:
+        '按 partId 或位号修改已有元器件的型号/数量/备注（底板或 BOM）；新型号必须存在于已启用数据包，否则返回 PART_NOT_FOUND；新件缺少外形尺寸时保留原尺寸并返回 NO_DIMENSIONS 告警。需要用户确认，可撤销。',
+      inputSchema: UPDATE_COMPONENT_SCHEMA,
+      handler: async (args) => {
+        const partId = getString(args.partId);
+        const ref = getString(args.ref) ?? getString(args.designator) ?? getString(args.tag);
+        if (!partId && !ref) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: '必须提供 partId 或位号（ref）之一' };
+        }
+        const model = getString(args.model) ?? getString(args.newModel);
+        const remark = typeof args.remark === 'string' ? args.remark : typeof args.note === 'string' ? args.note : undefined;
+        const qty = getNumber(args.qty);
+        if (qty !== undefined && (!Number.isInteger(qty) || qty <= 0)) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'qty 必须是大于 0 的整数' };
+        }
+        if (model === undefined && qty === undefined && remark === undefined) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: '至少提供 model / qty / remark 之一' };
+        }
+        if (args.target !== undefined && !['auto', 'plate', 'bom'].includes(String(args.target))) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'target 只能是 auto / plate / bom' };
+        }
+        const result = await this.execute('update_component', args);
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'remove_component',
+      description:
+        '按位号或 partId 从底板或 BOM 移除元器件；目标不存在时返回 NOT_PLACED；需要用户确认，可用 undo_last 撤销恢复。',
+      inputSchema: REMOVE_COMPONENT_SCHEMA,
+      handler: async (args) => {
+        const partId = getString(args.partId);
+        const ref = getString(args.ref) ?? getString(args.designator) ?? getString(args.tag);
+        if (!partId && !ref) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: '必须提供 partId 或位号（ref）之一' };
+        }
+        if (args.target !== undefined && !['auto', 'plate', 'bom'].includes(String(args.target))) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'target 只能是 auto / plate / bom' };
+        }
+        const result = await this.execute('remove_component', args);
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'run_plc_generate',
+      description:
+        '按当前（或显式传入的）机型生成 11 个 PLC 工程文件并落盘到 userData/exports/plc/<机型>-<时间>/，同时写 ZIP；返回文件清单、预检结果与统计。预检有 error 时返回 PRECHECK_FAILED，不写任何文件。需要用户确认。',
+      inputSchema: PLC_GENERATE_SCHEMA,
+      handler: async (args) => {
+        if (args.config !== undefined && !isRecord(args.config)) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'config 必须是对象' };
+        }
+        const target = getString(args.target);
+        if (target !== undefined && !['generic', 's7-1200', 's7-1500', 'codesys'].includes(target)) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'target 只能是 generic / s7-1200 / s7-1500 / codesys' };
+        }
+        const namePrefix = getString(args.namePrefix);
+        const sequenceTimeoutMs = getNumber(args.sequenceTimeoutMs);
+        if (sequenceTimeoutMs !== undefined && sequenceTimeoutMs <= 0) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'sequenceTimeoutMs 必须大于 0' };
+        }
+        const result = await this.execute('run_plc_generate', {
+          ...(args.config !== undefined ? { config: args.config } : {}),
+          ...(target ? { target } : {}),
+          ...(namePrefix ? { namePrefix } : {}),
+          ...(sequenceTimeoutMs !== undefined ? { sequenceTimeoutMs } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'export_files',
+      description:
+        '导出当前装配体为 pdf / dxf / glb / bom（BOM 为 CSV），写入 userData/exports/ 并返回实际路径与字节数。文件名与 export_cost_report 共用同一净化/冲突规则；默认不覆盖，除非 overwrite=true。需要用户确认。',
+      inputSchema: EXPORT_FILES_SCHEMA,
+      handler: async (args) => {
+        const kind = getString(args.kind);
+        if (!kind || !['pdf', 'dxf', 'glb', 'bom'].includes(kind)) {
+          return { ok: false, code: 'UNSUPPORTED_FORMAT', message: '导出格式仅支持 pdf / dxf / glb / bom' };
+        }
+        if (args.fileName !== undefined && args.fileName !== null && typeof args.fileName !== 'string') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'fileName 必须是字符串' };
+        }
+        if (args.overwrite !== undefined && args.overwrite !== null && typeof args.overwrite !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'overwrite 必须是布尔值' };
+        }
+        const result = await this.execute('export_files', args);
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
       name: 'undo_last',
-      description: '撤销最近一次可撤销的写操作（当前支持占位件插入与底板放置），返回 removed id。',
+      description: '撤销最近一次可撤销的写操作（占位件插入、底板放置、元器件修改/移除），返回被撤销的命令与 id。',
       inputSchema: EMPTY_SCHEMA,
       handler: async () => {
         if (!this.commands) return this.unavailable();

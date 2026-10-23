@@ -324,6 +324,8 @@ interface AgentBridgeBomRow {
   spec: string;
   qty: number;
   mat: string;
+  note?: string;
+  partId?: string;
 }
 
 interface AgentBridgeApi {
@@ -332,6 +334,14 @@ interface AgentBridgeApi {
   getSelection(): { name: string; bbox: number[] } | AgentBridgeFailure | null;
   getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
   getPlcGenConfig(): import('./plcgen/types').PlcGenConfig | AgentBridgeFailure | null;
+  getProjectContext(): {
+    domain: string | null;
+    view: string | null;
+    selection: { name: string; bbox: number[] } | null;
+    machine: { id: string; name: string; stations: number; actuators: number; sensors: number } | null;
+    plate: { width: number; height: number; rails: unknown[]; placed?: number } | null;
+    units: string | null;
+  } | AgentBridgeFailure;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
@@ -349,6 +359,48 @@ interface AgentBridgeApi {
     | { ok: false; code?: string; message: string }
   >;
   removeEnclosurePart(placementId: string): { ok: boolean; message?: string };
+  updateComponent(payload: {
+    target?: 'auto' | 'plate' | 'bom';
+    ref?: string;
+    matchPartId?: string;
+    model?: string;
+    newPartId?: string;
+    qty?: number;
+    remark?: string;
+    w?: number;
+    h?: number;
+  }): {
+    ok: boolean;
+    code?: string;
+    message?: string;
+    location?: 'plate' | 'bom';
+    targetRef?: string;
+    before?: Record<string, unknown>;
+    updated?: Record<string, unknown>;
+  };
+  removeProjectComponent(payload: {
+    target?: 'auto' | 'plate' | 'bom';
+    ref?: string;
+    matchPartId?: string;
+  }): {
+    ok: boolean;
+    code?: string;
+    message?: string;
+    location?: 'plate' | 'bom';
+    targetRef?: string;
+    removed?: Record<string, unknown>;
+    undoToken?: string;
+  };
+  restoreProjectComponent(token: string): { ok: boolean; code?: string; message?: string };
+  exportArtifact(payload: { kind: 'pdf' | 'dxf' | 'glb' | 'bom' }): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    kind?: string;
+    data?: string;
+    encoding?: 'utf8' | 'base64';
+    suggestedName?: string;
+  }>;
   runInterference(): { hits: number; items: { a: string; b: string; volume: number; severity: string }[] } | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
   exportCostFile(payload: {
@@ -556,6 +608,13 @@ interface Window {
       | { ok: false; code: 'PART_NOT_FOUND' | 'NO_DIMENSIONS'; message: string }
     >;
     remove(placementId: string): { ok: boolean; message?: string };
+    update(placementId: string, patch: Partial<import('./enclosure/layout').Placement>): {
+      ok: boolean;
+      placement?: import('./enclosure/layout').Placement;
+      code?: string;
+      message?: string;
+    };
+    restore(placement: import('./enclosure/layout').Placement): boolean;
     state(): {
       placed: number;
       overlap: number;
@@ -563,7 +622,7 @@ interface Window {
       ratio: number;
       usedMm2: number;
       plate: { width: number; height: number; rails: { id: string; y: number; height: number; label: string }[] };
-      placements: { id: string; partId: string; model: string; x: number; y: number; w: number; h: number; railId?: string }[];
+      placements: { id: string; partId: string; model: string; x: number; y: number; w: number; h: number; railId?: string; tag?: string; qty?: number; note?: string }[];
     } | null;
     open(): void;
     close(): void;

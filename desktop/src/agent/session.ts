@@ -25,6 +25,10 @@ const MUTATING_TOOLS = new Set([
   'import_cad',
   'insert_component',
   'place_component',
+  'update_component',
+  'remove_component',
+  'run_plc_generate',
+  'export_files',
   'undo_last',
   'export_cost_report'
 ]);
@@ -34,7 +38,7 @@ const COMMAND_ALIASES: Record<string, string> = {
 
 const SYSTEM_PROMPT = [
   '你是 AutomationCAD 的桌面智能体。',
-  '可以使用工具查询元器件、读取 BOM、导入 CAD、插入占位件、在底板放置元件、执行干涉初筛、生成成本报告并导出文件、撤销。',
+  '可以使用工具查询元器件、读取工程上下文/BOM、导入 CAD、插入/修改/移除元件、在底板放置元件、执行干涉初筛、生成 PLC 工程、生成成本报告并导出文件、撤销。',
   '工具结果会以 JSON 返回；失败时根据错误码向用户解释，不要编造执行结果。',
   '涉及修改装配体或写文件的操作会先请求用户确认。'
 ].join('');

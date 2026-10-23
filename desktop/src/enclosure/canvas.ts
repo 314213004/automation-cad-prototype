@@ -193,7 +193,12 @@ function readStoredLayout(): StoredLayout {
           y: Number(item.y),
           w: Number(item.w),
           h: Number(item.h),
-          ...(typeof (item as Placement).railId === 'string' ? { railId: (item as Placement).railId } : {})
+          ...(typeof (item as Placement).railId === 'string' ? { railId: (item as Placement).railId } : {}),
+          ...(typeof (item as Placement).tag === 'string' ? { tag: (item as Placement).tag } : {}),
+          ...(Number.isInteger(Number((item as Placement).qty)) && Number((item as Placement).qty) > 0
+            ? { qty: Number((item as Placement).qty) }
+            : {}),
+          ...(typeof (item as Placement).note === 'string' ? { note: (item as Placement).note } : {})
         }, { width: plateWidth, height: plateHeight, rails }))
       : [];
     return {
@@ -504,6 +509,52 @@ export class EnclosureCanvas {
     if (index < 0) return false;
     this.placements.splice(index, 1);
     if (this.selectedId === id) this.selectedId = null;
+    this.sync();
+    this.render();
+    return true;
+  }
+
+  /** 按放置 id 更新型号/数量/备注/尺寸（Agent update_component 用）。 */
+  updatePlacement(id: string, patch: Partial<Placement>): Placement | null {
+    const index = this.placements.findIndex((item) => item.id === id);
+    const current = index >= 0 ? this.placements[index] : undefined;
+    if (!current) return null;
+    const next: Placement = {
+      ...current,
+      ...(typeof patch.partId === 'string' && patch.partId.trim() ? { partId: patch.partId.trim() } : {}),
+      ...(typeof patch.model === 'string' && patch.model.trim() ? { model: patch.model.trim() } : {}),
+      ...(Number.isFinite(patch.w) && Number(patch.w) > 0 ? { w: Number(patch.w) } : {}),
+      ...(Number.isFinite(patch.h) && Number(patch.h) > 0 ? { h: Number(patch.h) } : {}),
+      ...(Number.isInteger(patch.qty) && Number(patch.qty) > 0 ? { qty: Number(patch.qty) } : {}),
+      ...(typeof patch.note === 'string' ? { note: patch.note } : {}),
+      ...(typeof patch.tag === 'string' && patch.tag.trim() ? { tag: patch.tag.trim() } : {})
+    };
+    this.placements[index] = clampToPlate(next, this.plate);
+    this.selectedId = id;
+    this.sync();
+    this.render();
+    return { ...this.placements[index]! };
+  }
+
+  /** 撤销移除时按快照恢复，保持原 id / 坐标 / 尺寸。 */
+  restorePlacement(record: Placement): boolean {
+    if (!record || typeof record.id !== 'string' || !record.id.trim()) return false;
+    if (this.placements.some((item) => item.id === record.id)) return false;
+    const restored = clampToPlate({
+      id: record.id,
+      partId: record.partId,
+      model: record.model,
+      x: Number(record.x),
+      y: Number(record.y),
+      w: Number(record.w),
+      h: Number(record.h),
+      ...(typeof record.railId === 'string' ? { railId: record.railId } : {}),
+      ...(typeof record.tag === 'string' ? { tag: record.tag } : {}),
+      ...(Number.isInteger(record.qty) && Number(record.qty) > 0 ? { qty: Number(record.qty) } : {}),
+      ...(typeof record.note === 'string' ? { note: record.note } : {})
+    }, this.plate);
+    this.placements.push(restored);
+    this.selectedId = restored.id;
     this.sync();
     this.render();
     return true;
@@ -990,6 +1041,22 @@ export function removeEnclosurePart(placementId: string): { ok: boolean; message
   return { ok: true };
 }
 
+export function updateEnclosurePlacement(
+  placementId: string,
+  patch: Partial<Placement>
+): { ok: true; placement: Placement } | { ok: false; code: 'NOT_PLACED'; message: string } {
+  if (!canvasInstance) return { ok: false, code: 'NOT_PLACED', message: '底板画布尚未就绪' };
+  const placement = canvasInstance.updatePlacement(placementId, patch);
+  if (!placement) {
+    return { ok: false, code: 'NOT_PLACED', message: `底板元件不存在：${placementId}` };
+  }
+  return { ok: true, placement };
+}
+
+export function restoreEnclosurePlacement(placement: Placement): boolean {
+  return canvasInstance?.restorePlacement(placement) ?? false;
+}
+
 export function enclosureState(): EnclosureState | null {
   return canvasInstance?.state() ?? null;
 }
@@ -1050,6 +1117,8 @@ export function initEnclosureUi(): void {
     place: (partId: string, x?: number, y?: number, options?: EnclosurePlaceOptions) =>
       placePartInEnclosure(partId, x, y, options),
     remove: (placementId: string) => removeEnclosurePart(placementId),
+    update: (placementId: string, patch: Partial<Placement>) => updateEnclosurePlacement(placementId, patch),
+    restore: (placement: Placement) => restoreEnclosurePlacement(placement),
     state: () => enclosureState(),
     open: openEnclosure,
     close: closeEnclosure,

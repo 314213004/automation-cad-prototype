@@ -33,6 +33,8 @@ export interface CadBomRow {
   spec: string;
   qty: number;
   mat: string;
+  note?: string;
+  partId?: string;
 }
 
 export interface CadKinematicsMesh {
@@ -61,6 +63,9 @@ interface LoadedPart {
   data: CadMeshData;
   mesh: THREE.Mesh;
   triangleCount: number;
+  partId?: string;
+  qty?: number;
+  note?: string;
 }
 
 const DEFAULT_COLORS = [0x7f8b96, 0x9aa6b2, 0xb5a078, 0x6f9e9a, 0xa77e8d, 0x8e9b74];
@@ -664,9 +669,69 @@ export class CadViewer {
       no: index + 1,
       name: part.name,
       spec: part.name,
-      qty: 1,
-      mat: '—'
+      qty: this.parts[index]?.qty ?? 1,
+      mat: '—',
+      ...(this.parts[index]?.note ? { note: this.parts[index]!.note } : {}),
+      ...(this.parts[index]?.partId ? { partId: this.parts[index]!.partId } : {})
     }));
+  }
+
+  /** Agent update_component：按 0 基下标更新 BOM 行的型号/数量/备注。 */
+  updateBomRow(index: number, patch: { model?: string; qty?: number; note?: string; partId?: string }): CadBomRow | null {
+    const part = this.parts[index];
+    const modelPart = this.modelParts[index];
+    if (!part || !modelPart) return null;
+    if (typeof patch.model === 'string' && patch.model.trim()) {
+      const model = patch.model.trim();
+      part.data.name = model;
+      part.mesh.name = model;
+      modelPart.name = model;
+    }
+    if (Number.isInteger(patch.qty) && Number(patch.qty) > 0) part.qty = Number(patch.qty);
+    if (typeof patch.note === 'string') part.note = patch.note;
+    if (typeof patch.partId === 'string' && patch.partId.trim()) part.partId = patch.partId.trim();
+    this.renderPartList();
+    return this.getBomRows()[index] ?? null;
+  }
+
+  /**
+   * 从装配体移除并保留对象引用，供 remove_component 的撤销恢复。
+   * 与 `removePart` 不同，这里不 dispose 几何/材质。
+   */
+  detachPart(index: number): { index: number; part: LoadedPart; modelPart: InterferencePart } | null {
+    if (this.degraded || !Number.isInteger(index)) return null;
+    const part = this.parts[index];
+    const modelPart = this.modelParts[index];
+    if (!part || !modelPart) return null;
+    this.restoreOriginalGeometries();
+    this.group.remove(part.mesh);
+    this.parts.splice(index, 1);
+    this.modelParts.splice(index, 1);
+    this.parts.forEach((candidate, candidateIndex) => {
+      candidate.mesh.userData.partIndex = candidateIndex;
+    });
+    this.selected = null;
+    if (this.selectionHelper) this.selectionHelper.visible = false;
+    this.renderPartList();
+    this.renderDetail(null);
+    this.syncPartCount();
+    this.rebuildPlanState();
+    return { index, part, modelPart };
+  }
+
+  restoreDetachedPart(snapshot: { index: number; part: LoadedPart; modelPart: InterferencePart }): boolean {
+    if (!snapshot || !snapshot.part || !snapshot.modelPart) return false;
+    const index = Math.min(Math.max(0, snapshot.index), this.parts.length);
+    this.parts.splice(index, 0, snapshot.part);
+    this.modelParts.splice(index, 0, snapshot.modelPart);
+    this.group.add(snapshot.part.mesh);
+    this.parts.forEach((candidate, candidateIndex) => {
+      candidate.mesh.userData.partIndex = candidateIndex;
+    });
+    this.renderPartList();
+    this.syncPartCount();
+    this.rebuildPlanState();
+    return true;
   }
 
   /** 运动学标注网格树的数据源；id 使用 parts 索引。 */
@@ -750,7 +815,7 @@ export class CadViewer {
     this.refreshInstanceMatrices();
   }
 
-  addPlaceholderPart(name: string): number {
+  addPlaceholderPart(name: string, partId?: string): number {
     if (this.degraded || !this.renderer) {
       throw new Error('当前环境不支持 WebGL，无法插入占位件');
     }
@@ -790,7 +855,7 @@ export class CadViewer {
       normals: null,
       indices: null
     };
-    this.parts.push({ data, mesh, triangleCount: 12 });
+    this.parts.push({ data, mesh, triangleCount: 12, ...(partId ? { partId } : {}) });
     this.group.add(mesh);
     const box = this.partBounds({ data, mesh, triangleCount: 12 });
     this.modelParts.push({

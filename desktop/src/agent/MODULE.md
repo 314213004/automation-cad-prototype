@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 12 个 AgentTool）
+tools.ts（AgentTools + 17 个 AgentTool）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
  ├─ mcp.ts        → MCP stdio server，工具定义直接复用
  ├─ mcp-proxy.ts  → stdio MCP → 桌面 RPC 写工具代理（10 秒超时）
@@ -53,11 +53,16 @@ interface Bridge {
 | `search_components` | `q` | 无（直接读 registry） | ✅ 可用 |
 | `import_cad` | `path` | `import_cad` | ✅ 可用 |
 | `get_bom` | 无 | `get_bom` | ✅ 简化 BOM |
+| `get_project_context` | 无 | `get_project_context` | ✅ 只读：域/视图/选中/机型/底板/单位/最近操作，缺失为 null |
 | `run_interference_check` | 无 | `run_interference` | ✅ 前 20 条 |
 | `insert_component` | `partId / name?` | `insert_component` | ✅ 可撤销 |
 | `place_component` | `partId / x / y / rotate? / railSnap?` | `place_component` | ✅ 底板放置，可撤销；越界/重叠只告警 |
+| `update_component` | `partId? / ref? / model? / qty? / remark? / target?` | `update_component` | ✅ 改型号/数量/备注，可撤销；无尺寸返回 `NO_DIMENSIONS` 告警 |
+| `remove_component` | `partId? / ref? / target?` | `remove_component` | ✅ 从底板或 BOM 移除，可撤销；不存在返回 `NOT_PLACED` |
 | `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条 |
 | `run_cost_report` | `bom? / pricebook? / placements? / plate? / plc? / options? / overrides? / wireSection? / now?` | `run_cost_report` | ✅ 只读，明细前 50 行、缺价/告警各 20 条 |
+| `run_plc_generate` | `config? / target? / namePrefix? / sequenceTimeoutMs?` | `run_plc_generate` | ✅ 写：11 文件 + ZIP 落盘 `userData/exports/plc/`；预检失败不落盘 |
+| `export_files` | `kind / fileName? / overwrite?` | `export_files` | ✅ 写：pdf/dxf/glb/bom(CSV)，与成本导出一套命名净化/冲突规则 |
 | `export_cost_report` | `format / fileName? / overwrite?` + 同上成本参数 | `export_cost_report` | ✅ 写工具：PDF/CSV 落盘到 `userData/exports/`，需确认 |
 | `verify_plc_program` | `config? / timeScale? / safetyTripAtStep? / sensorConflictAtStep?` | `verify_plc_program` | ✅ 只读：预检 + 生成 + 内置模拟器，返回步骤/报警/失败原因 |
 | `undo_last` | 无 | 直接 `CommandBus.undoLast()` | ✅ 可用 |
@@ -143,7 +148,7 @@ executePlan(plan, deps): Promise<ExecutePlanResult>
 - 规则不命中 `confidence=0.2`；低于 `PLAN_CONFIDENCE_THRESHOLD=0.6`（或 `context.minConfidence`）时拒绝，并返回 5 条可执行建议。
 - 执行器对写步骤按 `READ_ONLY_TOOLS` 判定（不信任步骤里的 `readOnly` 标记），一次汇总确认；拒绝返回 `cancelled:true` 且 `results` 为空。
 - 失败停止：业务 `ok:false`、嵌套 `error.code`、抛异常都归一为结果码（异常 `TOOL_EXCEPTION`）；`failedAt` 为 1 基步骤号，`failedIndex` 为 0 基下标。
-- `insert_component`/`place_component` 成功过且有失败时返回 `undoHint`，提示可用 `undo_last` 回退。
+- `insert_component`/`place_component`/`update_component`/`remove_component` 成功过且有失败时返回 `undoHint`，提示可用 `undo_last` 回退。
 - 逐步执行由 `deps.startAt / deps.maxSteps` 驱动，UI「全部执行」不传 `maxSteps`，「逐步执行」固定 `maxSteps=1`。
 
 IPC 与 UI：
@@ -161,22 +166,26 @@ IPC 与 UI：
 - 该命令通过构造参数 `createAgentCommandBus(registry, bridge, { loadBuiltinPricebook })` 拿到内置价格簿读取器（主进程读 `packs/builtin/pricebook-cn/pricebook.json`），与 `cost:pricebook` IPC 同源。
 - `insert_component` 成功后将 `meshIndex` 作为 undo token 入栈；`undo_last` 调用 `removeComponent` 后索引会重排。
 - `place_component` 先由 `placement.ts` 做型号解析（精确 id → 唯一模糊命中；多义返回 `AMBIGUOUS` + 候选），再由命令总线校验 `dims`，经渲染桥 `placeEnclosurePart` 调用真实 `window.__Enclosure.place`。放置 id 作为 undo token；`undo_last` 调 `removeEnclosurePart` 并返回 `{command:'place_component',removed:<placementId>}`。越界/重叠不拒绝，返回 `warnings[{code:'OUT_OF_BOUNDS'|'OVERLAP'}]`。
-- `PART_NOT_FOUND`、`UNSUPPORTED_FORMAT`、`FILE_NOT_FOUND`、`RENDERER_TIMEOUT`、`RENDERER_UNAVAILABLE` 均为结构化错误码。
+- `update_component` 先解析新型号；不在已启用数据包则 `PART_NOT_FOUND`。新件 `dims` 缺失只回 `NO_DIMENSIONS` 告警并保留原尺寸。底板目标以 placement 快照撤销，BOM 目标以行号/`partId` 定位后恢复。
+- `remove_component` 底板目标用 placement 快照、BOM 目标用 `detachPart` 对象快照，二者都以 opaque token 交给 `undo_last` 恢复；不存在统一 `NOT_PLACED`。
+- `run_plc_generate` 先 `generateProject` 预检；有任何 error 直接 `PRECHECK_FAILED`，不创建目录。成功后写 11 个文件 + ZIP，目录名 `<机型>-<yyyyMMdd-HHmm>`，冲突追加 `-2`。
+- `export_files` 由渲染桥生成内容，主进程落盘；`kind=bom` 固定 `.csv`，PDF 走独立 A3 报告打印管线，GLB 以 base64 过桥。
+- `PART_NOT_FOUND`、`NOT_PLACED`、`PRECHECK_FAILED`、`UNSUPPORTED_FORMAT`、`FILE_NOT_FOUND`、`RENDERER_TIMEOUT`、`RENDERER_UNAVAILABLE` 均为结构化错误码。
 
 ## MCP 写工具代理
 
 - 独立 stdio MCP 启动时读取 `userData/agent-token`，调用 `POST http://127.0.0.1:7420/rpc` 的 `tools/call`，工具名和参数原样转发，默认 10 秒超时。
 - 桌面可达时所有已知工具都转发，写操作走主进程 CommandBus 与渲染桥。
-- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 9 个工具（含 `place_component`、`export_cost_report`）返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
+- 桌面不可达时：`list_components` / `search_components` 回退本地 registry；其余 13 个桌面工具（含 `place_component`、`update_component`、`run_plc_generate`、`export_files`）返回 `{ok:false,code:'DESKTOP_NOT_RUNNING',message:'请先启动 AutomationCAD 桌面应用，再调用该工具'}`。
 - 代理错误不包含 token；401 单独返回鉴权错误，不降级成“桌面未运行”。
 
 ## 应用内智能体对话
 
 - `agent-llm.json` 保存 `{baseUrl,apiKey,model,maxIterations}`，POSIX 权限 600。默认 `https://api.openai.com/v1`、`gpt-4o-mini`、6 轮。
 - UI 读取时 apiKey 只返回掩码（如 `sk-****abcd`）；保存时掩码/空值保留原密钥。
-- `llm.ts` 以 OpenAI 兼容格式发送 11 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
+- `llm.ts` 以 OpenAI 兼容格式发送 17 工具 JSON Schema，60 秒超时；非 2xx 返回含状态码的中文错误。
 - `session.ts` 注入 `{llm,bus,confirmWrite}`：工具结果以 `role:'tool'` 回灌，失败不中断；历史只保留最近 20 条；超轮返回「已达到最大工具调用轮数（N），请缩小任务范围」。
-- `insert_component`、`place_component`、`import_cad`、`undo_last`、`export_cost_report` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
+- `import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last` 执行前由主进程弹出确认；拒绝时回灌 `USER_DENIED`。
 - 面板包含对话消息流/工具卡片、模型设置（apiKey 为 password）与测试连接（ping，`max_tokens=8`）。
 
 ## JSON-RPC 协议
@@ -198,6 +207,8 @@ window.__AgentBridge = {
   insertComponent(part), removeComponent(meshIndex),
   placeEnclosurePart({ partId, x, y, rotate?, railSnap? }),
   removeEnclosurePart(placementId),
+  getProjectContext(), updateComponent(payload), removeProjectComponent(payload),
+  restoreProjectComponent(token), exportArtifact({ kind }),
   runInterference(), importPath(path)
 }
 ```
@@ -224,8 +235,8 @@ window.__AgentBridge = {
 
 ## 进度
 
-- ✅ 注册表 + 12 工具（只读 7 / 写 5）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 12 个）
+- ✅ 注册表 + 17 工具（只读 8 / 写 9）+ 鉴权 + 结构化错误码
+- ✅ MCP stdio（真实握手 `tools/list` 返回 17 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）
@@ -233,11 +244,11 @@ window.__AgentBridge = {
 - ✅ 离线规则路由（7 类意图）+ 上下文 ≤2 KB 分级裁剪 + NDJSON 审计与凭据脱敏（P7-A）
 - ✅ 侧栏只读问答 UI：计划预览（只读可离线 / 写操作需联网）+ 在线离线统一回执 + 审计面板（P7-A-2）
 - ✅ P7-C 多步规划：五类离线组合 + 通用拆句、未知工具过滤、置信度拒绝；`executePlan` 写步骤一次确认、失败立即停止、可撤销写回提示；侧栏计划卡片全部/逐步/取消
-- ✅ 单测：全套 687/687；smoke：`SMOKE_AGENT_TOOLS_OK tools=12 implemented=12`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
+- ✅ 单测：全套 717/717（新增 `tools-v2.test.mjs` 30 条）；smoke：`SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_BRIDGE_OK scene=1 bom=1`、`SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`、`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`
 - ✅ P7-A-3 + P7-B：46 条中文评估集（`desktop/eval/agent-cases.json`）+ 离线回归 `npm run eval:agent`（结果写 `docs/desktop/eval/latest.json`）；当前基线 100% 意图 / 100% 工具 / 100% 超纲拒绝
-- ⏳ 更多可撤销写操作（属性修改、删除节点）、MCP resources、单步模型工具调用的逐步确认；联调/同步工具注册后补充真实工具用例
+- ⏳ MCP resources、单步模型工具调用的逐步确认、其余属性编辑（几何参数/装配层级）；联调/诊断/同步工具注册后补充真实工具用例
 
 ## 待办
 
 1. 为 MCP 增加 `resources`（当前装配树、数据包清单），让 Agent 能先读后写。
-2. 把 `updateProperty / deleteNode` 也接入命令总线与撤销栈。
+2. 把剩余属性编辑（几何参数 / 装配层级）接入命令总线与撤销栈；元件型号/数量/备注与移除已完成。

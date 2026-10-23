@@ -3,7 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync } 
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { registerIpcHandlers, registerAgentChatIpc, CAD_EXTENSIONS, renderCostReportPdf } from './ipc';
+import {
+  registerIpcHandlers,
+  registerAgentChatIpc,
+  CAD_EXTENSIONS,
+  renderAssemblyReportPdf,
+  renderCostReportPdf
+} from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
@@ -1159,18 +1165,24 @@ function createWindow(): BrowserWindow {
       try {
         const summaries = agentTools?.summaries() ?? [];
         if (
-          summaries.length !== 12 ||
+          summaries.length !== 17 ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||
           !summaries.some((tool) => tool.name === 'export_cost_report') ||
           !summaries.some((tool) => tool.name === 'place_component') ||
-          !summaries.some((tool) => tool.name === 'verify_plc_program')
+          !summaries.some((tool) => tool.name === 'verify_plc_program') ||
+          !summaries.some((tool) => tool.name === 'get_project_context') ||
+          !summaries.some((tool) => tool.name === 'update_component') ||
+          !summaries.some((tool) => tool.name === 'remove_component') ||
+          !summaries.some((tool) => tool.name === 'run_plc_generate') ||
+          !summaries.some((tool) => tool.name === 'export_files')
         ) {
           console.error('SMOKE_FAIL agent_tools', JSON.stringify(summaries.map((tool) => tool.name)));
           setTimeout(() => app.exit(1), 100);
           return;
         }
         console.log(`SMOKE_AGENT_TOOLS_OK tools=${summaries.length} implemented=${summaries.length}`);
+        console.log(`SMOKE_AGENT_TOOLS_V2 tools=${summaries.length}`);
 
         const bridgeState = await window.webContents.executeJavaScript(
           `(() => {
@@ -1922,7 +1934,9 @@ async function bootstrap(): Promise<void> {
 
   commandBus = createAgentCommandBus(registry, new RendererBridge(() => mainWindow), {
     loadBuiltinPricebook: readBuiltinPricebookRaw,
-    renderCostPdf: renderCostReportPdf
+    renderCostPdf: renderCostReportPdf,
+    renderReportPdf: renderAssemblyReportPdf,
+    exportsRoot: join(app.getPath('userData'), 'exports')
   });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({

@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动，评估集扩至 46 条）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动，评估集扩至 46 条）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -36,13 +36,14 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（已实现 12 个：只读 7 + 写 5；规划新增 5 个）
+## 3. 工具清单（已实现 17 个：只读 8 + 写 9；另 3 个规划中）
 
 | 工具 | 类型 | 说明 |
 |---|---|---|
 | `list_components` | 只读 | 按类别 / 数据包列出元件 |
 | `search_components` | 只读 | 型号、品牌、类别、规格全文检索 |
 | `get_bom` | 只读 | 当前装配体简化 BOM |
+| `get_project_context` | 只读 | 当前域 / 视图 / 选中对象 / 机型 / 底板 / 单位制 / 最近操作；缺失项返回 null |
 | `run_interference_check` | 只读 | 包围盒干涉初筛 |
 | `run_electrical_check` | 只读 | 线号 / 功率 / 截面 / 断路器校验 |
 | `run_cost_report` | 只读 | 按 BOM 与价格簿计算成本 |
@@ -50,32 +51,31 @@
 | `import_cad` | 写 | 导入 CAD 文件（需确认） |
 | `insert_component` | 写 | 插入装配体占位件（需确认，可撤销） |
 | `place_component` | 写 | 底板指定坐标放置（旋转 / 导轨吸附；越界/重叠只告警；需确认，可撤销） |
+| `update_component` | 写 | 按 partId / 位号修改型号 / 数量 / 备注；新型号不存在返回 `PART_NOT_FOUND`，新件无尺寸返回 `NO_DIMENSIONS` 告警（需确认，可撤销） |
+| `remove_component` | 写 | 按位号 / partId 从底板或 BOM 移除；不存在返回 `NOT_PLACED`（需确认，可撤销） |
+| `run_plc_generate` | 写 | 按当前机型生成 11 个 PLC 工程文件 + ZIP，落盘到 `userData/exports/plc/<机型>-<时间>/`；预检有 error 返回 `PRECHECK_FAILED` 且不落盘（需确认） |
+| `export_files` | 写 | 导出 PDF / DXF / GLB / BOM(CSV) 到 `userData/exports/`，默认不覆盖（需确认） |
 | `export_cost_report` | 写 | 成本报告落盘 PDF/CSV（需确认） |
 | `undo_last` | 写 | 撤销最近一次可撤销写操作（需确认） |
 
-规划新增 5 个：
-| 工具 | 类型 | 说明 |
-|---|---|---|
-| `get_project_context` | 只读 | 当前机型、域、视图、选中对象、底板尺寸、单位制 |
-| `export_files` | 写 | 导出 PDF/DXF/GLB/BOM，返回文件路径 |
-| `start_commission` | 写 | 启动联调序列（需确认） |
-| `diagnose_fault` | 只读 | 按当前点位/报警码给故障建议 |
-| `sync_design_package` | 写 | 打包并上传设计包（需确认 + 明文展示 deviceId/baseUrl） |
+规划中但尚未注册：`start_commission`（启动联调）、`diagnose_fault`（按点位/报警码给建议）、`sync_design_package`（打包上传，需确认并明文展示 deviceId/baseUrl）。未注册的工具不会进入可执行计划。
 
-已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。PLC 模拟验证：`verify_plc_program`（只读，复用 `verifyGenerated`，见 PLC-CODEGEN.md 13）。
+已实现的成本工具：`run_cost_report`（只读，见 COSTING.md 4.2）与 `export_cost_report`（写，PDF/CSV 落盘到 `userData/exports/`，见 COSTING.md 4.3）。PLC 模拟验证：`verify_plc_program`（只读，复用 `verifyGenerated`，见 PLC-CODEGEN.md 13）；PLC 工程落盘：`run_plc_generate`。通用导出 `export_files` 与 `export_cost_report` 共用 `src/cost/export.ts` 的文件名净化、扩展名强制、冲突序号和目录逃逸检查。
 
-每个工具：JSON Schema 入参、结构化返回、`error.code` 可读中文、幂等键（写操作）。
+每个工具：JSON Schema 入参（顶层 `additionalProperties: false`）、结构化返回、稳定 `error.code` 与中文消息。
 
 ### 写操作分级
 
 | 级别 | 范围 | 约束 |
 |---|---|---|
-| 只读 | 7 个查询/计算/验证工具 | 可离线直接执行，不产生副作用 |
-| W1 可撤销装配写 | `insert_component`、`place_component` | 执行前二次确认；成功后写入撤销栈，`undo_last` 回滚并返回 `removed` id |
-| W2 文件写 | `import_cad`、`export_cost_report` | 执行前二次确认；固定路径/格式，不接受任意写入路径 |
+| 只读 | 8 个查询/计算/验证工具 | 可离线直接执行，不产生副作用；`get_project_context` 缺失项必须返回 null |
+| W1 可撤销装配写 | `insert_component`、`place_component`、`update_component`、`remove_component` | 执行前二次确认；成功后写入撤销栈，`undo_last` 恢复插入件 / 放置 / 型号与备注 / 被移除元件 |
+| W2 文件写 | `import_cad`、`run_plc_generate`、`export_files`、`export_cost_report` | 执行前二次确认；导入只读用户明确给出的 CAD 路径，导出固定写入 `userData/exports/`，不接受任意写入路径，文件名走统一净化与冲突策略 |
 | W3 外部副作用 | 规划的 `start_commission` / `sync_design_package` | 除二次确认外，还需明文展示目标地址与机台编号 |
 
 `undo_last` 本身也走确认，但只回滚栈顶的一条可撤销写，不会删除文件或撤销外部操作。
+
+稳定错误码：`INVALID_ARGUMENT`（缺参/类型错误）、`PART_NOT_FOUND`（新型号不在数据包）、`NOT_PLACED`（删除目标不在底板/BOM）、`PRECHECK_FAILED`（PLC 预检错误，不落盘）、`UNSUPPORTED_FORMAT`（导出格式不在白名单）、`WRITE_FAILED` / `EXPORT_FAILED`（落盘与内容生成失败）。
 
 ## 4. 上下文注入
 
@@ -146,12 +146,12 @@ executePlan(plan, deps) → {
 通用多步补充：含「然后 / 接着 / 之后 / 最后 / 并且 / 同时 / 再 / 并」的指令会逐句调用 `planTool()`；任何一句落空都整单拒绝，避免做一半。单句仍回落到 `planTool()`。
 
 工具清单（以 `tools.ts` 注册表为准）：
-- 只读 7：`list_components`、`search_components`、`get_bom`、`run_interference_check`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
-- 写 5：`import_cad`、`insert_component`、`place_component`、`export_cost_report`、`undo_last`
-- 规划中但未注册：`sync_design_package`（以及 `export_files` / `start_commission` / `diagnose_fault` / `get_project_context`）；未注册前不会进入可执行计划
+- 只读 8：`list_components`、`search_components`、`get_bom`、`get_project_context`、`run_interference_check`、`run_electrical_check`、`run_cost_report`、`verify_plc_program`
+- 写 9：`import_cad`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_plc_generate`、`export_files`、`export_cost_report`、`undo_last`
+- 规划中但未注册：`start_commission`、`diagnose_fault`、`sync_design_package`；未注册前不会进入可执行计划
 
 工具名与过滤：
-- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 12 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
+- 默认工具集合来自 `router.ts` 的 `READ_ONLY_TOOLS + WRITE_TOOLS`，与 `tools.ts` 当前 17 个注册工具一致；IPC/UI 调用时传入实时 `AgentTools.summaries()` 名称。
 - 规划阶段逐条校验工具名；不存在的工具从步骤中移除并写入 `warnings`（例如 `忽略未注册工具 sync_design_package（第 1 步）`）。全部被过滤时 `refused:true`，不会执行空计划。
 - 不编造工具名；`sync_design_package` 注册后无需改规划规则即可自动纳入。
 
@@ -170,7 +170,7 @@ executePlan(plan, deps) → {
 限制（当前明确不做）：
 - 不做输出串联：`search_components` 的候选不会自动回填到 `place_component.partId`；型号不唯一时仍由工具层要求用户指定。
 - 规划器不调用大模型，不处理自由文本里的隐含指代；复杂任务由在线模型的工具调用循环承接。
-- 「生成设计包 → 上传」和「导出全部文件」等规划工具尚未注册；规划层只给 warning/refusal，不伪造执行结果。
+- 「生成设计包 → 上传」等联调/同步工具尚未注册；规划层只给 warning/refusal，不伪造执行结果。「导出全部文件」已由 `export_files` 提供，可用 `kind=pdf|dxf|glb|bom` 选择格式。
 - 受力校核没有注册工具，CAD 组合到此为止（导入 + 干涉初筛）。
 
 UI 与 IPC：
@@ -244,11 +244,11 @@ EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=12 audit=3 ctx=447`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`；`SMOKE_AGENT_TOOLS_V2 tools=17`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 687/687，其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 687/687）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 717/717，其中 PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（该阶段 466/466；当前全套 717/717）
 - 评估集与回归 —— ✅ P7-A-3 + P7-B：46 条中文用例 + 离线规则基线，`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（46/46 意图、46/46 工具、20/20 参数、5/5 超纲拒绝、5/5 多步）
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`

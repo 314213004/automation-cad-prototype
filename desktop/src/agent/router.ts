@@ -182,11 +182,12 @@ export interface ToolPlan {
   why: string;
 }
 
-/** 目前注册的 12 个工具里，只读 7 个、写操作 5 个。 */
+/** 目前注册的 17 个工具里，只读 8 个、写操作 9 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
   'get_bom',
+  'get_project_context',
   'run_interference_check',
   'run_electrical_check',
   'run_cost_report',
@@ -197,6 +198,10 @@ export const WRITE_TOOLS = new Set([
   'import_cad',
   'insert_component',
   'place_component',
+  'update_component',
+  'remove_component',
+  'run_plc_generate',
+  'export_files',
   'undo_last',
   'export_cost_report'
 ]);

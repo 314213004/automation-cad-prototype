@@ -26,8 +26,13 @@ const DESKTOP_REQUIRED_TOOLS = new Set([
   'import_cad',
   'insert_component',
   'place_component',
+  'update_component',
+  'remove_component',
+  'run_plc_generate',
+  'export_files',
   'undo_last',
   'get_bom',
+  'get_project_context',
   'run_interference_check',
   'run_cost_report',
   'export_cost_report'
