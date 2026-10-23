@@ -1355,5 +1355,136 @@
       ],
       "asksConfirmation": false
     }
+  },
+  {
+    "id": "M01",
+    "group": "machine",
+    "prompt": "设计一台三工位锁螺丝机，节拍 20 件/分钟",
+    "expect": {
+      "tools": ["design_machine"],
+      "alternatives": [
+        {
+          "tools": ["design_machine"],
+          "args": [
+            { "brief": { "containsAll": ["三工位", "锁螺丝", "20"] } },
+            { "brief": { "contains": "锁螺丝" }, "stationCount": 3, "cyclePerMin": 20 }
+          ]
+        }
+      ],
+      "mustNot": ["apply_machine_design"],
+      "asksConfirmation": false,
+      "expectClarify": false
+    },
+    "note": "三工位锁螺丝：只读合成，不落盘；关键参数为 3 工位与 20 件/分钟。"
+  },
+  {
+    "id": "M02",
+    "group": "machine",
+    "prompt": "做一台点胶机，两工位，3 秒一件",
+    "expect": {
+      "tools": ["design_machine"],
+      "alternatives": [
+        {
+          "tools": ["design_machine"],
+          "args": [
+            { "brief": { "containsAll": ["点胶", "两工位", "3 秒"] } },
+            { "brief": { "contains": "点胶" }, "stationCount": 2, "cyclePerMin": 20 }
+          ]
+        }
+      ],
+      "mustNot": ["apply_machine_design"],
+      "asksConfirmation": false,
+      "expectClarify": false
+    },
+    "note": "点胶两工位：3 秒/件应换算为 20 件/分钟，模板为旋转轴 + 压力传感器。"
+  },
+  {
+    "id": "M03",
+    "group": "machine",
+    "prompt": "装配线，四个工位，用汇川伺服，带安全光栅",
+    "expect": {
+      "tools": ["design_machine"],
+      "alternatives": [
+        {
+          "tools": ["design_machine"],
+          "args": [
+            { "brief": { "containsAll": ["装配", "四工位", "汇川", "安全光栅"] }, "stationCount": 4 },
+            { "brief": { "containsAll": ["装配", "四个工位", "汇川", "安全光栅"] } },
+            { "brief": { "containsAll": ["装配", "4 工位", "汇川", "安全光栅"] }, "stationCount": 4 }
+          ]
+        }
+      ],
+      "mustNot": ["apply_machine_design"],
+      "asksConfirmation": false,
+      "expectClarify": false
+    },
+    "note": "装配四工位：保留汇川品牌与安全光栅，执行机构按模板补全。"
+  },
+  {
+    "id": "M04",
+    "group": "machine",
+    "prompt": "随便设计一台检测机",
+    "expect": {
+      "tools": ["design_machine"],
+      "alternatives": [
+        {
+          "tools": ["design_machine"],
+          "args": [
+            { "brief": { "contains": "检测机" } }
+          ]
+        }
+      ],
+      "mustNot": ["apply_machine_design"],
+      "asksConfirmation": false,
+      "expectClarify": true,
+      "allowClarify": true
+    },
+    "note": "信息不足：允许先追问一次，也允许直接用默认 2 工位/10 件每分钟生成并在回复说明。"
+  },
+  {
+    "id": "M05",
+    "group": "machine",
+    "history": ["设计一台三工位锁螺丝机，节拍 20 件/分钟"],
+    "prompt": "把刚才那台改成 4 工位",
+    "expect": {
+      "tools": ["design_machine"],
+      "alternatives": [
+        {
+          "tools": ["design_machine"],
+          "args": [
+            { "brief": { "containsAll": ["4 工位", "锁螺丝"] }, "stationCount": 4, "cyclePerMin": 20 },
+            { "brief": { "containsAll": ["4 工位", "锁螺丝"] } },
+            { "brief": { "containsAll": ["四工位", "锁螺丝"] }, "stationCount": 4 }
+          ]
+        }
+      ],
+      "mustNot": ["apply_machine_design"],
+      "asksConfirmation": false,
+      "expectClarify": false
+    },
+    "note": "多轮引用：上一轮为三工位锁螺丝方案，本轮必须把工位改为 4 且保留锁螺丝工艺。"
+  },
+  {
+    "id": "M06",
+    "group": "machine",
+    "history": ["设计一台三工位锁螺丝机，节拍 20 件/分钟"],
+    "prompt": "直接应用到工程",
+    "expect": {
+      "tools": ["apply_machine_design"],
+      "alternatives": [
+        {
+          "tools": ["apply_machine_design"],
+          "args": [
+            { "design": { "hasKey": true } },
+            { "brief": { "nonEmpty": true } }
+          ],
+          "confirm": true
+        }
+      ],
+      "mustNot": [],
+      "asksConfirmation": true,
+      "expectClarify": false
+    },
+    "note": "写工具：必须调用 apply_machine_design 且仍请求确认；用户「直接」不能绕过确认。"
   }
 ]

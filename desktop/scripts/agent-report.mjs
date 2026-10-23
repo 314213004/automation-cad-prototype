@@ -3,7 +3,7 @@
  * Agent 运行报告生成器（给老王汇报用）
  *
  * 读取：
- *   docs/desktop/eval/agent-live.json       真实模型单轮评测（30 条）
+ *   docs/desktop/eval/agent-live.json       真实模型单轮评测（36 条）
  *   docs/desktop/eval/agent-multiturn.json  真实模型多轮评测（6 个场景）
  *   docs/desktop/eval/latest.json           离线规则评测（61 条）
  *   <userData>/agent-audit.jsonl            审计（存在才读）
@@ -49,9 +49,10 @@ const GROUP_LABELS = {
   query: '查询',
   operation: '操作',
   workflow: '流程',
-  refusal: '拒绝/澄清'
+  refusal: '拒绝/澄清',
+  machine: '机型'
 };
-const GROUP_ORDER = ['query', 'operation', 'workflow', 'refusal'];
+const GROUP_ORDER = ['query', 'operation', 'workflow', 'refusal', 'machine'];
 
 const CAPABILITY_TOOLS = [
   {
@@ -1066,7 +1067,7 @@ export function renderMarkdown(report) {
   const lines = [];
   lines.push('# Agent 能力报告', '');
   lines.push(`> 生成时间：${report.generatedAt} · 生成器：\`${report.generator}\` · 模型：${report.sources.live.model ?? '缺失'}`);
-  lines.push('> 口径：单轮 = 真实模型 30 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。');
+  lines.push(`> 口径：单轮 = 真实模型 ${fmtInt(live.total.value)} 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。`);
   lines.push('');
 
   lines.push('## 总览', '');

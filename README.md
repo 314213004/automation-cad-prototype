@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**1110 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、BOM/PLC 联动 / 工厂的 headless smoke
+- 质量基线：**1132 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、工艺模板、追问策略、BOM/PLC 联动 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -197,10 +197,10 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 失败建议 | `suggest.ts` 按 `PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED` 给中文建议与替代方案；未知码只复述消息，不编造原因 | ✅ P7-F |
 | 主动建议 | `advisor.ts` 纯函数按底板重叠 / 干涉 / 缺尺寸 / 电气校验 / 成本过期 / PLC 未生成等真实状态给出 0–3 条 next-best-action；侧栏顶部卡片可直接填入输入框或走单步计划确认，支持本次会话忽略与工具执行后刷新 | ✅ P7-H |
 | 审计面板 | 最近 200 条，按时间倒序；列为时间/工具/参数摘要/结果码/耗时，可按工具与结果筛选、导出当前 CSV、单条展开完整脱敏 JSON；超出上限提示丢弃数量 | ✅ P7-F |
-| 离线评估 | `docs/desktop/eval/cases.json` 68 条中文用例（20 个工具全覆盖 + 6 类拒绝场景）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 离线评估 | `docs/desktop/eval/cases.json` 74 条中文用例（20 个工具全覆盖 + 6 类拒绝场景 + 5 类工艺模板/信息不足）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | **Agent 能力报告** | 在 `desktop/` 下运行 `npm run agent:report`，读取单轮 / 多轮 / 离线评测 JSON 与本机 `<userData>/agent-audit.jsonl`，生成 `docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json` 和深色一页图 `docs/desktop/agent-report.svg`；每个数字标注来源文件与生成时间，缺源文件写「缺失：<文件>」并打印 WARN（退出码 0） | ✅ |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
-| 自然语言完整方案 | 20 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、68 条中文评估集、真实模型 30 条评测（30/30，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，并联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 20 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、74 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -240,11 +240,11 @@ npm start
 
 本地验证设计同步全链路（需 `/root/mf-main/material-flow-backend` 的 `.venv`）：`cd desktop && npm run sync:e2e`。脚本会起临时后端，跑通打包 → 上传 → 幂等 → 列表 → diff → 下载 → 断连错误，日志写 `docs/desktop/eval/sync-e2e.json`。
 
-可选真实模型评测（30 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-23 本机 bridge / `deepseek-v4.1-flash`：30/30（100%），p50 7.3 s / p95 18.4 s；拒绝/澄清类 6/6，`refusalRate=1.00`，脚本按阈值退出 0。
+可选真实模型评测（36 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-24 本机 bridge / `deepseek-v4.1-flash`：36/36（100%），p50 7.9 s / p95 31.3 s；拒绝/澄清类 6/6，`refusalRate=1.00`，脚本按阈值退出 0。首轮复跑曾出现 1 条既有 `O04` 参数形状失败，第二轮恢复通过，未删用例或降阈值。
 
 多轮真实模型评测（6 个场景 × 2–3 轮，环境变量同 `agent:live`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run eval:agent:multiturn`；未配置凭据时打印 `AGENT_MULTITURN_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-multiturn.json`，通过阈值 `passRate ≥ 0.8`。
 
-生成给管理层汇报的一页报告：`cd desktop && npm run agent:report`。输出 `docs/desktop/AGENT-REPORT.md`（总览 / 分组 / 能力清单 / 已知缺口 / 审计摘要）、`docs/desktop/agent-report.json`（可机读，含每个指标的来源与生成时间）和 `docs/desktop/agent-report.svg`（4 组准确率横向条形图 + KPI 行）。缺评测 JSON 或 `userData` 审计文件时报告写「缺失：<文件>」，打印 WARN，退出码仍为 0。
+生成给管理层汇报的一页报告：`cd desktop && npm run agent:report`。输出 `docs/desktop/AGENT-REPORT.md`（总览 / 分组 / 能力清单 / 已知缺口 / 审计摘要）、`docs/desktop/agent-report.json`（可机读，含每个指标的来源与生成时间）和 `docs/desktop/agent-report.svg`（5 组准确率横向条形图 + KPI 行）。缺评测 JSON 或 `userData` 审计文件时报告写「缺失：<文件>」，打印 WARN，退出码仍为 0。
 
 ### 方式三：把桌面能力接给外部 Agent
 
@@ -276,7 +276,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（1110 个）
+│   ├── test/                                 # node:test 单测与集成测试（1132 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -304,7 +304,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 1110 个单测（node:test）
+npm test          # 1132 个单测（node:test）
 npm run agent:report # 生成 Agent 汇报报告（md / json / svg）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
@@ -323,9 +323,9 @@ smoke 覆盖并断言：
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
-- 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`：三工位锁螺丝机示例、节拍 20 件/分钟、功率估算与 1 条瓶颈 warning）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`：写方案与 active 指针、3D 切到 3 工位、6 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=20`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
+- 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1`：三工位锁螺丝机示例、节拍 20 件/分钟、模板补全、功率估算与 1 条瓶颈 warning）；工艺模板与追问（`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`：5 类模板、多缺项合并为一次追问）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`：写方案与 active 指针、3D 切到 3 工位、5 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=20`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=355 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
 
-输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1`，最后 `SMOKE_OK`。
+输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=355 query=D2 hits=1`，最后 `SMOKE_OK`。
 
 **CI**：`.github/workflows/windows.yml` 在 `windows-latest` 上跑 `npm ci → build:ext → test → electron-builder --win nsis --x64`，产物为 `AutomationCAD-Setup-*.exe` + blockmap。当前**仅手动触发**：`gh workflow run windows-build --ref main`；推 `v*` tag 时额外发布到 GitHub Release。本地只想出免安装包可用 `npx electron-builder --win zip --x64`。
 
@@ -341,7 +341,7 @@ smoke 覆盖并断言：
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。
-- **智能体对话的真实模型兼容性**目前只对 OpenAI 兼容协议和本机 bridge / `deepseek-v4.1-flash` 做 30 条实测（30/30；拒绝/澄清 6/6，确认绕过与危险路径导出已有硬拦截）；其他服务商差异需逐一验证。单元测试仍使用本地假服务，不访问外网模型。
+- **智能体对话的真实模型兼容性**目前只对 OpenAI 兼容协议和本机 bridge / `deepseek-v4.1-flash` 做 36 条实测（36/36；拒绝/澄清 6/6，确认绕过与危险路径导出已有硬拦截）；其他服务商差异需逐一验证。单元测试仍使用本地假服务，不访问外网模型。
 - **离线意图路由是关键词规则，不是语义理解**：只覆盖 7 类意图与元件/成本/BOM/干涉/电气校验等有限句式，同义表达未收录会判为「超纲」；离线通道只执行只读工具，写操作一律要求联网确认。审计文件 `agent-audit.jsonl` 目前只追加、未做轮转与保留期清理；面板最多展示最近 200 条，回执不含 token 用量（网关未回传 usage）。
 - **生产环境未验证**：`/api/v1/design-sync/*` 后端 0.22.0 已实现并通过 30 项测试，本地临时 DB 端到端已通过（`npm run sync:e2e`）；生产实例 `221.231.106.194:5556` 当前从开发机不可达，线上部署仍待 D2 决策。
 - **原型侧的固有限制仍在**：3D 视口为固定等轴测示意投影，不支持真实几何求解；属性编辑只重算尺寸不改拓扑；插入件为示意占位体。桌面版的 CAD 查看是独立视图，不替代原型建模。

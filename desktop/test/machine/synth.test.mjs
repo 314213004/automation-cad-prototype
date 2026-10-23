@@ -15,11 +15,11 @@ function sensorKind(point) {
   return 'proximity';
 }
 
-test('三工位锁螺丝机：6 执行机构、6 传感器、1 条瓶颈警告', () => {
+test('三工位锁螺丝机：6 执行机构、3 传感器、1 条瓶颈警告', () => {
   const design = synthMachine(basicBrief(), { stationCount: 3 });
   assert.equal(design.config.stations.length, 3);
   assert.equal(design.config.actuators.length, 6);
-  assert.equal(design.config.sensors.length, 6);
+  assert.equal(design.config.sensors.length, 3);
   assert.equal(design.warnings.length, 1);
   assert.match(design.warnings[0], /节拍瓶颈/);
   assert.match(design.warnings[0], /并行工位/);
@@ -70,7 +70,7 @@ test('单工位动作时间超过节拍时给出所需并行工位数', () => {
 test('缺省工艺/工位/节拍：warnings 明确指出用了哪个缺省值', () => {
   const design = synthMachine(parseMachineBrief('帮我设计一台机器'));
   assert.ok(design.warnings.some((warning) => warning.includes('未识别工艺')));
-  assert.ok(design.warnings.some((warning) => warning.includes('缺省值 1 工位')));
+  assert.ok(design.warnings.some((warning) => warning.includes('缺省值 2 工位')));
   assert.ok(design.warnings.some((warning) => warning.includes('缺省值 10 件/分钟')));
 });
 
@@ -146,7 +146,7 @@ test('摘要 ≤600 字且包含工位/机构/传感器/节拍/功率/风险', (
   assert.ok(summary.length <= 600, `length=${summary.length}`);
   assert.match(summary, /工位：3/);
   assert.match(summary, /执行机构：6/);
-  assert.match(summary, /传感器：6/);
+  assert.match(summary, /传感器：3/);
   assert.match(summary, /20 件\/分钟/);
   assert.match(summary, /功率：约 \d+ VA/);
   assert.match(summary, /风险：/);
@@ -156,5 +156,5 @@ test('传感器类型按点位编码统计（配置本身不存 kind）', () => 
   const design = synthMachine(basicBrief());
   const kinds = design.config.sensors.map((sensor) => sensorKind(sensor.point));
   assert.equal(kinds.filter((kind) => kind === 'proximity').length, 3);
-  assert.equal(kinds.filter((kind) => kind === 'pressure').length, 3);
+  assert.equal(kinds.filter((kind) => kind === 'pressure').length, 0);
 });

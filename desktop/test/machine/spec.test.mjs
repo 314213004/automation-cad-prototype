@@ -96,7 +96,7 @@ test('传感器词：接近/光电/安全光栅/压力', () => {
 test('缺省：工艺/工位/节拍分别写进 notes，不阻断', () => {
   const brief = parseMachineBrief('帮我设计一台机器');
   assert.equal(brief.process, 'unknown');
-  assert.equal(brief.stations, 1);
+  assert.equal(brief.stations, 2);
   assert.equal(brief.cyclePerMin, null);
   assert.ok(brief.notes.some((note) => note.includes('未识别工艺')));
   assert.ok(brief.notes.some((note) => note.includes('未识别工位数')));

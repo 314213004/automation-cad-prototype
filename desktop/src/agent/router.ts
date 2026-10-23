@@ -145,8 +145,7 @@ export function isMachineDesignRequest(text: string): boolean {
   if (!value) return false;
   const designVerb = /设计|做一台|做一套|做一条|搭一台|搭一套/.test(value);
   const machineNoun = /(?:机|线|设备|装置|工位)/.test(value);
-  const engineeringHint = /(?:工位|节拍|锁螺丝|锁付|点胶|装配|检测|包装|伺服|气缸|夹爪|传感器)/.test(value);
-  return designVerb && machineNoun && engineeringHint;
+  return designVerb && machineNoun;
 }
 
 /** 机型方案落盘请求：需要已有 design（通常来自上一轮 design_machine）。 */

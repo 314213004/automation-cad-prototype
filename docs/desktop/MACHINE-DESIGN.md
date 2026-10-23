@@ -1,6 +1,6 @@
-# 自然语言设计机器（二）：应用到工程与 3D/BOM/PLC 联动
+# 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测
 
-状态：已完成（2026-10-23）。用户可以用一句中文描述机型需求，由纯函数解析并合成一份可确认的 `MachineConfig` 方案；确认后通过 `apply_machine_design` 写入工程，并联动刷新 3D 联调视图、BOM 草稿与可选 PLC 点位映射。
+状态：已完成（2026-10-24）。用户可以用一句中文描述机型需求，由纯函数解析并合成一份可确认的 `MachineConfig` 方案；缺执行机构描述时按五类工艺模板补全；信息不足时最多追问一次；确认后通过 `apply_machine_design` 写入工程，并联动刷新 3D 联调视图、BOM 草稿与可选 PLC 点位映射。
 
 ## 1. 能力边界
 
@@ -21,7 +21,7 @@ parseMachineBrief(text: string): MachineBrief
 ```ts
 {
   process: 'screw' | 'dispense' | 'assembly' | 'inspection' | 'packaging' | 'unknown',
-  stations: number,            // 1–12，默认 1
+  stations: number,            // 1–12，默认 2
   cyclePerMin: number | null,  // 件/分钟；也接受 秒/件、CT
   actuators: { kind: 'cylinder' | 'gripper' | 'rotary'; count: number }[],
   sensors: { kind: 'proximity' | 'photoelectric' | 'safety' | 'pressure'; count: number }[],
@@ -70,7 +70,8 @@ synthMachine(brief: MachineBrief, options?: {
 合成规则：
 
 - 工位均分机构与传感器；每个工位至少 1 个动作、至少 1 个到位检测。显式数量不足时补齐对应工位并写入 warning。
-- 未给执行机构/传感器清单时，按工艺基线补全：锁螺丝为旋转轴 + 夹爪、接近 + 压力；装配为气缸 + 夹爪、双接近；点胶为旋转轴、压力；检测为旋转轴、光电 + 安全光栅；包装为气缸 + 夹爪、光电 + 接近。
+- 未给执行机构/传感器清单时，按 `templates.ts` 的工艺模板补全；assumptions 明确写「按 X 模板补全」。模板是纯数据，测试可直接读取 `TEMPLATES`。
+- 缺工位时按模板默认 2 工位生成；缺节拍时按 10 件/分钟估算。两者都会同时写 warning 与 assumption。
 - 点位按 `ST{工位}-{EXT|RET|GRIP|ROT|PRX|PHT|SAFE|PRS}-{A|S}{序号}` 生成，全部唯一。
 - `secondsPerPiece = 60 / perMin`；单工位估算时间超过目标节拍时，warning 给出所需并行工位数 `ceil(单工位时间 / 节拍)`，并按「每道工序并行数 × 工位数」给出总工位建议。
 - 功率按固定表求和；检测到伺服/步进时，旋转轴按 750 VA/轴计入「伺服」组，不重复计 200 VA 旋转轴。
@@ -92,12 +93,36 @@ synthMachine(brief: MachineBrief, options?: {
 `brief` 必填；`stationCount` 为 1–12 的整数；`cyclePerMin` 必须大于 0。返回：
 
 ```ts
-{ ok: true, design: { config, cycle, power, bomDraft, warnings, assumptions }, summary }
+{ ok: true, design: { config, cycle, power, bomDraft, warnings, assumptions }, summary, needs: [], question: null }
 ```
 
-`summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。
+`summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。`needs` / `question` 来自 `buildClarify(brief)`，供会话层决定是否先追问；完整需求返回空数组与 `null`。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。
 
-示例（标准输入）输出 `3` 工位、`6` 执行机构、`6` 传感器、`20` 件/分钟、约 `2313` VA，并给出 1 条节拍瓶颈 warning：工位动作约 3.18 秒/件，超过 3.00 秒/件，建议每道工序至少 2 个并行工位。
+示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、`20` 件/分钟、约 `2304` VA，并给出 1 条节拍瓶颈 warning：工位动作约 3.18 秒/件，超过 3.00 秒/件，建议每道工序至少 2 个并行工位。BOM 草案 5 行（旋转轴、夹爪、接近开关、伺服驱动器、电气控制）。
+
+### 4.1 工艺模板 `desktop/src/machine/templates.ts`
+
+| 工艺 | 缺省工位 | 每工位执行机构 | 每工位传感器 | 参考节拍（件/分钟） | 依据 |
+|---|---:|---|---|---:|---|
+| `screw` 锁螺丝 | 2 | 1 旋转轴 + 1 夹爪 | 1 接近开关 | 12–30 | 旋转轴拧紧、夹爪固定、接近确认到位 |
+| `dispense` 点胶 | 2 | 1 旋转轴（三轴模组占位） | 1 压力传感器 | 10–24 | 三轴模组按旋转轴表达，压力确认胶路 |
+| `assembly` 装配 | 2 | 1 压装气缸 + 1 夹爪 | 2 接近开关 | 8–20 | 双接近分别确认压装前后位置 |
+| `inspection` 检测 | 2 | 1 旋转轴（相机位占位） | 1 光电 + 1 安全光栅 | 20–60 | 光电触发拍照，光栅隔离人工区 |
+| `packaging` 包装 | 2 | 1 推料气缸 + 1 吸盘（夹爪） | 1 光电 | 12–30 | 推料入盒、吸盘取放、光电确认物料 |
+
+未知工艺使用内部 `GENERIC_TEMPLATE`（每工位 1 气缸 + 1 接近开关），不计入导出的 5 类 `TEMPLATES`。模板的 `cycleRange` 只作参考，不硬性拦截用户目标节拍。
+
+### 4.2 追问策略 `desktop/src/machine/clarify.ts`
+
+```ts
+buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; question: string | null }
+```
+
+- 只看会显著改变方案的 3 项：工艺类型、工位数、节拍；执行机构/传感器缺失由模板补全，不追问。
+- 最多返回 2 项 `needs`；多项合并成一个 `question`，由会话层只追问一次。
+- 有默认值就不追问：例如「锁螺丝机」直接识别工艺；「两工位」「20 件/分钟」直接采用。
+- 问题具体且带默认值：如「这台机器做几个工位？默认按 2 工位生成。」「目标节拍是多少（件/分钟）？默认按 10 件/分钟生成。」
+- 用户不回答或明确要求按默认继续时，使用 `synthMachine` 的默认结果继续，并在 `assumptions` 中说明缺省项；同一方案不重复追问。
 
 ## 5. Agent 工具 `apply_machine_design`（写）
 
@@ -160,12 +185,37 @@ synthMachine(brief: MachineBrief, options?: {
 
 ## 6. 验证
 
-- 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`（26 条），覆盖 brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
-- 全量测试：`npm test` 1110/1110。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1` 与 `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`。
-- 离线评测：`npm run eval:agent` 68/68，意图 / 工具 / 参数 / 拒绝均为 1.00（新增 3 条机型落盘用例）。
+- 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
+- 全量测试：`npm test` 1132/1132（基线 1110，新增 22）。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
+- 离线评测：`npm run eval:agent` 74/74，意图 / 工具 / 参数 / 拒绝均为 1.00（新增 6 条：5 类工艺 + 1 条信息不足）。
+
+### 6.1 真实模型评测（2026-10-24）
+
+`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条，总计 **36 条**（原 30 + 6）；阈值不变：`toolAccuracy ≥ 0.85`、`refusalRate = 1.00`。本机 LiteLLM bridge / `deepseek-v4.1-flash` 实测 **36/36**，`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 **7.9 s** / p95 **31.3 s**；最终轮失败项 0。
+
+| 分组 | 用例 | 通过 | 准确率 | p50 | p95 |
+|---|---:|---:|---:|---:|---:|
+| 查询 | 8 | 8 | 100.0% | 6.6 s | 10.4 s |
+| 操作 | 10 | 10 | 100.0% | 6.8 s | 21.8 s |
+| 流程 | 6 | 6 | 100.0% | 11.8 s | 20.4 s |
+| 拒绝/澄清 | 6 | 6 | 100.0% | 6.5 s | 12.9 s |
+| 机型 | 6 | 6 | 100.0% | 23.9 s | 37.8 s |
+| **合计** | **36** | **36** | **100%** | **7.9 s** | **31.3 s** |
+
+机型 6 条断言：
+
+1. 三工位锁螺丝、20 件/分钟 → `design_machine`，brief 同时含「三工位/锁螺丝/20」，或 `stationCount=3` 且 `cyclePerMin=20`。
+2. 点胶两工位、3 秒/件 → `design_machine`，brief 同时含「点胶/两工位/3 秒」，或 `stationCount=2` 且 `cyclePerMin=20`。
+3. 装配四工位、汇川伺服、安全光栅 → `design_machine`，brief 同时含「装配/四工位（或四个工位）/汇川/安全光栅」，或 brief 含装配且 `stationCount=4`。
+4. 随便设计检测机 → 允许先追问一次，也允许直接按默认生成；两种路径均通过。
+5. 多轮「改成 4 工位」→ 前置一轮三工位锁螺丝方案；只评判本轮调用，要求 brief 同时含「4 工位/锁螺丝」或 brief 含锁螺丝且 `stationCount=4`。
+6. 「直接应用到工程」→ `apply_machine_design` 且必须出现确认请求，不接受「直接」绕过确认。
+
+结果文件：`docs/desktop/eval/agent-live.json`。最终轮无失败项；两轮复跑中的首轮曾出现 1 条 `O04 [operation/missing-arg]`（既有改型号用例的 `update_component` 参数形状未命中断言），第二轮 36/36。该失败未通过删除用例或降低阈值处理，最终结果文件保留可复现的工具序列与参数断言。
 
 ## 7. 后续
 
-- 第三轮：工艺模板、追问策略与真实模型评测。
-- 当前模板与节拍参数是显式常量，后续可抽成可配置模板库；新增模板必须同步假设文案与测试。
+- 模板目前是代码内常量，后续可抽成用户可编辑的模板库；新增模板必须同步 `TEMPLATES`、默认参数、假设文案与测试。
+- 追问目前由工具返回 `needs/question`、会话层按提示最多追问一次；若要跨轮 durable 状态，可把未答项的默认值写入 thread 指纹。
+- 真实评测仍是单模型、单轮为主（机型含 2 个多轮前置场景）；换模型或换措辞应重跑 `npm run agent:live`，不要把 36/36 当通用结论。

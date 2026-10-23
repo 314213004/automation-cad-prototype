@@ -27,10 +27,10 @@ export interface MachineBrief {
 
 export const MACHINE_STATIONS_MIN = 1;
 export const MACHINE_STATIONS_MAX = 12;
-export const MACHINE_DEFAULT_STATIONS = 1;
+export const MACHINE_DEFAULT_STATIONS = 2;
 export const MACHINE_DEFAULT_CYCLE_PER_MIN = 10;
 
-export const DEFAULT_NOTE_STATIONS = '缺省：未识别工位数，按 1 工位合成';
+export const DEFAULT_NOTE_STATIONS = `缺省：未识别工位数，按 ${MACHINE_DEFAULT_STATIONS} 工位合成`;
 export const DEFAULT_NOTE_CYCLE = `缺省：未识别节拍，按 ${MACHINE_DEFAULT_CYCLE_PER_MIN} 件/分钟估算`;
 export const DEFAULT_NOTE_PROCESS = '缺省：未识别工艺，按通用工艺方案合成';
 

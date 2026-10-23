@@ -57,7 +57,7 @@ test('design_machine 返回 config/cycle/power/bomDraft/warnings/assumptions 与
   assert.equal(result.ok, true);
   assert.equal(result.design.config.stations.length, 3);
   assert.equal(result.design.config.actuators.length, 6);
-  assert.equal(result.design.config.sensors.length, 6);
+  assert.equal(result.design.config.sensors.length, 3);
   assert.equal(result.design.cycle.perMin, 20);
   assert.equal(result.design.cycle.secondsPerPiece, 3);
   assert.ok(result.design.power.va > 0);
@@ -78,6 +78,56 @@ test('design_machine 覆盖参数优先于 brief', async () => {
   assert.equal(result.ok, true);
   assert.equal(result.design.config.stations.length, 2);
   assert.equal(result.design.cycle.perMin, 30);
+});
+
+test('design_machine 返回追问元数据：完整需求为空，信息不足最多 2 项', async () => {
+  const complete = await tools.call('design_machine', { brief: BRIEF });
+  assert.deepEqual(complete.needs, []);
+  assert.equal(complete.question, null);
+
+  const vague = await tools.call('design_machine', { brief: '随便设计一台检测机' });
+  assert.deepEqual(vague.needs, ['stations', 'cycle']);
+  assert.equal(typeof vague.question, 'string');
+  assert.match(vague.question, /默认按 2 工位生成/);
+  assert.equal(vague.design.config.stations.length, 2);
+});
+
+test('design_machine 缺执行机构时使用工艺模板并在 assumptions 说明', async () => {
+  const result = await tools.call('design_machine', { brief: '两工位包装机，15 件/分钟' });
+  assert.equal(result.ok, true);
+  assert.equal(result.design.config.sensors.length, 2);
+  assert.ok(result.design.assumptions.some((line) => line.includes('按 包装 模板补全')));
+});
+
+test('design_machine 五类模板都能通过工具层生成且 sensors/actuators 非空', async () => {
+  const briefs = [
+    '两工位锁螺丝机，20 件/分钟',
+    '两工位点胶机，18 件/分钟',
+    '两工位装配线，12 件/分钟',
+    '两工位检测机，30 件/分钟',
+    '两工位包装机，15 件/分钟'
+  ];
+  for (const brief of briefs) {
+    const result = await tools.call('design_machine', { brief });
+    assert.equal(result.ok, true, brief);
+    assert.ok(result.design.config.actuators.length >= 2, brief);
+    assert.ok(result.design.config.sensors.length >= 2, brief);
+    assert.deepEqual(result.needs, [], brief);
+  }
+});
+
+test('design_machine 的覆盖参数会消除对应追问项', async () => {
+  const result = await tools.call('design_machine', {
+    brief: '帮我设计一台机器',
+    stationCount: 3,
+    cyclePerMin: 18
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.needs, ['process']);
+  assert.match(result.question, /哪类工艺/);
+  assert.doesNotMatch(result.question, /几个工位|目标节拍/);
+  assert.equal(result.design.config.stations.length, 3);
+  assert.equal(result.design.cycle.perMin, 18);
 });
 
 test('离线路由把机型设计请求映射到 design_machine（只读）', () => {

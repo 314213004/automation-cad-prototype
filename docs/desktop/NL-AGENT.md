@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）；机型方案合成已完成（`design_machine` 只读工具）；机型落盘已完成（`apply_machine_design` 写工具 + 3D/BOM/PLC 联动 + 撤销，工具数 18 → 20，评估集 68 条，见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）；P7-N 已完成（同轮去重 / 只读并行 / 会话短缓存）；机型方案合成已完成（`design_machine` 只读工具）；机型落盘已完成（`apply_machine_design` 写工具 + 3D/BOM/PLC 联动 + 撤销，工具数 18 → 20）；第三轮已完成（5 类工艺模板 + 追问策略 + 真实模型 36 条评测，评估集 74 条，见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -43,7 +43,7 @@
 | `list_components` | 只读 | 按类别 / 数据包列出元件 |
 | `search_components` | 只读 | 型号、品牌、类别、规格全文检索 |
 | `search_docs` | 只读 | 离线检索 13 份项目文档、截图索引与元件库分类；返回 `{source,heading,snippet,score}`，无命中返回空 |
-| `design_machine` | 只读 | 从中文 brief 合成 `MachineConfig` 方案：工艺/工位/执行机构/传感器/节拍瓶颈/功率估算/BOM 草案/警告与假设；不落盘、不改工程（见 MACHINE-DESIGN.md） |
+| `design_machine` | 只读 | 从中文 brief 合成 `MachineConfig` 方案：工艺/工位/执行机构/传感器/节拍瓶颈/功率估算/BOM 草案/警告与假设；缺执行机构时按 5 类工艺模板补全，返回 `needs/question` 供会话层最多追问一次；不落盘、不改工程（见 MACHINE-DESIGN.md） |
 | `apply_machine_design` | 写 | 把 brief 或完整 design 写入 `userData/machine/<id>.json` 并更新 `active.json`；默认追加 BOM 草稿，可选生成 PLC `io-map.csv`，成功后刷新 3D；需确认，可用 `undo_last` 撤销 |
 | `get_bom` | 只读 | 当前装配体简化 BOM |
 | `get_project_context` | 只读 | 当前域 / 视图 / 选中对象 / 机型 / 底板 / 单位制 / 最近操作；缺失项返回 null |
@@ -453,7 +453,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 | 同一关键词调用 3 次 | 约 303 ms | 102 ms | 实际执行 1 次，2 次 `reused:true` |
 | 连续两轮 `get_bom` | 101 + 101 ms | 101 + 2 ms | 第二轮会话缓存命中 |
 
-线上基线仍是此前 30 条真实用例的 **p50 7.6 s / p95 21.3 s**（`deepseek-v4.1-flash`）。配置 `AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL` 后应重跑 `npm run agent:live`，用新结果替换本节表格上方说明；当前不把桩延迟与模型延迟混为一谈。
+当前真实评测基线为 36 条用例的 **p50 7.9 s / p95 31.3 s**（`deepseek-v4.1-flash`，详见 9.1）。配置 `AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL` 后应重跑 `npm run agent:live`；当前不把桩延迟与模型延迟混为一谈。
 
 **验证**：新增 `desktop/test/agent/efficiency.test.mjs` 33 条（含写后不复用写前结果）；`tsc` 干净、`npm test` 1034/1034、`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 65/65。
 
@@ -466,7 +466,7 @@ UI：侧栏「流程」下拉选择模板 → 预览前置条件与步骤（可�
 
 ## 9. 质量评估
 
-固定 68 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；20 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。本轮新增 3 条机型落盘用例（应用上一轮方案、生成 BOM、生成 PLC 点位映射）。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
+固定 74 条中文用例，位于 `docs/desktop/eval/cases.json`：覆盖 7 类意图，其中 17 条含指代、7 条歧义、5 条多步、5 条超纲；20 个已注册工具全部至少命中一次，并覆盖 6 类拒绝场景（缺参数、越权改文件、篡改审计、危险路径、未知位号、跨域误用）。本轮新增 6 条：5 类工艺模板（锁螺丝/点胶/装配/检测/包装）+ 1 条信息不足。工具名以 `desktop/src/agent/tools.ts` 的注册表为准，评估脚本会拒绝不存在的工具名与缺失的覆盖项。多步用例用 `expect.steps` 描述有序工具序列，单步用例用 `expect.tool + expect.argsContains`；缺参用例额外用 `expect.missing` 断言计划点名了缺失字段。`desktop/eval/agent-cases.json` 保留为旧路径兼容副本，内容与 docs 版本一致。
 
 在 `desktop/` 下运行：
 
@@ -484,12 +484,12 @@ npm run eval:agent
 - 超纲拒绝率 = 100%（超纲不得产生任何工具计划）
 - 误写率 = 0（未确认的写操作一律视为失败）
 
-任一指标低于上述阈值时脚本退出码为 1；当前离线基线（2026-10-23，v0.2.0）：
+任一指标低于上述阈值时脚本退出码为 1；当前离线基线（2026-10-24，v0.3.0）：
 
 ```
-意图准确率   100.0%  (68/68)
-工具选择率   100.0%  (68/68)
-参数抽取率   100.0%  (34/34)
+意图准确率   100.0%  (74/74)
+工具选择率   100.0%  (74/74)
+参数抽取率   100.0%  (40/40)
 超纲拒绝率   100.0%  (5/5)
 多步完成率   100.0%  (5/5)
 EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
@@ -499,7 +499,7 @@ EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00
 
 ### 9.1 真实模型验证
 
-`desktop/scripts/agent-live.mjs` 使用 `src/agent/llm.ts` 的 `OpenAiCompatibleClient`（OpenAI 兼容 `/chat/completions`）和 `AgentSession` 真实跑 30 条固定指令。用例从 `desktop/scripts/agent-live-cases.json` 读取，分为查询 8、操作 10、流程 6、拒绝/澄清 6；每条包含 `{id, prompt, expect:{tools, alternatives, mustNot, asksConfirmation?, expectClarify?}}`，支持单步、多步序列、参数检查、写确认与越权工具拦截。
+`desktop/scripts/agent-live.mjs` 使用 `src/agent/llm.ts` 的 `OpenAiCompatibleClient`（OpenAI 兼容 `/chat/completions`）和 `AgentSession` 真实跑 36 条固定指令。用例从 `desktop/scripts/agent-live-cases.json` 读取，分为查询 8、操作 10、流程 6、拒绝/澄清 6、机型 6；每条包含 `{id, prompt, expect:{tools, alternatives, mustNot, asksConfirmation?, expectClarify?, allowClarify?}}`，支持单步、多步序列、参数检查、写确认、多轮前置 `history` 与越权工具拦截。
 
 命令执行层使用**有状态、无外部副作用**的桩总线：底板放置、修改、移除与撤销会更新桩内 placements，`get_bom` / `get_project_context` 读取更新后的状态；不会改动本机装配体或真实文件。写工具仍必须经过 `confirmWrite` 回调。
 
@@ -514,10 +514,10 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 
 ```json
 {
-  "model": "...", "total": 30, "matched": 30,
+  "model": "...", "total": 36, "matched": 36,
   "toolAccuracy": 1, "confirmRate": 1, "clarifyRate": 1, "refusalRate": 1,
   "p50Ms": 7645, "p95Ms": 21340,
-  "byCategory": { "query": {}, "operation": {}, "workflow": {}, "refusal": {} },
+  "byCategory": { "query": {}, "operation": {}, "workflow": {}, "refusal": {}, "machine": {} },
   "failures": []
 }
 ```
@@ -559,7 +559,18 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 2. 系统提示新增「只有会造成重叠、覆盖已有文件或破坏数据时才暂停」——避免模型把可执行指令降级为建议。
 3. 用例 O03 改为在空白区起始，原提示会让「5 个端子排在一起」与已有 QF1 冲突，模型暂停属正确行为。
 
-稳定性说明：单轮 30/30 不等于稳定通过。第 2 轮出现的提前收口受采样波动影响，建议后续以 3 轮多数为准；本轮已跑 3 轮，第 1、2 轮的真实失败项保留在本文，不删除。
+**2026-10-24 36 条复跑**（同模型，原 30 条 + 新增机型 6 条；阈值不变）：**36/36**、`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 **7.9 s** / p95 **31.3 s**。新增机型分组 6/6，p50 23.9 s / p95 37.8 s；最终轮失败项 0。机型用例覆盖三工位锁螺丝、两工位点胶（3 秒/件）、四工位装配（汇川 + 安全光栅）、信息不足检测机（追问或默认）、多轮改 4 工位、直接应用需确认。
+
+| 分组 | 用例 | 通过 | 准确率 | p50 | p95 |
+|---|---:|---:|---:|---:|---:|
+| 查询 | 8 | 8 | 100.0% | 6.6 s | 10.4 s |
+| 操作 | 10 | 10 | 100.0% | 6.8 s | 21.8 s |
+| 流程 | 6 | 6 | 100.0% | 11.8 s | 20.4 s |
+| 拒绝/澄清 | 6 | 6 | 100.0% | 6.5 s | 12.9 s |
+| 机型 | 6 | 6 | 100.0% | 23.9 s | 37.8 s |
+| **合计** | **36** | **36** | **100%** | **7.9 s** | **31.3 s** |
+
+稳定性说明：36/36 不等于稳定通过。本轮两轮复跑中的首轮出现 `O04 [operation/missing-arg]`（既有改型号用例的 `update_component` 参数形状未命中），第二轮恢复 36/36；历史轮次的真实失败项保留在本文，不删除，也未调整用例或阈值。建议后续以多轮多数为准。
 
 结果文件只记录模型名、断言与回复摘要，不含 baseUrl 或密钥。
 
@@ -587,12 +598,12 @@ AGENT_LIVE_BASE_URL=http://127.0.0.1:7864/v1 AGENT_LIVE_API_KEY=... AGENT_LIVE_M
 
 ## 11. 验收（A 期）
 
-- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`；`SMOKE_AGENT_TOOLS_V2 tools=20`；`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`
+- 10 条典型中文指令在无网络模型下（规则路由）也能正确调用只读工具 —— ✅ 11 条样例覆盖 7 类意图，`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`；`SMOKE_AGENT_TOOLS_V2 tools=20`；`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1`；`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
 - 断网时给出明确提示，不静默失败 —— ✅ 回复以「当前模型不可用，已切换为离线规则路由」开头；写指令仍抛原始网络错误，不执行命令
 - 审计文件可查，凭据掩码正确 —— ✅ `<userData>/agent-audit.jsonl`（NDJSON）+ IPC `agent:audit:read`；`sk-live-*`、`Bearer`、`token` 字段在 smoke 中真实落盘后回读校验
-- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 1110/1110，其中机型落盘 26 条（`test/agent/apply-machine-design.test.mjs`）、PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
-- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（当前全套 1110/1110）
-- 评估集与回归 —— ✅ 68 条中文用例（20 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（68/68 意图、68/68 工具、34/34 参数、5/5 超纲拒绝、5/5 多步）；真实模型 30 条评测 `matched=30/30`、`refusalRate=1.00`（见 9.1，含三轮迭代与失败归因）
+- 单测覆盖：意图路由、参数校验、上下文裁剪、审计写入 —— ✅ 全套 1132/1132，其中机型落盘 26 条（`test/agent/apply-machine-design.test.mjs`）、模板 9 条、追问 9 条、PLC 模拟验证 21 条、放置类 21 条（`test/agent/place-component.test.mjs`）、工具扩展 v1 30 条（`test/agent/tools-v2.test.mjs`）
+- 侧栏只读问答 UI —— ✅ P7-A-2：输入即出计划预览（只读标「可离线」、写操作标「需联网确认」并点名缺参）、在线/离线共用一张回执（通道·耗时·工具次数·失败数）、审计面板展示最近 8 条与汇总；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`，预览前后场景零件数不变（当前全套 1132/1132）
+- 评估集与回归 —— ✅ 74 条中文用例（20 工具全覆盖 + 6 类拒绝），`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲拒绝、5/5 多步）；真实模型 36 条评测 `matched=36/36`、`refusalRate=1.00`（见 9.1，含历史三轮迭代与本轮结果）
 - 确认与路径策略 —— ✅ 策略层纯函数 + `executeTool` 硬确认 + 拒绝后短路 + 回复话术过滤；导出默认只接受纯文件名，绝对路径/盘符/UNC/`../` 返回 `TARGET_PATH_UNSUPPORTED`，`allowSanitize=true` 才净化落盘；`policy.test.mjs` 42 条，smoke `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1`
 - 底板放置与撤销 —— ✅ P7-B：`place_component` 走命令总线与真实 `window.__Enclosure`，越界/重叠返回 `OVERLAP`/`OUT_OF_BOUNDS` 告警；`undo_last` 回滚并返回 `removed`；smoke `SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - 多步规划 —— ✅ P7-C：`planner.ts` 五类组合 + 通用拆句；未知工具过滤 + warning；置信度 < 0.6 拒绝；`executePlan` 顺序执行、写步骤一次确认、失败立即停止、可撤销写回提示 `undo_last`；侧栏计划卡片支持全部/逐步/取消与逐项打勾；smoke `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`

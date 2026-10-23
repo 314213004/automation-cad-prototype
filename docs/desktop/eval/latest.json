@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-23T15:46:32.698Z",
+  "generatedAt": "2026-10-23T16:25:06.721Z",
   "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 68,
+    "count": 74,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
@@ -50,18 +50,18 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 68,
-      "total": 68,
+      "correct": 74,
+      "total": 74,
       "rate": 1
     },
     "tools": {
-      "correct": 68,
-      "total": 68,
+      "correct": 74,
+      "total": 74,
       "rate": 1
     },
     "params": {
-      "correct": 34,
-      "total": 34,
+      "correct": 40,
+      "total": 40,
       "rate": 1
     },
     "refused": {
@@ -2003,6 +2003,204 @@
           "missing": [
             "design"
           ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d08",
+      "input": "设计一台两工位锁螺丝机，节拍 20 件/分钟",
+      "tags": [
+        "machine_design",
+        "machine_template"
+      ],
+      "note": "模板评测：锁螺丝，缺执行机构描述时按模板补全。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一台两工位锁螺丝机，节拍 20 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d09",
+      "input": "做一台两工位点胶机，节拍 18 件/分钟",
+      "tags": [
+        "machine_design",
+        "machine_template"
+      ],
+      "note": "模板评测：点胶，三轴模组按旋转轴占位。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "做一台两工位点胶机，节拍 18 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d10",
+      "input": "设计一条三工位装配线，节拍 12 件/分钟",
+      "tags": [
+        "machine_design",
+        "machine_template"
+      ],
+      "note": "模板评测：装配，每工位压装气缸 + 夹爪 + 双接近。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一条三工位装配线，节拍 12 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d11",
+      "input": "设计一台两工位检测机，节拍 30 件/分钟",
+      "tags": [
+        "machine_design",
+        "machine_template"
+      ],
+      "note": "模板评测：检测，相机位按旋转轴占位 + 光电 + 安全光栅。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一台两工位检测机，节拍 30 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d12",
+      "input": "设计一台两工位包装机，节拍 15 件/分钟",
+      "tags": [
+        "machine_design",
+        "machine_template"
+      ],
+      "note": "模板评测：包装，推料气缸 + 吸盘（夹爪）+ 光电。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "设计一台两工位包装机，节拍 15 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "d13",
+      "input": "随便设计一台机器",
+      "tags": [
+        "machine_design",
+        "machine_clarify"
+      ],
+      "note": "信息不足：工具返回 needs/question，由会话层最多追问一次；不答则用默认值继续。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "随便设计一台机器"
+          },
+          "readOnly": true,
+          "missing": []
         }
       ],
       "passed": true

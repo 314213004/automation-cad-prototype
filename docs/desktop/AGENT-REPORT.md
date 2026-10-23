@@ -1,41 +1,42 @@
 # Agent 能力报告
 
-> 生成时间：2026-10-23T15:45:01.470Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
-> 口径：单轮 = 真实模型 30 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
+> 生成时间：2026-10-23T16:25:49.784Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
+> 口径：单轮 = 真实模型 36 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
 
 ## 总览
 
 | 指标 | 数值 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 工具数 | 20 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-23T15:44:42.366Z |
-| 测试数 | 1,110 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T15:44:54.822Z |
-| 单轮准确率 | 100.0%（30/30） | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
-| 单轮 p50 / p95 | 7,254 ms / 18,414 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
-| 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 工具数 | 20 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-23T16:25:06.721Z |
+| 测试数 | 1,132 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-23T16:25:42.780Z |
+| 单轮准确率 | 100.0%（36/36） | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 单轮 p50 / p95 | 7,930 ms / 31,291 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 多轮准确率 | 100.0%（6/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮轮次 | 15/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮 p50 / p95 | 7,028 ms / 15,528 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
-| 离线意图准确率 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 离线意图准确率 | 100.0%（74/74） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
 | 审计条目 | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失 |
 
 ## 分组表现（真实模型单轮）
 
 | 分组 | 通过 / 总数 | 准确率 | p50 | p95 | 来源文件 | 生成时间 |
 |---|---:|---:|---:|---:|---|---|
-| 查询 | 8 / 8 | 100.0% | 5,632 ms | 8,720 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
-| 操作 | 10 / 10 | 100.0% | 4,842 ms | 18,263 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
-| 流程 | 6 / 6 | 100.0% | 11,957 ms | 20,222 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
-| 拒绝/澄清 | 6 / 6 | 100.0%（拒绝率 100.0%） | 8,332 ms | 13,938 ms | docs/desktop/eval/agent-live.json | 2026-10-23T14:57:31.789Z |
+| 查询 | 8 / 8 | 100.0% | 6,604 ms | 10,396 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 操作 | 10 / 10 | 100.0% | 6,770 ms | 21,795 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 流程 | 6 / 6 | 100.0% | 11,823 ms | 20,365 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 拒绝/澄清 | 6 / 6 | 100.0%（拒绝率 100.0%） | 6,468 ms | 12,855 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
+| 机型 | 6 / 6 | 100.0% | 23,902 ms | 37,772 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 
 ## 离线评测（规则路由）
 
 | 指标 | 结果 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 意图 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
-| 工具 | 100.0%（68/68） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
-| 参数 | 100.0%（34/34） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
-| 超纲拒绝 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
-| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T15:44:42.366Z |
+| 意图 | 100.0%（74/74） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
+| 工具 | 100.0%（74/74） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
+| 参数 | 100.0%（40/40） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
+| 超纲拒绝 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
+| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-23T16:25:06.721Z |
 
 ## 多轮场景
 
@@ -84,15 +85,15 @@
 | 可复用流程模板<br>`recipes` | desktop/src/agent/recipes.ts | 单测 agent/recipes.test.mjs；smoke SMOKE_AGENT_RECIPE_OK | ✅ 已实现 |
 | 主动建议（next-best-action）<br>`advisor` | desktop/src/agent/advisor.ts | 单测 agent/advisor.test.mjs；smoke SMOKE_AGENT_ADVISOR_OK | ✅ 已实现 |
 | 工具调用纠错与重试<br>`repair` | desktop/src/agent/repair.ts + retry.ts | 单测 agent/repair.test.mjs；smoke SMOKE_AGENT_REPAIR_OK | ✅ 已实现 |
-| 真实模型单轮评测<br>`live-eval` | desktop/scripts/agent-live.mjs | eval 单轮真实模型 | ✅ 30/30 |
+| 真实模型单轮评测<br>`live-eval` | desktop/scripts/agent-live.mjs | eval 单轮真实模型 | ✅ 36/36 |
 | 真实模型多轮评测<br>`multiturn-eval` | desktop/scripts/agent-multiturn.mjs | eval 多轮真实模型 | ✅ 6/6 |
 
 ## 已知缺口（从 BACKLOG 自动摘取）
 
-- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:212`，生成时间：2026-10-23T15:39:14.375Z）
-- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:337`，生成时间：2026-10-23T15:39:14.375Z）
-- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。（来源：`docs/desktop/BACKLOG.md:338`，生成时间：2026-10-23T15:39:14.375Z）
-- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。（来源：`docs/desktop/BACKLOG.md:339`，生成时间：2026-10-23T15:39:14.375Z）
+- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:223`，生成时间：2026-10-23T16:24:30.419Z）
+- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:348`，生成时间：2026-10-23T16:24:30.419Z）
+- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。（来源：`docs/desktop/BACKLOG.md:349`，生成时间：2026-10-23T16:24:30.419Z）
+- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。（来源：`docs/desktop/BACKLOG.md:350`，生成时间：2026-10-23T16:24:30.419Z）
 
 ## 缺失数据源
 

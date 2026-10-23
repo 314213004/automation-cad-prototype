@@ -87,7 +87,7 @@ test('brief 单独使用时先 synth 再落盘，并更新 active 指针', async
   assert.equal(result.data.machineId, 'design-screw-3st');
   assert.equal(result.data.stations, 3);
   assert.equal(result.data.actuators, 6);
-  assert.equal(result.data.sensors, 6);
+  assert.equal(result.data.sensors, 3);
   assert.ok(existsSync(result.data.designPath));
   const pointer = readActivePointer(root);
   assert.equal(pointer?.machineId, 'design-screw-3st');
@@ -232,17 +232,17 @@ test('withBom 默认 true：追加行数等于 bomDraft，并写 bom-draft.csv',
   const result = await apply(bus, { design });
   assert.equal(result.ok, true);
   assert.equal(result.data.bom.count, design.bomDraft.items.length);
-  assert.equal(result.data.bom.count, 6);
+  assert.equal(result.data.bom.count, 5);
   assert.equal(result.data.bom.source, 'machine-design');
   assert.ok(existsSync(result.data.bomPath));
   assert.equal(result.data.bomPath, machineBomDraftPath(root, result.data.machineId));
   const appended = calls.find((call) => call.method === 'appendMachineBomRows');
-  assert.equal(appended.args.rows.length, 6);
+  assert.equal(appended.args.rows.length, 5);
   assert.ok(appended.args.rows.every((row) => row.source === 'machine-design'));
   assert.ok(appended.args.rows.every((row) => row.spec === '模型待定'));
   const csv = readFileSync(result.data.bomPath, 'utf8');
   assert.match(csv, /machine-design/);
-  assert.equal(csv.trim().split(/\r?\n/).length, 7);
+  assert.equal(csv.trim().split(/\r?\n/).length, 6);
 });
 
 test('withBom=false 时不追加、不写 BOM 草稿文件', async () => {

@@ -1001,5 +1001,101 @@
       "machine_apply"
     ],
     "note": "机型落盘：可选生成 io-map.csv，不生成完整 ST。"
+  },
+  {
+    "id": "d08",
+    "input": "设计一台两工位锁螺丝机，节拍 20 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一台两工位锁螺丝机，节拍 20 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_template"
+    ],
+    "note": "模板评测：锁螺丝，缺执行机构描述时按模板补全。"
+  },
+  {
+    "id": "d09",
+    "input": "做一台两工位点胶机，节拍 18 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "做一台两工位点胶机，节拍 18 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_template"
+    ],
+    "note": "模板评测：点胶，三轴模组按旋转轴占位。"
+  },
+  {
+    "id": "d10",
+    "input": "设计一条三工位装配线，节拍 12 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一条三工位装配线，节拍 12 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_template"
+    ],
+    "note": "模板评测：装配，每工位压装气缸 + 夹爪 + 双接近。"
+  },
+  {
+    "id": "d11",
+    "input": "设计一台两工位检测机，节拍 30 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一台两工位检测机，节拍 30 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_template"
+    ],
+    "note": "模板评测：检测，相机位按旋转轴占位 + 光电 + 安全光栅。"
+  },
+  {
+    "id": "d12",
+    "input": "设计一台两工位包装机，节拍 15 件/分钟",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "设计一台两工位包装机，节拍 15 件/分钟"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_template"
+    ],
+    "note": "模板评测：包装，推料气缸 + 吸盘（夹爪）+ 光电。"
+  },
+  {
+    "id": "d13",
+    "input": "随便设计一台机器",
+    "intent": "generate",
+    "expect": {
+      "tool": "design_machine",
+      "argsContains": {
+        "brief": "随便设计一台机器"
+      }
+    },
+    "tags": [
+      "machine_design",
+      "machine_clarify"
+    ],
+    "note": "信息不足：工具返回 needs/question，由会话层最多追问一次；不答则用默认值继续。"
   }
 ]

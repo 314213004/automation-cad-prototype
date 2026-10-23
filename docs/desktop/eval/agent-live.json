@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-10-23T14:53:08.208Z",
-  "finishedAt": "2026-10-23T14:57:31.789Z",
+  "generatedAt": "2026-10-23T16:16:35.561Z",
+  "finishedAt": "2026-10-23T16:23:29.180Z",
   "mode": "live-model",
   "model": "deepseek-v4.1-flash",
-  "total": 30,
-  "matched": 30,
+  "total": 36,
+  "matched": 36,
   "toolAccuracy": 1,
   "confirmRate": 1,
   "clarifyRate": 1,
   "refusalRate": 1,
-  "p50Ms": 7254,
-  "p95Ms": 18414,
+  "p50Ms": 7930,
+  "p95Ms": 31291,
   "byCategory": {
     "query": {
       "total": 8,
@@ -18,8 +18,8 @@
       "toolAccuracy": 1,
       "confirmRate": 1,
       "clarifyRate": 1,
-      "p50Ms": 5632,
-      "p95Ms": 8720
+      "p50Ms": 6604,
+      "p95Ms": 10396
     },
     "operation": {
       "total": 10,
@@ -27,8 +27,8 @@
       "toolAccuracy": 1,
       "confirmRate": 1,
       "clarifyRate": 1,
-      "p50Ms": 4842,
-      "p95Ms": 18263
+      "p50Ms": 6770,
+      "p95Ms": 21795
     },
     "workflow": {
       "total": 6,
@@ -36,8 +36,8 @@
       "toolAccuracy": 1,
       "confirmRate": 1,
       "clarifyRate": 1,
-      "p50Ms": 11957,
-      "p95Ms": 20222
+      "p50Ms": 11823,
+      "p95Ms": 20365
     },
     "refusal": {
       "total": 6,
@@ -45,9 +45,18 @@
       "toolAccuracy": 1,
       "confirmRate": 1,
       "clarifyRate": 1,
-      "p50Ms": 8332,
-      "p95Ms": 13938,
+      "p50Ms": 6468,
+      "p95Ms": 12855,
       "refusalRate": 1
+    },
+    "machine": {
+      "total": 6,
+      "matched": 6,
+      "toolAccuracy": 1,
+      "confirmRate": 1,
+      "clarifyRate": 1,
+      "p50Ms": 23902,
+      "p95Ms": 37772
     }
   },
   "failures": []

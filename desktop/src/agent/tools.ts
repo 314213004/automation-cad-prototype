@@ -6,8 +6,15 @@ import { checkExportTargetPath } from './policy.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
 import { searchDocs } from './kb/search.ts';
-import { parseMachineBrief, MACHINE_STATIONS_MAX, MACHINE_STATIONS_MIN } from '../machine/spec.ts';
+import {
+  DEFAULT_NOTE_CYCLE,
+  DEFAULT_NOTE_STATIONS,
+  parseMachineBrief,
+  MACHINE_STATIONS_MAX,
+  MACHINE_STATIONS_MIN
+} from '../machine/spec.ts';
 import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
+import { buildClarify } from '../machine/clarify.ts';
 
 export interface AgentTool {
   name: string;
@@ -584,6 +591,16 @@ export class AgentTools {
 
         try {
           const brief = parseMachineBrief(briefText);
+          const clarifyBrief = {
+            ...brief,
+            ...(stationCount !== undefined ? { stations: stationCount } : {}),
+            ...(cyclePerMin !== undefined ? { cyclePerMin } : {}),
+            notes: brief.notes.filter((note) =>
+              !(stationCount !== undefined && note === DEFAULT_NOTE_STATIONS) &&
+              !(cyclePerMin !== undefined && note === DEFAULT_NOTE_CYCLE)
+            )
+          };
+          const clarify = buildClarify(clarifyBrief);
           const design = synthMachine(brief, {
             ...(stationCount !== undefined ? { stationCount } : {}),
             ...(cyclePerMin !== undefined ? { cyclePerMin } : {})
@@ -598,7 +615,9 @@ export class AgentTools {
               warnings: design.warnings,
               assumptions: design.assumptions
             },
-            summary: summarizeMachineDesign(design)
+            summary: summarizeMachineDesign(design),
+            needs: clarify.needs,
+            question: clarify.question
           };
         } catch (error) {
           return {

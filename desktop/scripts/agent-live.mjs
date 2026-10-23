@@ -10,7 +10,7 @@
  * 缺任一变量：打印 AGENT_LIVE_SKIP 并以 0 退出，不算失败。
  * 有凭据但调用失败、阈值不达标或断言不通过：写结果文件并以 1 退出。
  *
- * 用例：desktop/scripts/agent-live-cases.json（查询 8 / 操作 10 / 流程 6 / 拒绝·澄清 6）
+ * 用例：desktop/scripts/agent-live-cases.json（查询 8 / 操作 10 / 流程 6 / 拒绝·澄清 6 / 机型 6）
  * 结果：docs/desktop/eval/agent-live.json
  */
 
@@ -31,7 +31,7 @@ const CASES_PATH = resolve(HERE, 'agent-live-cases.json');
 const OUTPUT_PATH = resolve(REPO_ROOT, 'docs/desktop/eval/agent-live.json');
 const BUILTIN_PACKS = resolve(REPO_ROOT, 'packs/builtin');
 
-const REQUIRED_GROUPS = { query: 8, operation: 10, workflow: 6, refusal: 6 };
+const REQUIRED_GROUPS = { query: 8, operation: 10, workflow: 6, refusal: 6, machine: 6 };
 const TOOL_ACCURACY_GATE = 0.85;
 const MAX_ITERATIONS = 12;
 const MUTATING_TOOLS = new Set([
@@ -42,6 +42,7 @@ const MUTATING_TOOLS = new Set([
   'remove_component',
   'run_plc_generate',
   'export_files',
+  'apply_machine_design',
   'undo_last',
   'export_cost_report'
 ]);
@@ -103,7 +104,7 @@ function loadCases() {
       throw new Error(`用例分组 ${group} 应为 ${expected} 条，实际 ${counts[group] ?? 0} 条`);
     }
   }
-  if (raw.length !== 30) throw new Error(`用例总数应为 30 条，实际 ${raw.length} 条`);
+  if (raw.length !== 36) throw new Error(`用例总数应为 36 条，实际 ${raw.length} 条`);
   return raw;
 }
 
@@ -379,9 +380,18 @@ function matchesValue(actual, expected) {
   if (expected && typeof expected === 'object' && expected.nonEmpty === true) {
     return actual !== undefined && actual !== null && String(actual).trim() !== '';
   }
+  if (expected && typeof expected === 'object' && Array.isArray(expected.containsAll)) {
+    const text = actual === undefined || actual === null ? '' : String(actual).toLowerCase();
+    return text !== '' && expected.containsAll.every((part) =>
+      typeof part === 'string' && text.includes(part.toLowerCase())
+    );
+  }
   if (expected && typeof expected === 'object' && typeof expected.contains === 'string') {
     return actual !== undefined && actual !== null &&
       String(actual).toLowerCase().includes(expected.contains.toLowerCase());
+  }
+  if (expected && typeof expected === 'object' && expected.hasKey === true) {
+    return actual !== undefined && actual !== null;
   }
   return actual === expected;
 }
@@ -590,10 +600,17 @@ async function runCase(testCase, tempRoot) {
     }
   });
 
+  const history = Array.isArray(testCase.history) ? testCase.history : [];
+  const historyCallStart = bus.calls.length;
+  const historyConfirmationStart = confirmations.length;
   const startedAt = Date.now();
   let reply = '';
   let errorMessage = '';
   try {
+    for (const previous of history) {
+      if (typeof previous !== 'string' || !previous.trim()) continue;
+      await withTimeout(session.run(previous), caseTimeoutMs);
+    }
     reply = await withTimeout(session.run(testCase.prompt), caseTimeoutMs);
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : String(error);
@@ -602,6 +619,10 @@ async function runCase(testCase, tempRoot) {
   const autoClarified = hasClarification(reply);
   const autoRefused = hasRefusal(reply);
   const successClaim = claimsSuccess(reply);
+  const calls = bus.calls.slice(historyCallStart);
+  const caseConfirmations = confirmations
+    .slice(historyConfirmationStart)
+    .map((entry) => entry.name);
 
   if (errorMessage) {
     return {
@@ -610,10 +631,10 @@ async function runCase(testCase, tempRoot) {
       prompt: testCase.prompt,
       durationMs,
       expected: expectedLabel(testCase),
-      actualTools: bus.calls.map((call) => call.name),
-      actualCalls: bus.calls,
-      confirmations: confirmations.map((entry) => entry.name),
-      confirmed: confirmations.length > 0,
+      actualTools: calls.map((call) => call.name),
+      actualCalls: calls,
+      confirmations: caseConfirmations,
+      confirmed: caseConfirmations.length > 0,
       confirmExpected: testCase.expect.asksConfirmation === true,
       clarifyExpected: testCase.expect.expectClarify === true,
       clarified: autoClarified,
@@ -625,8 +646,7 @@ async function runCase(testCase, tempRoot) {
     };
   }
 
-  const calls = bus.calls;
-  const confirmationsView = confirmations.map((entry) => entry.name);
+  const confirmationsView = caseConfirmations;
   const replyView = reply.length > 500 ? `${reply.slice(0, 500)}…` : reply;
 
   if (testCase.group === 'refusal') {
@@ -699,7 +719,9 @@ async function runCase(testCase, tempRoot) {
   }
 
   const forbidden = calls.filter((call) => testCase.expect.mustNot.includes(call.name));
-  const ok = Boolean(matchedAlternative) && forbidden.length === 0;
+  const clarifyAllowed = testCase.expect.allowClarify === true || testCase.expect.expectClarify === true;
+  const clarifiedOnly = clarifyAllowed && calls.length === 0 && autoClarified;
+  const ok = (Boolean(matchedAlternative) || clarifiedOnly) && forbidden.length === 0;
   let reason;
   if (!ok) {
     if (forbidden.length > 0) {
@@ -797,7 +819,7 @@ async function main() {
   const refusalResults = results.filter((result) => result.group === 'refusal');
   const refusalMatched = refusalResults.filter((result) => result.matched).length;
   const refusalRate = refusalResults.length === 0 ? 1 : refusalMatched / refusalResults.length;
-  const categories = ['query', 'operation', 'workflow', 'refusal'];
+  const categories = ['query', 'operation', 'workflow', 'refusal', 'machine'];
   const byCategory = Object.fromEntries(categories.map((group) => {
     const list = results.filter((result) => result.group === group);
     const stats = summarize(list);
@@ -806,12 +828,13 @@ async function main() {
   }));
   const failures = results
     .filter((result) => !result.matched)
-    .map(({ id, group, prompt, expected, actualTools, confirmations, clarified, refused, category, reason, reply }) => ({
+    .map(({ id, group, prompt, expected, actualTools, actualCalls, confirmations, clarified, refused, category, reason, reply }) => ({
       id,
       group,
       prompt,
       expected,
       actualTools,
+      actualCalls: (actualCalls ?? []).map(({ name, args }) => ({ name, args })),
       confirmations,
       clarified,
       refused,

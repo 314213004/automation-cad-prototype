@@ -17,6 +17,7 @@ import {
   type MachineProcess,
   type MachineSensorKind
 } from './spec.ts';
+import { templateFor, templateKinds } from './templates.ts';
 
 export interface MachineCycleEstimate {
   perMin: number;
@@ -84,25 +85,6 @@ const SENSOR_LABEL: Record<MachineSensorKind, string> = {
   photoelectric: '光电传感器',
   safety: '安全光栅',
   pressure: '压力传感器'
-};
-
-/** 工艺基线：每工位的默认动作与检测类型。仅在 brief 未给出对应清单时启用。 */
-const ACTUATOR_TEMPLATE: Record<MachineProcess, MachineActuatorKind[]> = {
-  screw: ['rotary', 'gripper'],
-  dispense: ['rotary'],
-  assembly: ['cylinder', 'gripper'],
-  inspection: ['rotary'],
-  packaging: ['cylinder', 'gripper'],
-  unknown: ['cylinder']
-};
-
-const SENSOR_TEMPLATE: Record<MachineProcess, MachineSensorKind[]> = {
-  screw: ['proximity', 'pressure'],
-  dispense: ['pressure'],
-  assembly: ['proximity', 'proximity'],
-  inspection: ['photoelectric', 'safety'],
-  packaging: ['photoelectric', 'proximity'],
-  unknown: ['proximity']
 };
 
 /** 工艺固定余量（秒/件）：换刀、定位、上下料衔接等，未建模为真实动作。 */
@@ -318,6 +300,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const stations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
+  const template = templateFor(process);
+  const templateActuatorKinds = templateKinds(template.actuators);
+  const templateSensorKinds = templateKinds(template.sensors);
   const servo = servoDetected(brief);
   const warnings: string[] = [];
   const assumptions: string[] = [
@@ -327,12 +312,12 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   ];
 
   if (process === 'unknown') {
-    warnings.push('未识别工艺：已按通用工艺（每工位 1 气缸 + 1 接近开关）合成，请确认工艺类型。');
-    assumptions.push('未识别工艺，按通用工艺模板补全动作与检测。');
+    warnings.push('未识别工艺：已按通用工艺模板（每工位 1 气缸 + 1 接近开关）合成，请确认工艺类型。');
+    assumptions.push('未识别工艺，按 通用 模板补全动作与检测。');
   }
   if (options.stationCount === undefined && brief.notes.includes(DEFAULT_NOTE_STATIONS)) {
-    warnings.push('未提供工位数：已按缺省值 1 工位合成，请确认实际工位数。');
-    assumptions.push('工位数缺省为 1。');
+    warnings.push(`未提供工位数：已按缺省值 ${stations} 工位合成，请确认实际工位数。`);
+    assumptions.push(`工位数缺省为 ${stations}。`);
   }
   if (options.stationCount === undefined) {
     const invalidStationNote = brief.notes.find((note) => /^工位数\s*\d+\s*(?:无效|超出)/.test(note));
@@ -350,9 +335,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   let actuatorKinds = flattened(brief.actuators);
   let actuatorSource = 'brief';
   if (actuatorKinds.length === 0) {
-    actuatorKinds = Array.from({ length: stations }, () => ACTUATOR_TEMPLATE[process]).flat();
+    actuatorKinds = Array.from({ length: stations }, () => templateActuatorKinds).flat();
     actuatorSource = 'template';
-    assumptions.push(`未指定执行机构，按 ${process} 工艺模板补全（每工位：${templateDescription(ACTUATOR_TEMPLATE[process])}）。`);
+    assumptions.push(`未指定执行机构，按 ${template.label} 模板补全（每工位：${templateDescription(template.actuators.map((entry) => ACTUATOR_LABEL[entry.kind]))}）。`);
   }
 
   let actuatorBuckets = distribute(actuatorKinds, stations);
@@ -360,7 +345,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     .map((bucket, index) => ({ bucket, index }))
     .filter(({ bucket }) => bucket.length === 0);
   if (emptyActuatorStations.length > 0) {
-    const fillKind = ACTUATOR_TEMPLATE[process][0] ?? 'cylinder';
+    const fillKind = templateActuatorKinds[0] ?? 'cylinder';
     for (const { bucket } of emptyActuatorStations) bucket.push(fillKind);
     actuatorBuckets = actuatorBuckets;
     warnings.push(
@@ -371,9 +356,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   let sensorKinds = flattened(brief.sensors);
   let sensorSource = 'brief';
   if (sensorKinds.length === 0) {
-    sensorKinds = Array.from({ length: stations }, () => SENSOR_TEMPLATE[process]).flat();
+    sensorKinds = Array.from({ length: stations }, () => templateSensorKinds).flat();
     sensorSource = 'template';
-    assumptions.push(`未指定传感器，按 ${process} 工艺模板补全（每工位：${templateDescription(SENSOR_TEMPLATE[process])}）。`);
+    assumptions.push(`未指定传感器，按 ${template.label} 模板补全（每工位：${templateDescription(template.sensors.map((entry) => SENSOR_LABEL[entry.kind]))}）。`);
   }
 
   let sensorBuckets = distribute(sensorKinds, stations);
@@ -439,7 +424,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   });
 
   const baseSeconds = PROCESS_BASE_SECONDS[process];
-  let slowest = { station: 1, seconds: 0, kind: ACTUATOR_TEMPLATE[process][0] ?? 'cylinder' };
+  let slowest = { station: 1, seconds: 0, kind: templateActuatorKinds[0] ?? 'cylinder' };
   for (const [stationIndex, kinds] of actuatorBuckets.entries()) {
     const actionSeconds = kinds.reduce((sum, kind) => sum + ACTUATOR_SECONDS[kind], 0);
     const stationKind = kinds.reduce<MachineActuatorKind | null>((best, kind) => {

@@ -1,12 +1,12 @@
-# 项目状态 · 2026-10-23
+# 项目状态 · 2026-10-24
 
 ## 概览
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`），本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1110/1110 全绿**（本轮新增机型落盘 26 条）。
-- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`，最终 `SMOKE_OK`。
-- 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（68/68 意图、68/68 工具、34/34 参数、5/5 超纲、5/5 多步）。
+- 测试：**1132/1132 全绿**（本轮新增工艺模板/追问/评测等 22 条）。
+- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`，最终 `SMOKE_OK`。
+- 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
 
 ## 验证记录（本轮真实执行）
@@ -14,7 +14,7 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1110 pass / 0 fail / 0 skipped |
+| `npm test` | 1132 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
 | `npm run eval:agent` | `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
@@ -61,8 +61,9 @@
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
 | `SMOKE_AGENT_TOOLS_OK` | `tools=20 implemented=20` |
 | `SMOKE_AGENT_TOOLS_V2` | `tools=20`，新增工具全部注册 |
-| `SMOKE_MACHINE_DESIGN_OK` | `stations=3 actuators=6 sensors=6 warnings=1` |
-| `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=6 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
+| `SMOKE_MACHINE_DESIGN_OK` | `stations=3 actuators=6 sensors=3 warnings=1` |
+| `SMOKE_MACHINE_TEMPLATES_OK` | `templates=5 clarify=1 multi=1`，五类工艺模板与追问上限 |
+| `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=5 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
 | `SMOKE_AGENT_KB_OK` | `docs=13 chunks=347 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
@@ -133,11 +134,11 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 1110 条单测/集成测试
+npm test                            # 1132 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
-npm run eval:agent                  # 46 条中文 Agent 评估集
+npm run eval:agent                  # 74 条中文 Agent 评估集
 npm run sync:e2e                    # 本地临时 DB 的设计同步端到端
 npm run screenshots                 # 真实 Electron 截图（14 张）
 ```

@@ -43,6 +43,9 @@ import { computeCost, type CostInput } from '../src/cost/engine';
 import { validatePricebook } from '../src/cost/pricebook';
 import { planExportName } from '../src/cost/export';
 import { demoMachineConfig } from '../src/commission/machine-config';
+import { parseMachineBrief } from '../src/machine/spec';
+import { TEMPLATES } from '../src/machine/templates';
+import { buildClarify } from '../src/machine/clarify';
 import { generateSt } from '../src/plcgen/st';
 import { generateProject } from '../src/plcgen/generate';
 import { verifyGenerated } from '../src/plcgen/verify';
@@ -1227,7 +1230,7 @@ function createWindow(): BrowserWindow {
           !machineDesign.ok ||
           machineDesign.design?.config?.stations?.length !== 3 ||
           machineDesign.design?.config?.actuators?.length !== 6 ||
-          machineDesign.design?.config?.sensors?.length !== 6 ||
+          machineDesign.design?.config?.sensors?.length !== 3 ||
           machineDesign.design?.cycle?.perMin !== 20 ||
           machineDesign.design?.cycle?.secondsPerPiece !== 3 ||
           !(Number(machineDesign.design?.power?.va) > 0) ||
@@ -1240,7 +1243,16 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1');
+        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1');
+
+        const templateCount = Object.keys(TEMPLATES).length;
+        const clarify = buildClarify(parseMachineBrief('随便设计一台检测机'));
+        if (templateCount !== 5 || clarify.question === null || clarify.needs.length !== 2) {
+          console.error('SMOKE_FAIL machine_templates', JSON.stringify({ templateCount, clarify }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1');
 
         const applied = await activeTools.call('apply_machine_design', {
           brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
@@ -1264,8 +1276,8 @@ function createWindow(): BrowserWindow {
           !applied.ok ||
           applied.stations !== 3 ||
           applied.actuators !== 6 ||
-          applied.sensors !== 6 ||
-          applied.bom?.count !== 6 ||
+          applied.sensors !== 3 ||
+          applied.bom?.count !== 5 ||
           !applied.bomPath || !existsSync(applied.bomPath) ||
           !applied.plcPath || !existsSync(applied.plcPath) ||
           !applied.designPath || !existsSync(applied.designPath) ||
@@ -1288,7 +1300,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=6 undo=1`);
+        console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=5 undo=1`);
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
           ok?: boolean;

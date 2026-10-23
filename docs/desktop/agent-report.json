@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-23T15:45:01.470Z",
+  "generatedAt": "2026-10-23T16:25:49.784Z",
   "generator": "desktop/scripts/agent-report.mjs",
   "sources": {
     "live": {
       "file": "docs/desktop/eval/agent-live.json",
       "status": "ok",
-      "generatedAt": "2026-10-23T14:57:31.789Z",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
       "mode": "live-model",
       "model": "deepseek-v4.1-flash"
     },
@@ -20,7 +20,7 @@
     "offline": {
       "file": "docs/desktop/eval/latest.json",
       "status": "ok",
-      "generatedAt": "2026-10-23T15:44:42.366Z",
+      "generatedAt": "2026-10-23T16:25:06.721Z",
       "version": "0.3.0",
       "mode": "offline-rules"
     },
@@ -32,7 +32,7 @@
     "backlog": {
       "file": "docs/desktop/BACKLOG.md",
       "status": "ok",
-      "generatedAt": "2026-10-23T15:39:14.375Z"
+      "generatedAt": "2026-10-23T16:24:30.419Z"
     },
     "tools": {
       "file": "desktop/src/agent/tools.ts",
@@ -46,69 +46,69 @@
     "toolCount": {
       "value": 20,
       "source": "docs/desktop/eval/latest.json#dataset.toolCoverage",
-      "generatedAt": "2026-10-23T15:44:42.366Z",
+      "generatedAt": "2026-10-23T16:25:06.721Z",
       "missing": false
     },
     "testCount": {
-      "value": 1110,
+      "value": 1132,
       "source": "desktop/test/**/*.test.*（`node --test` 实测）",
-      "generatedAt": "2026-10-23T15:44:54.822Z",
+      "generatedAt": "2026-10-23T16:25:42.780Z",
       "missing": false
     },
     "testPassed": true,
     "singleTurn": {
       "total": {
-        "value": 30,
+        "value": 36,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "matched": {
-        "value": 30,
+        "value": 36,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "accuracy": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "toolAccuracy": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "confirmRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "clarifyRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "refusalRate": {
         "value": 1,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "p50Ms": {
-        "value": 7254,
+        "value": 7930,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       },
       "p95Ms": {
-        "value": 18414,
+        "value": 31291,
         "source": "docs/desktop/eval/agent-live.json",
-        "generatedAt": "2026-10-23T14:57:31.789Z",
+        "generatedAt": "2026-10-23T16:23:29.180Z",
         "missing": false
       }
     },
@@ -170,75 +170,75 @@
     },
     "offline": {
       "total": {
-        "value": 68,
+        "value": 74,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-23T15:44:42.366Z",
+        "generatedAt": "2026-10-23T16:25:06.721Z",
         "missing": false
       },
       "passed": {
         "value": 1,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-23T15:44:42.366Z",
+        "generatedAt": "2026-10-23T16:25:06.721Z",
         "missing": false
       },
       "metrics": {
         "intent": {
           "correct": {
-            "value": 68,
+            "value": 74,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "total": {
-            "value": 68,
+            "value": 74,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           }
         },
         "tools": {
           "correct": {
-            "value": 68,
+            "value": 74,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "total": {
-            "value": 68,
+            "value": 74,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           }
         },
         "params": {
           "correct": {
-            "value": 34,
+            "value": 40,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "total": {
-            "value": 34,
+            "value": 40,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           }
         },
@@ -246,19 +246,19 @@
           "correct": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "total": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           }
         },
@@ -266,19 +266,19 @@
           "correct": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "total": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T15:44:42.366Z",
+            "generatedAt": "2026-10-23T16:25:06.721Z",
             "missing": false
           }
         }
@@ -292,11 +292,11 @@
       "total": 8,
       "matched": 8,
       "accuracy": 1,
-      "p50Ms": 5632,
-      "p95Ms": 8720,
+      "p50Ms": 6604,
+      "p95Ms": 10396,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T14:57:31.789Z",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
       "missing": false
     },
     {
@@ -305,11 +305,11 @@
       "total": 10,
       "matched": 10,
       "accuracy": 1,
-      "p50Ms": 4842,
-      "p95Ms": 18263,
+      "p50Ms": 6770,
+      "p95Ms": 21795,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T14:57:31.789Z",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
       "missing": false
     },
     {
@@ -318,11 +318,11 @@
       "total": 6,
       "matched": 6,
       "accuracy": 1,
-      "p50Ms": 11957,
-      "p95Ms": 20222,
+      "p50Ms": 11823,
+      "p95Ms": 20365,
       "refusalRate": null,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T14:57:31.789Z",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
       "missing": false
     },
     {
@@ -331,11 +331,24 @@
       "total": 6,
       "matched": 6,
       "accuracy": 1,
-      "p50Ms": 8332,
-      "p95Ms": 13938,
+      "p50Ms": 6468,
+      "p95Ms": 12855,
       "refusalRate": 1,
       "source": "docs/desktop/eval/agent-live.json",
-      "generatedAt": "2026-10-23T14:57:31.789Z",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
+      "missing": false
+    },
+    {
+      "key": "machine",
+      "label": "机型",
+      "total": 6,
+      "matched": 6,
+      "accuracy": 1,
+      "p50Ms": 23902,
+      "p95Ms": 37772,
+      "refusalRate": null,
+      "source": "docs/desktop/eval/agent-live.json",
+      "generatedAt": "2026-10-23T16:23:29.180Z",
       "missing": false
     }
   ],
@@ -797,7 +810,7 @@
       "verification": [
         "eval 单轮真实模型"
       ],
-      "status": "✅ 30/30",
+      "status": "✅ 36/36",
       "tools": []
     },
     {
@@ -815,30 +828,30 @@
     {
       "text": "BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框",
       "section": "P6 机台硬件成本自动统计",
-      "line": 212,
+      "line": 223,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T15:39:14.375Z"
+      "generatedAt": "2026-10-23T16:24:30.419Z"
     },
     {
       "text": "**真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 337,
+      "line": 348,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T15:39:14.375Z"
+      "generatedAt": "2026-10-23T16:24:30.419Z"
     },
     {
       "text": "**离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 338,
+      "line": 349,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T15:39:14.375Z"
+      "generatedAt": "2026-10-23T16:24:30.419Z"
     },
     {
       "text": "**多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 339,
+      "line": 350,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T15:39:14.375Z"
+      "generatedAt": "2026-10-23T16:24:30.419Z"
     }
   ],
   "audit": {

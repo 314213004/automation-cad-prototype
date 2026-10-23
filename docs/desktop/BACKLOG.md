@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测（P10-3，2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1132/1132**（1110 + 新增 22）、`npm run smoke` 新增 `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`npm run eval:agent` **74/74（1.00）**、`npm run agent:live` **36/36**；不 push。
+- A. 工艺模板：新增 `desktop/src/machine/templates.ts`，导出可直接读取的 `TEMPLATES`（5 类）。锁螺丝每工位 1 旋转轴 + 1 夹爪 + 1 接近；点胶 1 旋转轴（三轴模组占位）+ 1 压力；装配 1 压装气缸 + 1 夹爪 + 2 接近；检测 1 旋转轴（相机位占位）+ 1 光电 + 1 安全光栅；包装 1 推料气缸 + 1 吸盘（夹爪）+ 1 光电。每类含 `stations / actuators / sensors / cycleRange / rationale`，未知工艺使用内部通用模板。
+- B. 合成器接入：`synthMachine` 缺执行机构/传感器时按模板补全，assumptions 写「按 X 模板补全」；缺工位默认 2、缺节拍默认 10 件/分钟，同时写 warning 与 assumption。
+- C. 追问策略：新增 `desktop/src/machine/clarify.ts` 纯函数 `buildClarify(brief)`，只看工艺/工位/节拍，最多 2 项、合并成一个具体问题；有默认值不追问；`design_machine` 返回 `needs` 与 `question`，会话系统提示要求最多追问一次，不答则用默认并说明。
+- D. 离线评测：`docs/desktop/eval/cases.json` 新增 6 条（5 类工艺 + 1 条信息不足），74/74，意图/工具/参数/拒绝均 1.00。
+- E. 真实评测：`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条（三工位锁螺丝、两工位点胶 3 秒/件、四工位装配含汇川+安全光栅、信息不足检测机、多轮改 4 工位、直接应用需确认），总数 30 → 36；评测器支持 `history` 多轮前置、`allowClarify`、`hasKey`、`containsAll` 参数检查，并只评判本轮工具调用，阈值不变。本机 `deepseek-v4.1-flash` 最终轮 36/36、confirm/clarify/refusal 均 1.00，p50 7.9 s / p95 31.3 s；机型分组 6/6，p50 23.9 s / p95 37.8 s。两轮复跑中的首轮出现 `O04 [operation/missing-arg]`，第二轮恢复；失败分类保留，未删用例、未降阈值。
+- F. 文档：`MACHINE-DESIGN.md` 补模板表、追问规则与 36 条真实评测分组/延迟/失败项；`NL-AGENT.md`、`README.md`、`desktop/README.md`、本文件同步数字；报告生成器新增「机型」分组。
+- 边界：模板是代码内常量，不是用户可编辑库；追问只保证一次，不持久化未答状态；真实评测仍是单模型结果，换模型需重跑。
+
 ## 自然语言设计机器（二）：落盘写工具 + 3D/BOM/PLC 联动（P10-2，2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1110/1110**（1084 + 新增 26）、`npm run smoke` 新增 `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`、`npm run eval:agent` **68/68（1.00）**；不 push。

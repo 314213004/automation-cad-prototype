@@ -64,10 +64,10 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 
 **边界原则**：渲染层无 fs/net 权限；主进程不做几何计算；Agent 与 UI 共用同一份工具/命令注册表。
 
-## 当前总体进度（2026-10-23）
+## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 1110 个单测 + 完整 smoke 断言全绿
+- ✅ 1132 个单测 + 完整 smoke 断言全绿
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（44 型号 / 12 分类 / 34 带符号）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -77,7 +77,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`
+- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
@@ -92,7 +92,7 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 - ✅ 执行效率（P7-N）：`dedupe.ts` 同轮 `(tool, canonicalArgs)` 合并、写工具永不合并、单轮 12 次上限返回 `TOO_MANY_TOOL_CALLS`；`parallel.ts` 无依赖只读默认 3 路并发、写工具屏障、参数依赖降级串行、失败不吞且结果按原顺序；`cache.ts` 对 `get_bom` / `get_project_context` / `list_components` 按工程指纹缓存 30 秒，写后清空，命中审计 `cacheHit:true` 且 UI 显示「已复用」；新增 33 条单测，`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`
 - ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 20（只读 10 + 写 10），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1`
-- ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`
+- ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）
@@ -109,8 +109,8 @@ Electron 实跑抓取（既有 10 张 1440×873；本轮 4 张 1600×1000），�
 ## Agent 能力报告（汇报）
 
 - 脚本：`desktop/scripts/agent-report.mjs`；命令：`cd desktop && npm run agent:report`。
-- 输入：`docs/desktop/eval/agent-live.json`（真实模型单轮 30 条）、`docs/desktop/eval/agent-multiturn.json`（6 个场景）、`docs/desktop/eval/latest.json`（离线 68 条）、`docs/desktop/BACKLOG.md`（已知限制/问题）、`desktop/src/agent/tools.ts`（工具注册表），以及本机 `<userData>/agent-audit.jsonl`（存在才统计）。
-- 输出：`docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json`、`docs/desktop/agent-report.svg`。SVG 为纯代码生成，不截图；深色底、4 组横向条形图 + 工具/测试/单轮/多轮 KPI。
+- 输入：`docs/desktop/eval/agent-live.json`（真实模型单轮 36 条）、`docs/desktop/eval/agent-multiturn.json`（6 个场景）、`docs/desktop/eval/latest.json`（离线 74 条）、`docs/desktop/BACKLOG.md`（已知限制/问题）、`desktop/src/agent/tools.ts`（工具注册表），以及本机 `<userData>/agent-audit.jsonl`（存在才统计）。
+- 输出：`docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json`、`docs/desktop/agent-report.svg`。SVG 为纯代码生成，不截图；深色底、5 组横向条形图 + 工具/测试/单轮/多轮 KPI。
 - 一致性：报告 JSON 写出后立即读回比对；`verifyReport` 还会逐项核对总览、分组与离线指标是否等于源 JSON。缺失源文件写「缺失：<文件>」、打印 WARN，退出码 0。
 - 测试：`desktop/test/agent/report.test.mjs`（10 条），覆盖真实源数字、源变更传导、篡改拦截、缺源降级、Markdown 来源/时间、SVG 数据驱动、BACKLOG 缺口摘取、md/json/svg 文件产出。
 - 审计路径：优先 `AGENT_REPORT_AUDIT_FILE`，其次 `AGENT_REPORT_USER_DATA`，否则按平台默认 `userData/AutomationCAD/agent-audit.jsonl`；目录不可达或文件不存在时跳过并说明。

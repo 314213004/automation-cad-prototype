@@ -46,8 +46,8 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   assert.equal(verifyReport(report, sources), true);
   assert.equal(report.overview.toolCount.value, 20);
   assert.equal(report.overview.toolCount.source, 'docs/desktop/eval/latest.json#dataset.toolCoverage');
-  assert.equal(report.overview.singleTurn.total.value, 30);
-  assert.equal(report.overview.singleTurn.matched.value, 30);
+  assert.equal(report.overview.singleTurn.total.value, 36);
+  assert.equal(report.overview.singleTurn.matched.value, 36);
   assert.equal(report.overview.singleTurn.accuracy.value, 1);
   // 延迟与多轮计数随评测重跑变化：断言「报告等于源 json」，而不是写死某次数字
   assert.equal(report.overview.singleTurn.p50Ms.value, sources.live.data.p50Ms);
@@ -55,14 +55,14 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   assert.equal(report.overview.multiTurn.total.value, multi.total);
   assert.equal(report.overview.multiTurn.passed.value, multi.passed);
   assert.equal(report.overview.multiTurn.turnPassed.value, multi.turnPassed);
-  assert.equal(report.overview.offline.metrics.intent.correct.value, 68);
+  assert.equal(report.overview.offline.metrics.intent.correct.value, 74);
   assert.equal(report.overview.testCount.value, 1042);
 });
 
-test('分组表：4 组与源 byCategory 一致且总数等于单轮总数', () => {
+test('分组表：5 组与源 byCategory 一致且总数等于单轮总数', () => {
   const sources = loadSources();
   const report = build(sources);
-  assert.deepEqual(report.groups.map((group) => group.label), ['查询', '操作', '流程', '拒绝/澄清']);
+  assert.deepEqual(report.groups.map((group) => group.label), ['查询', '操作', '流程', '拒绝/澄清', '机型']);
   const byCategory = sources.live.data.byCategory;
   for (const group of report.groups) {
     assert.equal(group.total, byCategory[group.key].total);
@@ -128,7 +128,7 @@ test('Markdown：每个总览/分组数字都有来源文件与生成时间', ()
   assert.ok(markdown.includes('| 拒绝/澄清 | 6 / 6 |'));
 });
 
-test('SVG：4 组条形图 + KPI 行全部由报告数据驱动', () => {
+test('SVG：5 组条形图 + KPI 行全部由报告数据驱动', () => {
   const sources = clone(loadSources());
   sources.multiturn.data.passed = 4;
   sources.multiturn.data.passRate = 4 / 6;
@@ -136,12 +136,12 @@ test('SVG：4 组条形图 + KPI 行全部由报告数据驱动', () => {
   const svg = renderSvg(report);
   assert.ok(svg.startsWith('<?xml'));
   assert.ok(svg.includes('fill="#0b1220"'));
-  for (const label of ['查询', '操作', '流程', '拒绝/澄清']) assert.ok(svg.includes(label));
+  for (const label of ['查询', '操作', '流程', '拒绝/澄清', '机型']) assert.ok(svg.includes(label));
   assert.ok(svg.includes('>20<'));
   assert.ok(svg.includes('1,042'));
-  assert.ok(svg.includes('30/30'));
+  assert.ok(svg.includes('36/36'));
   assert.ok(svg.includes('4/6'));
-  assert.ok(svg.includes('真实模型单轮 30 条'));
+  assert.ok(svg.includes('真实模型单轮 36 条'));
   assert.ok(!svg.includes('<script'));
 });
 
