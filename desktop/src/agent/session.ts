@@ -2,7 +2,7 @@ import type { CommandResult } from './commands.ts';
 import type { AgentCommandExecutor } from './tools.ts';
 import type { LlmClient, LlmMessage, LlmToolCall } from './llm.ts';
 import type { AgentAuditRecord } from './audit.ts';
-import { describePlan, planReadOnly } from './router.ts';
+import { describePlan, planReadOnly, routeIntent } from './router.ts';
 import {
   emptyAgentContext,
   serializeAgentContext,
@@ -25,6 +25,15 @@ import {
   type AgentProgressEvent,
   type CompletedStep
 } from './feedback.ts';
+import {
+  AgentThread,
+  augmentContextWithThreadReference,
+  completedToThreadSteps,
+  formatThreadContext,
+  projectFingerprint,
+  type PendingConfirm,
+  type ThreadState
+} from './thread.ts';
 
 export interface AgentSessionOptions {
   llm: LlmClient;
@@ -44,6 +53,8 @@ export interface AgentSessionOptions {
   contextProvider?: () => AgentContext | null | Promise<AgentContext | null>;
   /** 工具参数 JSON Schema（name → schema）；用于模型脏输出纠错。 */
   toolSchemas?: Record<string, unknown> | ((name: string) => unknown);
+  /** 多轮状态存储；主进程让对话与计划共享同一个实例。 */
+  thread?: AgentThread;
 }
 
 export type ConfirmWrite = AgentSessionOptions['confirmWrite'];
@@ -174,7 +185,11 @@ export class AgentSession {
   private readonly offlineFallback: boolean;
   private readonly contextProvider: AgentSessionOptions['contextProvider'];
   private readonly toolSchemas: AgentSessionOptions['toolSchemas'];
+  private readonly thread: AgentThread;
   private readonly memory = new AgentMemory();
+  private threadPrevious: ThreadState | null = null;
+  private pendingConfirm: PendingConfirm | undefined;
+  private turnContextReady = false;
   private messages: LlmMessage[] = [];
   private replyMode: AgentReplyMode = 'online';
   private turnContext: AgentContext = emptyAgentContext();
@@ -191,6 +206,7 @@ export class AgentSession {
     this.offlineFallback = options.offlineFallback !== false;
     this.contextProvider = options.contextProvider;
     this.toolSchemas = options.toolSchemas;
+    this.thread = options.thread ?? new AgentThread();
   }
 
   private recordAudit(record: AgentAuditRecord): void {
@@ -217,6 +233,15 @@ export class AgentSession {
     this.bypassIntent = null;
     this.deniedWriteTools.clear();
     this.memory.clear();
+    this.thread.clear();
+    this.threadPrevious = null;
+    this.pendingConfirm = undefined;
+    this.turnContextReady = false;
+  }
+
+  /** 供 UI / IPC / 测试读取的上一轮状态快照；只读拷贝。 */
+  threadState(): ThreadState | null {
+    return this.thread.read();
   }
 
   /** 最近一次 `run()` 走的是哪条通道；离线降级时返回 'offline'。 */
@@ -234,9 +259,10 @@ export class AgentSession {
   private systemPrompt(): LlmMessage {
     const packed = serializeAgentContext(this.turnContext);
     const memory = this.memory.prompt();
+    const thread = formatThreadContext(this.threadPrevious, this.turnContextReady ? this.turnContext : null);
     return {
       role: 'system',
-      content: [SYSTEM_PROMPT, packed.text, memory].filter(Boolean).join('\n\n')
+      content: [SYSTEM_PROMPT, thread, packed.text, memory].filter(Boolean).join('\n\n')
     };
   }
 
@@ -359,7 +385,7 @@ export class AgentSession {
         message,
         source: 'chat'
       });
-      context.completed.push({ step: context.index, tool: name, ok: false, code: 'INVALID_ARGUMENT', wrote: false });
+      context.completed.push({ step: context.index, tool: name, args: {}, ok: false, code: 'INVALID_ARGUMENT', wrote: false });
       return failedTool('INVALID_ARGUMENT', message);
     }
 
@@ -406,6 +432,7 @@ export class AgentSession {
         context.completed.push({
           step: context.index,
           tool: name,
+          args: { ...args },
           ok,
           code,
           wrote: ok && MUTATING_TOOLS.has(name)
@@ -454,10 +481,29 @@ export class AgentSession {
           );
         } catch (error) {
           if (error instanceof AgentAborted) {
+            this.pendingConfirm = {
+              tool: name,
+              args: { ...args },
+              stepIndex: Math.max(0, context.index - 1),
+              reason: 'cancelled'
+            };
             finish(false, 'CANCELLED', '已取消');
             throw new AgentCancelledError(context.completed, name, false);
           }
           const message = `确认对话框失败：${error instanceof Error ? error.message : String(error)}`;
+          const timeout = /timeout|timed out|超时|ETIMEDOUT/i.test(message);
+          if (timeout) {
+            this.pendingConfirm = {
+              tool: name,
+              args: { ...args },
+              stepIndex: Math.max(0, context.index - 1),
+              reason: 'timeout',
+              message
+            };
+            this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'CONFIRM_TIMEOUT' }));
+            finish(false, 'CONFIRM_TIMEOUT', message);
+            return { ok: false, code: 'CONFIRM_TIMEOUT', message };
+          }
           this.memory.record(summarizeToolCall(name, args, { ok: false, code: 'USER_DENIED' }));
           finish(false, 'USER_DENIED', message);
           return { ok: false, code: 'USER_DENIED', message };
@@ -598,7 +644,7 @@ export class AgentSession {
       ...(result.ok ? {} : { message: result.error?.message ?? '未知错误' }),
       source: 'chat'
     });
-    completed.push({ step: 1, tool: plan.tool, ok: result.ok, code, wrote: result.ok && MUTATING_TOOLS.has(plan.tool) });
+    completed.push({ step: 1, tool: plan.tool, args: { ...plan.args }, ok: result.ok, code, wrote: result.ok && MUTATING_TOOLS.has(plan.tool) });
     this.memory.record(summarizeToolCall(plan.tool, plan.args, result));
     if (!result.ok) {
       return `模型暂不可用，离线规则已调用 ${plan.tool}，但返回失败：${result.error?.message ?? '未知错误'}`;
@@ -621,10 +667,14 @@ export class AgentSession {
     if (!text) throw new Error('请输入要发送给智能体的内容');
     const runId = options.runId ?? `chat-${Date.now()}`;
     const completed: CompletedStep[] = [];
+    // 先读取上一轮快照，再开始本轮；本轮结束后由 finally 路径统一覆盖。
+    this.threadPrevious = this.thread.read();
+    this.pendingConfirm = undefined;
     this.bypassIntent = detectBypassIntent(text);
     this.deniedWriteTools.clear();
     this.replyMode = 'online';
     this.turnContext = emptyAgentContext();
+    this.turnContextReady = false;
     if (this.contextProvider) {
       try {
         this.turnContext = await this.contextProvider() ?? emptyAgentContext();
@@ -632,8 +682,38 @@ export class AgentSession {
         this.turnContext = emptyAgentContext();
       }
     }
+    this.turnContext = augmentContextWithThreadReference(text, this.turnContext, this.threadPrevious);
+    this.turnContextReady = true;
     this.push({ role: 'user', content: text });
 
+    try {
+      const reply = await this.runLoop(text, options, completed, runId);
+      this.commitThreadTurn(text, completed, reply);
+      return reply;
+    } catch (error) {
+      const steps = error instanceof AgentCancelledError ? error.completedSteps : completed;
+      this.commitThreadTurn(text, steps, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  private commitThreadTurn(text: string, completed: readonly CompletedStep[], reply: string): void {
+    this.thread.finish({
+      intent: routeIntent(text).intent,
+      context: this.turnContext,
+      completedSteps: completedToThreadSteps(completed),
+      reply,
+      source: 'chat',
+      ...(this.pendingConfirm ? { pendingConfirm: this.pendingConfirm } : {})
+    });
+  }
+
+  private async runLoop(
+    text: string,
+    options: AgentRunOptions,
+    completed: CompletedStep[],
+    runId: string
+  ): Promise<string> {
     let retryUsed = false;
     for (let iteration = 0; iteration < this.maxIterations; iteration += 1) {
       if (options.signal?.aborted) throw new AgentCancelledError(completed);

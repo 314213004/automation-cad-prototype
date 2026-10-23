@@ -14,6 +14,7 @@ import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
 import { executePlan, plan } from '../src/agent/planner';
+import { AgentThread, formatThreadContext, projectFingerprint, runPlan } from '../src/agent/thread';
 import { RECIPES, runRecipe } from '../src/agent/recipes';
 import {
   buildAgentContext,
@@ -1654,6 +1655,75 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log('SMOKE_AGENT_CONTEXT_OK selection=1 recent=3');
+
+        // P7-L：多轮状态、续跑跳过、工程变化拒续跑（3 轮状态写入）。
+        const threadSmoke = new AgentThread();
+        threadSmoke.write({
+          turnId: 1,
+          projectFingerprint: projectFingerprint(uiContext),
+          intent: 'modify',
+          targets: ['QF1'],
+          completedSteps: [{ step: 1, index: 0, tool: 'get_bom', ok: true, wrote: false }],
+          lastReplySummary: '已读取 BOM'
+        });
+        const threadPlan = plan('读一下 BOM，算一下成本，然后导出 CSV 报价单');
+        const smokeResumeRuns: number[] = [];
+        const smokeResume = await runPlan(threadPlan, {
+          resumeFrom: 0,
+          previous: threadSmoke.read(),
+          currentContext: uiContext,
+          thread: threadSmoke,
+          confirmPlan: async () => true,
+          execute: async (step, index) => {
+            smokeResumeRuns.push(index);
+            return { ok: true, data: { tool: step.tool } };
+          }
+        });
+        const smokeChangedContext = {
+          ...uiContext,
+          machine: { ...uiContext.machine!, name: '装盒机' },
+          bomRows: 7
+        };
+        let smokeStaleRuns = 0;
+        const smokeStale = await runPlan(threadPlan, {
+          resumeFrom: 0,
+          previous: threadSmoke.read(),
+          currentContext: smokeChangedContext,
+          execute: async () => {
+            smokeStaleRuns += 1;
+            return { ok: true };
+          }
+        });
+        threadSmoke.finish({
+          intent: 'modify',
+          context: uiContext,
+          completedSteps: [],
+          reply: '已读取上一轮状态'
+        });
+        const smokeThreadPrompt = formatThreadContext(threadSmoke.read(), smokeChangedContext);
+        const smokeTurns = threadSmoke.read()?.turnId ?? 0;
+        if (
+          smokeResume.resumedFrom !== 1 ||
+          smokeResume.skippedSteps !== 1 ||
+          smokeResumeRuns.join(',') !== '1,2' ||
+          smokeStale.stale !== true ||
+          smokeStaleRuns !== 0 ||
+          !smokeThreadPrompt.includes('工程已变化，不要沿用旧结论') ||
+          smokeTurns !== 3
+        ) {
+          console.error('SMOKE_FAIL agent_thread', JSON.stringify({
+            resumedFrom: smokeResume.resumedFrom,
+            skippedSteps: smokeResume.skippedSteps,
+            resumed: smokeResumeRuns,
+            stale: smokeStale.stale,
+            staleRuns: smokeStaleRuns,
+            turns: smokeTurns,
+            prompt: smokeThreadPrompt
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log('SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1');
 
         const auditPath = join(app.getPath('userData'), 'agent-audit-smoke.jsonl');
         const auditLog = createAuditLog({ write: (line) => appendFileSync(auditPath, `${line}\n`, 'utf8') });

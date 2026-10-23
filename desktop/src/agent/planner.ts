@@ -432,6 +432,11 @@ export interface ExecutePlanResult {
   confirmationRequired: boolean;
   /** 需要确认时是否得到允许；只读计划视为已确认。 */
   confirmed: boolean;
+  /**
+   * 确认阶段的结果：allowed / denied / timeout / aborted / unavailable / error。
+   * 多轮续跑据此区分「用户明确拒绝」与「确认超时/取消」。
+   */
+  confirmOutcome?: 'allowed' | 'denied' | 'timeout' | 'aborted' | 'unavailable' | 'error';
   cancelled?: boolean;
   refused?: boolean;
   /** 失败步骤的 1 基序号。 */
@@ -575,7 +580,11 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
   const undoHint = (): string | undefined => completed.some((item) => item.ok && item.wrote && UNDOABLE_WRITE_TOOLS.has(item.tool))
     ? '已执行的装配写操作可用 undo_last 回退'
     : undefined;
-  const cancelledResult = (currentTool?: string, currentToolMayWrite = false): ExecutePlanResult => {
+  const cancelledResult = (
+    currentTool?: string,
+    currentToolMayWrite = false,
+    confirmOutcome?: ExecutePlanResult['confirmOutcome']
+  ): ExecutePlanResult => {
     const summary = cancellationText({
       completed,
       ...(currentTool ? { currentTool } : {}),
@@ -590,6 +599,7 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
       results,
       totalMs: elapsed(),
       summary,
+      ...(confirmOutcome ? { confirmOutcome } : {}),
       ...(hint ? { undoHint: hint } : {})
     };
   };
@@ -606,6 +616,7 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         confirmationRequired,
         confirmed: false,
         cancelled: true,
+        confirmOutcome: 'unavailable',
         results: [],
         totalMs: elapsed(),
         summary: '写步骤需要确认，但缺少必填参数：确认回调，已取消'
@@ -619,15 +630,18 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         totalSteps: plan.steps.length
       }), deps.signal);
     } catch (error) {
-      if (error instanceof PlanAborted) return cancelledResult();
+      if (error instanceof PlanAborted) return cancelledResult(undefined, false, 'aborted');
+      const message = error instanceof Error ? error.message : String(error);
+      const timeout = /timeout|timed out|超时|ETIMEDOUT/i.test(message);
       return {
         ok: false,
         confirmationRequired,
         confirmed: false,
         cancelled: true,
+        confirmOutcome: timeout ? 'timeout' : 'error',
         results: [],
         totalMs: elapsed(),
-        summary: `确认失败：${error instanceof Error ? error.message : String(error)}，已取消`
+        summary: `确认失败：${message}，已取消`
       };
     }
     if (!confirmed) {
@@ -636,6 +650,7 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         confirmationRequired,
         confirmed: false,
         cancelled: true,
+        confirmOutcome: 'denied',
         results: [],
         totalMs: elapsed(),
         summary: '已取消：用户拒绝执行该计划'
@@ -733,6 +748,7 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
     ok: !failed,
     confirmationRequired,
     confirmed,
+    ...(confirmationRequired && confirmed ? { confirmOutcome: 'allowed' as const } : {}),
     ...(failed
       ? { failedAt: failed.step, failedIndex: failed.index, failedTool: failed.tool }
       : {}),

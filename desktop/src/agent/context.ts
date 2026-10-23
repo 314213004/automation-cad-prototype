@@ -42,6 +42,9 @@ export interface AgentContext {
   /** 最近 3 条；summary 可带 `[target=kind:id:label]` 尾部标记，序列化时会被剥掉。 */
   recentActions: AgentRecentAction[];
   units: 'mm';
+  /** BOM 行数与 CAD 模型是否存在；用于多轮工程指纹。 */
+  bomRows?: number;
+  hasCadModel?: boolean;
   /** 底板 placement 列表，仅用于「左边第二个」这类几何指代；画布不可用时缺省。 */
   placements?: AgentPlacementHint[];
 }
@@ -282,6 +285,10 @@ export function collectAgentContext(
     plate,
     recentActions: normalizeRecent(recent, now),
     units: 'mm',
+    ...(typeof source.bomRows === 'number' || typeof source.bomCount === 'number'
+      ? { bomRows: countValue(source.bomRows ?? source.bomCount) }
+      : {}),
+    ...(typeof source.hasCadModel === 'boolean' ? { hasCadModel: source.hasCadModel } : {}),
     ...(activePlacements.length > 0 ? { placements: activePlacements } : {})
   };
 }
@@ -312,6 +319,9 @@ function renderAgentContext(context: AgentContext, recent: AgentRecentAction[], 
   }
   if (context.plate) {
     lines.push(`底板：${context.plate.width}×${context.plate.height} mm · 已放置 ${context.plate.placed} · 重叠 ${context.plate.overlaps}`);
+  }
+  if (context.bomRows !== undefined || context.hasCadModel !== undefined) {
+    lines.push(`工程：BOM ${context.bomRows ?? 0} 行 · CAD 模型 ${context.hasCadModel ? '有' : '无'}`);
   }
   lines.push(`单位：${context.units}`);
   if (recent.length > 0) {

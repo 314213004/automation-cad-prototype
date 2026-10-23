@@ -1,0 +1,320 @@
+[
+  {
+    "id": "MT01",
+    "title": "改型号 → 撤销 → 改数量",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "把 QF1 的型号改成 NXB-63 3P C32",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "model": { "contains": "NXB" } },
+                { "partId": "iC65N-C16-1P", "model": { "contains": "NXB" } },
+                { "ref": "QF1", "newModel": { "contains": "NXB" } }
+              ]
+            }
+          ],
+          "mustNot": ["insert_component", "remove_component"]
+        }
+      },
+      {
+        "prompt": "撤销刚才的型号修改",
+        "confirm": "allow",
+        "expect": {
+          "tools": [{ "tool": "undo_last" }],
+          "mustNot": ["update_component", "remove_component"]
+        }
+      },
+      {
+        "prompt": "接着把刚才那个件的数量改成 2",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "qty": 2 },
+                { "partId": "iC65N-C16-1P", "qty": 2 }
+              ]
+            }
+          ],
+          "mustNot": ["insert_component", "remove_component"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "MT02",
+    "title": "改数量 → 撤销 → 改备注",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "把 QF1 的数量改成 3",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "qty": 3 },
+                { "partId": "iC65N-C16-1P", "qty": 3 }
+              ]
+            }
+          ],
+          "mustNot": ["remove_component"]
+        }
+      },
+      {
+        "prompt": "撤销刚才的数量修改",
+        "confirm": "allow",
+        "expect": {
+          "tools": [{ "tool": "undo_last" }],
+          "mustNot": ["update_component", "remove_component"]
+        }
+      },
+      {
+        "prompt": "还是同一个件，把备注改成「备用」",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "remark": "备用" },
+                { "partId": "iC65N-C16-1P", "remark": "备用" }
+              ]
+            }
+          ],
+          "mustNot": ["insert_component", "remove_component"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "MT03",
+    "title": "跨轮「刚才那个件」",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "把 QF1 换成 NXB-63 3P C32",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "model": { "contains": "NXB" } },
+                { "partId": "iC65N-C16-1P", "model": { "contains": "NXB" } }
+              ]
+            }
+          ],
+          "mustNot": ["remove_component"]
+        }
+      },
+      {
+        "prompt": "把刚才那个件的数量改成 2",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "qty": 2 },
+                { "partId": "iC65N-C16-1P", "qty": 2 },
+                { "ref": "NXB-63 3P C32", "qty": 2 }
+              ]
+            }
+          ],
+          "mustNot": ["insert_component", "remove_component"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "MT04",
+    "title": "拒绝后不自动重试",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "把 QF1 的型号改成 NXB-63 3P C32",
+        "confirm": "deny",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "model": { "contains": "NXB" } },
+                { "partId": "iC65N-C16-1P", "model": { "contains": "NXB" } }
+              ]
+            }
+          ],
+          "mustNot": []
+        }
+      },
+      {
+        "prompt": "继续",
+        "confirm": "allow",
+        "expect": {
+          "tools": [],
+          "mustNot": ["update_component", "insert_component", "remove_component", "undo_last"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "MT05",
+    "title": "确认超时后续跑",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "把 QF1 的型号改成 NXB-63 3P C32",
+        "confirm": "timeout",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "model": { "contains": "NXB" } },
+                { "partId": "iC65N-C16-1P", "model": { "contains": "NXB" } }
+              ]
+            }
+          ],
+          "mustNot": []
+        }
+      },
+      {
+        "prompt": "继续上次未确认的操作",
+        "confirm": "allow",
+        "expect": {
+          "tools": [
+            {
+              "tool": "update_component",
+              "args": [
+                { "ref": "QF1", "model": { "contains": "NXB" } },
+                { "partId": "iC65N-C16-1P", "model": { "contains": "NXB" } }
+              ]
+            }
+          ],
+          "mustNot": ["remove_component"]
+        }
+      }
+    ]
+  },
+  {
+    "id": "MT06",
+    "title": "工程变化后重新读取",
+    "context": {
+      "domain": "elec",
+      "view": "底板",
+      "selection": { "kind": "placement", "id": "p1", "label": "QF1" },
+      "machine": { "name": "烟包机", "stations": 3, "actuators": 6, "sensors": 8 },
+      "plate": { "width": 600, "height": 400, "placed": 2, "overlaps": 0 },
+      "bomRows": 2,
+      "hasCadModel": true,
+      "placements": [
+        { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+        { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 }
+      ]
+    },
+    "turns": [
+      {
+        "prompt": "读一下当前 BOM",
+        "confirm": "allow",
+        "expect": {
+          "tools": [{ "tool": "get_bom" }],
+          "mustNot": ["update_component", "remove_component"]
+        }
+      },
+      {
+        "prompt": "接着上次继续",
+        "confirm": "allow",
+        "contextPatch": {
+          "machine": { "name": "装盒机" },
+          "bomRows": 3,
+          "placements": [
+            { "id": "p1", "label": "QF1", "model": "iC65N-C16-1P", "qty": 1, "x": 20, "y": 30, "w": 36, "h": 80 },
+            { "id": "p2", "label": "KM1", "model": "LC1D09", "qty": 1, "x": 80, "y": 30, "w": 45, "h": 80 },
+            { "id": "p3", "label": "KA1", "model": "RXM2AB2BD", "qty": 1, "x": 140, "y": 30, "w": 30, "h": 60 }
+          ]
+        },
+        "expect": {
+          "tools": [],
+          "anyOfTools": ["get_bom", "get_project_context"],
+          "mustNot": ["update_component", "remove_component"]
+        }
+      },
+      {
+        "prompt": "基于最新 BOM 算一下成本",
+        "confirm": "allow",
+        "expect": {
+          "tools": [{ "tool": "run_cost_report" }],
+          "mustNot": ["update_component", "remove_component"]
+        }
+      }
+    ]
+  }
+]

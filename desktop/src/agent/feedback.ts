@@ -13,6 +13,8 @@ export interface CompletedStep {
   /** 1 基步骤号。 */
   step: number;
   tool: string;
+  /** 实际调用参数；多轮状态用它恢复目标与未确认操作。 */
+  args?: Record<string, unknown>;
   ok: boolean;
   code?: string;
   /** 是否是会修改装配体/文件的工具。 */

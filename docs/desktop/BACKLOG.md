@@ -3,6 +3,17 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
+## Agent 多轮上下文与中断续跑（P7-L，2026-10-23，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` 962/962、`npm run smoke` 新增 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`；`npm run eval:agent` 通过；多轮真实模型评测无凭据 SKIP（结果文件已写；本地桩校验 6/6 场景、15/15 轮）。不 push。
+- A. 多轮模型：新增 `desktop/src/agent/thread.ts`——`ThreadState` 保存 `turnId/projectFingerprint/intent/targets/pendingConfirm/completedSteps/lastReplySummary`；`AgentSession` 每轮结束写入，下一轮系统提示注入「上一轮做了什么、是否完成、是否被拒绝」。
+- B. 工程指纹：机型名 + BOM 行数 + 底板放置数 + CAD 模型有无；变化时固定提示「工程已变化，不要沿用旧结论」并列出逐项差异。
+- C. 中断续跑：`runPlan({resumeFrom})` 从已完成步骤之后继续；前置指纹变化时 `refused+stale+changed[]`，不执行任何工具并要求重跑前置步骤；确认超时/取消写 `pendingConfirm`，下一轮优先询问是否继续；用户拒绝记 `USER_DENIED` 且不自动重试。
+- D. 跨轮指代：上一轮目标合成 `[target=kind:id:label]`，支持「刚才那个件 / 它」；当前选中仍优先。
+- E. 测试：新增 `desktop/test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、拒续跑、pendingConfirm 恢复、拒绝不重试、跨轮指代、改型号→撤销→改数量全流程。
+- F. 评测：新增 `desktop/scripts/agent-multiturn.mjs` + `agent-multiturn-cases.json`，6 个多轮场景（2–3 轮/场景），环境变量同 `agent:live`，输出 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`；无凭据跳过但写 SKIP 结果。
+- G. 文档：`NL-AGENT.md` 4.2「多轮与续跑」、`README.md` 命令、`MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
+
 ## 会话层硬拦截 + 目标路径澄清（2026-10-23，本轮）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **932/932**、`npm run smoke` → `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1` 且 `SMOKE_OK`、`npm run eval:agent` 通过；不 push。

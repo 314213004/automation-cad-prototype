@@ -963,6 +963,8 @@ function initAgentBridge(): void {
         }
         const enclosure = enclosureState();
         const storedPlate = enclosure ? null : persistedEnclosurePlate();
+        const bomRows = viewer?.getBomRows() ?? [];
+        const hasCadModel = (viewer?.getSceneParts() ?? []).length > 0;
         const plate = enclosure
           ? {
               width: enclosure.plate.width,
@@ -979,6 +981,8 @@ function initAgentBridge(): void {
           selection,
           machine,
           plate,
+          bomRows: bomRows.length,
+          hasCadModel,
           units: root ? 'mm' : null
         };
       } catch (error) {

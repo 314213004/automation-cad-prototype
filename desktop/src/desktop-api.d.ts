@@ -270,8 +270,13 @@ interface DesktopAgentPlanExecuteResult {
   ok: boolean;
   confirmationRequired: boolean;
   confirmed: boolean;
+  confirmOutcome?: 'allowed' | 'denied' | 'timeout' | 'aborted' | 'unavailable' | 'error';
   cancelled?: boolean;
   refused?: boolean;
+  resumedFrom?: number;
+  skippedSteps?: number;
+  stale?: boolean;
+  changed?: string[];
   failedAt?: number;
   failedIndex?: number;
   failedTool?: string;
@@ -590,6 +595,8 @@ interface Window {
           plan: DesktopAgentPlan;
           startAt?: number;
           maxSteps?: number;
+          resumeFrom?: number;
+          resume?: boolean;
         }): Promise<DesktopAgentPlanExecuteResult>;
         cancel(): Promise<{ ok: boolean; cancelled: boolean; message?: string }>;
       };

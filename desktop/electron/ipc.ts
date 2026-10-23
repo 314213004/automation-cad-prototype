@@ -25,7 +25,8 @@ import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentCancelledError, AgentSession } from '../src/agent/session.ts';
 import { BYPASS_CONFIRMATION_NOTICE } from '../src/agent/policy.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
-import { executePlan, type AgentPlan, type PlanStep } from '../src/agent/planner.ts';
+import type { AgentPlan, PlanStep } from '../src/agent/planner.ts';
+import { AgentThread, runPlan } from '../src/agent/thread.ts';
 import { runRecipe, type RecipeContext, type RecipeProgressEvent } from '../src/agent/recipes.ts';
 import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
 import { AUDIT_DISPLAY_LIMIT, limitAuditEntries } from '../src/agent/audit-view.ts';
@@ -705,12 +706,14 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
 
 export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   let session: AgentSession | null = null;
+  const thread = new AgentThread();
   let activeChat: AbortController | null = null;
   let activePlan: AbortController | null = null;
   let activeRecipe: AbortController | null = null;
 
   const clearSession = (): void => {
     session = null;
+    thread.clear();
   };
 
   const getSession = (): AgentSession => {
@@ -736,6 +739,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       llm,
       bus,
       maxIterations: config.maxIterations,
+      thread,
       toolSchemas: Object.fromEntries(tools.summaries().map((tool) => [tool.name, tool.inputSchema])),
       audit: (record) => audit.record(record),
       contextProvider: async () => {
@@ -832,6 +836,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     let plan: AgentPlan;
     let startAt: number | undefined;
     let maxSteps: number | undefined;
+    let resumeFrom: number | undefined;
     try {
       if (typeof payload !== 'object' || payload === null) throw new Error('计划参数必须是对象');
       const source = payload as Record<string, unknown>;
@@ -882,6 +887,14 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       maxSteps = typeof source.maxSteps === 'number' && Number.isFinite(source.maxSteps)
         ? Math.max(1, Math.trunc(source.maxSteps))
         : undefined;
+      const rawResume = source.resumeFrom !== undefined
+        ? source.resumeFrom
+        : source.resume === true ? 0 : undefined;
+      resumeFrom = typeof rawResume === 'number' && Number.isFinite(rawResume)
+        ? Math.max(0, Math.trunc(rawResume))
+        : undefined;
+      // UI 的「下一步」用 startAt 表达续跑；同样需要指纹校验与已完成步骤跳过。
+      if (resumeFrom === undefined && startAt !== undefined && startAt > 0) resumeFrom = startAt;
     } catch (error) {
       return {
         ok: false,
@@ -902,9 +915,20 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
     const emitProgress = (progress: AgentProgressEvent): void => {
       if (!event.sender.isDestroyed()) event.sender.send('agent:progress', progress);
     };
-    const result = await executePlan(plan, {
+    let currentContext = null;
+    try {
+      const project = await bus.execute('get_project_context');
+      if (project.ok) currentContext = collectAgentContext({ projectContext: () => project.data });
+    } catch {
+      currentContext = null;
+    }
+    const result = await runPlan(plan, {
       ...(startAt !== undefined ? { startAt } : {}),
       ...(maxSteps !== undefined ? { maxSteps } : {}),
+      ...(resumeFrom !== undefined ? { resumeFrom } : {}),
+      ...(currentContext ? { currentContext } : {}),
+      thread,
+      userText: '计划执行',
       signal: controller.signal,
       onProgress: emitProgress,
       confirmPlan: async (request) => {

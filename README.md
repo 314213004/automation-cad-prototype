@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**890 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代与本地知识检索 / 工厂的 headless smoke
+- 质量基线：**962 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑与本地知识检索 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -237,6 +237,8 @@ npm start
 
 可选真实模型评测（30 条，用例见 `desktop/scripts/agent-live-cases.json`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run agent:live`；未配置凭据时打印 `AGENT_LIVE_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-live.json`。2026-10-23 本机 bridge / `cn:deepseek-v4.1-flash`：28/30（93.3%），p50 7.7 s / p95 18.5 s；拒绝/澄清类 4/6，`refusalRate=0.67`，因此脚本按阈值退出 1。
 
+多轮真实模型评测（6 个场景 × 2–3 轮，环境变量同 `agent:live`）：`cd desktop && AGENT_LIVE_BASE_URL=... AGENT_LIVE_API_KEY=... AGENT_LIVE_MODEL=... npm run eval:agent:multiturn`；未配置凭据时打印 `AGENT_MULTITURN_SKIP` 并以 0 退出，结果写 `docs/desktop/eval/agent-multiturn.json`，通过阈值 `passRate ≥ 0.8`。
+
 ### 方式三：把桌面能力接给外部 Agent
 
 桌面启动后即开放 JSON-RPC；MCP（stdio）入口在 `desktop/dist-electron/mcp.cjs`。Claude Code / Codex 的配置样例、token 位置、curl 示例见 [desktop/README.md](desktop/README.md)。
@@ -294,7 +296,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 890 个单测（node:test）
+npm test          # 962 个单测（node:test）
 npm run smoke     # xvfb + Electron headless，强制走无 WebGL 路径
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run kb:build  # 从 docs/desktop/*.md + 截图 + 元件分类重建 kb.json

@@ -1,6 +1,6 @@
 # 自然语言交互 Agent · 完整设计方案
 
-状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入，评估集扩至 61 条）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）
+状态：P7-A 已完成（离线规则路由 / 上下文裁剪 / 审计 / 只读问答 UI / 评估集）；P7-B 已完成（`place_component` 底板放置 + 二次确认 + 撤销联动）；P7-C 已完成（离线多步规划 + 计划卡片 + 顺序执行 + 失败停止）；P7-D 已完成（Agent 工具扩展 v1，12 → 17 个工具）；P7-E 已完成（上下文快照 / 指代消解 / 会话记忆 / 结果裁剪）；P7-F 已完成（执行进度 / 取消 / 失败建议 / 审计筛选与导出）；P7-G 已完成（真实模型冒烟 + 工具结果抗提示注入，评估集扩至 61 条）；P7-K 已完成（真实模型评测 30 条 + 失败归因，三轮迭代后 30/30、拒绝率 6/6 过闸）；P7-H 已完成（主动建议 next-best-action：纯函数规则引擎 + 侧栏建议卡片 + 会话内忽略 + 工具执行后刷新）；P7-J 已完成（工具调用纠错与重试：脏 JSON 修复、schema 中文路径、一次重试、两条候选回落）；P7-L 已完成（多轮状态 / 工程指纹 / 续跑与确认中断）；会话安全策略已完成（绕过确认硬拦截 + 导出目标路径澄清）；本地知识检索已完成（`search_docs` + 构建期 `kb.json`）
 目标：用户用中文一句话完成「查、算、改、出图、联调、同步」，不必记菜单路径；Agent 不替代界面，而是并行的快捷通道。
 
 ## 1. 设计边界
@@ -86,6 +86,7 @@
 - `machine`：机型名、工位数、执行机构数、传感器数
 - `plate`：底板宽高、已放置数、重叠数；可附 placement 列表供几何指代
 - `recentActions`：最近 3 条工具操作（工具名、摘要、时间），摘要可带 `[target=kind:id:label]` 供指代回退
+- `bomRows` / `hasCadModel`：BOM 行数与是否已有 CAD 模型，用于多轮工程指纹
 - `units`：固定 `mm`
 
 采集入口是 `desktop/src/agent/context.ts` 的 `collectAgentContext()`：每个 provider 单独 `try/catch`，采集失败字段为 null，不抛错、不新增全局单例。`serializeAgentContext()` 超限时按「删旧 recentActions → 压长字段 → UTF-8 码点边界硬截断」降级，并回报 `bytes / truncated / droppedRecent`。历史调用方仍可用 `buildAgentContext()` 的工具清单文本块（同样受 1.5 KB 上限约束）。
@@ -113,6 +114,31 @@
 - **工具**：`search_docs({query, limit?})` 只读，返回 `{ok,query,hits:[{source,heading,snippet,score}]}`。系统提示要求涉及「怎么操作 / 限制 / 决策 / 为什么」先查文档；命中要引用来源，无命中就直说。
 - **同步校验**：`kb.json` 为每份文档保存标题列表 SHA-256；测试会重新扫描当前 Markdown 并比对。改了标题却忘记运行 `npm run kb:build` 会直接失败。另覆盖 800 字符上限、source/line、2-gram 命中「导轨/干涉/D2」、top3 排序、无命中、2 KB 上限与 400 KB 体积。
 - **冒烟**：`SMOKE_AGENT_KB_OK docs=12 chunks=N query=D2 hits=1`；评估集新增 3 条文档类用例（导轨、D2、缺尺寸）。
+
+### 4.2 多轮与续跑（P7-L）
+
+目标：解决「改型号 → 撤销 → 再改数量」和「接着刚才那步」两类跨轮任务，避免模型只看最近 5 条工具摘要就重复执行或沿用过期结论。
+
+`desktop/src/agent/thread.ts` 维护一份进程内 `ThreadState`：
+
+```ts
+interface ThreadState {
+  turnId: number;
+  projectFingerprint: string;              // machine=…;bom=N;placed=N;cad=0|1
+  intent: string;
+  targets: string[];                       // 上一轮涉及的位号 / 型号
+  pendingConfirm?: PendingConfirm;         // 确认超时或取消的写操作
+  completedSteps: ThreadCompletedStep[];
+  lastReplySummary: string;
+}
+```
+
+- **每轮写入**：`AgentSession.run()` 开始时先读取上一轮快照，结束时（含取消异常）统一 `thread.finish()`。系统提示顺序为 `SYSTEM_PROMPT → [上一轮会话] → [工程上下文] → [最近工具调用]`，明确写出「上一轮做了什么、是否完成、是否被拒绝」。
+- **工程指纹**：机型名 + BOM 行数 + 底板放置数 + 是否有 CAD 模型。下一轮指纹不同时固定注入「工程已变化，不要沿用旧结论」并列出「机型 A → B / BOM 6 → 7 / 放置 2 → 3 / CAD 有 → 无」。
+- **续跑**：`runPlan(plan, { resumeFrom, previous/thread, currentContext })` 从 `resumeFrom` 起跳过 `completedSteps` 中已成功的步骤；指纹不同直接 `refused:true, stale:true`，返回 `changed[]` 与「请重跑前置步骤」，且不执行任何工具。主进程 `agent:plan:execute` 与对话共享同一个 `AgentThread`，UI 的「下一步」用 `startAt` 进入同一套指纹校验。
+- **确认中断**：确认回调超时 → `pendingConfirm.reason='timeout'`；确认等待被取消 → `'cancelled'`。下一轮系统提示优先要求「是否继续上次未确认的操作」，用户明确同意前不得执行。用户主动拒绝记 `USER_DENIED`，不写 `pendingConfirm`，下一轮明确「不要自动重试」。
+- **跨轮指代**：上一轮目标写成 `[target=kind:id:label]` 合成最近操作；用户说「刚才那个件 / 它」时，当前没有选中对象也能解析到上一轮目标，当前选中仍优先。
+- **验证**：`test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、指纹变化拒续跑、超时/拒绝区分、跨轮指代与「改型号→撤销→改数量」全流程；smoke 输出 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`。真实模型多轮评测见 `npm run eval:agent:multiturn`（6 场景 × 2–3 轮，结果写 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`）；本机未配置 `AGENT_LIVE_*`，评测结果为 SKIP，评测器本身用本地桩校验 6/6 场景、15/15 轮。
 
 ## 5. 意图分类与路由
 

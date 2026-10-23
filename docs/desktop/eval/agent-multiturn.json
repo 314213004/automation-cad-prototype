@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-10-23T12:16:28.421Z",
+  "finishedAt": "2026-10-23T12:16:28.422Z",
+  "mode": "skip",
+  "skipped": true,
+  "reason": "未配置 AGENT_LIVE_BASE_URL / AGENT_LIVE_API_KEY / AGENT_LIVE_MODEL",
+  "model": "",
+  "total": 6,
+  "passed": 0,
+  "passRate": 0,
+  "threshold": 0.8,
+  "gate": false,
+  "scenarios": []
+}
