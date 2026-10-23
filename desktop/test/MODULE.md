@@ -23,6 +23,7 @@
 | 会话循环 | `test/agent/session.test.mjs` | 同上 | 0/1/2 次工具调用、超轮、失败回灌、确认拒绝、20 条历史上限 |
 | 执行体验 | `test/agent/ux.test.mjs` | 同上 | 六类错误码建议与未知码回落、耗时格式、参数掩码、进度事件、取消状态、审计筛选/CSV/200 条上限/完整 JSON 脱敏 |
 | 主动建议 | `test/agent/advisor.test.mjs` | 同上 | 每条规则命中/不命中、优先级、上限 3、空状态、会话内忽略不复活、why 数字、BOM 指纹 |
+| 主视口 3D | `test/orbit/*.test.mjs` | 同上 | 相机/标准视图数学、装配参数化与叠放链/校验、vm 执行原型 app.js 逐字比对轮廓与插入放置、树↔3D 映射、SVG 反算吸附、three 场景包围盒/高亮/拾取/干涉层（38 条） |
 | 工厂 | `test/factory/*.test.mjs` | 同上 | demo 连接/读取/订阅；OPC UA/MQTT 只做参数校验（不连外网） |
 | PLC | `test/plc/*.test.mjs` | 同上 | sim 表达式/自锁/定时器/force、Modbus 参数与中文错误、配置持久化 |
 | PLC 代码生成 | `test/plcgen*.test.ts` | 同上 | 预检/变量表/ST/序列/安全/报警、生成 UI 与 zip 历史、mapping 模拟执行与 `verifyGenerated` |
@@ -59,6 +60,7 @@ SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
 SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
 SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
+SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1
 SMOKE_AGENT_CHAT_UI_OK fields=6 log=1
 SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0

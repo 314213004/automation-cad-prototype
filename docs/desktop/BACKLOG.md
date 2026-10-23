@@ -3,7 +3,20 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
-## 迭代 34：机型方案生成真实三维几何（34-machine-geometry，2026-10-24，本轮）
+## 主视口可旋转 3D：轨道视图 + 属性编辑改几何（35-orbit-view，2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`npm test` **1170/1170**（1132 + 新增 38）、`npm run smoke` 新增 `SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`（`AUTOMATIONCAD_PARAMETRIC_CMD` 假内核下全部 59 个 `SMOKE_*_OK` + `SMOKE_OK`）；WebGL 路径另以 `npm run check:orbit-webgl`（swiftshader 软件 GL，手动）实跑 `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1`；不 push。
+- A. 架构：新增注入扩展 `desktop/src/orbit/`，`extension.ts` 只加一行 `initOrbitView()`（失败时 try/catch 保留等轴测）；**原型 `index.html` / `app.js` / `styles.css` 零改动**。数据来源：`ProtoApi.getTree()`、原型 SVG `g.part` 的 `data-sel/hover/hit`、气缸面板输入框；面板不在时从重新挂载的 SVG 反算缸径/行程并吸附到用户输入过的值与标准表；插入件坐标复刻原型确定性的 `findFreePlacement()`。3D 拾取/悬停在 SVG 对应 `g.part` 上派发 click/mouseover，交给原型自己的 `selectPart / applyIssue`，所以结构树、属性面板、状态栏、撤销栈沿用原型逻辑。
+- B. 视口：WebGLRenderer + 透视/正交双相机 + OrbitControls（左键旋转、中键缩放、右键平移，缩放对准光标）；顶部工具条前/顶/右/等轴测、透视/正交、适合；原型「缩放到适合 (F)」按钮与 F 键同时取景；原型「平移」工具切左键平移、「剖切/剖切面」工具开真实裁剪（保留 X ≤ 气缸中心线一侧）；HUD 显示当前标准视图/自由视角与透视开关；左下坐标轴按相机实时重画。按需渲染，材质/裁剪变化后补帧（swiftshader 并行编译首帧画空的实测问题）。
+- C. 选择：树 → 3D 支持组展开（选「气缸组」高亮缸体+活塞杆+磁性开关；选文件夹替换原型残留选中；标准件 `std*` 代理节点不展开）；3D → 树点击即选中并滚动到行；悬停与原型树悬停双向联动。
+- D. 属性编辑 → 几何：原型缸径/行程（含撤销/重做/「写入装配」）实时重建；右栏追加「3D 几何 · 桌面版」分组：底板长/宽/厚、导轨长/宽/高、滑台长/宽/厚/位置 X、磁性开关槽内高度、插入件尺寸与位置，沿「底板→导轨→滑台→气缸→杆/开关」叠放链传递（改底板厚度上方整体抬高、改滑台 X 气缸跟走、剖切面跟随）；校验导轨不超底板、滑台不脱出导轨，非法值红框 + 中文原因且不生效；「恢复默认」。
+- E. 干涉/受力：干涉校核视口同样替换为 3D：当前问题零件红色、其余半透明、剖切面跟随滑台 X、原型气泡按 3D 投影重新定位、叠加 `detectInterferences` 包围盒初筛重叠体与计数（默认装配 1 处：缸体↔磁性开关，开关嵌在缸体槽里的 AABB 级结果）；原型 7 条示例问题列表与步进不变。受力入口（左栏「受力」tab → CAD 查看受力面板）不受影响，smoke 同步断言该 tab 仍在。
+- F. 降级：`probeWebGL` 失败或渲染器创建失败 → 不挂画布、原型等轴测 SVG 原样显示（`stage[data-orbit=fallback]` + 原因提示），模型/选择映射仍维护；WebGL 上下文丢失时卸载画布退回 SVG。冒烟进程本就关闭 WebGL，因此 smoke 覆盖的是降级路径 + 模型/选择/属性联动；WebGL 路径由 `check:orbit-webgl` 手动覆盖（真实射线拾取、面板编辑、裁剪、气泡定位均断言）。
+- G. 测试：`test/orbit/` 38 条——`camera`（标准视图、俯视防退化、fitDistance、投影往返、正交视锥、坐标轴投影）、`model`（默认坐标、底板/滑台/缸径/导轨编辑传导、校验与不可变、插入件参数）、`proto-parity`（vm 执行原型 app.js，三组缸径/行程下 6 个零件轮廓逐字一致、7 次插入放置与轮廓一致、SVG 反算吸附、真实 TREE 映射）、`selection`、`proto-sync`、`three-scene`（网格世界包围盒、编辑后网格位移、高亮/幽灵、射线拾取回溯、干涉层与剖切面）。
+- H. 文档：新增 `desktop/src/orbit/MODULE.md`；同步 `MODULES.md`、`PROTOTYPE.md`（坑点 4）、`STATUS.md`、`README.md`（测试数与限制）、`desktop/README.md`、`desktop/test/MODULE.md`、本文件；`npm run kb:build` 重建离线索引。
+- 边界（如实）：几何仍是参数化示意体（长方体/圆柱），缸径→半径 `4+0.32·bore`、杆长 `10+0.12·stroke` 沿用原型示意比例而非 1:1；没有 B-rep/配合求解，叠放链是写死的装配关系；桌面版几何参数只在内存、不进原型撤销栈、不持久化；WebGL 模式下没有框选多选（画布需截断原型舞台的框选事件，降级模式仍可框选）；3D 等轴测为真实右手系 (1,−1,1)，与原型镜像等轴测左右相反；真实显卡上的帧率未实测（本机只有 swiftshader）；干涉初筛只到 AABB 级。
+
+## 迭代 34：机型方案生成真实三维几何（34-machine-geometry，2026-10-24）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1156/1156**（1132 + 24；沙箱默认 UTC 需 `TZ=Asia/Shanghai`，否则 `cost-export.test.ts` 两条既有时间断言失败，与本轮无关）、`npm run smoke`（xvfb-run）新增 `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`、`SMOKE_OK`；`SMOKE_PARAMETRIC_SIDECAR_SKIP`（无 Python）；不 push。
 - 内容：纯函数 `machine/geometry.ts` 生成 mm 级整机（机架、底板 + 门架、气缸缩回位、夹爪张开位、旋转台、传感器、光栅、输送线/分度转盘）与运动轴元数据；`geometry-export.ts` 出 STL / glTF / build123d `AssemblyDoc` 分块与实体化回退；`geometry-three.ts` 接入 `createScene3D` 替换占位方块；`apply_machine_design` 新增 `withGeometry`（默认 true）/ `withSolids`，`design_machine` 返回几何摘要；单测 24 条；文档同步，`kb:build` 重建。
@@ -350,10 +363,11 @@
 4. **无代码签名**：Win11 SmartScreen 会拦一次；发行前需证书。
 5. **CI 为手动触发**：按老王要求，不自动构建；要包时 `gh workflow run windows-build`。
 6. **数据准确性**：元器件参数为公开样本汇总，定型前以铭牌/最新样本为准（manifest 已声明）。
-7. **前端原型限制**：3D 为固定等轴测投影，属性编辑不改拓扑（插入与撤销已真实化）。
+7. **前端原型限制**：原型自身 3D 仍为固定等轴测投影（插入与撤销已真实化）。**桌面版已缓解（35-orbit-view）**：有 WebGL 时主视口为可旋转 three.js，缸径/行程与桌面版尺寸/位置编辑沿叠放链重建几何；仍未解决：几何为参数化示意体（非 B-rep、无配合求解、缸径为原型示意比例），桌面版几何参数不进撤销栈/不持久化，WebGL 模式无框选多选，无 WebGL 时回到固定等轴测。
 8. **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。
 9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
 10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
+11. **两条成本导出单测依赖本地时区**：`test/cost-export.test.ts` 的文件名断言按 Asia/Shanghai 本地时间（`…-20261023-1200`）；在 UTC 环境（如本轮沙箱）直接 `npm test` 会 1130/1132，需 `TZ=Asia/Shanghai npm test`。35-orbit-view 未改这两条断言，只记录。
 
 ## 夜间执行约束
 

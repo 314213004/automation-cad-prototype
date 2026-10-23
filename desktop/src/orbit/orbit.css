@@ -1,0 +1,30 @@
+/* 主视口 three.js 覆盖层：复用原型 token，不新增 UI 主色 */
+.stage[data-orbit="webgl"] > .scene{visibility:hidden; pointer-events:none}
+.orbit-canvas{position:absolute; inset:0; width:100%; height:100%; display:block; z-index:1; touch-action:none; outline:none}
+.stage[data-orbit="webgl"] .vp-tools,
+.stage[data-orbit="webgl"] .vp-hud,
+.stage[data-orbit="webgl"] .vp-axis,
+.stage[data-orbit="webgl"] .vp-hint,
+.stage[data-orbit="webgl"] .vp-callout,
+.stage[data-orbit="webgl"] .marquee{z-index:3}
+
+.orbit-bar{position:absolute; left:50%; top:10px; transform:translateX(-50%); z-index:3;
+  display:flex; align-items:center; gap:2px; padding:3px; border-radius:var(--r);
+  background:rgba(30,33,36,.80); border:1px solid var(--divider);
+  box-shadow:0 2px 8px rgba(0,0,0,.25); backdrop-filter:blur(3px)}
+.orbit-bar[hidden]{display:none}
+.orbit-btn{height:22px; min-width:28px; padding:0 7px; border-radius:2px; font-size:11px; color:var(--text-2); white-space:nowrap}
+.orbit-btn:hover{background:var(--hover); color:var(--text-1)}
+.orbit-btn.is-active{color:var(--accent); background:rgba(20,184,166,.14); box-shadow:inset 0 0 0 1px rgba(20,184,166,.30)}
+.orbit-sep{width:1px; height:12px; margin:0 3px; background:var(--stroke)}
+.orbit-chip{margin-left:4px; padding:0 6px; height:18px; line-height:18px; border-radius:2px; font-size:10.5px;
+  color:var(--error); background:rgba(240,68,56,.10); border:1px solid rgba(240,68,56,.30)}
+.orbit-chip[hidden]{display:none}
+
+.orbit-geom .orbit-note{padding:2px 10px 6px; font-size:10.5px; line-height:1.5; color:var(--text-3)}
+.orbit-geom .orbit-msg{padding:0 10px 6px; font-size:11px; color:var(--error)}
+.orbit-geom .orbit-msg:empty{display:none}
+.orbit-geom input.is-invalid{border-color:var(--error); box-shadow:0 0 0 1px rgba(240,68,56,.35)}
+.orbit-geom .orbit-reset{margin:2px 10px 6px; height:22px; padding:0 8px; font-size:11px; border-radius:2px;
+  color:var(--text-2); border:1px solid var(--stroke)}
+.orbit-geom .orbit-reset:hover{color:var(--text-1); background:var(--hover)}

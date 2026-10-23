@@ -67,7 +67,7 @@ ES = {
 1. **`state` 是模块级 const，没有导出**：桌面扩展拿不到；需要读状态只能走 DOM（`[data-sel]`、`.is-active`）或注入自己的数据。
 2. **视图切换靠 `hidden` 属性**：用 `.is-active` 判断当前视图永远是 `assembly`，写测试时容易误判。
 3. **`app.js` 末尾 `init()` 立即执行**，扩展脚本必须等 `DOMContentLoaded` 之后再注入，否则拿到空 DOM。
-4. **3D 是固定等轴测投影**（`(x−y)·cos30 / (x+y)·0.5−z`），不是真 3D；旋转/缩放不可用，只有 `fit`。
+4. **3D 是固定等轴测投影**（`(x−y)·cos30 / (x+y)·0.5−z`），不是真 3D；旋转/缩放不可用，只有 `fit`。桌面版由注入扩展 `desktop/src/orbit/` 在有 WebGL 时换成可旋转 three.js（本文件不改），无 WebGL 时仍显示这套等轴测（见 BACKLOG「35-orbit-view」）。
 5. **拖放是假插入**：`drop` 只弹 toast「已插入 1 个零件」，不建树、不改场景——这是 README「下一步」里要打通的动线。
 6. **撤销栈只有单步**（`state.undo` 只存一个字段级回滚）。
 7. **电气域是「加而不改」范例**：`app.js` 零改动，新增 `electrical.js/css`，通过 `data-domain` 切换模式组。桌面扩展沿用同一模式。
