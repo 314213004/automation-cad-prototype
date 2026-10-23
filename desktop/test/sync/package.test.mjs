@@ -78,7 +78,7 @@ test('缺失或空文件被跳过并记录，仍生成有效 manifest', () => {
 test('全部文件缺失时拒绝打包', () => {
   assert.throws(
     () => buildDesignPackage(sources({ bomCsv: undefined, pdf: undefined, glb: undefined, dxf: undefined })),
-    /没有可打包的导出文件/
+    /导出文件不存在：BOM\/PDF\/GLB\/DXF 均无有效内容/
   );
   assert.throws(() => buildDesignPackage(sources({ projectId: '  ' })), /projectId不能为空/);
 });

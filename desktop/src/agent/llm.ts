@@ -166,7 +166,7 @@ export class OpenAiCompatibleClient implements LlmClient {
       ...(this.tools.length > 0 ? { tools: this.tools, tool_choice: 'auto' } : {})
     });
     if (!isRecord(payload) || !Array.isArray(payload.choices) || !isRecord(payload.choices[0])) {
-      throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应缺少 choices');
+      throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应字段不存在：choices');
     }
     const message = isRecord(payload.choices[0].message) ? payload.choices[0].message : {};
     return {
@@ -182,7 +182,7 @@ export class OpenAiCompatibleClient implements LlmClient {
       max_tokens: 8
     });
     if (!isRecord(payload) || !Array.isArray(payload.choices) || !isRecord(payload.choices[0])) {
-      throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应缺少 choices');
+      throw new LlmError('LLM_INVALID_RESPONSE', '模型服务响应字段不存在：choices');
     }
     const message = isRecord(payload.choices[0].message) ? payload.choices[0].message : {};
     return contentText(message.content).trim();
@@ -211,7 +211,7 @@ export async function testLlmConnection(
   } catch (error) {
     return {
       ok: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: `测试连接失败：${error instanceof Error ? error.message : String(error)}`,
       model: config.model
     };
   }

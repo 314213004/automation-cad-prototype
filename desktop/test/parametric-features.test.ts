@@ -5,6 +5,8 @@ import {
   emptyDoc,
   summarize,
   validateFeatures,
+  type AssemblyDoc,
+  type CompiledAssembly,
   type FeatureDoc,
   type FeatureNode
 } from '../src/parametric/features.ts';
@@ -169,6 +171,64 @@ test('compileOps：确定性与输入不可变', () => {
   const outputPositions = first[1]?.positions as number[][];
   outputPositions[0]![0] = 999;
   assert.deepEqual((source.features[1]?.params.positions as number[][])[0], [-44, -24]);
+});
+
+test('compileOps：空特征树返回空数组', () => {
+  assert.deepEqual(compileOps(doc([])), []);
+});
+
+test('compileOps：重复特征 id 不去重且保持输入顺序', () => {
+  const ops = compileOps(doc([
+    { id: 'dup', type: 'box', name: '第一块', params: { length: 10, width: 10, height: 2 } },
+    { id: 'dup', type: 'box', name: '第二块', params: { length: 20, width: 20, height: 3 } }
+  ]));
+  assert.equal(ops.length, 2);
+  assert.deepEqual(ops.map((op) => op.length), [10, 20]);
+});
+
+test('compileOps：未知特征类型抛出中文错误', () => {
+  assert.throws(
+    () => compileOps(doc([{ id: 'x', type: 'cone' as FeatureNode['type'], name: '锥体', params: {} }])),
+    /未知特征类型「cone」/
+  );
+});
+
+test('compileOps：空 instances 返回空 ops 与空实例', () => {
+  const empty: AssemblyDoc = { schemaVersion: 2, updatedAt: UPDATED, instances: [] };
+  assert.deepEqual(compileOps(empty), { ops: [], instances: [] });
+});
+
+test('compileOps：Unicode 名称与 partId 原样保留', () => {
+  const source: AssemblyDoc = {
+    schemaVersion: 2,
+    updatedAt: UPDATED,
+    instances: [{
+      id: 'p1',
+      name: '上料机构·一号 🦾',
+      partId: 'PART-零件-01',
+      transform: { x: 0, y: 0, z: 0, rz: 0 },
+      features: [{ id: 'f1', type: 'box', name: '底板⊙', params: { length: 10, width: 10, height: 2 } }]
+    }]
+  };
+  const compiled = compileOps(source) as CompiledAssembly;
+  assert.equal(compiled.instances[0]?.name, '上料机构·一号 🦾');
+  assert.equal(compiled.instances[0]?.partId, 'PART-零件-01');
+  assert.equal(compiled.instances[0]?.ops[0]?.op, 'box');
+});
+
+test('compileOps：transform 的 NaN/Infinity 回落为 0', () => {
+  const source: AssemblyDoc = {
+    schemaVersion: 2,
+    updatedAt: UPDATED,
+    instances: [{
+      id: 'p1',
+      name: '异常变换',
+      transform: { x: Number.NaN, y: Number.POSITIVE_INFINITY, z: 5, rz: Number.NEGATIVE_INFINITY },
+      features: []
+    }]
+  };
+  const compiled = compileOps(source) as CompiledAssembly;
+  assert.deepEqual(compiled.instances[0]?.transform, { x: 0, y: 0, z: 5, rz: 0 });
 });
 
 test('summarize：统计特征、孔数与抑制数', () => {

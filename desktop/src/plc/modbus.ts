@@ -92,7 +92,7 @@ export class ModbusPlcAdapter implements PlcAdapter {
   async connect(config: PlcConfig): Promise<void> {
     const parsed = parsePlcConfig(config);
     if (parsed.kind !== 'modbus') throw new Error(`Modbus 适配器不接受 ${parsed.kind} 配置`);
-    if (!parsed.host || !parsed.port) throw new Error('Modbus TCP 缺少 host 或 port');
+    if (!parsed.host || !parsed.port) throw new Error('缺少必填参数：host 或 port');
     this.state = 'connecting';
     this.lastError = null;
     this.points = new Map(parsed.points.map((point) => [point.id, point]));
@@ -109,8 +109,9 @@ export class ModbusPlcAdapter implements PlcAdapter {
       this.lastError = translateModbusError(error, 'PLC 连接失败');
       try {
         client.close();
-      } catch {
-        // close 只做资源回收，不覆盖原始连接错误。
+      } catch (closeError) {
+        // close 只做资源回收，不覆盖原始连接错误，但保留日志。
+        console.warn('[plc/modbus] 关闭失败连接时出错', closeError);
       }
       this.client = null;
       throw new Error(this.lastError);

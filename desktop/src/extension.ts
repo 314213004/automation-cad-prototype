@@ -501,7 +501,7 @@ function setParametricStatus(state: ParametricStateView): void {
 
 function requiredElement(id: string): HTMLElement {
   const element = document.getElementById(id);
-  if (!element) throw new Error(`缺少 CAD UI 节点：${id}`);
+  if (!element) throw new Error(`CAD UI 节点不存在：${id}`);
   return element;
 }
 
@@ -800,7 +800,7 @@ function initAgentBridge(): void {
       const id = typeof source.id === 'string' ? source.id.trim() : '';
       const model = typeof source.model === 'string' ? source.model.trim() : '';
       const category = typeof source.category === 'string' ? source.category.trim() : '';
-      if (!id || !model || !category) return { ok: false, message: '零件参数缺少 id/model/category' };
+      if (!id || !model || !category) return { ok: false, message: '缺少必填参数：零件 id/model/category' };
       try {
         const name = model || id;
         const meshIndex = ensureViewer().addPlaceholderPart(name);

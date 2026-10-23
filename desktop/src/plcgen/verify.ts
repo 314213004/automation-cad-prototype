@@ -241,4 +241,5 @@ export function summarizeVerification(result: VerifyResult): VerifySummary {
   return summary;
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `verifyGenerated`。 */
 export const runPlcVerification = verifyGenerated;

@@ -38,7 +38,8 @@ function readIgnored(): string[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(IGNORE_KEY) ?? '[]');
     return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
-  } catch {
+  } catch (error) {
+    console.warn('[interference] 读取忽略记录失败，按空列表处理', error);
     return [];
   }
 }

@@ -386,4 +386,5 @@ export function generateSequence(input: GenerateInput): SequenceGenerateResult {
   return { content, steps: plan.steps.length, warnings: plan.warnings };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `generateSequence`。 */
 export const generateAutoSequence = generateSequence;

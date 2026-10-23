@@ -94,11 +94,6 @@ export function bomToCsv(rows: readonly BomRow[]): string {
   return `${BOM_CSV_BOM}${lines.join('\r\n')}\r\n`;
 }
 
-/** 直接导出装配 BOM CSV。 */
-export function assemblyBomCsv(assembly: AssemblyDoc | FeatureDoc): string {
-  return bomToCsv(toBom(assembly));
-}
-
 /** 成本面板/`computeCostReport` 共用入参：未映射行不带 partId，绝不猜物料号。 */
 export function toCostBomRows(assembly: AssemblyDoc | FeatureDoc): CostBomRow[] {
   return toBom(assembly).map((row) => ({
@@ -113,4 +108,5 @@ export function toCostInput(assembly: AssemblyDoc | FeatureDoc): CostInputLike {
   return { bom: toCostBomRows(assembly) };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `toCostInput`。 */
 export const toCostReportInput = toCostInput;

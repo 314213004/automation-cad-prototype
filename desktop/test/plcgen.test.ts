@@ -306,6 +306,68 @@ test('变量表：超长名称截断到 32 字符且保持唯一', () => {
   assert.equal(new Set(tags.rows.map((row) => row.name)).size, tags.rows.length);
 });
 
+test('变量表：跨来源重复点位只保留首次出现', () => {
+  const config = makeConfig({
+    actuators: [
+      {
+        id: 'cyl-1',
+        name: '上料气缸',
+        kind: 'cylinder',
+        station: '上料',
+        extendPoint: 'X0',
+        retractPoint: 'Y1'
+      }
+    ]
+  });
+  const tags = buildTags(config);
+  const x0 = tags.rows.filter((row) => row.comment.includes('X0'));
+  assert.equal(x0.length, 1);
+  assert.equal(x0[0]?.address, 'I0.0');
+  assert.match(x0[0]?.comment ?? '', /输入 X0/);
+});
+
+test('变量表：Unicode 工位与 emoji 名称按白名单净化且保留中文', () => {
+  const config = makeConfig({
+    stations: ['上料🚀'],
+    actuators: [
+      {
+        id: 'cyl-u',
+        name: '气缸·A 🦾',
+        kind: 'cylinder',
+        station: '上料🚀',
+        extendPoint: 'Y0',
+        retractPoint: 'Y1'
+      }
+    ],
+    sensors: [
+      { point: 'X0', station: '上料🚀', part: 'cyl-u' },
+      { point: 'X1', station: '上料🚀', part: 'cyl-u' }
+    ],
+    safety: undefined
+  });
+  const tags = buildTags(config);
+  const extend = tags.rows.find((row) => row.address === 'Q0.0');
+  assert.ok(extend, '缺少伸出点位');
+  assert.match(extend.name, /^[\p{L}\p{N}_]+$/u);
+  assert.ok(extend.name.includes('上料'));
+  assert.ok(extend.name.includes('气缸'));
+  assert.ok(extend.name.includes('伸出'));
+  assert.ok(!extend.name.includes('🚀'));
+  assert.ok(Array.from(extend.name).length <= 32);
+});
+
+test('变量表：完全空配置只输出 BOM 与表头', () => {
+  const tags = buildTags({
+    id: 'empty',
+    name: '空机型',
+    stations: [],
+    actuators: [],
+    sensors: []
+  });
+  assert.equal(tags.rows.length, 0);
+  assert.equal(tags.csv, `\uFEFF${'地址,名称,数据类型,注释,工位'}`);
+});
+
 test('变量表 CSV：UTF-8 BOM、固定表头、逗号转义', () => {
   const config = makeConfig({ stations: ['上料,1'] });
   config.stations = ['上料,1'];

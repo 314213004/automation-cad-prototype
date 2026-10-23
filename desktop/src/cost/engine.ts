@@ -341,7 +341,7 @@ function categoryOf(row: InternalRow, item: PricebookItem | undefined): string {
 export function computeCost(input: CostInput): CostReport {
   if (!input || typeof input !== 'object') throw new Error('成本输入必须是对象');
   if (!input.pricebook || typeof input.pricebook !== 'object') {
-    throw new Error('成本输入缺少价格簿');
+    throw new Error('缺少必填参数：价格簿');
   }
 
   const rows = normalizeBom(input);
@@ -483,5 +483,7 @@ export function computeCost(input: CostInput): CostReport {
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `computeCost`。 */
 export const calculateCost = computeCost;
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `computeCost`。 */
 export const runCostReport = computeCost;

@@ -36,7 +36,7 @@ export interface GeneratedProjectLike {
   files: readonly GeneratedFile[];
 }
 
-/** 与任务口径一致的别名：生成结果至少包含 11 个文件。 */
+/** 兼容类型别名：保留对外导出；新代码请使用 `GeneratedProjectLike`。 */
 export type GeneratedProject = GeneratedProjectLike;
 
 export interface SimulateOptions {
@@ -118,11 +118,11 @@ function readFile(project: GeneratedProjectLike, path: string): string | null {
 
 function parseMapping(project: GeneratedProjectLike): MappingDocument {
   const content = readFile(project, 'mapping.json');
-  if (content === null) throw new Error('生成结果缺少 mapping.json');
+  if (content === null) throw new Error('生成结果文件不存在：mapping.json');
   const raw = JSON.parse(content) as unknown;
   const record = asRecord(raw);
   if (!record || !Array.isArray(record.points) || !Array.isArray(record.sequence)) {
-    throw new Error('mapping.json 缺少 points / sequence');
+    throw new Error('缺少必填参数：mapping.json.points / sequence');
   }
   const points = record.points.map((value, index): MappingPoint => {
     const point = asRecord(value);
@@ -293,6 +293,7 @@ function evaluateCondition(expression: string | undefined, context: ConditionCon
     if (cursor !== tokens.length) return false;
     return value;
   } catch {
+    // 表达式语法不合法按 false 处理；配置预检会单独报告表达式错误。
     return false;
   }
 }
@@ -364,7 +365,7 @@ export function simulate(
         config: maybeConfig as MachineConfig | PlcGenConfig,
         ...(maybeOptions ?? {})
       };
-  if (!raw.config) return failureResult('缺少机型配置');
+  if (!raw.config) return failureResult('缺少必填参数：机型配置');
   const options = normalizeOptions(raw);
   let mapping: MappingDocument;
   try {
@@ -678,4 +679,5 @@ export function simulate(
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `simulate`。 */
 export const simulateGeneratedProject = simulate;

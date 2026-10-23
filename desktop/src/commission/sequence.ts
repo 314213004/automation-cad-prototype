@@ -112,9 +112,9 @@ export async function runSequence(
     if (preconditionSatisfied) {
       if (step.action === 'set') {
         if (!step.point) {
-          message = `阶段「${step.name}」缺少点位 id`;
+          message = `缺少必填参数：阶段「${step.name}」的点位 id`;
         } else if (step.value === undefined) {
-          message = `阶段「${step.name}」缺少写入值`;
+          message = `缺少必填参数：阶段「${step.name}」的写入值`;
         } else {
           expected = `${step.point} = ${formatValue(step.value)}`;
           try {
@@ -132,9 +132,9 @@ export async function runSequence(
         }
       } else {
         if (!step.point) {
-          message = `阶段「${step.name}」缺少点位 id`;
+          message = `缺少必填参数：阶段「${step.name}」的点位 id`;
         } else if (step.expect === undefined) {
-          message = `阶段「${step.name}」缺少期望值`;
+          message = `缺少必填参数：阶段「${step.name}」的期望值`;
         } else {
           expected = `${step.point} = ${formatValue(step.expect)}`;
           const timeoutMs = step.timeoutMs ?? DEFAULT_TIMEOUT_MS;

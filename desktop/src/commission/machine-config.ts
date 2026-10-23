@@ -42,7 +42,7 @@ function isRecord(value: unknown): value is UnknownRecord {
 function requiredString(record: UnknownRecord, key: string, label: string): string {
   const value = record[key];
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`机型配置缺少 ${label}`);
+    throw new Error(`缺少必填参数：机型配置.${label}`);
   }
   return value.trim();
 }
@@ -76,7 +76,7 @@ export function validateMachineConfig(value: unknown): MachineConfig {
   if (!isRecord(value)) throw new Error('机型配置必须是对象');
 
   if (!Array.isArray(value.stations) || value.stations.length === 0) {
-    throw new Error('机型配置缺少 stations');
+    throw new Error('缺少必填参数：机型配置.stations');
   }
   const stations = value.stations.map((station, index) => {
     if (typeof station !== 'string' || station.trim() === '') {
@@ -87,9 +87,9 @@ export function validateMachineConfig(value: unknown): MachineConfig {
   if (new Set(stations).size !== stations.length) throw new Error('机型配置 stations 存在重复工位');
 
   if (!Array.isArray(value.actuators) || value.actuators.length === 0) {
-    throw new Error('机型配置缺少 actuators');
+    throw new Error('缺少必填参数：机型配置.actuators');
   }
-  if (!Array.isArray(value.sensors)) throw new Error('机型配置缺少 sensors');
+  if (!Array.isArray(value.sensors)) throw new Error('缺少必填参数：机型配置.sensors');
 
   const stationSet = new Set(stations);
   const pointSet = new Set<string>();

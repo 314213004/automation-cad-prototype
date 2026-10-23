@@ -99,7 +99,3 @@ export async function parseOcctBuffer(
     }
   };
 }
-
-export function getOcctWasmUrl(): string | undefined {
-  return occtWasmUrl;
-}

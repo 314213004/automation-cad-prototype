@@ -9,7 +9,7 @@ import { join } from 'node:path';
 
 test('OPC UA 参数校验：缺少/非法 endpointUrl 不发起网络连接', async () => {
   const adapter = new OpcUaFactoryAdapter();
-  await assert.rejects(() => adapter.connect({ kind: 'opcua' }), /缺少 endpointUrl/);
+  await assert.rejects(() => adapter.connect({ kind: 'opcua' }), /缺少必填参数：endpointUrl/);
   await assert.rejects(() => adapter.connect({ kind: 'opcua', endpointUrl: 'http://127.0.0.1' }), /opc\.tcp:\/\//);
   await assert.rejects(
     () => adapter.connect({ kind: 'opcua', endpointUrl: 'opc.tcp://127.0.0.1:4840', securityPolicy: 'Basic256Sha256' }),
@@ -20,7 +20,7 @@ test('OPC UA 参数校验：缺少/非法 endpointUrl 不发起网络连接', as
 
 test('MQTT 参数校验：缺少 brokerUrl / topicMap 不发起网络连接', async () => {
   const adapter = new MqttFactoryAdapter();
-  await assert.rejects(() => adapter.connect({ kind: 'mqtt' }), /缺少 brokerUrl/);
+  await assert.rejects(() => adapter.connect({ kind: 'mqtt' }), /缺少必填参数：brokerUrl/);
   await assert.rejects(() => adapter.connect({ kind: 'mqtt', brokerUrl: 'http://127.0.0.1' }), /brokerUrl/);
   await assert.rejects(
     () => adapter.connect({ kind: 'mqtt', brokerUrl: 'mqtt://127.0.0.1:1883' }),

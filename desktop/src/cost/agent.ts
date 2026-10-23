@@ -19,6 +19,7 @@ import {
 import { isUsablePricebookItem, validatePricebook, type Pricebook } from './pricebook.ts';
 import { describeCost } from './report.ts';
 
+/** 公共工具名常量：保留对外导出，避免外部脚本引用断裂；注册处仍使用同名字面量。 */
 export const COST_TOOL_NAME = 'run_cost_report';
 
 /** 输出上限：明细 / 缺价 / 告警各截断到这里。 */
@@ -114,7 +115,7 @@ function parseBom(value: unknown): CostBomRow[] | undefined {
     if (spec !== undefined) row.spec = spec;
     const qty = numberAt(raw, 'qty', `bom[${index}].qty`);
     if (qty === undefined) {
-      fail('INVALID_ARGUMENT', `bom[${index}] 缺少数量 qty`);
+      fail('INVALID_ARGUMENT', `缺少必填参数：bom[${index}].qty`);
     }
     if (!Number.isInteger(qty) || qty <= 0) {
       fail('INVALID_ARGUMENT', `bom[${index}].qty 必须是正整数`);
@@ -168,7 +169,7 @@ function parsePlacements(value: unknown): Placement[] | undefined {
     const x = numberAt(raw, 'x', `placements[${index}].x`);
     const y = numberAt(raw, 'y', `placements[${index}].y`);
     if (x === undefined || y === undefined) {
-      fail('INVALID_ARGUMENT', `placements[${index}] 缺少坐标 x / y`);
+      fail('INVALID_ARGUMENT', `缺少必填参数：placements[${index}].x/y`);
     }
     return {
       id: textAt(raw, 'id') ?? `p${index + 1}`,
@@ -214,7 +215,7 @@ function parsePlc(value: unknown): CostPlcSpec | undefined {
   const modules = value.modules.map((raw, index) => {
     if (!isRecord(raw)) fail('INVALID_ARGUMENT', `plc.modules[${index}] 必须是对象`);
     const partId = textAt(raw, 'partId');
-    if (partId === undefined) fail('INVALID_ARGUMENT', `plc.modules[${index}] 缺少 partId`);
+    if (partId === undefined) fail('INVALID_ARGUMENT', `缺少必填参数：plc.modules[${index}].partId`);
     const qty = numberAt(raw, 'qty', `plc.modules[${index}].qty`) ?? 1;
     if (!Number.isInteger(qty) || qty <= 0) {
       fail('INVALID_ARGUMENT', `plc.modules[${index}].qty 必须是正整数`);
@@ -302,7 +303,7 @@ function resolvePricebook(
       }
     }
   }
-  return fail('PRICEBOOK_UNAVAILABLE', '缺少价格簿：请传入 pricebook，或确认桌面版内置价格簿可用');
+  return fail('PRICEBOOK_UNAVAILABLE', '缺少必填参数：pricebook（请传入 pricebook，或确认桌面版内置价格簿可用）');
 }
 
 export interface CostReportComputation {

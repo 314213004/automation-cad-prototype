@@ -38,7 +38,7 @@ function finiteNumber(value: unknown, label: string): number {
 
 function validatePart(part: InterferencePart, index: number): void {
   if (!part || typeof part.name !== 'string' || !part.name.trim()) {
-    throw new Error(`第 ${index + 1} 个零件缺少名称`);
+    throw new Error(`缺少必填参数：第 ${index + 1} 个零件的名称`);
   }
   if (!part.bbox || !Array.isArray(part.bbox.min) || !Array.isArray(part.bbox.max) ||
       part.bbox.min.length !== 3 || part.bbox.max.length !== 3) {

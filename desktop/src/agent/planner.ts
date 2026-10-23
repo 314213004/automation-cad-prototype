@@ -211,7 +211,7 @@ function matchImportInterference(text: string, segments: string[]): Candidate | 
       makeStep(
         'import_cad',
         importArgs,
-        path ? `导入 CAD 文件 ${path}（需确认）` : '导入 CAD 文件（需确认；缺少本机绝对路径）',
+        path ? `导入 CAD 文件 ${path}（需确认）` : '导入 CAD 文件（需确认；缺少必填参数：本机绝对路径）',
         path ? [] : ['path']
       ),
       makeStep('run_interference_check', {}, '对导入后的装配体做包围盒级干涉初筛')
@@ -524,7 +524,7 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         cancelled: true,
         results: [],
         totalMs: elapsed(),
-        summary: '写步骤需要确认，但未提供确认回调，已取消'
+        summary: '写步骤需要确认，但缺少必填参数：确认回调，已取消'
       };
     }
     try {
@@ -534,8 +534,16 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
         writeIndexes,
         totalSteps: plan.steps.length
       });
-    } catch {
-      confirmed = false;
+    } catch (error) {
+      return {
+        ok: false,
+        confirmationRequired,
+        confirmed: false,
+        cancelled: true,
+        results: [],
+        totalMs: elapsed(),
+        summary: `确认失败：${error instanceof Error ? error.message : String(error)}，已取消`
+      };
     }
     if (!confirmed) {
       return {
@@ -601,10 +609,4 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
 export function describePlanStep(step: PlanStep): string {
   const args = Object.keys(step.args).length > 0 ? JSON.stringify(step.args) : '无参数';
   return `${step.tool} ${args}`;
-}
-
-/** UI 预览用：是否像多步指令（有明确连接词或已生成 2 步以上）。 */
-export function isMultiStepInstruction(input: string, planned?: AgentPlan): boolean {
-  if (planned && (planned.steps.length >= 2 || planned.refused)) return planned.steps.length >= 2;
-  return splitInstructionSteps(input).length > 1;
 }

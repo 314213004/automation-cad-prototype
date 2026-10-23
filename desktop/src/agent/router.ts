@@ -21,16 +21,6 @@ export type IntentKind =
   | 'sync'
   | 'out_of_scope';
 
-export const INTENT_ORDER: IntentKind[] = [
-  'query',
-  'compute',
-  'modify',
-  'generate',
-  'commission',
-  'sync',
-  'out_of_scope'
-];
-
 export const INTENT_LABELS: Record<IntentKind, string> = {
   query: '查询',
   compute: '计算',
@@ -592,11 +582,4 @@ export function planReadOnly(text: string): ToolPlan | null {
 export function describePlan(plan: ToolPlan): string {
   const args = Object.keys(plan.args).length > 0 ? ` ${JSON.stringify(plan.args)}` : '';
   return `${plan.why}（${plan.tool}${args}${plan.readOnly ? '' : '，写操作'}）`;
-}
-
-export function explainIntent(match: IntentMatch): string {
-  if (match.intent === 'out_of_scope') {
-    return '这条指令没有匹配到可执行能力：可以问元件、BOM、成本、电气校验或干涉检查。';
-  }
-  return `意图：${INTENT_LABELS[match.intent]}（${match.confidence}，${match.reason}）`;
 }

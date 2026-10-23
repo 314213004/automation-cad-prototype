@@ -247,7 +247,7 @@ test('执行器：缺少确认回调时写计划中止', async () => {
   );
   assert.equal(result.ok, false);
   assert.equal(result.cancelled, true);
-  assert.match(result.summary, /未提供确认回调/);
+  assert.match(result.summary, /缺少必填参数：确认回调/);
 });
 
 test('执行器：中途失败立即停止，failedAt 从 1 开始，后续不执行', async () => {

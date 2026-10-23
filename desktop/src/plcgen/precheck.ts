@@ -509,5 +509,6 @@ export function precheck(config: PlcGenConfig, bom?: PlcBomInput): PrecheckResul
   return { errors, warnings };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `precheck`。 */
 export const precheckMachineConfig = precheck;
 export const runPrecheck = precheck;

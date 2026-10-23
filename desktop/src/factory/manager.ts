@@ -145,10 +145,10 @@ export class FactoryManager extends EventEmitter {
     }
 
     if (!config.endpointUrl && config.kind === 'opcua') {
-      return { ok: false, code: 'INVALID_CONFIG', message: 'OPC UA 连接失败：缺少 endpointUrl' };
+      return { ok: false, code: 'INVALID_CONFIG', message: '缺少必填参数：endpointUrl' };
     }
     if (!config.brokerUrl && config.kind === 'mqtt') {
-      return { ok: false, code: 'INVALID_CONFIG', message: 'MQTT 连接失败：缺少 brokerUrl' };
+      return { ok: false, code: 'INVALID_CONFIG', message: '缺少必填参数：brokerUrl' };
     }
 
     this.unsubscribeCurrent?.();
@@ -156,8 +156,9 @@ export class FactoryManager extends EventEmitter {
     if (this.active) {
       try {
         await withTimeout(this.active.disconnect(), this.timeoutMs, '断开旧适配器');
-      } catch {
-        // 切换适配器时旧连接可能已经失效；新连接结果会覆盖该错误。
+      } catch (error) {
+        // 切换适配器时旧连接可能已经失效；新连接结果会覆盖该错误，但保留日志便于排查。
+        console.warn('[factory] 断开旧适配器失败', error);
       }
       this.active = null;
     }
@@ -225,7 +226,7 @@ export class FactoryManager extends EventEmitter {
 
   async writeTag(id: string, value: unknown): Promise<FactoryActionResult<null>> {
     if (typeof id !== 'string' || !id) {
-      return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+      return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     }
     return await this.run('写入点位', async (adapter) => {
       await adapter.writeTag(id, value);

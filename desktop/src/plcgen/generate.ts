@@ -249,7 +249,7 @@ function buildReadme(
 
 function fileByPath(files: readonly GeneratedFile[], path: string): GeneratedFile {
   const file = files.find((candidate) => candidate.path === path);
-  if (!file) throw new Error(`PLC 生成缺少文件 ${path}`);
+  if (!file) throw new Error(`PLC 生成文件不存在：${path}`);
   return file;
 }
 
@@ -330,4 +330,5 @@ export function generateProject(input: GenerateProjectInput): GenerateProjectRes
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `generateProject`。 */
 export const generatePlcProject = generateProject;

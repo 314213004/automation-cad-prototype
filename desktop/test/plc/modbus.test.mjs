@@ -11,11 +11,11 @@ test('Modbus 参数校验：缺少点位/host/port 不发起连接', async () =>
   await assert.rejects(() => adapter.connect({ kind: 'modbus', points: [] }), /点位表不能为空/);
   await assert.rejects(
     () => adapter.connect({ kind: 'modbus', points: [point] }),
-    /缺少 host/
+    /缺少必填参数：host/
   );
   await assert.rejects(
     () => adapter.connect({ kind: 'modbus', host: '127.0.0.1', points: [point] }),
-    /缺少 port/
+    /缺少必填参数：port/
   );
   assert.equal(adapter.status(), 'disconnected');
 });

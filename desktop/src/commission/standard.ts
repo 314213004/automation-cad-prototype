@@ -189,7 +189,3 @@ export const COMMISSION_CASES: readonly CommissionCase[] = [
     ]
   }
 ];
-
-export function findCase(id: string): CommissionCase | undefined {
-  return COMMISSION_CASES.find((testCase) => testCase.id === id);
-}

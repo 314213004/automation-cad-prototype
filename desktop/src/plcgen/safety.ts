@@ -101,4 +101,5 @@ export function generateSafety(input: GenerateInput): string {
   return renderGeneratedFile(ctx, 'src/FC_Safety.st', body.join('\n'));
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `generateSafety`。 */
 export const generateSafetyBlock = generateSafety;

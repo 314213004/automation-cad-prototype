@@ -16,7 +16,7 @@ export function buildTagBindings(config: PlcGenConfig): TagBinding[] {
   }
   return refs.map((ref, index) => {
     const row = rows[index];
-    if (!row) throw new Error(`PLC 变量表缺少第 ${index + 1} 行`);
+    if (!row) throw new Error(`PLC 变量表行不存在：${index + 1}`);
     return { ref, row };
   });
 }
@@ -48,8 +48,4 @@ export function tagRef(variable: string): string {
 
 export function outputBindings(config: PlcGenConfig): TagBinding[] {
   return buildTagBindings(config).filter((binding) => binding.ref.area === 'output');
-}
-
-export function inputBindings(config: PlcGenConfig): TagBinding[] {
-  return buildTagBindings(config).filter((binding) => binding.ref.area === 'input');
 }

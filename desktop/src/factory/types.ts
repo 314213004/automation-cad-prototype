@@ -54,9 +54,3 @@ export interface FactoryStatusInfo {
 }
 
 export const FACTORY_KINDS: FactoryKind[] = ['demo', 'opcua', 'mqtt'];
-
-export const FACTORY_LABELS: Record<FactoryKind, string> = {
-  demo: '内置仿真产线',
-  opcua: 'OPC UA',
-  mqtt: 'MQTT'
-};

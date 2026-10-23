@@ -66,7 +66,7 @@ export class MqttFactoryAdapter implements FactoryAdapter {
   async connect(config: FactoryConfig): Promise<void> {
     if (config.kind !== 'mqtt') throw new Error(`MQTT 适配器不接受 ${config.kind} 配置`);
     const brokerUrl = config.brokerUrl?.trim();
-    if (!brokerUrl) throw new Error('MQTT 连接失败：缺少 brokerUrl');
+    if (!brokerUrl) throw new Error('缺少必填参数：brokerUrl');
     if (!/^(mqtt|mqtts|ws|wss):\/\//i.test(brokerUrl)) {
       throw new Error('MQTT 连接失败：brokerUrl 必须以 mqtt://、mqtts://、ws:// 或 wss:// 开头');
     }

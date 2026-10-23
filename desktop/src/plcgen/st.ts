@@ -89,7 +89,7 @@ export function createRenderContext(input: GenerateInput): RenderContext {
   if (!isRecord(input)) throw new Error('PLC 生成输入必须是对象');
   const wrapped = isWrappedInput(input);
   const config = (wrapped ? input.config : input) as PlcGenConfig;
-  if (!isRecord(config)) throw new Error('PLC 生成输入缺少机型配置');
+  if (!isRecord(config)) throw new Error('缺少必填参数：机型配置');
 
   const options: StGenerateOptions = wrapped ? input : {};
   const timeoutTimeMs = validateTimeout(options.timeoutTimeMs);
@@ -452,4 +452,5 @@ export function generateSt(input: GenerateInput): StGenerateResult {
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `generateSt`。 */
 export const generatePlcSt = generateSt;

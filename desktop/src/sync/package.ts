@@ -126,7 +126,7 @@ export function buildDesignPackage(sources: DesignPackageSources): DesignPackage
     zip.addFile(candidate.path, Buffer.from(bytes));
   }
 
-  if (files.length === 0) throw new Error('没有可打包的导出文件（BOM/PDF/GLB/DXF 均缺失）');
+  if (files.length === 0) throw new Error('导出文件不存在：BOM/PDF/GLB/DXF 均无有效内容');
 
   const manifest: DesignManifest = {
     schemaVersion: DESIGN_MANIFEST_SCHEMA_VERSION,

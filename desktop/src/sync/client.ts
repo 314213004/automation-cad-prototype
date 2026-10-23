@@ -207,7 +207,7 @@ export class SyncClient {
       if (!packageId) {
         return {
           ok: false,
-          message: '解析上传响应失败：缺少 packageId',
+          message: '解析上传响应失败：缺少必填参数：packageId',
           stage: '解析',
           code: 'UPLOAD_PARSE_FAILED'
         };
@@ -266,7 +266,7 @@ export class SyncClient {
       if (!isRecord(payload) || !Array.isArray(payload.items)) {
         return {
           ok: false,
-          message: '解析设计包列表失败：响应缺少 items 数组',
+          message: '解析设计包列表失败：响应字段不存在：items',
           stage: '列表',
           code: 'LIST_PARSE_FAILED'
         };

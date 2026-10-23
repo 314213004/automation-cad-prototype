@@ -18,9 +18,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parsePoint(value: unknown, index: number): PlcPoint {
   if (!isRecord(value)) throw new Error(`第 ${index + 1} 个点位必须是对象`);
   const id = typeof value.id === 'string' ? value.id.trim() : '';
-  if (!id) throw new Error(`第 ${index + 1} 个点位缺少 id`);
+  if (!id) throw new Error(`缺少必填参数：points[${index}].id`);
   const name = typeof value.name === 'string' ? value.name.trim() : '';
-  if (!name) throw new Error(`点位「${id}」缺少名称`);
+  if (!name) throw new Error(`缺少必填参数：点位「${id}」的名称`);
   const area = value.area;
   if (typeof area !== 'string' || !PLC_AREAS.includes(area as PlcArea)) {
     throw new Error(`点位「${id}」的 area 必须是 ${PLC_AREAS.join('/')}`);
@@ -57,20 +57,20 @@ function parsePoint(value: unknown, index: number): PlcPoint {
 function parseRule(value: unknown, index: number): SimRule {
   if (!isRecord(value)) throw new Error(`第 ${index + 1} 条逻辑规则必须是对象`);
   const target = typeof value.target === 'string' ? value.target.trim() : '';
-  if (!target) throw new Error(`第 ${index + 1} 条逻辑规则缺少 target`);
+  if (!target) throw new Error(`缺少必填参数：rules[${index}].target`);
   const type = value.type ?? 'expr';
   if (type === 'expr') {
-    if (typeof value.expr !== 'string' || !value.expr.trim()) throw new Error(`第 ${index + 1} 条逻辑规则缺少 expr`);
+    if (typeof value.expr !== 'string' || !value.expr.trim()) throw new Error(`缺少必填参数：rules[${index}].expr`);
     return { target, type: 'expr', expr: value.expr.trim() };
   }
   if (type === 'latch') {
     if (typeof value.set !== 'string' || !value.set.trim() || typeof value.reset !== 'string' || !value.reset.trim()) {
-      throw new Error(`第 ${index + 1} 条自锁规则缺少 set/reset`);
+      throw new Error(`缺少必填参数：rules[${index}].set/reset`);
     }
     return { target, type: 'latch', set: value.set.trim(), reset: value.reset.trim() };
   }
   if (type === 'timer') {
-    if (typeof value.when !== 'string' || !value.when.trim()) throw new Error(`第 ${index + 1} 条定时器规则缺少 when`);
+    if (typeof value.when !== 'string' || !value.when.trim()) throw new Error(`缺少必填参数：rules[${index}].when`);
     if (typeof value.delayMs !== 'number' || !Number.isFinite(value.delayMs) || value.delayMs < 0) {
       throw new Error(`第 ${index + 1} 条定时器规则的 delayMs 必须是非负数字`);
     }
@@ -113,8 +113,8 @@ export function parsePlcConfig(value: unknown): PlcConfig {
     config.pollMs = value.pollMs;
   }
   if (kind === 'modbus') {
-    if (!config.host) throw new Error('Modbus TCP 缺少 host');
-    if (!config.port) throw new Error('Modbus TCP 缺少 port');
+    if (!config.host) throw new Error('缺少必填参数：host');
+    if (!config.port) throw new Error('缺少必填参数：port');
   }
   if (value.rules !== undefined) {
     if (!Array.isArray(value.rules)) throw new Error('仿真逻辑规则必须是数组');

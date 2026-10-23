@@ -571,7 +571,7 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
     const tag = textOf(item.tag) || `#${index + 1}`;
     const powerKw = numberOf(item.powerKw, `loads[${index}].powerKw`);
     if (powerKw === undefined) {
-      throw new CommandFailure('INVALID_ARGUMENT', `loads[${index}] 缺少额定功率 powerKw`);
+      throw new CommandFailure('INVALID_ARGUMENT', `缺少必填参数：loads[${index}].powerKw`);
     }
     const phase = textOf(item.phase) || '3P';
     if (!PHASES.includes(phase as Phase)) {
@@ -594,8 +594,8 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
     if (!isRecord(item)) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 必须是对象`);
     const wireNo = textOf(item.wireNo);
     const currentA = numberOf(item.currentA, `circuits[${index}].currentA`);
-    if (!wireNo) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 缺少线号 wireNo`);
-    if (currentA === undefined) throw new CommandFailure('INVALID_ARGUMENT', `circuits[${index}] 缺少工作电流 currentA`);
+    if (!wireNo) throw new CommandFailure('INVALID_ARGUMENT', `缺少必填参数：circuits[${index}].wireNo`);
+    if (currentA === undefined) throw new CommandFailure('INVALID_ARGUMENT', `缺少必填参数：circuits[${index}].currentA`);
     const sectionMm2 = numberOf(item.sectionMm2, `circuits[${index}].sectionMm2`);
     const breakerA = numberOf(item.breakerA, `circuits[${index}].breakerA`);
     return {

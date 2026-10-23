@@ -73,4 +73,5 @@ export function buildTags(config: PlcGenConfig): TagTable {
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `buildTags`。 */
 export const generateTags = buildTags;

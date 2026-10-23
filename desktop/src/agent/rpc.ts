@@ -153,7 +153,7 @@ export class AgentRpcServer {
         try {
           parsed = JSON.parse(body) as unknown;
         } catch {
-          sendJson(response, 200, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+          sendJson(response, 200, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'JSON 解析失败' } });
           return;
         }
         if (Array.isArray(parsed)) {
@@ -165,7 +165,7 @@ export class AgentRpcServer {
         return;
       }
 
-      sendJson(response, 404, { ok: false, error: 'not_found' });
+      sendJson(response, 404, { ok: false, error: '接口不存在' });
     } catch (error) {
       const status = error instanceof RpcError && error.code === -32600 ? 413 : 500;
       sendJson(response, status, {
@@ -180,7 +180,7 @@ export class AgentRpcServer {
       ? payload.id
       : null;
     if (!isRecord(payload) || payload.jsonrpc !== '2.0' || typeof payload.method !== 'string') {
-      return { jsonrpc: '2.0', id, error: { code: -32600, message: 'Invalid Request' } };
+      return { jsonrpc: '2.0', id, error: { code: -32600, message: '请求格式不合法' } };
     }
     try {
       const params = isRecord(payload.params) ? payload.params : {};
@@ -189,7 +189,7 @@ export class AgentRpcServer {
         result = { tools: this.tools.summaries() };
       } else if (payload.method === 'tools/call') {
         const name = typeof params.name === 'string' ? params.name : '';
-        if (!this.tools.has(name)) throw new RpcError(-32601, `Unknown tool: ${name || '(empty)'}`);
+        if (!this.tools.has(name)) throw new RpcError(-32601, `工具不存在：${name || '(空)'}`);
         const args = isRecord(params.arguments) ? params.arguments : {};
         const toolResult = await this.tools.call(name, args);
         result = {
@@ -200,7 +200,7 @@ export class AgentRpcServer {
       } else if (this.tools.has(payload.method)) {
         result = await this.tools.call(payload.method, params);
       } else {
-        throw new RpcError(-32601, `Method not found: ${payload.method}`);
+        throw new RpcError(-32601, `方法不存在：${payload.method}`);
       }
       return { jsonrpc: '2.0', id, result };
     } catch (error) {

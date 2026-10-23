@@ -79,8 +79,9 @@ export class AgentSession {
     if (!this.audit) return;
     try {
       this.audit(record);
-    } catch {
-      // 审计失败不影响对话。
+    } catch (error) {
+      // 审计失败不阻断对话，但必须留下可诊断的告警。
+      console.warn('[agent] 审计写入失败', error);
     }
   }
 
@@ -135,8 +136,10 @@ export class AgentSession {
       let allowed = false;
       try {
         allowed = await this.confirmWrite(name, args);
-      } catch {
-        allowed = false;
+      } catch (error) {
+        const message = `确认对话框失败：${error instanceof Error ? error.message : String(error)}`;
+        this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args, message });
+        return { ok: false, code: 'USER_DENIED', message };
       }
       if (!allowed) {
         this.recordAudit({ tool: name, ok: false, code: 'USER_DENIED', source: 'llm', args });

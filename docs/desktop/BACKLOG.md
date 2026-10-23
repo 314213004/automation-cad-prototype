@@ -11,6 +11,16 @@
 - 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
 - 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
 
+## 质量加固轮（2026-10-23，本轮）
+
+- 状态：✅ 完成；不新增功能、不改工具名/IPC 通道/文件格式/状态字符串，不 push。
+- A. 一致性审查：统一「缺少必填参数：x」/「x 不存在：id」文案；JSON-RPC 英文错误改为中文且保留错误码；确认回调异常不再伪装成用户拒绝；补充静默 catch 的告警或原因注释。
+- B. 死代码：`grep -rn -w` 确认零引用后删除 12 个导出（`isMultiStepInstruction`、`INTENT_ORDER`、`explainIntent`、`annotationToDoc`、`axisPoses`、`getOcctWasmUrl`、`findCase`、`isCostExportSaveResult`、`FACTORY_LABELS`、`assemblyBomCsv`、`findInstance`、`inputBindings`）；公共/兼容别名保留并加注释。
+- C. 测试补强：`compileOps`、`planExportName`、`buildTags` 新增 13 条边界用例（空数组、重复 id、Unicode/emoji、NaN/Infinity、非法 fileName、超短 maxLength、空配置）。
+- D. 验收：`npx tsc --noEmit` 通过；`npm test` **687/687**（起点 674）；`npm run smoke` → 源码定义 46 个 `SMOKE_*` 断言名（含条件分支），本轮无 fake sidecar 实跑 42 个（40 个 `_OK` + 2 个预期 `_SKIP`）并输出 `SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
+- E. 文档：重写 `STATUS.md`（P1–P9 状态表、smoke 断言清单、限制、D1–D8 索引、命令速查）；新建 `HARDENING.md`（文件:行 → 原 → 新 → 原因）；README 测试基线同步 687。
+- 本轮未执行 `npm run sync:e2e` / `npm run screenshots`；两条命令保留在 STATUS 速查中，供发布前按需复跑。
+
 ## 待办（按优先级）
 
 ### P1 电气智能辅助（线号合规 + 功率统计）

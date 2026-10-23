@@ -52,7 +52,7 @@ function isPricebookOnlyPack(dir: string): boolean {
 function validateManifest(value: unknown): PackManifest {
   if (!isRecord(value)) throw new Error('manifest.json 必须是对象');
   for (const key of MANIFEST_REQUIRED) {
-    if (!(key in value)) throw new Error(`manifest.json 缺少字段：${key}`);
+    if (!(key in value)) throw new Error(`缺少必填参数：manifest.${key}`);
   }
   if (value.schemaVersion !== 1) throw new Error('manifest.schemaVersion 必须为 1');
   if (typeof value.id !== 'string' || !PACK_ID_PATTERN.test(value.id)) throw new Error('manifest.id 格式不合法');
@@ -89,7 +89,7 @@ function validateParts(value: unknown, packId: string, packName: string): Compon
   return source.map((item, index) => {
     if (!isRecord(item)) throw new Error(`parts[${index}] 必须是对象`);
     if (typeof item.id !== 'string' || item.id.trim() === '') {
-      throw new Error(`parts[${index}] 缺少 id`);
+      throw new Error(`缺少必填参数：parts[${index}].id`);
     }
     if (seen.has(item.id)) throw new Error(`parts 中存在重复 id：${item.id}`);
     seen.add(item.id);
@@ -253,7 +253,7 @@ export class PackRegistry {
       throw new Error(`manifest.id (${manifest.id}) 与 ZIP 根目录名 (${rootFolder}) 不一致`);
     }
     const partsEntry = entries.find((entry) => safeZipEntryName(entry.entryName) === `${rootPrefix}parts.json`);
-    if (!partsEntry) throw new Error('ZIP 中缺少 parts.json');
+    if (!partsEntry) throw new Error('ZIP 条目不存在：parts.json');
     const parts = validateParts(JSON.parse(partsEntry.getData().toString('utf8')) as unknown, manifest.id, manifest.name);
     if (parts.length === 0) throw new Error('parts.json 不能为空');
 
@@ -279,7 +279,7 @@ export class PackRegistry {
         writeFileSync(destination, entry.getData());
       }
       if (!existsSync(join(tempDir, 'manifest.json')) || !existsSync(join(tempDir, 'parts.json'))) {
-        throw new Error('ZIP 解压后缺少 manifest.json 或 parts.json');
+        throw new Error('ZIP 条目不存在：manifest.json 或 parts.json');
       }
       const loaded = this.loadPackDirectory(tempDir, manifest.id, false, new Set(), manifest.id);
       if (loaded.info.error) throw new Error(loaded.info.error);
@@ -367,7 +367,10 @@ export class PackRegistry {
       const value = readJson(this.stateFile);
       if (!isRecord(value) || !Array.isArray(value.disabled)) return { disabled: [] };
       return { disabled: value.disabled.filter((item): item is string => typeof item === 'string') };
-    } catch {
+    } catch (error) {
+      if (existsSync(this.stateFile)) {
+        console.warn('[packs] 读取启停状态失败，按全部启用处理', error);
+      }
       return { disabled: [] };
     }
   }

@@ -241,7 +241,7 @@ export class SimPlcAdapter implements PlcAdapter {
       const type = rule.type ?? 'expr';
       if (type === 'expr') {
         const expr = (rule as { expr?: unknown }).expr;
-        if (typeof expr !== 'string') throw new Error(`第 ${index + 1} 条逻辑规则缺少 expr`);
+        if (typeof expr !== 'string') throw new Error(`缺少必填参数：rules[${index}].expr`);
         const predicate = compileExpr(expr, knownIds);
         compiled.push({ target: rule.target, apply: (values, sim) => sim.setRuleValue(rule.target, predicate(values)) });
       } else if (type === 'latch') {

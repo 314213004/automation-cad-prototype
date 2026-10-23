@@ -177,7 +177,7 @@ export class PlcManager extends EventEmitter {
   }
 
   async read(id: string): Promise<PlcActionResult<PlcValue>> {
-    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     return await this.run('读取点位', (adapter) => adapter.read(id));
   }
 
@@ -186,7 +186,7 @@ export class PlcManager extends EventEmitter {
   }
 
   async write(id: string, value: PlcValue): Promise<PlcActionResult<null>> {
-    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     if (!isPlcValue(value)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
     return await this.run('写入点位', async (adapter) => {
       await adapter.write(id, value);
@@ -196,7 +196,7 @@ export class PlcManager extends EventEmitter {
 
   /** 仿真适配器保持强制值；Modbus 适配器等价于普通写入。 */
   async force(id: string, value: PlcValue): Promise<PlcActionResult<null>> {
-    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少点位 id' };
+    if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     if (!isPlcValue(value)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
     return await this.run('强制写入点位', async (adapter) => {
       if (adapter instanceof SimPlcAdapter) await adapter.force(id, value);

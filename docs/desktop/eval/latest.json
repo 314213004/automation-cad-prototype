@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-23T06:35:20.986Z",
-  "version": "0.2.0",
+  "generatedAt": "2026-10-23T07:17:57.988Z",
+  "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "desktop/eval/agent-cases.json",

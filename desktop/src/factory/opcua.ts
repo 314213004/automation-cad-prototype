@@ -76,7 +76,7 @@ export class OpcUaFactoryAdapter implements FactoryAdapter {
   async connect(config: FactoryConfig): Promise<void> {
     if (config.kind !== 'opcua') throw new Error(`OPC UA 适配器不接受 ${config.kind} 配置`);
     const endpointUrl = config.endpointUrl?.trim();
-    if (!endpointUrl) throw new Error('OPC UA 连接失败：缺少 endpointUrl');
+    if (!endpointUrl) throw new Error('缺少必填参数：endpointUrl');
     if (!/^opc\.tcp:\/\//i.test(endpointUrl)) {
       throw new Error('OPC UA 连接失败：endpointUrl 必须以 opc.tcp:// 开头');
     }
@@ -272,8 +272,9 @@ export class OpcUaFactoryAdapter implements FactoryAdapter {
     if (subscription) {
       try {
         await subscription.terminate();
-      } catch {
-        // 清理阶段不再覆盖原始连接错误。
+      } catch (error) {
+        // 清理阶段不再覆盖原始连接错误，但记录资源回收失败。
+        console.warn('[factory/opcua] 终止订阅失败', error);
       }
     }
     const session = this.session;
@@ -281,8 +282,9 @@ export class OpcUaFactoryAdapter implements FactoryAdapter {
     if (session) {
       try {
         await session.close();
-      } catch {
-        // 清理阶段不再覆盖原始连接错误。
+      } catch (error) {
+        // 清理阶段不再覆盖原始连接错误，但记录资源回收失败。
+        console.warn('[factory/opcua] 关闭会话失败', error);
       }
     }
     const client = this.client;
@@ -290,8 +292,9 @@ export class OpcUaFactoryAdapter implements FactoryAdapter {
     if (client) {
       try {
         await client.disconnect();
-      } catch {
-        // 清理阶段不再覆盖原始连接错误。
+      } catch (error) {
+        // 清理阶段不再覆盖原始连接错误，但记录资源回收失败。
+        console.warn('[factory/opcua] 断开客户端失败', error);
       }
     }
   }

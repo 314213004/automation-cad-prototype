@@ -30,11 +30,11 @@ test('机型配置：合法配置补全默认行程和动作时长', () => {
 });
 
 test('机型配置：缺少 stations 抛出中文错误', () => {
-  assert.throws(() => validateMachineConfig(minimalConfig({ stations: undefined })), /缺少 stations/);
+  assert.throws(() => validateMachineConfig(minimalConfig({ stations: undefined })), /缺少必填参数：机型配置\.stations/);
 });
 
 test('机型配置：缺少 actuators 抛出中文错误', () => {
-  assert.throws(() => validateMachineConfig(minimalConfig({ actuators: undefined })), /缺少 actuators/);
+  assert.throws(() => validateMachineConfig(minimalConfig({ actuators: undefined })), /缺少必填参数：机型配置\.actuators/);
 });
 
 test('机型配置：点位重复抛出中文错误', () => {

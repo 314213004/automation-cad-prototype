@@ -256,8 +256,3 @@ export async function buildCostExport(
     grand: report.totals.grand
   };
 }
-
-/** 供命令层/测试判断桥接返回是否像一次成功落盘。 */
-export function isCostExportSaveResult(value: unknown): value is CostExportSaveResult {
-  return isRecord(value) && typeof value.ok === 'boolean';
-}

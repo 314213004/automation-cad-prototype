@@ -187,7 +187,7 @@ export function checkKinematics(input: unknown, options: KinematicsOptions = {})
     push('doc.units', 'error', '运动学标注单位只能是 mm（旋转角度以 deg 记录）');
   }
   if (!Array.isArray(input.axes)) {
-    push('doc.axes', 'error', '运动学标注缺少 axes 数组');
+    push('doc.axes', 'error', '缺少必填参数：axes');
     return fail();
   }
 
@@ -206,7 +206,7 @@ export function checkKinematics(input: unknown, options: KinematicsOptions = {})
 
     const rawPart = raw.part;
     if (typeof rawPart !== 'string' || rawPart.trim() === '') {
-      push('axis.part.missing', 'error', `axes[${index}] 缺少动件名称 part`);
+      push('axis.part.missing', 'error', `缺少必填参数：axes[${index}].part`);
       continue;
     }
     const partName = findPartName(options.partNames, rawPart);
@@ -302,7 +302,7 @@ export function checkKinematics(input: unknown, options: KinematicsOptions = {})
     }
 
     if (!Array.isArray(raw.bindings)) {
-      push('axis.bindings.missing', 'error', `动件「${partName}」缺少 bindings 数组`, partName);
+      push('axis.bindings.missing', 'error', `缺少必填参数：动件「${partName}」的 bindings`, partName);
       axisBroken = true;
     } else if (raw.bindings.length === 0) {
       push('axis.bindings.empty', 'error', `动件「${partName}」至少需要绑定一个点位`, partName);
@@ -344,7 +344,7 @@ export function checkKinematics(input: unknown, options: KinematicsOptions = {})
 
         const rawPoint = rawBinding.point;
         if (typeof rawPoint !== 'string' || rawPoint.trim() === '') {
-          push('binding.point', 'error', `动件「${partName}」的 ${normalizedRole} 绑定缺少点位`, partName);
+          push('binding.point', 'error', `缺少必填参数：动件「${partName}」的 ${normalizedRole} 绑定点位`, partName);
           axisBroken = true;
           continue;
         }
@@ -367,7 +367,7 @@ export function checkKinematics(input: unknown, options: KinematicsOptions = {})
 
       if (kind === 'linear') {
         if (!roleSeen.has('extend')) {
-          push('binding.extendMissing', 'error', `直线动件「${partName}」缺少 extend 绑定，无法判断伸出`, partName);
+          push('binding.extendMissing', 'error', `缺少必填参数：直线动件「${partName}」的 extend 绑定，无法判断伸出`, partName);
           axisBroken = true;
         }
         if (!roleSeen.has('retract')) {
@@ -464,10 +464,6 @@ export function axisPose(axis: KinematicsAxis, values: Record<string, boolean | 
     source,
     conflict: extend && retract
   };
-}
-
-export function axisPoses(doc: KinematicsDoc, values: Record<string, boolean | number>): AxisPose[] {
-  return doc.axes.map((axis) => axisPose(axis, values));
 }
 
 /** 新增或替换（按动件名，忽略大小写）一条轴标注，返回新文档，不修改入参。 */

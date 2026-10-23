@@ -104,7 +104,7 @@ export class DesktopRpcProxy {
     try {
       token = readFileSync(this.tokenFile, 'utf8').trim();
     } catch {
-      throw new DesktopRpcUnavailableError('未找到 AutomationCAD 桌面应用的连接凭据，请先启动桌面应用');
+      throw new DesktopRpcUnavailableError('连接凭据不存在：AutomationCAD 桌面应用的 agent-token（请先启动桌面应用）');
     }
     if (!token) {
       throw new DesktopRpcUnavailableError('AutomationCAD 桌面应用尚未就绪');

@@ -208,7 +208,7 @@ export function makeAssembly(
   };
 }
 
-/** 把旧单件文档包成装配；已有装配规范化并深拷贝。 */
+/** 兼容入口：保留对外导出；新代码请直接使用 `toAssembly`。 */
 export function assemblyFromDoc(doc: FeatureDoc | AssemblyDoc): AssemblyDoc {
   return toAssembly(doc);
 }
@@ -220,11 +220,6 @@ export function nextInstanceId(instances: readonly PartInstance[]): string {
     if (match) max = Math.max(max, Number(match[1]));
   }
   return `p${max + 1}`;
-}
-
-export function findInstance(assembly: AssemblyDoc, id: string | null): PartInstance | null {
-  if (!id) return null;
-  return assembly.instances.find((instance) => instance.id === id) ?? null;
 }
 
 export function instanceFeatures(assembly: AssemblyDoc): FeatureNode[] {
@@ -302,6 +297,7 @@ export function updateInstanceTransform(
   }, now);
 }
 
+/** 兼容入口：保留对外导出；当前 UI 通过特征编辑函数间接更新实体特征。 */
 export function setInstanceFeatures(
   assembly: AssemblyDoc,
   id: string,
@@ -562,12 +558,12 @@ function parseFeatureNodes(
       errors.push(`${label}必须是对象`);
       return;
     }
-    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`${label}缺少 id`);
+    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`缺少必填参数：${label}.id`);
     if (typeof value.type !== 'string' || !TYPE_SET.has(value.type)) {
       errors.push(`${label}类型无效`);
       return;
     }
-    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`${label}缺少名称`);
+    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`缺少必填参数：${label}.name`);
     if (!isRecord(value.params)) errors.push(`${label} params 必须是对象`);
     features.push({
       id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `f${index + 1}`,
@@ -584,7 +580,7 @@ function parseAssembly(raw: Record<string, unknown>, errors: string[]): Assembly
   if (raw.schemaVersion !== 1 && raw.schemaVersion !== ASSEMBLY_SCHEMA_VERSION) {
     errors.push('schemaVersion 必须为 1 或 2');
   }
-  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('updatedAt 缺失');
+  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('缺少必填参数：updatedAt');
   if (raw.sourceFile !== undefined && typeof raw.sourceFile !== 'string') errors.push('sourceFile 必须是字符串');
   if (!Array.isArray(raw.instances)) {
     errors.push('instances 必须是数组');
@@ -601,8 +597,8 @@ function parseAssembly(raw: Record<string, unknown>, errors: string[]): Assembly
       errors.push(`${label}必须是对象`);
       return;
     }
-    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`${label}缺少 id`);
-    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`${label}缺少名称`);
+    if (typeof value.id !== 'string' || !value.id.trim()) errors.push(`缺少必填参数：${label}.id`);
+    if (typeof value.name !== 'string' || !value.name.trim()) errors.push(`缺少必填参数：${label}.name`);
     if (value.partId !== undefined && typeof value.partId !== 'string') errors.push(`${label} partId 必须是字符串`);
     const transform = isRecord(value.transform) ? value.transform : null;
     if (!transform) errors.push(`${label} transform 必须是对象`);
@@ -661,7 +657,7 @@ export function deserializeDoc(text: string, now = Date.now()): DeserializeResul
   }
   if (raw.schemaVersion !== 1) errors.push('schemaVersion 必须为 1');
   if (!Array.isArray(raw.features)) errors.push('features 必须是数组');
-  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('updatedAt 缺失');
+  if (typeof raw.updatedAt !== 'string' || !raw.updatedAt.trim()) errors.push('缺少必填参数：updatedAt');
   if (raw.sourceFile !== undefined && typeof raw.sourceFile !== 'string') errors.push('sourceFile 必须是字符串');
   const features: FeatureNode[] = [];
   if (Array.isArray(raw.features)) {

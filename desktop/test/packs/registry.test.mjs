@@ -175,7 +175,7 @@ test('manifest 缺 id 时拒绝该包', async () => {
   writePack(join(builtinDir, 'bad-pack'), bad);
   const packs = await registry().scan();
   assert.equal(packs.length, 1);
-  assert.match(packs[0].error, /缺少字段：id/);
+  assert.match(packs[0].error, /缺少必填参数：manifest\.id/);
   assert.equal(registry().listParts().length, 0);
 });
 
@@ -259,7 +259,7 @@ test('导入缺少 manifest 必填字段的 ZIP 返回具体原因', async () =>
     'manifest.json': bad,
     'parts.json': parts()
   });
-  await assert.rejects(() => registry().importZip(zip), /缺少字段：vendor/);
+  await assert.rejects(() => registry().importZip(zip), /缺少必填参数：manifest\.vendor/);
   assert.equal((await registry().scan()).length, 0);
 });
 

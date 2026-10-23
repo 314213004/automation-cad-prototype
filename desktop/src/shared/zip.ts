@@ -13,7 +13,7 @@ const MAX_ENTRIES = 500;
 
 /** 归一化并校验 ZIP 内路径；返回 `a/b.st` 形式。 */
 export function normalizeZipPath(value: unknown): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error('ZIP 条目缺少路径');
+  if (typeof value !== 'string' || !value.trim()) throw new Error('缺少必填参数：ZIP 条目路径');
   const normalized = value.trim().replace(/\\/g, '/').replace(/^\.\/+/, '');
   if (!normalized || normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) {
     throw new Error(`ZIP 条目路径必须是相对路径：${value}`);

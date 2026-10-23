@@ -102,11 +102,11 @@ test('run_electrical_check 命令拒绝非法入参', async () => {
 
   const missingPower = await bus.execute('run_electrical_check', { loads: [{ tag: 'M1' }] });
   assert.equal(missingPower.ok, false);
-  assert.match(missingPower.error.message, /缺少额定功率 powerKw/);
+  assert.match(missingPower.error.message, /缺少必填参数：loads\[0\]\.powerKw/);
 
   const missingCurrent = await bus.execute('run_electrical_check', { circuits: [{ wireNo: '101' }] });
   assert.equal(missingCurrent.ok, false);
-  assert.match(missingCurrent.error.message, /缺少工作电流 currentA/);
+  assert.match(missingCurrent.error.message, /缺少必填参数：circuits\[0\]\.currentA/);
 
   const badOptions = await bus.execute('run_electrical_check', { loads: [{ powerKw: 1 }], options: 3 });
   assert.equal(badOptions.ok, false);

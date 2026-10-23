@@ -92,7 +92,7 @@ function paramNumber(
 ): number | null {
   const value = params[key];
   if (value === undefined) {
-    errors.push(`${label}：缺少必填参数「${key}」`);
+    errors.push(`缺少必填参数：${label}.${key}`);
     return null;
   }
   if (!isFiniteNumber(value)) {
@@ -188,13 +188,13 @@ export function validateAssembly(assembly: AssemblyDoc): string[] {
     const rawName = typeof value.name === 'string' ? value.name.trim() : '';
     const label = `第 ${index + 1} 个实体${rawName ? `（${rawName}）` : ''}`;
     if (!id) {
-      errors.push(`${label}：缺少实体 id`);
+      errors.push(`缺少必填参数：${label}.id`);
     } else if (ids.has(id)) {
       errors.push(`${label}：id「${id}」与第 ${(ids.get(id) ?? index) + 1} 个实体重复`);
     } else {
       ids.set(id, index);
     }
-    if (!rawName) errors.push(`${label}：缺少实体名称`);
+    if (!rawName) errors.push(`缺少必填参数：${label}.name`);
     if (value.partId !== undefined && typeof value.partId !== 'string') {
       errors.push(`${label}：partId 必须是字符串`);
     }
@@ -248,7 +248,7 @@ function validateFeatureDoc(doc: FeatureDoc): string[] {
     const label = featureLabel(value, index);
     const id = typeof value.id === 'string' ? value.id.trim() : '';
     if (!id) {
-      errors.push(`${label}：缺少特征 id`);
+      errors.push(`缺少必填参数：${label}.id`);
     } else if (ids.has(id)) {
       errors.push(`${label}：id「${id}」与第 ${(ids.get(id) ?? index) + 1} 个特征重复`);
     } else {
@@ -286,7 +286,7 @@ function validateFeatureDoc(doc: FeatureDoc): string[] {
       const diameter = paramNumber(params, 'diameter', label, errors);
       const positions = positionsOf(params.positions);
       if (params.positions === undefined) {
-        errors.push(`${label}：缺少必填参数「positions」`);
+        errors.push(`缺少必填参数：${label}.positions`);
       } else if (!Array.isArray(params.positions)) {
         errors.push(`${label}：参数「positions」必须是孔位数组`);
       } else if (params.positions.length === 0) {

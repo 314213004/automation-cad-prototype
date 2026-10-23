@@ -380,11 +380,6 @@ export function applySlide(part: MovingPart, percent: number): SlidePose {
   };
 }
 
-/** 兼容数据层：把 UI 标注转成 KinematicsDoc，便于导出/交叉核对。 */
-export function annotationToDoc(annotation: KinematicsAnnotation): KinematicsDoc {
-  return { schemaVersion: 1, units: 'mm', axes: annotation.parts.map(partToAxis) };
-}
-
 export function serializeAnnotation(annotation: KinematicsAnnotation): string {
   return `${JSON.stringify(
     {
@@ -431,10 +426,10 @@ export function deserializeAnnotation(text: string): AnnotationParseResult {
     issues.push({ code: 'json.version', level: 'error', message: '运动学标注 version 必须为 1' });
   }
   if (typeof record.sourceFile !== 'string') {
-    issues.push({ code: 'json.sourceFile', level: 'error', message: '运动学标注缺少 sourceFile' });
+    issues.push({ code: 'json.sourceFile', level: 'error', message: '缺少必填参数：sourceFile' });
   }
   if (!Array.isArray(record.parts)) {
-    issues.push({ code: 'json.parts', level: 'error', message: '运动学标注缺少 parts 数组' });
+    issues.push({ code: 'json.parts', level: 'error', message: '缺少必填参数：parts' });
     return { ok: false, annotation: null, issues };
   }
   const parts: MovingPart[] = [];
@@ -453,12 +448,12 @@ export function deserializeAnnotation(text: string): AnnotationParseResult {
       issues.push({ code: 'part.axis', level: 'error', message: `parts[${index}] 的 axis 必须是 x、y 或 z` });
     }
     const name = typeof rawPart.name === 'string' ? rawPart.name.trim() : '';
-    if (!name) issues.push({ code: 'part.name', level: 'error', message: `parts[${index}] 缺少动件名称` });
+    if (!name) issues.push({ code: 'part.name', level: 'error', message: `缺少必填参数：parts[${index}].name` });
     const meshIds = Array.isArray(rawPart.meshIds)
       ? rawPart.meshIds.filter((id): id is number => typeof id === 'number' && Number.isInteger(id))
       : [];
     if (!Array.isArray(rawPart.meshIds) || meshIds.length === 0) {
-      issues.push({ code: 'part.meshIds', level: 'error', message: `动件「${name || index + 1}」缺少 meshIds` });
+      issues.push({ code: 'part.meshIds', level: 'error', message: `缺少必填参数：动件「${name || index + 1}」的 meshIds` });
     }
     const direction = rawPart.direction === -1 ? -1 : 1;
     const role = rawPart.role;

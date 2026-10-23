@@ -839,5 +839,7 @@ export function initPlcGenUi(uiOptions: PlcGenUiOptions = {}): void {
   };
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `open`。 */
 export const openPlcGen = open;
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `close`。 */
 export const closePlcGen = close;

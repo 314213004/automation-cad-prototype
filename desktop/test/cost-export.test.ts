@@ -170,6 +170,46 @@ test('planExportName：追加序号后文件名仍不超过 80 字符', () => {
   assert.match(planned.name, / \(\d+\)\.csv$/);
 });
 
+test('planExportName：Unicode 文件名原样保留并强制扩展名', () => {
+  const planned = planExportName({
+    directory: sandbox,
+    format: 'pdf',
+    fileName: '报价单·夹具机🚀.csv'
+  });
+  assert.equal(planned.name, '报价单·夹具机🚀.pdf');
+  assert.equal(planned.path, join(sandbox, planned.name));
+});
+
+test('planExportName：fileName 非字符串抛 INVALID_ARGUMENT', () => {
+  assert.throws(
+    () => planExportName({ directory: sandbox, format: 'csv', fileName: 42 as unknown as string }),
+    (error: unknown) => error instanceof CostExportError
+      && error.code === 'INVALID_ARGUMENT'
+      && /fileName 必须是字符串/.test(error.message)
+  );
+});
+
+test('planExportName：maxLength 小于扩展名时退化为最短安全文件名', () => {
+  const planned = planExportName({
+    directory: sandbox,
+    format: 'csv',
+    fileName: 'abcdef',
+    maxLength: 3
+  });
+  assert.equal(planned.name, 'a.csv');
+  assert.equal(planned.name.length, 5);
+});
+
+test('planExportName：fileName 与 suggestedName 都为空时回落成本报告', () => {
+  const planned = planExportName({
+    directory: sandbox,
+    format: 'csv',
+    fileName: '   ',
+    suggestedName: ' '
+  });
+  assert.equal(planned.name, '成本报告.csv');
+});
+
 test('文件名时间戳格式为 yyyyMMdd-HHmm', () => {
   const timestamp = costExportTimestamp(new Date(2026, 9, 23, 9, 5));
   assert.equal(timestamp, '20261023-0905');

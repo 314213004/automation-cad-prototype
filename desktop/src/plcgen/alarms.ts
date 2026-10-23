@@ -131,4 +131,5 @@ export function generateAlarms(input: GenerateInput): string {
   return renderGeneratedFile(ctx, 'src/FC_Alarms.st', body.join('\n'));
 }
 
+/** 兼容别名：保留对外导出，当前仓库内无调用；新代码请使用 `generateAlarms`。 */
 export const generateAlarmBlock = generateAlarms;

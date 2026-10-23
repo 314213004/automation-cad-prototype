@@ -309,7 +309,7 @@ export class AgentTools {
 
   async call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     const tool = this.tools.get(name);
-    if (!tool) throw new Error(`Unknown tool: ${name}`);
+    if (!tool) throw new Error(`工具不存在：${name}`);
     return await tool.handler(args);
   }
 
@@ -362,7 +362,7 @@ export class AgentTools {
       },
       handler: async (args) => {
         const q = getString(args.q);
-        if (!q) return { ok: false, code: 'INVALID_ARGUMENT', message: 'search_components 需要 q 参数' };
+        if (!q) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：q' };
         const components = this.componentQuery(args);
         return { ok: true, query: q, count: components.length, components };
       }
@@ -425,7 +425,7 @@ export class AgentTools {
       },
       handler: async (args) => {
         const partId = getString(args.partId);
-        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: 'insert_component 需要 partId 参数' };
+        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：partId' };
         const part = this.registry.listParts().find((candidate) => candidate.id === partId);
         if (!part) return { ok: false, code: 'PART_NOT_FOUND', message: `元器件不存在：${partId}` };
         const name = getString(args.name);
@@ -441,11 +441,11 @@ export class AgentTools {
       inputSchema: PLACE_COMPONENT_SCHEMA,
       handler: async (args) => {
         const partId = getString(args.partId);
-        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: 'place_component 需要 partId 参数' };
+        if (!partId) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：partId' };
         const x = getNumber(args.x);
         const y = getNumber(args.y);
         if (x === undefined || y === undefined) {
-          return { ok: false, code: 'INVALID_ARGUMENT', message: 'place_component 需要 x/y 坐标（mm）' };
+          return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：x/y（mm）' };
         }
         const resolution = resolvePartReference(this.registry.listParts(), partId);
         if (!resolution.ok) {
@@ -539,7 +539,7 @@ export class AgentTools {
             return {
               ok: false,
               code: 'VERIFY_FAILED',
-              message: error instanceof Error ? error.message : String(error)
+              message: `验证失败：${error instanceof Error ? error.message : String(error)}`
             };
           }
         }
