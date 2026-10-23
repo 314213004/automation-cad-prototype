@@ -13,6 +13,7 @@
 | 工具表 | `test/agent/tools.test.mjs` | 同上 | 20 工具、BOM 空数组、干涉截断、插入与撤销 |
 | 工具扩展 v1 | `test/agent/tools-v2.test.mjs` | 同上 | 上下文 null 字段、元件修改/移除、PLC 预检拦截不落盘、导出白名单/净化/覆盖、确认拒绝 |
 | 机型方案落盘 | `test/agent/apply-machine-design.test.mjs` | 同上 | brief/design 二选一、设计校验、id/点位冲突、overwrite、active 指针、BOM/PLC 联动、撤销、确认拒绝、路径净化（26 条） |
+| 机型几何 | `test/machine/geometry*.test.mjs`、`test/agent/apply-machine-geometry.test.mjs` | 同上 | 尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴元数据、BOM 对账、STL/glTF/sidecar 契约、three 动画、几何落盘/撤销/实体化回退（24 条） |
 | 底板放置 | `test/agent/place-component.test.mjs` | 同上 | 参数校验、AMBIGUOUS、NO_DIMENSIONS、越界/重叠告警、旋转/吸附、撤销、确认拒绝 |
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 20 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
@@ -55,6 +56,7 @@ SMOKE_AGENT_TOOLS_OK tools=20 implemented=20
 SMOKE_AGENT_TOOLS_V2 tools=20
 SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1
 SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
+SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
 SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1

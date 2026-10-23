@@ -20,7 +20,11 @@ const COMMISSION_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 13.5V8
 let machineConfig = demoMachineConfig();
 
 function machineSummary(): string {
-  return `机型：${machineConfig.name} · ${machineConfig.stations.length} 工位 · ${machineConfig.actuators.length} 执行机构 · ${machineConfig.sensors.length} 传感器`;
+  const base = `机型：${machineConfig.name} · ${machineConfig.stations.length} 工位 · ${machineConfig.actuators.length} 执行机构 · ${machineConfig.sensors.length} 传感器`;
+  const geometry = scene3d?.machineGeometry();
+  if (!geometry) return base;
+  const [x, y, z] = geometry.envelope.map((value) => Math.round(value));
+  return `${base} · 参数化几何 ${geometry.parts.length} 件 · 外形 ${x}×${y}×${z} mm`;
 }
 
 const STATUS_LABEL: Record<PlcStatus, string> = {
@@ -897,6 +901,8 @@ function buildPanel(): void {
     summary: get<HTMLElement>('#commissionSummary')
   };
   scene3d = createScene3D(elements.scene3dHost, machineConfig);
+  const machineNote = drawer.root.querySelector<HTMLElement>('#commission3dMachine');
+  if (machineNote) machineNote.textContent = machineSummary();
   scene3d.setEnabled(elements.scene3dToggle.checked);
   scene3d.setActive(drawer.isOpen());
   renderSceneMode();
@@ -920,11 +926,11 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
   const applyMachineConfig = (config: MachineConfig | null): void => {
     machineConfig = config ? validateMachineConfig(config) : demoMachineConfig();
     if (!elements) return;
-    const summary = elements.drawer.querySelector<HTMLElement>('#commission3dMachine');
-    if (summary) summary.textContent = machineSummary();
     scene3d?.dispose();
     elements.scene3dHost.innerHTML = '';
     scene3d = createScene3D(elements.scene3dHost, machineConfig);
+    const summary = elements.drawer.querySelector<HTMLElement>('#commission3dMachine');
+    if (summary) summary.textContent = machineSummary();
     scene3d.setEnabled(elements.scene3dToggle.checked);
     scene3d.setActive(drawerHandle?.isOpen() ?? false);
     renderSceneMode();
@@ -954,7 +960,10 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
         actuators: 0,
         webgl: false,
         enabled: false,
-        active: false
+        active: false,
+        geometryParts: 0,
+        envelopeMm: [0, 0, 0],
+        layout: 'single'
       },
       update: (incoming: Record<string, boolean | number>): void => scene3d?.update(incoming),
       highlight: (pointId: string, on: boolean): void => scene3d?.highlight(pointId, on),

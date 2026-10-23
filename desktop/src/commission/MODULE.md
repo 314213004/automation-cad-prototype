@@ -33,9 +33,9 @@ interface StepResult {
 ## 3D 联动与诊断
 
 - `machine-config.ts` 定义机型配置（工位、执行机构、传感器及点位映射）并做中文校验；`demoMachineConfig()` 提供 4 工位 × 3 执行机构（气缸/夹爪/旋转）× 16 传感器样例。
-- `scene3d.ts` 按配置生成工位基座、执行机构可动件和传感器灯。气缸按 `extendPoint`/`retractPoint` 与 `durationMs` 插值，夹爪按 `gripPoint` 开合，旋转轴按 `point` 转到 90°；故障高亮通过 `sensors[].part` 或执行机构点位映射到部件。
+- `scene3d.ts` 调用 `machine/geometry.ts` 按配置生成参数化整机几何（机架、工位底板、门架、气缸缸体+活塞杆、夹爪、旋转台、传感器、安全光栅、输送线/分度转盘，单位 mm），经 `machine/geometry-three.ts` 渲染，运动件按生成器给出的轴向/行程动画。气缸按 `extendPoint`/`retractPoint` 与 `durationMs` 插值，夹爪按 `gripPoint` 开合，旋转轴按 `point` 转到 90°；故障高亮通过 `sensors[].part` 或执行机构点位映射到部件。
 - `initCommissionPanel()` 暴露 `getMachineConfig()` / `setMachineConfig(config | null)`：应用机型方案时销毁旧 `createScene3D` 实例并用新配置重建；传 `null` 恢复内置 4 工位样机。启动时渲染层读取 `machine:active` 恢复上次方案，指针缺失或损坏则保持样机。
-- 3D 视图默认开启，关闭后停止渲染；WebGL 不可用时显示降级文案，不抛异常。`window.__Commission3D.stats()` 暴露帧/更新计数、工位数、执行机构数、传感器数与部件数（基座 + 执行机构）。
+- 3D 视图默认开启，关闭后停止渲染；WebGL 不可用时显示降级文案，不抛异常。`window.__Commission3D.stats()` 暴露帧/更新计数、工位数、执行机构数、传感器数、部件数（工位 + 执行机构）以及 `geometryParts` / `envelopeMm` / `layout`；`scene.machineGeometry()` 返回当前几何。
 - 边界：STEP 只提供几何，不含轴类型、行程和运动学。若 CAD 覆盖层存在完整运动学标注，3D 场景优先按
   `MovingPart.meshIds` + `MachineConfig` 点位映射驱动；标注缺失/行程为 0/点位未绑定时回退到配置驱动，
   面板顶部黄条会说明原因。两种模式都不声称支持任意 STEP 自动识别机构。

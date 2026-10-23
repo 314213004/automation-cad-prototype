@@ -1,10 +1,11 @@
 # 自然语言设计机器（三）：工艺模板 + 追问策略 + 真实模型评测
 
-状态：已完成（2026-10-24）。用户可以用一句中文描述机型需求，由纯函数解析并合成一份可确认的 `MachineConfig` 方案；缺执行机构描述时按五类工艺模板补全；信息不足时最多追问一次；确认后通过 `apply_machine_design` 写入工程，并联动刷新 3D 联调视图、BOM 草稿与可选 PLC 点位映射。
+状态：已完成（2026-10-24）。用户可以用一句中文描述机型需求，由纯函数解析并合成一份可确认的 `MachineConfig` 方案；缺执行机构描述时按五类工艺模板补全；信息不足时最多追问一次；确认后通过 `apply_machine_design` 写入工程，并联动刷新 3D 联调视图、BOM 草稿与可选 PLC 点位映射。迭代 34 起，方案会再经纯函数 `generateMachineGeometry` 生成**带真实毫米尺寸的参数化整机几何**（机架、工位底板、门架、气缸、夹爪、旋转台、传感器、安全光栅、输送线/分度转盘），3D 联调视图直接渲染它，并落盘 STL / glTF / sidecar 实体列表（见第 6 节）。
 
 ## 1. 能力边界
 
-- **几何仍是配置驱动**：输出是 `MachineConfig`（stations / actuators / sensors / point 映射），可直接喂给 `createScene3D`，但不会生成真实三维结构，也不会从 STEP 反推机构。
+- **几何是「按规则摆放的标准件外形」，不是结构设计**：`generateMachineGeometry` 由 `MachineConfig` 生成真实 mm 尺寸与位置的装配（典型值：台面 850 mm、缸径 Ø32、M12 接近开关、50 方门架型材），运动件带轴向/行程/点位；但**不做**强度/刚度/挠度校核、零件间干涉求解、型号选型，不生成紧固件、钣金、气路/线缆、电柜，也不建模工位与输送线/转盘之间的上下料机构；输送线驱动与转盘分度没有接入点位。仍不会从 STEP 反推机构。
+- **STEP 只能经 build123d sidecar 产出**：离线时只有 TS 三角网格（STL / glTF，圆柱为多边形近似）；sidecar 只有 box / 竖直 cylinder 与绕 Z 旋转，水平圆柱（接近开关、压力传感器、输送线电机）实体化时按**等截面积方棒近似**，并在 `approximated` 中逐个列出。
 - **功率是估算表**：气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA。它是选型前的粗略容量参考，不是实测有功功率、启动电流或断路器选型结论。
 - **节拍是估算**：单工位动作时间 = 工艺固定余量 + 机构动作时间之和；未计入上下料、通讯、人工干预、调试损失与真实加减速曲线。
 - **不做安全决策**：不提安全等级、不替代风险评估；安全光栅数量只按需求记录。
@@ -183,14 +184,32 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 `design_machine` 工具结果在侧栏渲染「机型方案卡」：工位数、执行机构、传感器、节拍、功率、全部 warnings（黄色条，不折叠）与「应用到工程」按钮。按钮走计划确认；确认后执行 `apply_machine_design`，3D 视图切到新机型，并在卡片和反馈区显示「已应用：<名称>」。
 
-## 6. 验证
+### 5.4 参数化几何落盘
 
+新增开关（工具数仍为 20）：`withGeometry`（默认 `true`）写 `machine/<id>/geometry.json`、`model.stl`（二进制，mm，Z 向上）、`model.gltf`（glTF 2.0，内嵌缓冲，extras 带零件与运动轴）、`sidecar-assembly.json`（≤50 实体/块的 `AssemblyDoc`），结果返回 `geometry` 摘要与路径；`withSolids`（默认 `false`）仅在 build123d 内核已就绪时逐块 `POST /build`（不隐式拉起 Python），全部成功才写 `solids/part-N.step`，否则整体回退 TS 网格并写 warning。几何文件进入撤销快照（base64）。`design_machine` 额外返回只读 `geometry` 摘要。
+
+## 6. 参数化整机几何 `desktop/src/machine/geometry*.ts`
+
+`generateMachineGeometry(config | design, { process?, layout? })`：纯函数、确定性；Z 向上、mm，X 为物料流向，-Y 为操作侧。典型值集中在 `GEOMETRY_DIMENSIONS`。
+
+- 布局：1 工位 `single`；锁螺丝/装配 2–8 工位 `dial`（分度器 + 转盘，工位 -Y 朝向圆心，半径逐步加大到相邻占地不重叠再留 30 mm）；其余 `linear`（工位间距 60 mm，操作侧输送线 + 电机）。工艺缺省从 `config.id` 推断。
+- 机架：台面 20 mm、顶面 850 mm；60 方立腿 830 mm，跨距 >1200 mm 加中腿；4 根下横梁。
+- 工位：底板 深 300 × 厚 15，宽 = 槽位之和（气缸 110 / 夹爪 130 / 旋转台 170）+ 100，最小 320；门架横梁高度按最长气缸反算，保证伸出不撞治具。
+- 气缸：竖直下压，缸体 Ø40×(行程+70) + 活塞杆 Ø12 + 压头，缩回位露杆 25；轴 `linear` [0,0,-1]，`strokeMm = travelMm`。夹爪：本体 64×40×56 + 双指，张开位，轴 `gripper` 每指半行程。旋转台：底座 Ø110 + 台面 Ø140 + 偏心治具，轴 `rotary` 绕 Z 0→90°。
+- 传感器：接近 M12、光电、压力靠近所测执行机构；安全光栅为两根 35×35×600 立柱，共用材质一起亮灭。
+- 输出：`parts[]`（唯一 `[a-z0-9-]` id、形状、中心、绕 Z 角、材质、`bomGroup`、归属、`moving`）、`moving[]`（`axis / pivot / strokeMm / rangeDeg / home / points / jaws`）、`stations[]`（含旋转矩形 `footprint`，`footprintsOverlap` 用分离轴判定）、`envelope / bounds`、`structureBom`（结构件，与 `bomDraft` 分开）。`geometryComponentCounts` 与 `bomDraft` 逐项对账。
+- 导出：`geometry-export.ts` 网格 → STL / glTF；`geometryToSidecarAssemblies` 盒体 → `box`，竖直圆柱 → 内接种子方块 + `cylinder`（精确），水平圆柱 → 等截面方棒（列入 `approximated`）；`buildMachineSolids` 逐块实体化、任一块失败整体回退。
+- 渲染：`geometry-three.ts` 与导出共用网格；`createScene3D` 不再画占位方块，`stats()` 增加 `geometryParts / envelopeMm / layout`，`parts` 口径与标注驱动优先级不变。
+
+## 7. 验证
+
+- 几何（迭代 34）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退。`npm test` **1156/1156**（基线 1132）；冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
 - 全量测试：`npm test` 1132/1132（基线 1110，新增 22）。
 - 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 74/74，意图 / 工具 / 参数 / 拒绝均为 1.00（新增 6 条：5 类工艺 + 1 条信息不足）。
 
-### 6.1 真实模型评测（2026-10-24）
+### 7.1 真实模型评测（2026-10-24）
 
 `desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条，总计 **36 条**（原 30 + 6）；阈值不变：`toolAccuracy ≥ 0.85`、`refusalRate = 1.00`。本机 LiteLLM bridge / `deepseek-v4.1-flash` 实测 **36/36**，`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 **7.9 s** / p95 **31.3 s**；最终轮失败项 0。
 
@@ -214,8 +233,9 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 结果文件：`docs/desktop/eval/agent-live.json`。最终轮无失败项；两轮复跑中的首轮曾出现 1 条 `O04 [operation/missing-arg]`（既有改型号用例的 `update_component` 参数形状未命中断言），第二轮 36/36。该失败未通过删除用例或降低阈值处理，最终结果文件保留可复现的工具序列与参数断言。
 
-## 7. 后续
+## 8. 后续
 
+- 几何：sidecar 加水平圆柱/通用旋转算子后可去掉方棒近似；转盘分度与输送线驱动接入点位后可进联调动画；上下料机构、气路/线缆、电柜与紧固件尚未建模；xvfb 下 WebGL 被 blocklist，冒烟只验证场景构建与零件数，真实 GPU 渲染需在 Windows 实机目测。
 - 模板目前是代码内常量，后续可抽成用户可编辑的模板库；新增模板必须同步 `TEMPLATES`、默认参数、假设文案与测试。
 - 追问目前由工具返回 `needs/question`、会话层按提示最多追问一次；若要跨轮 durable 状态，可把未答项的默认值写入 thread 指纹。
 - 真实评测仍是单模型、单轮为主（机型含 2 个多轮前置场景）；换模型或换措辞应重跑 `npm run agent:live`，不要把 36/36 当通用结论。

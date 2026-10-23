@@ -1267,11 +1267,25 @@ function createWindow(): BrowserWindow {
           bomPath?: string;
           plcPath?: string;
           designPath?: string;
+          geometry?: {
+            layout?: string;
+            parts?: number;
+            movingAxes?: number;
+            envelopeMm?: number[];
+            stlPath?: string;
+            gltfPath?: string;
+            jsonPath?: string;
+            sidecarPath?: string;
+            sidecarChunks?: number;
+          };
           message?: string;
         };
         const appliedScene = await window.webContents.executeJavaScript(
           'window.__Commission3D?.stats?.()?.stations ?? -1'
         ) as number;
+        const appliedGeometry = await window.webContents.executeJavaScript(
+          '(() => { const s = window.__Commission3D?.stats?.(); return s ? { parts: s.geometryParts, layout: s.layout, envelope: s.envelopeMm } : null; })()'
+        ) as { parts?: number; layout?: string; envelope?: number[] } | null;
         if (
           !applied.ok ||
           applied.stations !== 3 ||
@@ -1284,6 +1298,23 @@ function createWindow(): BrowserWindow {
           appliedScene !== 3
         ) {
           console.error('SMOKE_FAIL machine_apply', JSON.stringify({ ...applied, appliedScene }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        const machineGeometry = applied.geometry;
+        if (
+          !machineGeometry ||
+          machineGeometry.layout !== 'dial' ||
+          !(Number(machineGeometry.parts) > 0) ||
+          machineGeometry.movingAxes !== 6 ||
+          !machineGeometry.stlPath || !existsSync(machineGeometry.stlPath) ||
+          !machineGeometry.gltfPath || !existsSync(machineGeometry.gltfPath) ||
+          !machineGeometry.jsonPath || !existsSync(machineGeometry.jsonPath) ||
+          !machineGeometry.sidecarPath || !existsSync(machineGeometry.sidecarPath) ||
+          appliedGeometry?.parts !== machineGeometry.parts ||
+          appliedGeometry?.layout !== 'dial'
+        ) {
+          console.error('SMOKE_FAIL machine_geometry', JSON.stringify({ geometry: machineGeometry, appliedGeometry }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
@@ -1300,7 +1331,13 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
+        if (existsSync(machineGeometry.stlPath)) {
+          console.error('SMOKE_FAIL machine_geometry_undo', JSON.stringify({ stlPath: machineGeometry.stlPath }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
         console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=5 undo=1`);
+        console.log(`SMOKE_MACHINE_GEOMETRY_OK layout=${machineGeometry.layout} parts=${machineGeometry.parts} axes=${machineGeometry.movingAxes} envelope=${(machineGeometry.envelopeMm ?? []).map((value) => Math.round(value)).join('x')} chunks=${machineGeometry.sidecarChunks} scene=${appliedGeometry?.parts}`);
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
           ok?: boolean;
@@ -2636,7 +2673,15 @@ async function bootstrap(): Promise<void> {
     renderCostPdf: renderCostReportPdf,
     renderReportPdf: renderAssemblyReportPdf,
     exportsRoot: join(app.getPath('userData'), 'exports'),
-    userDataRoot: app.getPath('userData')
+    userDataRoot: app.getPath('userData'),
+    // 机型几何实体化：只在内核已就绪时调用，不为此隐式拉起 400 MB 的 Python 进程。
+    buildSolids: async (doc) => {
+      const manager = parametric;
+      if (!manager || manager.status().status !== 'ready') {
+        return { ok: false, code: 'UNAVAILABLE', message: '参数化建模内核未启动' };
+      }
+      return manager.build(doc);
+    }
   });
   await startAgent(registry, commandBus);
   registerAgentChatIpc({
