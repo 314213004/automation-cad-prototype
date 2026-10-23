@@ -18,6 +18,7 @@ import { validatePricebook } from '../src/cost/pricebook';
 import { planExportName } from '../src/cost/export';
 import { demoMachineConfig } from '../src/commission/machine-config';
 import { generateSt } from '../src/plcgen/st';
+import { generateProject } from '../src/plcgen/generate';
 import { ParametricManager } from './parametric.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
@@ -226,6 +227,38 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_PLCGEN_OK files=${generated.stats.files} tags=${generated.stats.tags}`);
+
+        const demo = demoMachineConfig();
+        const cylindersByStation = new Map(
+          demo.actuators
+            .filter((actuator) => actuator.kind === 'cylinder')
+            .map((actuator) => [actuator.station, actuator.id])
+        );
+        const projectConfig = {
+          ...demo,
+          safety: { emergencyStop: 'X100', safetyDoor: 'X101' },
+          sensors: demo.sensors.map((sensor) => {
+            const cylinder = cylindersByStation.get(sensor.station);
+            return sensor.part === sensor.station && cylinder ? { ...sensor, part: cylinder } : sensor;
+          }),
+          sequence: [
+            { id: 'smoke-1', name: '上料气缸伸出', action: 'set', point: 'Y0', condition: 'X0', timeoutMs: 1000 },
+            { id: 'smoke-2', name: '上料夹爪夹紧', action: 'set', point: 'Y8', condition: 'X1', timeoutMs: 1000 }
+          ]
+        };
+        const project = generateProject({ config: projectConfig });
+        const repeatedProject = generateProject({ config: projectConfig });
+        if (
+          !project.ok ||
+          project.stats.files !== 11 ||
+          project.stats.steps !== 2 ||
+          JSON.stringify(project.files) !== JSON.stringify(repeatedProject.ok ? repeatedProject.files : [])
+        ) {
+          console.error('SMOKE_FAIL plcgen_project', JSON.stringify(project.ok ? project.stats : project.errors));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PLCGEN_SEQ_OK files=${project.stats.files} steps=${project.stats.steps}`);
       } catch (error) {
         console.error('SMOKE_FAIL plcgen_exception', error);
         setTimeout(() => app.exit(1), 100);

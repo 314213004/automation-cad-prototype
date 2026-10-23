@@ -11,10 +11,11 @@ import { inputJsonHash } from './hash.ts';
 export const PLCGEN_VERSION = '1.0.0';
 export const DEFAULT_TIMEOUT_MS = 3000;
 export const DEFAULT_TOLERANCE_DEG = 0.5;
+export const DEFAULT_SEQUENCE_TIMEOUT_MS = 5000;
 
-type GenerateInput = StGenerateInput | PlcGenConfig;
+export type GenerateInput = StGenerateInput | PlcGenConfig;
 
-interface RenderContext {
+export interface RenderContext {
   config: PlcGenConfig;
   version: string;
   inputHash: string;
@@ -22,6 +23,8 @@ interface RenderContext {
   timeoutTime: string;
   timeoutTimeMs: number;
   toleranceDeg: number;
+  sequenceTimeout: string;
+  sequenceTimeoutMs: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,7 +35,7 @@ function isWrappedInput(value: GenerateInput): value is StGenerateInput {
   return isRecord(value) && isRecord((value as { config?: unknown }).config);
 }
 
-function validateTimeout(value: number | undefined): number {
+export function validateTimeout(value: number | undefined): number {
   const timeout = value ?? DEFAULT_TIMEOUT_MS;
   if (!Number.isFinite(timeout) || !Number.isInteger(timeout) || timeout <= 0) {
     throw new Error('PLC 生成超时时间必须是大于 0 的整数毫秒');
@@ -48,6 +51,14 @@ function validateTolerance(value: number | undefined): number {
   return tolerance;
 }
 
+function validateSequenceTimeout(value: number | undefined): number {
+  const timeout = value ?? DEFAULT_SEQUENCE_TIMEOUT_MS;
+  if (!Number.isFinite(timeout) || !Number.isInteger(timeout) || timeout <= 0) {
+    throw new Error('PLC 序列超时时间必须是大于 0 的整数毫秒');
+  }
+  return timeout;
+}
+
 function formatVersion(value: string | number | undefined): string {
   const version = value ?? '1';
   const text = String(version).trim();
@@ -55,7 +66,7 @@ function formatVersion(value: string | number | undefined): string {
   return text;
 }
 
-function formatTime(milliseconds: number): string {
+export function formatTime(milliseconds: number): string {
   if (milliseconds % 1000 === 0) return `T#${milliseconds / 1000}s`;
   return `T#${milliseconds}ms`;
 }
@@ -64,13 +75,44 @@ function cleanComment(value: string): string {
   return value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function header(ctx: RenderContext, fileName: string): string {
+export function renderHeader(ctx: RenderContext, fileName: string): string {
   return [
     '// 自动生成，请勿手工修改',
     `// 机型: ${ctx.config.name || '未命名机型'} (${ctx.config.id || '未指定'})  版本: ${ctx.version}  输入哈希: ${ctx.inputHash}`,
     `// 来源: AutomationCAD 生成器 v${ctx.generatorVersion}`,
     `// 文件: ${fileName}`
   ].join('\n');
+}
+
+/** 解析 `{ config, ...options }` 或直接传入机型配置，并生成稳定的渲染上下文。 */
+export function createRenderContext(input: GenerateInput): RenderContext {
+  if (!isRecord(input)) throw new Error('PLC 生成输入必须是对象');
+  const wrapped = isWrappedInput(input);
+  const config = (wrapped ? input.config : input) as PlcGenConfig;
+  if (!isRecord(config)) throw new Error('PLC 生成输入缺少机型配置');
+
+  const options: StGenerateOptions = wrapped ? input : {};
+  const timeoutTimeMs = validateTimeout(options.timeoutTimeMs);
+  const toleranceDeg = validateTolerance(options.toleranceDeg);
+  const sequenceTimeoutMs = validateSequenceTimeout(options.sequenceTimeoutMs);
+  const generatorVersion = options.generatorVersion?.trim() || PLCGEN_VERSION;
+  const version = formatVersion(options.version ?? config.version);
+  const inputHash = inputJsonHash(input).slice(0, 12);
+  return {
+    config,
+    version,
+    inputHash,
+    generatorVersion,
+    timeoutTime: formatTime(timeoutTimeMs),
+    timeoutTimeMs,
+    toleranceDeg,
+    sequenceTimeout: formatTime(sequenceTimeoutMs),
+    sequenceTimeoutMs
+  };
+}
+
+export function renderGeneratedFile(ctx: RenderContext, path: string, body: string): string {
+  return `${renderHeader(ctx, path.split('/').pop() ?? path)}\n\n${body}`;
 }
 
 function cylinderBlock(ctx: RenderContext): string {
@@ -333,12 +375,37 @@ function ob1Block(ctx: RenderContext): string {
     '    ManualMode : BOOL;',
     '    AutoMode : BOOL;',
     '    AlarmReset : BOOL;',
+    '    Abort : BOOL;',
+    '    SafeStop : BOOL;',
+    '    SafetyTriggered : BOOL;',
+    '    StepNo : INT;',
+    '    SeqTimeout : BOOL;',
+    '    StepErrorCode : WORD;',
+    '    AlarmWord : WORD;',
+    '    FirstFault : WORD;',
     'END_VAR',
     'BEGIN',
-    '    // P8-1 占位：P8-2 补实现后接入手动、自动与报警。',
+    '    // P8-2：FC_AutoSequence() 与 FC_Alarms() 已接线；FC_Manual() 留待后续。',
     '    // FC_Manual();',
-    '    // FC_AutoSequence();',
-    '    // FC_Alarms();',
+    '    FC_AutoSequence(',
+    '        Start := AutoMode,',
+    '        Abort := Abort,',
+    '        SafeStop := SafeStop,',
+    '        StepNo => StepNo,',
+    '        SeqTimeout => SeqTimeout,',
+    '        StepErrorCode => StepErrorCode,',
+    '        AlarmWord := AlarmWord);',
+    '    FC_Alarms(',
+    '        SeqTimeout := SeqTimeout,',
+    '        SafetyTriggered := SafetyTriggered,',
+    '        Reset := AlarmReset,',
+    '        AlarmWord => AlarmWord,',
+    '        FirstFault => FirstFault);',
+    '    // 安全 FC 最后执行，保证 SafeStop 同扫描周期内复位所有输出。',
+    '    FC_Safety(',
+    '        Reset := AlarmReset,',
+    '        SafeStop => SafeStop,',
+    '        SafetyTriggered => SafetyTriggered);',
     'END_PROGRAM',
     ''
   ].join('\n');
@@ -354,27 +421,7 @@ function countLines(content: string): number {
  * 文件正文不含时间戳。
  */
 export function generateSt(input: GenerateInput): StGenerateResult {
-  if (!isRecord(input)) throw new Error('PLC 生成输入必须是对象');
-  const wrapped = isWrappedInput(input);
-  const config = (wrapped ? input.config : input) as PlcGenConfig;
-  if (!isRecord(config)) throw new Error('PLC 生成输入缺少机型配置');
-
-  const options: StGenerateOptions = wrapped ? input : {};
-  const timeoutTimeMs = validateTimeout(options.timeoutTimeMs);
-  const toleranceDeg = validateTolerance(options.toleranceDeg);
-  const generatorVersion = options.generatorVersion?.trim() || PLCGEN_VERSION;
-  const version = formatVersion(options.version ?? config.version);
-  const hashSource = wrapped ? input : config;
-  const inputHash = inputJsonHash(hashSource).slice(0, 12);
-  const ctx: RenderContext = {
-    config,
-    version,
-    inputHash,
-    generatorVersion,
-    timeoutTime: formatTime(timeoutTimeMs),
-    timeoutTimeMs,
-    toleranceDeg
-  };
+  const ctx = createRenderContext(input);
 
   const definitions: Array<{ path: string; render: () => string }> = [
     { path: 'src/FB_Cylinder.st', render: () => cylinderBlock(ctx) },
@@ -385,9 +432,9 @@ export function generateSt(input: GenerateInput): StGenerateResult {
   ];
   const files: GeneratedFile[] = definitions.map((definition) => ({
     path: definition.path,
-    content: `${header(ctx, definition.path.split('/').pop() ?? definition.path)}\n\n${definition.render()}`
+    content: renderGeneratedFile(ctx, definition.path, definition.render())
   }));
-  const tags = buildTags(config);
+  const tags = buildTags(ctx.config);
   return {
     files,
     stats: {
@@ -396,11 +443,11 @@ export function generateSt(input: GenerateInput): StGenerateResult {
       tags: tags.rows.length,
       inputs: tags.rows.filter((row) => row.address.startsWith('I')).length,
       outputs: tags.rows.filter((row) => row.address.startsWith('Q')).length,
-      actuators: (config.actuators ?? []).length,
-      stations: (config.stations ?? []).length,
-      inputHash,
-      timeoutTimeMs,
-      toleranceDeg
+      actuators: (ctx.config.actuators ?? []).length,
+      stations: (ctx.config.stations ?? []).length,
+      inputHash: ctx.inputHash,
+      timeoutTimeMs: ctx.timeoutTimeMs,
+      toleranceDeg: ctx.toleranceDeg
     }
   };
 }

@@ -5,7 +5,7 @@
 - 当前版本：**v0.2.0**（Windows NSIS 安装包已发布；CI 改为手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**505 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成 / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
+- 质量基线：**556 个单元测试全绿**，另有覆盖 CAD / 运动学 / 机核 / 导出 / PLC / PLC 代码生成 / 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体 / 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -133,7 +133,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 通电联调 | 上电序列 + 用例，逐步 / 一键执行，导出 PDF 章节 | ✅ 仿真验证 |
 | 3D 联动 | 机型配置驱动（4 工位 / 12 执行机构 / 16 传感器）+ 运动学标注优先 | ✅ |
 | 故障诊断 | 7 条规则 + 兜底，按置信度排序给出原因与处置 | ✅ |
-| PLC 程序生成 | P8-1 核心：全量预检 + IO 变量表 CSV + 气缸/夹爪/旋转轴/DB_IO/OB1 五个 ST 文件，`inputHash` 确定性输出 | ✅ 核心（无 UI） |
+| PLC 程序生成 | P8-2 核心：全量预检 + IO 变量表 CSV + 五个基础块 + 自动序列/报警/安全 FC + `mapping.json`，固定 11 文件与逐文件 SHA-256 | ✅ 核心（无 UI） |
 | 智慧工厂 | demo（2 工位 / 8 点位）、OPC UA、MQTT 三适配器 + 实时值面板 | ✅ demo 实测 |
 | 设计包同步 | manifest / SHA-256 幂等、`X-Design-Key`、版本 diff、手动上传、失败阶段可区分 | ✅ 客户端（后端 0.22.0 已实现） |
 
@@ -216,7 +216,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（505 个）
+│   ├── test/                                 # node:test 单测与集成测试（556 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -255,7 +255,7 @@ smoke 覆盖并断言：
 - 运动学标注（`SMOKE_KINEMATICS_UI_OK parts=2 errors=1 slide=25`）；
 - 干涉、受力、导出的计算与文件写出；
 - PLC 点位、上电序列、用例；
-- PLC 代码生成（`SMOKE_PLCGEN_OK files=5 tags=32`）：demo 机型确定性生成五个 ST 文件与 32 点变量表；
+- PLC 代码生成（`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`）：五个基础块、11 文件汇总、自动序列/安全/报警 FC 与确定性校验；
 - 参数化 sidecar 与特征树 UI（假内核，`AUTOMATIONCAD_PARAMETRIC_CMD` 指向 `desktop/scripts/fake-parametric-sidecar.mjs`）：`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`；不设环境变量时输出 `SMOKE_PARAMETRIC_UI_SKIP`；
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
@@ -274,7 +274,7 @@ smoke 覆盖并断言：
 - **成本面板的 BOM 需手工导入**：面板接受 BOM JSON（或由上层注入 `__CostBomProvider`），尚未把 CAD 模型零件名自动映射到元器件物料号（映射口径待定，见 BACKLOG D7）；Agent 工具 `run_cost_report` 未传 `bom` 时回落到当前场景 BOM，场景零件没有物料号，会全部计入「缺物料号」而不会按 0 计价。Agent 导出工具 `export_cost_report` 固定写 `<userData>/exports/`（Windows 通常为 `%APPDATA%/AutomationCAD/exports/`），不接受任意绝对路径、不弹系统保存对话框；面板里的 CSV 仍走系统保存对话框。
 - **运动学标注需人工指定**：STEP 不含运动学，动件 / 轴 / 行程 / 点位由人标注；未标注时联调回退到机型配置。
 - **参数化建模已完成 P9-3 单件特征树**：右侧抽屉可编辑 box / holes / slot / fillet / cylinder，自动重建后载入 sidecar 返回的 STL 并叠加旧模型（[PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md)）。仍需 Python sidecar 运行时；草图约束（P9-4）、多实体装配与 BOM/成本联动（P9-5）未做。
-- **PLC 程序自动生成仅完成 P8-1 核心**：预检、IO 变量表与五个 ST 块已落地（[PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)）；生成 UI、zip 导出、自动序列/报警/安全 FC 仍在 P8-2～P8-4，不生成厂商专有工程文件。
+- **PLC 程序自动生成完成 P8-1/P8-2 核心**：预检、IO 变量表、五个基础块、自动序列/报警/安全 FC 与 `mapping.json` 已落地（[PLC-CODEGEN.md](docs/desktop/PLC-CODEGEN.md)）；生成 UI、zip 导出与模拟器联调自检仍在 P8-3/P8-4，不生成厂商专有工程文件。
 - **委外加工数据智能系统为规划项**：仅在设计方案与汇报材料中描述，未开发。
 - **便携包偏大**（Electron 45 + node-opcua，解压后数百 MB），后续可按需懒加载 node-opcua 或改 sidecar。
 - **干涉为 AABB 初筛**，不是精确布尔求交；贴合面、螺纹啮合可能被误报，需要白名单收口。

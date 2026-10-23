@@ -18,6 +18,8 @@ export interface ParsedPointAddress {
 
 export interface IoRef {
   point: string;
+  /** 配置里的显式源地址（如有），仅用于映射与步序引用。 */
+  sourceAddress?: string;
   area: IoArea;
   station: string;
   actuatorName?: string;
@@ -280,7 +282,8 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
     purpose: string,
     comment: string,
     path: string,
-    actuatorName?: string
+    actuatorName?: string,
+    sourceAddress?: string
   ): void => {
     const trimmed = point.trim();
     if (!trimmed) return;
@@ -297,6 +300,7 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
       order
     };
     if (actuatorName) ref.actuatorName = actuatorName;
+    if (sourceAddress?.trim()) ref.sourceAddress = sourceAddress.trim();
     refs.push(ref);
     order += 1;
   };
@@ -316,7 +320,8 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
       purpose,
       comment,
       `sensors[${index}].point`,
-      actuator?.name
+      actuator?.name,
+      (sensor as SensorExtras).ioAddress ?? (sensor as SensorExtras).address
     );
   }
 
@@ -326,6 +331,9 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
   }
   for (const [index, point] of safetyRefs.safetyDoor.entries()) {
     add(point, 'input', '安全', '安全门', `输入 ${point}；安全门/光栅`, `safety.safetyDoor[${index}]`);
+  }
+  if (safetyRefs.reset) {
+    add(safetyRefs.reset, 'input', '安全', '安全复位', `输入 ${safetyRefs.reset}；安全复位`, 'safety.reset');
   }
 
   const extraPoints = [
@@ -341,7 +349,9 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
       extra.station ?? '扩展',
       extra.role ?? (area === 'input' ? '输入' : '输出'),
       `${area === 'input' ? '输入' : '输出'} ${extra.point}；${extra.name ?? '扩展点位'}`,
-      `ioPoints[${index}].point`
+      `ioPoints[${index}].point`,
+      undefined,
+      extra.address
     );
   }
 
@@ -362,7 +372,11 @@ export function collectIoRefs(config: PlcGenConfig): IoRef[] {
         purpose,
         `输出 ${point}；${actuator.name} ${purpose}`,
         `actuators[${actuatorIndex}].${field}`,
-        actuator.name
+        actuator.name,
+        field === 'extendPoint' ? actuator.extendAddress
+          : field === 'retractPoint' ? actuator.retractAddress
+            : field === 'gripPoint' ? actuator.gripAddress
+              : actuator.pointAddress
       );
     }
   }

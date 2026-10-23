@@ -115,6 +115,13 @@ function definitionPoints(config: PlcGenConfig): PointDefinition[] {
     known.add(key);
     definitions.push({ point, area: 'input', path: `safety.safetyDoor[${index}]`, owner: 'safety-door' });
   }
+  if (safety.reset) {
+    const key = normalizePointKey(safety.reset);
+    if (!known.has(key)) {
+      known.add(key);
+      definitions.push({ point: safety.reset, area: 'input', path: 'safety.reset', owner: 'safety-reset' });
+    }
+  }
   return definitions;
 }
 

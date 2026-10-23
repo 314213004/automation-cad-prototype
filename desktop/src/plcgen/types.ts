@@ -56,6 +56,10 @@ export interface PlcSequenceStep {
   waits?: readonly string[];
   condition?: string;
   expect?: boolean | number;
+  /** 单步超时，单位 ms；缺省使用 5000。 */
+  timeoutMs?: number;
+  /** `timeoutMs` 的兼容别名。 */
+  timeout?: number;
 }
 
 /** MachineConfig 的 PLC 生成扩展；原有调用方无需修改。 */
@@ -145,6 +149,8 @@ export interface StGenerateOptions {
   timeoutTimeMs?: number;
   /** 旋转轴角度容差，单位度，默认 0.5。 */
   toleranceDeg?: number;
+  /** 自动序列单步默认超时，单位 ms，默认 5000。 */
+  sequenceTimeoutMs?: number;
   generatorVersion?: string;
 }
 

@@ -1,6 +1,6 @@
 # 设计完成后自动生成 PLC 程序 · 设计方案
 
-状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2～P8-5 待做
+状态：P8-1 ✅ 已实现（预检 + IO 变量表 + 五个 ST 基础块）；P8-2 ✅ 已实现（自动序列 / 报警 / 安全 FC + 汇总生成）；P8-3～P8-5 待做
 目标：电气设计定稿（选型 + IO 表 + 动作顺序）后，一键生成**可直接导入 PLC 工程**的程序骨架与变量表，把「画完图再手工敲程序」变成「设计即程序」。
 
 ## 1. 输入（全部来自已有模块）
@@ -162,3 +162,47 @@ plc/
 - `npm test`：**505/505**，其中 `desktop/test/plcgen.test.ts` **35 条**。
 - `npm run smoke`：`SMOKE_PLCGEN_OK files=5 tags=32` → `SMOKE_OK`。
 - demo 机型（4 工位 / 12 执行机构 / 16 传感器）生成 5 文件、32 个变量；demo 未带安全点位，因此直接跑 P8-1 预检会如实报 `ESTOP_UNDEFINED` / `SAFETY_DOOR_UNDEFINED`，接入安全件后为 0 错误。
+
+## 11. P8-2 实现记录（2026-10-23）
+
+状态：✅ 核心完成（无 UI）。新增 `sequence.ts`、`safety.ts`、`alarms.ts`、`symbols.ts`、`generate.ts`，并扩展 `st.ts` / `types.ts` / `io.ts` / `precheck.ts`。
+
+### 汇总生成
+
+`generateProject({ config, bom? }) → { ok, files, stats, precheck }`：
+
+- 先跑 `precheck`；有 error 时返回 `{ ok:false, errors }`，不生成任何文件。
+- 成功时固定输出 11 个文件，顺序为：`src/OB1_Main.st`、`src/DB_IO.st`、`src/FB_Cylinder.st`、`src/FB_Gripper.st`、`src/FB_RotaryAxis.st`、`src/FC_AutoSequence.st`、`src/FC_Alarms.st`、`src/FC_Safety.st`、`io-tags.csv`、`mapping.json`、`README.md`。
+- `stats` 追加 `steps`、`sequenceEmpty`、`precheckWarnings`、`sequenceWarnings` 与每个文件的 `hashes`（SHA-256）。
+- 同一输入连续生成，11 个文件逐字节一致，`hashes` 逐项相同；正文与 README 均不写时间戳。
+
+### 自动序列 `FC_AutoSequence.st`
+
+`generateSequence(input) → { content, steps, warnings }`，把 `sequence` / `steps` 直译为 `CASE StepNo OF`：
+
+- 支持 `action` / `type` 的 set/reset/wait/expect，以及 `point`、`points`、`setPoints`、`resetPoints`、`waitPoints`、`sets`、`resets`、`waits`、`condition`、`expect`、`value`。
+- 条件中的点位转换为 `"DB_IO".<变量名>`，保留 AND/OR/NOT 与括号；`expect=false` 生成 `NOT`。
+- 每步缺省超时 `T#5s`，可用 `timeoutMs` 覆盖；超时置 `StepNo := STEP_ERROR`、`SeqTimeout := TRUE`、`ErrorCode := 16#8101` 并写 `AlarmWord := AlarmWord OR ALARM_SEQ_TIMEOUT`。
+- `Abort` 上升沿或 `SafeStop` 回到 `STEP_IDLE`（Step0）；最后一步完成后回 Step0。
+- 空步序仍输出可编译骨架，并返回 `SEQUENCE_EMPTY` warning（不报错）；无转移条件给 `SEQUENCE_NO_CONDITION` warning。
+
+### 安全 `FC_Safety.st`
+
+`generateSafety(config)`：急停、安全门、光栅按常闭串联（`SafetyHealthy := ch1 AND ch2 ...`）。任一断开置 `SafeStop := TRUE`、`SafetyTriggered := TRUE`，并复位所有输出；仅当安全条件恢复且 `Reset` 出现上升沿时解除锁存。缺失急停或安全门时输出 `(* 未配置急停/安全门 *)` 与失效保护 `SafeStop := TRUE`，不伪造任何输入变量。
+
+### 报警 `FC_Alarms.st`
+
+`generateAlarms(config)`：统一 `AlarmWord` 汇总超时（`16#8101`）、传感器矛盾（`16#8202`）、安全触发（`16#8301`）。同一执行机构按绑定顺序取前两路传感器，同时为 1 时置 `SensorConflict`；`FirstFault` 按 超时 → 传感器矛盾 → 安全触发 的优先级锁存首故障，`Reset` 上升沿清空。
+
+### 映射与接线
+
+- `mapping.json` 顶层含 `schemaVersion`、`inputHash`、机型、IO 计数；`points[]` 串起位号（`ref`）、源点位、分配地址、变量名、注释、工位与引用步序；`sequence[]` 保留每步动作、条件与超时。
+- `OB1_Main.st` 已从占位改为实际调用 `FC_AutoSequence` / `FC_Alarms` / `FC_Safety`；安全块最后执行，确保 `SafeStop` 在同扫描周期复位输出。
+- `safety.reset` 若配置为实际点位，会作为输入进入变量表；未配置时由 HMI 的 `Reset` 形参驱动。
+
+### 验证证据
+
+- `npx tsc --noEmit`：通过。
+- `npm test`：**556/556**，其中新增 `desktop/test/plcgen-p82.test.ts` **32 条**（序列转移/超时/中止、安全串联与锁存、报警首故障、空步序、确定性、文件顺序、预检拦截）。
+- `npm run smoke`：`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2` → `SMOKE_OK`。
+- P8-2 边界：仍不生成 zip / UI / 厂商专用工程；模拟器联调自检留给 P8-4。
