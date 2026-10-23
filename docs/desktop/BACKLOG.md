@@ -37,7 +37,10 @@
 - 内容：按 `docs/desktop/SMART-FACTORY-INTEGRATION.md` 实现 `/api/v1/design-sync/*`
 
 ### P6 机台硬件成本自动统计
-- 状态：🔄 P6-1 ✅ 引擎完成（`a8c1e5f`）：价格簿校验 + 计算引擎，43 条成本用例，301/301，`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`；示例价条目自动排除。下一步 P6-2 面板/导出
+- 状态：🔄 P6-1 ✅ 引擎完成（`a8c1e5f`）；P6-2 ✅ 面板与导出（`6d70ae7`）：`src/cost/ui.ts` 顶栏「成本估算」抽屉（9 卡 + 参数区 + 明细 + 缺价告警 + 导入 BOM/价格簿 + 导出 PDF/CSV）、`src/cost/report.ts` A4 纵向报告与 UTF-8 BOM CSV、主进程 `cost:pricebook` IPC 与 `exportReport` 可选 A3/A4
+- 实测（P6-2）：`tsc --noEmit` 通过；`npm test` **401/401**（新增 14 条报告用例）；`npm run smoke` → `SMOKE_COST_OK lines=6 missing=1 grand=1398.64`、`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`、`SMOKE_OK`
+- 已知限制：BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；CSV 导出在桌面版走系统保存对话框（headless smoke 只断言 CSV 内容，不落盘）
+- 下一步：P6-3 Agent 工具 `run_cost_report`
 - 分期：P6-1 价格簿+引擎 → P6-2 面板/导出 → P6-3 Agent 工具 → P6-4 与智慧工厂采购价对接
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
 
@@ -71,6 +74,7 @@
 | D4 | 委外加工数据智能系统是否立项 | A 立项并定义接口；B 先只做数据导出；C 暂缓 | 路线图与汇报口径 | B 过渡，接口按 A 设计 | 待定 |
 | D5 | 元件库缺失尺寸（180/371）能否用「同系列壳体推定」 | A 允许并标注推定；B 只用实测/官方值，缺的留空 | 底板布置覆盖率 | A + 标注，人工复核 | 待定 |
 | D6 | 参数化建模首期范围 | A 只做单件结构件；B 单件+多体装配；C 直接上草图约束 | 工期（A≈3 周，B≈6 周） | A 先交付，B/C 分期 | 待定 |
+| D7 | 成本面板如何拿到 BOM（CAD 零件名 → 元器件物料号映射口径） | A 由底板画布/电气元件库直接给 partId，成本面板只读；B 允许「零件名规则匹配 + 人工确认」自动填 partId；C 保持手工导入 BOM JSON | 影响成本能否一键算；B 需要命名规范（如 `QF1:LC1D09`），否则匹配率低 | A 长期方向，短期用 C + 预留 B | 待定 |
 
 ## 已知问题（记录，不阻塞）
 
