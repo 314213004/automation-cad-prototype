@@ -1,6 +1,6 @@
 # 机台硬件成本自动统计 · 设计方案
 
-状态：P6-1 引擎 ✅、P6-2 面板与导出 ✅（2026-10-23）
+状态：P6-1 引擎 ✅、P6-2 面板与导出 ✅、P6-3 Agent 工具 ✅（2026-10-23）
 目标：从已有 BOM / 底板布置 / PLC 配置自动算出每台机台的硬件成本，单价可追溯、可覆盖、可导出。
 
 ## 1. 原则
@@ -105,10 +105,22 @@ interface CostReport {
 - `describeCost` / `money`：状态栏与报告共用同一格式化口径
 - `exportReport` 增加可选 `page: { size: 'A3'|'A4', landscape }`，默认 A3 横向，成本报告传 A4 纵向
 
+## 4.2 Agent 工具 `run_cost_report`（P6-3）
+
+实现 `desktop/src/cost/agent.ts` + 命令总线 `run_cost_report`，MCP / JSON-RPC / 应用内对话共用同一份工具定义。
+
+- **入参**：`bom?`（不给则取当前场景 BOM）、`pricebook?`（不给则读内置价格簿）、`placements?` / `plate?` / `plc?` / `options?` / `overrides?` / `wireSection?` / `now?`
+- **出参**：`bomSource`、`bomRows`、`pricebook{label, usableItems, exampleItems}`、`totals / labor / extras / byCategory`、`counts{lines, missing, warnings}`、`lines`（≤50）、`missing`（≤20）、`warnings`（≤20）、`truncated`、`notes`、`summary`
+- **只读**：不写价格簿、不落盘、不进撤销栈
+- **诚实性**：显式 BOM 的 `partId` 缺失、价格簿未命中都会进 `missing` 并在 `notes` 写明「合计偏低，不要当作报价单」；场景 BOM 没有物料号时全部计入 `NO_PART_ID`，不会按 0 计价
+- **错误码**：`INVALID_ARGUMENT`（带 `bom[0].qty` 这类行号）、`NO_BOM`、`PRICEBOOK_UNAVAILABLE`、`COST_FAILED`
+
+自然语言「这台机台硬件成本多少」→ 模型调用该工具 → 用 `summary` 与 `totals` 复述，缺价时说明还需要哪些物料号。
+
 ## 5. 与其他模块的关系
 
 - **BOM 导出**：`export/bom.ts` 增加 `unitPrice/subtotal` 两列（有价时），保持原有列不变
-- **Agent**：新增工具 `run_cost_report`（只读，返回 `CostReport` 摘要），自然语言「这台机台硬件成本多少」直接调用
+- **Agent**：`run_cost_report` 已实现（只读，返回 `CostReport` 窄摘要），自然语言「这台机台硬件成本多少」直接调用
 - **智慧工厂同步**：manifest 增加可选 `cost: { grand, currency, pricedAt }`，服务端可落库做采购参考（需对方确认字段，先在文档标注「待对接」）
 - **底板画布**：布置变化后成本面板显示「布置已变更，需重算」提示，不自动重算以免误改报价
 
@@ -118,17 +130,18 @@ interface CostReport {
 - 不批量抓电商价（价格波动、含促销、不可追溯）
 - 用户可在价格簿 UI 里批量导入 CSV：`partId,price,currency,source,updatedAt`
 
-## 7. 验收（P6-2 实测）
+## 7. 验收（P6-3 实测）
 
-- 单测 43 条引擎/价格簿 + 14 条报告（HTML/CSV），全套 `npm test` 401/401
+- 单测 43 条引擎/价格簿 + 14 条报告（HTML/CSV）+ 12 条 Agent 工具（入参校验/场景 BOM/示例价/截断/命令透传），全套 `npm test` **413/413**
 - smoke：`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`（引擎 fixture）
+- smoke：`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`（命令总线 → 工具层，与引擎数字一致）
 - smoke：`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`（面板：打开 → 载入价格簿 → 计算 → 9 卡 6 行 → A4 PDF 落盘；内置价格簿 IPC 返回 `exampleItems=4`）
-- 报告与面板数字同源（同一次 `computeCost` 结果对象），HTML 与 CSV 都断言合计 `1398.64`
+- 报告、面板、Agent 三处数字同源（同一次 `computeCost` 结果对象），都断言合计 `1398.64`
 - 性能：500 行 BOM < 50 ms（引擎单测已覆盖）
 
 ## 8. 分期
 
 - P6-1：价格簿格式 + 校验 + 计算引擎 + 单测（无 UI）
 - P6-2：成本面板 + CSV/PDF 导出 + BOM 增列
-- P6-3：Agent 工具 `run_cost_report` + 自然语言问答
+- P6-3：✅ Agent 工具 `run_cost_report`（2026-10-23）
 - P6-4：与智慧工厂采购价字段对接（需对方确认）

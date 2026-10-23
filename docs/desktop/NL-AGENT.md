@@ -36,16 +36,16 @@
 
 关键约束：**工具层必须是唯一写入口**，UI 与 Agent 共用同一套 API，避免两套逻辑漂移。
 
-## 3. 工具清单（现有 8 + 新增 7）
+## 3. 工具清单（现有 9 + 新增 6）
 
-现有：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`run_electrical_check`、`undo_last`
+现有：`list_components`、`search_components`、`import_cad`、`get_bom`、`run_interference_check`、`insert_component`、`run_electrical_check`、`run_cost_report`、`undo_last`
 
 新增：
 | 工具 | 类型 | 说明 |
 |---|---|---|
 | `get_project_context` | 只读 | 当前机型、域、视图、选中对象、底板尺寸、单位制 |
 | `place_component` | 写 | 在底板/原理图指定位置放元件（含吸附与冲突返回） |
-| `run_cost_report` | 只读 | 硬件成本统计（见 COSTING.md） |
+| `run_cost_report` | 只读 | ✅ 已实现（`src/cost/agent.ts`）：硬件成本统计，见 COSTING.md 4.2 |
 | `export_files` | 写 | 导出 PDF/DXF/GLB/BOM，返回文件路径 |
 | `start_commission` | 写 | 启动联调序列（需确认） |
 | `diagnose_fault` | 只读 | 按当前点位/报警码给故障建议 |
