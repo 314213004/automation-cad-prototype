@@ -148,6 +148,8 @@ function buildOverlay(): void {
       <aside class="cad-sidebar">
         <div class="cad-side-tabs" role="tablist" aria-label="CAD 侧栏">
           <button type="button" class="cad-side-tab is-active" data-cad-side="parts" role="tab" aria-selected="true">零件</button>
+          <button type="button" class="cad-side-tab" data-cad-side="bom" role="tab" aria-selected="false">BOM</button>
+          <button type="button" class="cad-side-tab" data-cad-side="io" role="tab" aria-selected="false">IO 点位</button>
           <button type="button" class="cad-side-tab" data-cad-side="stress" role="tab" aria-selected="false">受力</button>
         </div>
         <div class="cad-side-pane" id="cadPartsPane">
@@ -157,6 +159,19 @@ function buildOverlay(): void {
           </div>
           <div class="cad-detail" id="cadDetail">
             <div class="cad-detail-empty">单击零件查看包围盒与尺寸</div>
+          </div>
+        </div>
+        <div class="cad-side-pane" id="cadBomPane" hidden>
+          <div class="cad-side-head"><span>机型 BOM</span><b id="cadBomCount">0</b></div>
+          <div class="cad-machine-table" id="cadBomRows">
+            <div class="cad-parts-empty">应用机型方案后显示真实型号 BOM</div>
+          </div>
+        </div>
+        <div class="cad-side-pane" id="cadIoPane" hidden>
+          <div class="cad-side-head"><span>PLC IO 点位</span><b id="cadIoCount">0</b></div>
+          <div class="cad-machine-note" id="cadIoMeta">应用机型方案后读取 io-map</div>
+          <div class="cad-machine-table" id="cadIoRows">
+            <div class="cad-parts-empty">尚无机型点位</div>
           </div>
         </div>
         <div class="cad-side-pane" id="cadStressPane" hidden></div>
@@ -192,7 +207,8 @@ function buildOverlay(): void {
     event.stopPropagation();
     const sideTab = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-side]');
     if (sideTab) {
-      const pane = sideTab.dataset.cadSide === 'stress' ? 'stress' : 'parts';
+      const value = sideTab.dataset.cadSide;
+      const pane = value === 'stress' || value === 'bom' || value === 'io' ? value : 'parts';
       activateSidePane(pane);
       return;
     }
@@ -234,15 +250,101 @@ function buildOverlay(): void {
   root.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
 }
 
-function activateSidePane(pane: 'parts' | 'stress'): void {
+function activateSidePane(pane: 'parts' | 'bom' | 'io' | 'stress'): void {
   const partsPane = document.getElementById('cadPartsPane');
+  const bomPane = document.getElementById('cadBomPane');
+  const ioPane = document.getElementById('cadIoPane');
   const stressPane = document.getElementById('cadStressPane');
   if (partsPane) partsPane.hidden = pane !== 'parts';
+  if (bomPane) bomPane.hidden = pane !== 'bom';
+  if (ioPane) ioPane.hidden = pane !== 'io';
   if (stressPane) stressPane.hidden = pane !== 'stress';
   root?.querySelectorAll<HTMLElement>('[data-cad-side]').forEach((button) => {
     const active = button.dataset.cadSide === pane;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-selected', String(active));
+  });
+  if (pane === 'bom') renderMachineBomPane();
+  if (pane === 'io') void loadMachineIoPane();
+}
+
+function renderMachineBomPane(): void {
+  const host = document.getElementById('cadBomRows');
+  const count = document.getElementById('cadBomCount');
+  if (!host) return;
+  const rows = viewer?.getBomRows() ?? [];
+  if (count) count.textContent = String(rows.length);
+  if (rows.length === 0) {
+    host.innerHTML = '<div class="cad-parts-empty">应用机型方案后显示真实型号 BOM</div>';
+    return;
+  }
+  host.innerHTML = `<table class="cad-machine-table-el cad-bom-table">
+      <thead><tr><th>#</th><th>名称 / 型号</th><th>数量</th><th>来源</th></tr></thead>
+      <tbody>${rows.map((row) => {
+        const source = row.source === 'machine-design'
+          ? (row.note?.match(/来源包：([^\s·]+)/)?.[1] ?? 'machine-design')
+          : 'CAD';
+        return `<tr data-bom-row="${row.no}">
+          <td class="cad-machine-no">${String(row.no).padStart(2, '0')}</td>
+          <td class="cad-machine-main"><b>${escapeCadHtml(row.name)}</b><span>${escapeCadHtml(row.spec)}</span>${row.note ? `<em>${escapeCadHtml(row.note)}</em>` : ''}</td>
+          <td class="cad-machine-qty">${escapeCadHtml(String(row.qty))}</td>
+          <td class="cad-machine-source">${escapeCadHtml(source)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+async function loadMachineIoPane(): Promise<void> {
+  const host = document.getElementById('cadIoRows');
+  const count = document.getElementById('cadIoCount');
+  const meta = document.getElementById('cadIoMeta');
+  if (!host) return;
+  if (!window.desktop?.machine?.ioMap) {
+    host.innerHTML = '<div class="cad-parts-empty">IO 点位仅在桌面版可用</div>';
+    return;
+  }
+  host.innerHTML = '<div class="cad-parts-empty">正在读取机型点位…</div>';
+  try {
+    const result = await window.desktop.machine.ioMap() as {
+      ok?: boolean;
+      message?: string;
+      rows?: Array<Record<string, unknown>>;
+      machine?: { name?: string; stations?: number; actuators?: number; sensors?: number };
+    };
+    if (!result?.ok) {
+      if (count) count.textContent = '0';
+      if (meta) meta.textContent = result?.message ?? '尚无机型点位';
+      host.innerHTML = `<div class="cad-parts-empty">${escapeCadHtml(result?.message ?? '尚无机型点位')}</div>`;
+      return;
+    }
+    const rows = Array.isArray(result.rows) ? result.rows : [];
+    if (count) count.textContent = String(rows.length);
+    if (meta) {
+      const machine = result.machine ?? {};
+      meta.textContent = `${machine.name ?? '机型方案'} · ${machine.stations ?? 0} 工位 / ${machine.actuators ?? 0} 执行机构 / ${machine.sensors ?? 0} 传感器 · io-map.csv 同源`;
+    }
+    host.innerHTML = `<table class="cad-machine-table-el cad-io-table">
+        <thead><tr><th>点位</th><th>方向</th><th>归属 / 类型</th><th>地址</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr>
+          <td class="cad-machine-point">${escapeCadHtml(String(row.point ?? ''))}</td>
+          <td class="cad-machine-dir" data-dir="${escapeCadHtml(String(row.direction ?? ''))}">${escapeCadHtml(String(row.direction ?? ''))}</td>
+          <td class="cad-machine-main"><b>${escapeCadHtml(String(row.owner ?? ''))}</b><span>${escapeCadHtml(String(row.type ?? ''))}</span><em>${escapeCadHtml(String(row.station ?? ''))}</em></td>
+          <td class="cad-machine-address">${escapeCadHtml(String(row.address ?? ''))}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (meta) meta.textContent = message;
+    host.innerHTML = `<div class="cad-parts-empty">${escapeCadHtml(message)}</div>`;
+  }
+}
+
+function escapeCadHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    };
+    return entities[character] ?? character;
   });
 }
 

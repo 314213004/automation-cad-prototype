@@ -14,6 +14,7 @@ import {
   MACHINE_STATIONS_MIN
 } from '../machine/spec.ts';
 import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
+import { mapMachineBom } from '../machine/bom-map.ts';
 import { buildClarify } from '../machine/clarify.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
 
@@ -608,6 +609,17 @@ export class AgentTools {
             ...(stationCount !== undefined ? { stationCount } : {}),
             ...(cyclePerMin !== undefined ? { cyclePerMin } : {})
           });
+          let mapped = false;
+          try {
+            const bomMapping = mapMachineBom(design, this.registry.listParts());
+            design.bomDraft = { items: bomMapping.items };
+            mapped = true;
+            if (bomMapping.pending.length > 0) {
+              design.warnings.push(...bomMapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
+            }
+          } catch {
+            // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
+          }
           return {
             ok: true,
             design: {

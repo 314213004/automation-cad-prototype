@@ -3,25 +3,29 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
-## 集成：34/35/36 三条 3D 分支合并（integ/3d-all，2026-10-24，本轮）
+## 集成：34/35/36 三条 3D 分支合并 + 同步 main（P10-4 六工位案例）（integ/3d-all，2026-10-24，本轮）
 
-- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1228/1228**、`build:ext`、`smoke` 全绿（含 `SMOKE_MACHINE_GEOMETRY_OK` / `SMOKE_ORBIT_VIEW_OK` / `SMOKE_KINEMATICS_AUTO_OK`，各分支冒烟块全部保留）；不 push。
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1237/1237**、`build:ext`、`smoke` 全绿（含 `SMOKE_MACHINE_GEOMETRY_OK` / `SMOKE_ORBIT_VIEW_OK` / `SMOKE_KINEMATICS_AUTO_OK`，各分支冒烟块全部保留）；不 push。
 - 互不干扰：主视口 3D 只挂原型 `#stageAssembly/#scene3d`、`#stageCheck/#sceneCheck` 与 `window.AutomationCadOrbit`；联调 3D 在联调抽屉内自建 `commission-3d-canvas`，入口 `__Commission3D`；运动学建议走 `AutomationCadKinematics`。
 - KB：合并后超 400 KB 上限；未提上限，改为精简本文件冗余记录（35/36 细节见模块 MODULE.md），重建后未截断。
 
+## 六工位锁螺丝机完整案例 + 全流程真实截图（P10-4，2026-10-24）
+
+- 状态：✅ 完成；新增 9 条案例断言，`npm run screenshots:machine` 4 张图（15–18）像素校验通过；不 push。
+- 内容：真实解析/合成六工位案例（6 工位 / 12 执行机构 / 7 传感器 / 19 点位）、真实型号 BOM（11 行真实 + 1 行待选型）、离线桩驱动的全流程截图；细节与复现见 [MACHINE-DESIGN-DEMO.md](MACHINE-DESIGN-DEMO.md)。
+- 边界：节拍估算 3.18 秒/件未达 3.00 目标（需约 12 总工位）；安全光栅无库内型号；3D 为配置驱动示意。
+
 ## 运动学自动识别建议（36-auto-kinematics，2026-10-24）
 
-- 状态：✅ 完成；分支内 `tsc` 干净、`npm test` **1166/1166**（1132 + 新增 34）、`npm run smoke` 新增 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`；不 push、不打包。
-- 内容：纯函数 `desktop/src/cad/kinematics-auto.ts` 用名称/型号（中英文关键词 + SMC/AirTAC/HIWIN 型号）、装配层级（同系列归组、父装配继承）、几何（PCA 主轴、同轴、回转体、骑轨）三类证据推测动件，输出轴类型/方向/行程（型号 > 样本表 > 几何 > 0 待填）/置信度/中文理由与 IO 点位建议（≥ 0.5 才推荐、不抢占）。标注抽屉「自动识别建议」区逐条「采纳 / 忽略」，**从不自动写入**，采纳后仍走 `validateDraft` / `checkKinematics` 并需「保存标注」；schema 未改。`CadMeshData.path`、`CadViewer.getKinematicsGeometry()`、`window.AutomationCadKinematics.suggest/suggestions/acceptSuggestion/dismissSuggestion` 为新增通路。规则、置信度与夹具细节见 `desktop/src/cad/MODULE.md`。
-- 测试：`test/cad/kinematics-auto.test.mjs` 34 条（每条启发式 + 合成 STEP 夹具 `test/fixtures/kinematics-assembly.stp` 端到端，夹具由 `scripts/gen-kinematics-fixture.mjs` 生成）。沙箱默认 TZ=UTC 时既有 `cost-export.test.ts` 两条时间断言失败，需 `TZ=Asia/Shanghai npm test`。
-- 边界：① 识别全靠启发式，命名不规范（如「零件17」）且几何不典型的机构识别不到，只会进跳过/漏报；② occt-import-js 会把只含零件的子装配压平到上一级，子装配名里的型号会丢失，需叶子名自带型号（或父装配下有多级层级）；③ 标注层只支持 ±X/±Y/±Z，斜向运动取最近主轴并降置信度；④ 夹爪只给一根手指（同一点位不能绑两个动件），对侧手指需人工处理；⑤ 缩回位一律按模型当前位置，模型画在伸出状态时只提示不纠正；⑥ 样本表只覆盖 MHZ2 行程与 MSQ 180°，其他型号无表时按几何/默认值并注明；⑦ 未新增 Agent 工具 `suggest_kinematics`（可选项，避免与并行分支在工具数/评测集上冲突，留待合并后补）。
+- 状态：✅ 完成；新增 34 条测试（`test/cad/kinematics-auto.test.mjs`，含合成 STEP 夹具端到端），smoke 新增 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`。
+- 内容：`desktop/src/cad/kinematics-auto.ts` 按名称/型号、装配层级、几何（PCA 主轴、同轴、回转体、骑轨）推测动件的轴向/行程/置信度/中文理由与 IO 建议；标注抽屉逐条「采纳 / 忽略」，**从不自动写入**，schema 未改。细节见 `desktop/src/cad/MODULE.md`。
+- 边界：纯启发式，命名不规范且几何不典型识别不到；子装配压平会丢型号；只支持 ±X/±Y/±Z；夹爪只给一根手指；未加 Agent 工具 `suggest_kinematics`。
 
 ## 主视口可旋转 3D：轨道视图 + 属性编辑改几何（35-orbit-view，2026-10-24）
 
-- 状态：✅ 完成；分支内 `tsc` 干净、`npm test` **1170/1170**（1132 + 新增 38）、`npm run smoke` 新增 `SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径以 `npm run check:orbit-webgl`（swiftshader，手动）实跑 `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1`；不 push。
-- 内容：注入扩展 `desktop/src/orbit/` 把原型「装配」「干涉校核」视口的固定等轴测 SVG 换成可旋转 three.js（`extension.ts` 只加 try/catch 包裹的 `initOrbitView()`，**原型 `index.html` / `app.js` / `styles.css` 零改动**）：轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F 键与原型按钮）、原型「平移」「剖切」工具接管；树↔3D 选择与悬停双向联动（组节点展开，`std*` 代理不展开），3D 拾取经 SVG `g.part` 派发给原型 `selectPart / applyIssue`；原型缸径/行程 + 右栏「3D 几何 · 桌面版」（底板/导轨/滑台/开关槽/插入件）沿叠放链改几何，非法值红框 + 中文原因不生效。干涉视口：问题件红、其余半透明、剖切跟随滑台 X、原型气泡按 3D 投影定位、`detectInterferences` AABB 初筛（默认装配 1 处：缸体↔磁性开关）；受力 tab 不受影响。WebGL 不可用或上下文丢失 → `stage[data-orbit=fallback]`，原型 SVG 原样显示。文件分工、数据流、坑点见 `desktop/src/orbit/MODULE.md`。
-- 测试：`test/orbit/` 38 条（camera / model / proto-parity〔vm 执行原型 app.js 逐字比对轮廓与插入放置〕/ selection / proto-sync / three-scene）。
-- 边界（如实）：几何仍是参数化示意体（长方体/圆柱），缸径→半径 `4+0.32·bore`、杆长 `10+0.12·stroke` 沿用原型示意比例而非 1:1；没有 B-rep/配合求解，叠放链是写死的装配关系；桌面版几何参数只在内存、不进原型撤销栈、不持久化；WebGL 模式下没有框选多选（画布需截断原型舞台的框选事件，降级模式仍可框选）；3D 等轴测为真实右手系 (1,−1,1)，与原型镜像等轴测左右相反；真实显卡上的帧率未实测（本机只有 swiftshader）；干涉初筛只到 AABB 级。
+- 状态：✅ 完成；新增 38 条测试（`test/orbit/`），smoke 新增 `SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径用 `npm run check:orbit-webgl`（swiftshader，手动）验证。
+- 内容：注入扩展 `desktop/src/orbit/` 把原型装配/干涉视口换成可旋转 three.js（原型三文件零改动）：轨道/缩放/平移、标准视向、透视↔正交、适合、剖切、树↔3D 双向选择、缸径/行程与桌面版几何参数实时改几何、干涉 AABB 初筛；无 WebGL 回退原型 SVG。细节见 `desktop/src/orbit/MODULE.md`。
+- 边界：示意体非 1:1、无 B-rep/配合求解；桌面版几何参数不进撤销栈、不持久化；WebGL 模式无框选；真实显卡帧率未实测。
 
 ## 迭代 34：机型方案生成真实三维几何（34-machine-geometry，2026-10-24）
 
@@ -356,6 +360,7 @@
 9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
 10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
 11. **两条成本导出单测依赖本地时区**：`test/cost-export.test.ts` 的文件名断言按 Asia/Shanghai 本地时间（`…-20261023-1200`）；在 UTC 环境（如本轮沙箱）直接 `npm test` 会 1130/1132，需 `TZ=Asia/Shanghai npm test`。35-orbit-view 未改这两条断言，只记录。
+12. **安全光栅型号缺失（待补录）**：`smc-cn` / `iec-cn` 均无安全光栅型号，六工位案例的 BOM 只能标「待选型」；需补录真实安全光栅型号、分辨率/保护高度/安全等级与安全继电器匹配参数，完成后再更新 `machine-case.json` 与 MACHINE-DESIGN-DEMO.md。
 
 ## 夜间执行约束
 

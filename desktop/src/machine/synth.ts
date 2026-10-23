@@ -21,7 +21,16 @@ import { templateFor, templateKinds } from './templates.ts';
 
 export interface MachineCycleEstimate {
   perMin: number;
+  /** 目标节拍，60 / perMin。 */
   secondsPerPiece: number;
+  /** 慢工位估算节拍；高于 secondsPerPiece 时表示当前方案不达标。 */
+  estimatedSecondsPerPiece: number;
+  baseSeconds: number;
+  slowestStation: number;
+  slowestActionSeconds: number;
+  requiredParallelStations: number;
+  requiredTotalStations: number;
+  meetsTarget: boolean;
   bottleneck: string;
 }
 
@@ -37,6 +46,12 @@ export interface MachineBomItem {
   /** 可选型号；方案合成默认不编造型号。 */
   model?: string;
   note?: string;
+  /** 真实元件包中的 id；仅 BOM 映射后存在。 */
+  partId?: string;
+  /** 真实元件包 id；仅 BOM 映射后存在。 */
+  packId?: string;
+  /** true 表示库内没有可选型号，需要补录后确认。 */
+  pendingSelection?: boolean;
 }
 
 export interface MachineDesign {
@@ -288,7 +303,7 @@ function buildSummary(design: MachineDesign): string {
   const text = [
     `机型方案：${config.name}`,
     `工位：${config.stations.length} 个；执行机构：${config.actuators.length} 个（${actuatorText || '无'}）；传感器：${config.sensors.length} 个（${sensorText || '无'}）`,
-    `节拍：${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；瓶颈：${cycle.bottleneck}`,
+    `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.estimatedSecondsPerPiece.toFixed(2)} 秒/件；瓶颈：${cycle.bottleneck}`,
     `功率：约 ${power.va} VA（固定表估算）`,
     `风险：${risk}`,
     '说明：三维几何为按配置生成的标准件外形，功率与节拍均为估算，需人工确认。'
@@ -435,8 +450,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     if (seconds > slowest.seconds) slowest = { station: stationIndex + 1, seconds, kind: stationKind };
   }
   const secondsPerPiece = round(60 / cyclePerMin);
-  if (slowest.seconds > secondsPerPiece) {
-    const parallel = Math.max(1, Math.ceil(slowest.seconds / secondsPerPiece - 1e-9));
+  const meetsTarget = slowest.seconds <= secondsPerPiece;
+  const parallel = meetsTarget ? 1 : Math.max(1, Math.ceil(slowest.seconds / secondsPerPiece - 1e-9));
+  if (!meetsTarget) {
     warnings.push(
       `节拍瓶颈：工位${slowest.station} 估算 ${round(slowest.seconds, 2).toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
       `建议每道工序至少 ${parallel} 个并行工位（总工位建议 ≥ ${stations * parallel}）。`
@@ -461,7 +477,18 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const design: MachineDesign = {
     config,
     points,
-    cycle: { perMin: cyclePerMin, secondsPerPiece, bottleneck },
+    cycle: {
+      perMin: cyclePerMin,
+      secondsPerPiece,
+      estimatedSecondsPerPiece: round(slowest.seconds),
+      baseSeconds,
+      slowestStation: slowest.station,
+      slowestActionSeconds: round(slowest.seconds - baseSeconds),
+      requiredParallelStations: parallel,
+      requiredTotalStations: stations * parallel,
+      meetsTarget,
+      bottleneck
+    },
     power,
     bomDraft,
     warnings,

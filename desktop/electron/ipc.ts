@@ -37,6 +37,7 @@ import type { ParametricManager, ParametricStartInfo } from './parametric.ts';
 import { createZip, normalizeZipPath, type ZipEntry } from '../src/shared/zip.ts';
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
 import { readActiveMachineDesign } from '../src/machine/store.ts';
+import { buildMachineIoMap } from '../src/machine/io-map.ts';
 import {
   mergePlcHistory,
   normalizeHistoryEntry,
@@ -737,9 +738,38 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         appendFileSync(auditFile, `${line}\n`, 'utf8');
       }
     });
+    // 智能体工具层包含只读的 design_machine / search_* 等纯工具，它们不在
+    // CommandBus 中注册。对话执行先走命令总线，未知命令再回退到工具层。
+    const agentExecutor = {
+      async execute(name: string, args?: Record<string, unknown>, signal?: AbortSignal) {
+        const result = await bus.execute(name, args, signal);
+        if (!result.ok && result.error?.code === 'UNKNOWN_COMMAND' && tools.has(name)) {
+          const fallback = await tools.call(name, args ?? {}, signal);
+          const record = typeof fallback === 'object' && fallback !== null
+            ? fallback as Record<string, unknown>
+            : null;
+          if (record?.ok === false) {
+            return {
+              ok: false as const,
+              error: {
+                code: typeof record.code === 'string' ? record.code : 'TOOL_FAILED',
+                message: typeof record.message === 'string' ? record.message : `${name} 执行失败`
+              }
+            };
+          }
+          // 工具层结果已经是 { ok, design/... } 形态；直接返回，避免再包一层
+          // data 导致渲染层的机型方案卡无法解析。
+          return fallback as { ok: boolean; data?: unknown };
+        }
+        return result;
+      },
+      undoLast(signal?: AbortSignal) {
+        return bus.undoLast(signal);
+      }
+    };
     session = new AgentSession({
       llm,
-      bus,
+      bus: agentExecutor,
       maxIterations: config.maxIterations,
       thread,
       model: config.model,
@@ -790,6 +820,29 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         : { ok: true, design: null };
     } catch (error) {
       return { ok: false, design: null, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // 当前机型 → PLC IO 点位。只读当前 active 方案，供 CAD 侧栏预览。
+  ipcMain.handle('machine:io-map', () => {
+    try {
+      const design = readActiveMachineDesign(context.userDataDir);
+      if (!design) return { ok: false, message: '尚未应用机型方案', rows: [], csv: '' };
+      const ioMap = buildMachineIoMap(design.config);
+      return {
+        ok: true,
+        machine: {
+          id: design.id,
+          name: design.name,
+          stations: design.config.stations.length,
+          actuators: design.config.actuators.length,
+          sensors: design.config.sensors.length
+        },
+        rows: ioMap.rows,
+        csv: ioMap.csv
+      };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error), rows: [], csv: '' };
     }
   });
 
@@ -949,6 +1002,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       onProgress: emitProgress,
       confirmPlan: async (request) => {
         confirmCount += 1;
+        if (process.env.AUTOMATIONCAD_AUTOCONFIRM === '1') return true;
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
         const detail = request.steps

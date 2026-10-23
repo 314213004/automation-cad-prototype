@@ -1,0 +1,1088 @@
+{
+  "schemaVersion": 1,
+  "kind": "machine-case",
+  "brief": "六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅",
+  "parsed": {
+    "process": "screw",
+    "stations": 6,
+    "cyclePerMin": 20,
+    "actuators": [
+      {
+        "kind": "gripper",
+        "count": 6
+      },
+      {
+        "kind": "rotary",
+        "count": 6
+      }
+    ],
+    "sensors": [
+      {
+        "kind": "proximity",
+        "count": 6
+      },
+      {
+        "kind": "safety",
+        "count": 1
+      }
+    ],
+    "brand": "汇川",
+    "voltage": null,
+    "notes": [
+      "伺服/步进执行机构 6 台（750W）：按旋转轴建模"
+    ]
+  },
+  "design": {
+    "config": {
+      "id": "design-screw-6st",
+      "name": "6 工位锁螺丝机（方案草案）",
+      "stations": [
+        "工位1",
+        "工位2",
+        "工位3",
+        "工位4",
+        "工位5",
+        "工位6"
+      ],
+      "actuators": [
+        {
+          "id": "st1-gripper-1",
+          "name": "工位1夹爪1",
+          "kind": "gripper",
+          "station": "工位1",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST1-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st1-rotary-2",
+          "name": "工位1旋转轴2",
+          "kind": "rotary",
+          "station": "工位1",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST1-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        },
+        {
+          "id": "st2-gripper-1",
+          "name": "工位2夹爪1",
+          "kind": "gripper",
+          "station": "工位2",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST2-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st2-rotary-2",
+          "name": "工位2旋转轴2",
+          "kind": "rotary",
+          "station": "工位2",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST2-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        },
+        {
+          "id": "st3-gripper-1",
+          "name": "工位3夹爪1",
+          "kind": "gripper",
+          "station": "工位3",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST3-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st3-rotary-2",
+          "name": "工位3旋转轴2",
+          "kind": "rotary",
+          "station": "工位3",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST3-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        },
+        {
+          "id": "st4-gripper-1",
+          "name": "工位4夹爪1",
+          "kind": "gripper",
+          "station": "工位4",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST4-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st4-rotary-2",
+          "name": "工位4旋转轴2",
+          "kind": "rotary",
+          "station": "工位4",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST4-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        },
+        {
+          "id": "st5-gripper-1",
+          "name": "工位5夹爪1",
+          "kind": "gripper",
+          "station": "工位5",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST5-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st5-rotary-2",
+          "name": "工位5旋转轴2",
+          "kind": "rotary",
+          "station": "工位5",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST5-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        },
+        {
+          "id": "st6-gripper-1",
+          "name": "工位6夹爪1",
+          "kind": "gripper",
+          "station": "工位6",
+          "travelMm": 20,
+          "durationMs": 280,
+          "gripPoint": "ST6-GRIP-A1",
+          "position": [
+            0.05,
+            0.55,
+            -0.38
+          ]
+        },
+        {
+          "id": "st6-rotary-2",
+          "name": "工位6旋转轴2",
+          "kind": "rotary",
+          "station": "工位6",
+          "travelMm": 90,
+          "durationMs": 700,
+          "point": "ST6-ROT-A2",
+          "position": [
+            0.76,
+            0.65,
+            0.35
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST1-PRX-S1",
+          "station": "工位1",
+          "part": "st1-gripper-1"
+        },
+        {
+          "point": "ST1-SAFE-S2",
+          "station": "工位1",
+          "part": "st1-gripper-1",
+          "color": "#ef4444"
+        },
+        {
+          "point": "ST2-PRX-S1",
+          "station": "工位2",
+          "part": "st2-gripper-1"
+        },
+        {
+          "point": "ST3-PRX-S1",
+          "station": "工位3",
+          "part": "st3-gripper-1"
+        },
+        {
+          "point": "ST4-PRX-S1",
+          "station": "工位4",
+          "part": "st4-gripper-1"
+        },
+        {
+          "point": "ST5-PRX-S1",
+          "station": "工位5",
+          "part": "st5-gripper-1"
+        },
+        {
+          "point": "ST6-PRX-S1",
+          "station": "工位6",
+          "part": "st6-gripper-1"
+        }
+      ]
+    },
+    "points": [
+      "ST1-GRIP-A1",
+      "ST1-ROT-A2",
+      "ST1-PRX-S1",
+      "ST1-SAFE-S2",
+      "ST2-GRIP-A1",
+      "ST2-ROT-A2",
+      "ST2-PRX-S1",
+      "ST3-GRIP-A1",
+      "ST3-ROT-A2",
+      "ST3-PRX-S1",
+      "ST4-GRIP-A1",
+      "ST4-ROT-A2",
+      "ST4-PRX-S1",
+      "ST5-GRIP-A1",
+      "ST5-ROT-A2",
+      "ST5-PRX-S1",
+      "ST6-GRIP-A1",
+      "ST6-ROT-A2",
+      "ST6-PRX-S1"
+    ],
+    "cycle": {
+      "perMin": 20,
+      "secondsPerPiece": 3,
+      "estimatedSecondsPerPiece": 3.18,
+      "baseSeconds": 2.2,
+      "slowestStation": 1,
+      "slowestActionSeconds": 0.98,
+      "requiredParallelStations": 2,
+      "requiredTotalStations": 12,
+      "meetsTarget": false,
+      "bottleneck": "工位1 估算 3.18 秒/件（工艺固定 2.20s + 旋转轴 0.70s）"
+    },
+    "power": {
+      "va": 4628,
+      "byGroup": [
+        {
+          "name": "夹爪",
+          "va": 90
+        },
+        {
+          "name": "伺服",
+          "va": 4500
+        },
+        {
+          "name": "传感器",
+          "va": 18
+        },
+        {
+          "name": "安全光栅",
+          "va": 20
+        }
+      ]
+    },
+    "warnings": [
+      "节拍瓶颈：工位1 估算 3.18 秒/件，超过目标 3.00 秒/件；建议每道工序至少 2 个并行工位（总工位建议 ≥ 12）。",
+      "安全光栅：库里无安全光栅型号，需补录"
+    ],
+    "assumptions": [
+      "功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。",
+      "节拍按单工位串行动作加固定工艺余量估算，未计入上下料、通讯、人工干预与调试损失。",
+      "几何仍由 MachineConfig 配置驱动，不包含结构强度、干涉与真实运动学校核。",
+      "检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。",
+      "品牌按需求中的「汇川」记录，具体型号待选型。",
+      "执行机构按需求数量均分到各工位。",
+      "传感器按需求数量均分到各工位。"
+    ],
+    "bomDraft": {
+      "items": [
+        {
+          "kind": "actuator",
+          "name": "伺服驱动器",
+          "qty": 6,
+          "model": "SV660P 750 W",
+          "note": "来源包：iec-cn · id=SV660PS5R5I · 按 1 驱 1 电机配置",
+          "partId": "SV660PS5R5I",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "actuator",
+          "name": "伺服电机",
+          "qty": 6,
+          "model": "MS1H1-75B30CB 750 W",
+          "note": "来源包：iec-cn · id=MS1H1-75B30CB · 与 SV660P 750 W 配套",
+          "partId": "MS1H1-75B30CB",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "actuator",
+          "name": "气爪",
+          "qty": 6,
+          "model": "MHZ2-20D",
+          "note": "来源包：smc-cn · id=MHZ2-20D",
+          "partId": "MHZ2-20D",
+          "packId": "smc-cn"
+        },
+        {
+          "kind": "actuator",
+          "name": "电磁阀",
+          "qty": 6,
+          "model": "SY5120-5LZD",
+          "note": "来源包：smc-cn · id=SY5120-5LZD · 按 1 气爪 1 阀配置",
+          "partId": "SY5120-5LZD",
+          "packId": "smc-cn"
+        },
+        {
+          "kind": "sensor",
+          "name": "到位检测（磁性开关）",
+          "qty": 6,
+          "model": "D-M9B",
+          "note": "来源包：smc-cn · id=D-M9B",
+          "partId": "D-M9B",
+          "packId": "smc-cn"
+        },
+        {
+          "kind": "sensor",
+          "name": "安全光栅",
+          "qty": 1,
+          "model": "待选型",
+          "note": "库里无安全光栅型号，需补录",
+          "pendingSelection": true
+        },
+        {
+          "kind": "electrical",
+          "name": "PLC",
+          "qty": 1,
+          "model": "CP1E-N40DR-A",
+          "note": "来源包：iec-cn · id=CP1E-N40DR-A · 24 DI / 16 DO，覆盖 19 点位",
+          "partId": "CP1E-N40DR-A",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "electrical",
+          "name": "安全继电器",
+          "qty": 1,
+          "model": "PNOZ s3 750103",
+          "note": "来源包：iec-cn · id=PNOZ-s3-750103 · 光栅/安全门监控，光栅型号待补录",
+          "partId": "PNOZ-s3-750103",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "electrical",
+          "name": "24 V 开关电源",
+          "qty": 1,
+          "model": "LRS-350-24",
+          "note": "来源包：iec-cn · id=LRS-350-24 · 350 W / 14.6 A",
+          "partId": "LRS-350-24",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "electrical",
+          "name": "伺服支路断路器",
+          "qty": 6,
+          "model": "iC65N 1P C6",
+          "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 4.456 A，额定 6 A",
+          "partId": "iC65N-C6-1P",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "electrical",
+          "name": "总进线断路器",
+          "qty": 1,
+          "model": "5SY63 3P C16",
+          "note": "来源包：iec-cn · id=5SY63-C16 · 计算 9.235 A，额定 16 A",
+          "partId": "5SY63-C16",
+          "packId": "iec-cn"
+        },
+        {
+          "kind": "electrical",
+          "name": "开关电源支路断路器",
+          "qty": 1,
+          "model": "iC65N 1P C6",
+          "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 2.08 A，额定 6 A",
+          "partId": "iC65N-C6-1P",
+          "packId": "iec-cn"
+        }
+      ]
+    }
+  },
+  "cycleAnalysis": {
+    "targetPerMin": 20,
+    "targetSecondsPerPiece": 3,
+    "estimatedSecondsPerPiece": 3.18,
+    "baseSeconds": 2.2,
+    "slowestStation": 1,
+    "slowestActionSeconds": 0.98,
+    "meetsTarget": false,
+    "requiredParallelStations": 2,
+    "requiredTotalStations": 12,
+    "verdict": "当前方案未满足目标节拍，按现估算需每道工序 2 个并行工位，总工位至少 12 个",
+    "bottleneck": "工位1 估算 3.18 秒/件（工艺固定 2.20s + 旋转轴 0.70s）"
+  },
+  "stations": [
+    {
+      "station": "工位1",
+      "actuators": [
+        {
+          "id": "st1-gripper-1",
+          "kind": "gripper",
+          "name": "工位1夹爪1",
+          "points": [
+            "ST1-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st1-rotary-2",
+          "kind": "rotary",
+          "name": "工位1旋转轴2",
+          "points": [
+            "ST1-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST1-PRX-S1",
+          "part": "st1-gripper-1"
+        },
+        {
+          "point": "ST1-SAFE-S2",
+          "part": "st1-gripper-1"
+        }
+      ]
+    },
+    {
+      "station": "工位2",
+      "actuators": [
+        {
+          "id": "st2-gripper-1",
+          "kind": "gripper",
+          "name": "工位2夹爪1",
+          "points": [
+            "ST2-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st2-rotary-2",
+          "kind": "rotary",
+          "name": "工位2旋转轴2",
+          "points": [
+            "ST2-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST2-PRX-S1",
+          "part": "st2-gripper-1"
+        }
+      ]
+    },
+    {
+      "station": "工位3",
+      "actuators": [
+        {
+          "id": "st3-gripper-1",
+          "kind": "gripper",
+          "name": "工位3夹爪1",
+          "points": [
+            "ST3-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st3-rotary-2",
+          "kind": "rotary",
+          "name": "工位3旋转轴2",
+          "points": [
+            "ST3-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST3-PRX-S1",
+          "part": "st3-gripper-1"
+        }
+      ]
+    },
+    {
+      "station": "工位4",
+      "actuators": [
+        {
+          "id": "st4-gripper-1",
+          "kind": "gripper",
+          "name": "工位4夹爪1",
+          "points": [
+            "ST4-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st4-rotary-2",
+          "kind": "rotary",
+          "name": "工位4旋转轴2",
+          "points": [
+            "ST4-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST4-PRX-S1",
+          "part": "st4-gripper-1"
+        }
+      ]
+    },
+    {
+      "station": "工位5",
+      "actuators": [
+        {
+          "id": "st5-gripper-1",
+          "kind": "gripper",
+          "name": "工位5夹爪1",
+          "points": [
+            "ST5-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st5-rotary-2",
+          "kind": "rotary",
+          "name": "工位5旋转轴2",
+          "points": [
+            "ST5-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST5-PRX-S1",
+          "part": "st5-gripper-1"
+        }
+      ]
+    },
+    {
+      "station": "工位6",
+      "actuators": [
+        {
+          "id": "st6-gripper-1",
+          "kind": "gripper",
+          "name": "工位6夹爪1",
+          "points": [
+            "ST6-GRIP-A1"
+          ]
+        },
+        {
+          "id": "st6-rotary-2",
+          "kind": "rotary",
+          "name": "工位6旋转轴2",
+          "points": [
+            "ST6-ROT-A2"
+          ]
+        }
+      ],
+      "sensors": [
+        {
+          "point": "ST6-PRX-S1",
+          "part": "st6-gripper-1"
+        }
+      ]
+    }
+  ],
+  "bom": {
+    "items": [
+      {
+        "kind": "actuator",
+        "name": "伺服驱动器",
+        "qty": 6,
+        "model": "SV660P 750 W",
+        "note": "来源包：iec-cn · id=SV660PS5R5I · 按 1 驱 1 电机配置",
+        "partId": "SV660PS5R5I",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "actuator",
+        "name": "伺服电机",
+        "qty": 6,
+        "model": "MS1H1-75B30CB 750 W",
+        "note": "来源包：iec-cn · id=MS1H1-75B30CB · 与 SV660P 750 W 配套",
+        "partId": "MS1H1-75B30CB",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "actuator",
+        "name": "气爪",
+        "qty": 6,
+        "model": "MHZ2-20D",
+        "note": "来源包：smc-cn · id=MHZ2-20D",
+        "partId": "MHZ2-20D",
+        "packId": "smc-cn"
+      },
+      {
+        "kind": "actuator",
+        "name": "电磁阀",
+        "qty": 6,
+        "model": "SY5120-5LZD",
+        "note": "来源包：smc-cn · id=SY5120-5LZD · 按 1 气爪 1 阀配置",
+        "partId": "SY5120-5LZD",
+        "packId": "smc-cn"
+      },
+      {
+        "kind": "sensor",
+        "name": "到位检测（磁性开关）",
+        "qty": 6,
+        "model": "D-M9B",
+        "note": "来源包：smc-cn · id=D-M9B",
+        "partId": "D-M9B",
+        "packId": "smc-cn"
+      },
+      {
+        "kind": "sensor",
+        "name": "安全光栅",
+        "qty": 1,
+        "model": "待选型",
+        "note": "库里无安全光栅型号，需补录",
+        "pendingSelection": true
+      },
+      {
+        "kind": "electrical",
+        "name": "PLC",
+        "qty": 1,
+        "model": "CP1E-N40DR-A",
+        "note": "来源包：iec-cn · id=CP1E-N40DR-A · 24 DI / 16 DO，覆盖 19 点位",
+        "partId": "CP1E-N40DR-A",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "electrical",
+        "name": "安全继电器",
+        "qty": 1,
+        "model": "PNOZ s3 750103",
+        "note": "来源包：iec-cn · id=PNOZ-s3-750103 · 光栅/安全门监控，光栅型号待补录",
+        "partId": "PNOZ-s3-750103",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "electrical",
+        "name": "24 V 开关电源",
+        "qty": 1,
+        "model": "LRS-350-24",
+        "note": "来源包：iec-cn · id=LRS-350-24 · 350 W / 14.6 A",
+        "partId": "LRS-350-24",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "electrical",
+        "name": "伺服支路断路器",
+        "qty": 6,
+        "model": "iC65N 1P C6",
+        "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 4.456 A，额定 6 A",
+        "partId": "iC65N-C6-1P",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "electrical",
+        "name": "总进线断路器",
+        "qty": 1,
+        "model": "5SY63 3P C16",
+        "note": "来源包：iec-cn · id=5SY63-C16 · 计算 9.235 A，额定 16 A",
+        "partId": "5SY63-C16",
+        "packId": "iec-cn"
+      },
+      {
+        "kind": "electrical",
+        "name": "开关电源支路断路器",
+        "qty": 1,
+        "model": "iC65N 1P C6",
+        "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 2.08 A，额定 6 A",
+        "partId": "iC65N-C6-1P",
+        "packId": "iec-cn"
+      }
+    ],
+    "pending": [
+      {
+        "name": "安全光栅",
+        "reason": "库里无安全光栅型号，需补录"
+      }
+    ],
+    "sourcePacks": [
+      "iec-cn",
+      "smc-cn"
+    ],
+    "realPartCount": 11,
+    "pendingCount": 1
+  },
+  "electrical": {
+    "assumptions": [
+      "总进线按 380 V 三相四线估算，伺服支路取相电压 220 V。",
+      "cosφ=0.85、效率 η=0.9，功率因数为工程估算，需按实际电机/驱动数据复核。",
+      "所有断路器与开关电源按计算电流/功率的 1.25 倍以上选取；额定值来自元件包 specs。",
+      "安全光栅库内无型号，未参与具体电气参数校核，仅按 1 套 15 W 预留。"
+    ],
+    "auxLoadBreakdown": [
+      {
+        "name": "电磁阀",
+        "qty": 6,
+        "watts": 24
+      },
+      {
+        "name": "到位检测",
+        "qty": 6,
+        "watts": 12
+      },
+      {
+        "name": "安全光栅",
+        "qty": 1,
+        "watts": 15
+      },
+      {
+        "name": "PLC",
+        "qty": 1,
+        "watts": 25
+      },
+      {
+        "name": "安全继电器",
+        "qty": 1,
+        "watts": 5
+      },
+      {
+        "name": "伺服驱动控制",
+        "qty": 6,
+        "watts": 60
+      },
+      {
+        "name": "预留",
+        "qty": 1,
+        "watts": 9
+      }
+    ],
+    "totalServoW": 4500,
+    "totalAuxW": 150,
+    "totalDesignW": 4650,
+    "calculations": [
+      {
+        "id": "main-current",
+        "name": "总进线计算电流",
+        "formula": "I = P / (√3 × U × cosφ × η)",
+        "inputs": {
+          "totalDesignW": 4650,
+          "voltage": 380,
+          "phases": 3,
+          "cosPhi": 0.85,
+          "efficiency": 0.9
+        },
+        "loadA": 9.235,
+        "requiredA": 11.544,
+        "ratedA": 16,
+        "margin": 1.732
+      },
+      {
+        "id": "servo-branch-current",
+        "name": "单轴伺服支路计算电流",
+        "formula": "I = 750 W / (U × cosφ × η)",
+        "inputs": {
+          "powerW": 750,
+          "voltage": 220,
+          "cosPhi": 0.85,
+          "efficiency": 0.9
+        },
+        "loadA": 4.456,
+        "requiredA": 5.57,
+        "ratedA": 6,
+        "margin": 1.346
+      },
+      {
+        "id": "psu-ac-current",
+        "name": "开关电源进线计算电流",
+        "formula": "I = 350 W / (U × cosφ × η)",
+        "inputs": {
+          "powerW": 350,
+          "voltage": 220,
+          "cosPhi": 0.85,
+          "efficiency": 0.9
+        },
+        "loadA": 2.08,
+        "requiredA": 2.6,
+        "ratedA": 6,
+        "margin": 2.885
+      },
+      {
+        "id": "psu-dc-output",
+        "name": "24 V 电源输出余量",
+        "formula": "Iout = Paux / 24 V",
+        "inputs": {
+          "auxLoadW": 150,
+          "voltage": 24
+        },
+        "loadA": 6.25,
+        "requiredA": 7.813,
+        "ratedA": 14.6,
+        "margin": 2.336
+      }
+    ]
+  },
+  "ioMap": {
+    "rowCount": 19,
+    "rows": [
+      {
+        "point": "ST1-PRX-S1",
+        "address": "I0.0",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位1夹爪1",
+        "type": "接近开关",
+        "station": "工位1",
+        "comment": "输入 ST1-PRX-S1；工位1夹爪1 到位"
+      },
+      {
+        "point": "ST1-SAFE-S2",
+        "address": "I0.1",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位1夹爪1",
+        "type": "安全光栅",
+        "station": "工位1",
+        "comment": "输入 ST1-SAFE-S2；工位1夹爪1 到位"
+      },
+      {
+        "point": "ST2-PRX-S1",
+        "address": "I0.2",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位2夹爪1",
+        "type": "接近开关",
+        "station": "工位2",
+        "comment": "输入 ST2-PRX-S1；工位2夹爪1 到位"
+      },
+      {
+        "point": "ST3-PRX-S1",
+        "address": "I0.3",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位3夹爪1",
+        "type": "接近开关",
+        "station": "工位3",
+        "comment": "输入 ST3-PRX-S1；工位3夹爪1 到位"
+      },
+      {
+        "point": "ST4-PRX-S1",
+        "address": "I0.4",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位4夹爪1",
+        "type": "接近开关",
+        "station": "工位4",
+        "comment": "输入 ST4-PRX-S1；工位4夹爪1 到位"
+      },
+      {
+        "point": "ST5-PRX-S1",
+        "address": "I0.5",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位5夹爪1",
+        "type": "接近开关",
+        "station": "工位5",
+        "comment": "输入 ST5-PRX-S1；工位5夹爪1 到位"
+      },
+      {
+        "point": "ST6-PRX-S1",
+        "address": "I0.6",
+        "direction": "输入",
+        "ownerType": "传感器",
+        "owner": "工位6夹爪1",
+        "type": "接近开关",
+        "station": "工位6",
+        "comment": "输入 ST6-PRX-S1；工位6夹爪1 到位"
+      },
+      {
+        "point": "ST1-GRIP-A1",
+        "address": "Q0.0",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位1夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位1",
+        "comment": "输出 ST1-GRIP-A1；工位1夹爪1 夹紧"
+      },
+      {
+        "point": "ST1-ROT-A2",
+        "address": "Q0.1",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位1旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位1",
+        "comment": "输出 ST1-ROT-A2；工位1旋转轴2 旋转"
+      },
+      {
+        "point": "ST2-GRIP-A1",
+        "address": "Q0.2",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位2夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位2",
+        "comment": "输出 ST2-GRIP-A1；工位2夹爪1 夹紧"
+      },
+      {
+        "point": "ST2-ROT-A2",
+        "address": "Q0.3",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位2旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位2",
+        "comment": "输出 ST2-ROT-A2；工位2旋转轴2 旋转"
+      },
+      {
+        "point": "ST3-GRIP-A1",
+        "address": "Q0.4",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位3夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位3",
+        "comment": "输出 ST3-GRIP-A1；工位3夹爪1 夹紧"
+      },
+      {
+        "point": "ST3-ROT-A2",
+        "address": "Q0.5",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位3旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位3",
+        "comment": "输出 ST3-ROT-A2；工位3旋转轴2 旋转"
+      },
+      {
+        "point": "ST4-GRIP-A1",
+        "address": "Q0.6",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位4夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位4",
+        "comment": "输出 ST4-GRIP-A1；工位4夹爪1 夹紧"
+      },
+      {
+        "point": "ST4-ROT-A2",
+        "address": "Q0.7",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位4旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位4",
+        "comment": "输出 ST4-ROT-A2；工位4旋转轴2 旋转"
+      },
+      {
+        "point": "ST5-GRIP-A1",
+        "address": "Q1.0",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位5夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位5",
+        "comment": "输出 ST5-GRIP-A1；工位5夹爪1 夹紧"
+      },
+      {
+        "point": "ST5-ROT-A2",
+        "address": "Q1.1",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位5旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位5",
+        "comment": "输出 ST5-ROT-A2；工位5旋转轴2 旋转"
+      },
+      {
+        "point": "ST6-GRIP-A1",
+        "address": "Q1.2",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位6夹爪1",
+        "type": "夹爪·夹紧",
+        "station": "工位6",
+        "comment": "输出 ST6-GRIP-A1；工位6夹爪1 夹紧"
+      },
+      {
+        "point": "ST6-ROT-A2",
+        "address": "Q1.3",
+        "direction": "输出",
+        "ownerType": "执行机构",
+        "owner": "工位6旋转轴2",
+        "type": "旋转轴·旋转",
+        "station": "工位6",
+        "comment": "输出 ST6-ROT-A2；工位6旋转轴2 旋转"
+      }
+    ],
+    "csv": "﻿点位,地址,方向,归属类型,归属,类型,工位,说明\r\nST1-PRX-S1,I0.0,输入,传感器,工位1夹爪1,接近开关,工位1,输入 ST1-PRX-S1；工位1夹爪1 到位\r\nST1-SAFE-S2,I0.1,输入,传感器,工位1夹爪1,安全光栅,工位1,输入 ST1-SAFE-S2；工位1夹爪1 到位\r\nST2-PRX-S1,I0.2,输入,传感器,工位2夹爪1,接近开关,工位2,输入 ST2-PRX-S1；工位2夹爪1 到位\r\nST3-PRX-S1,I0.3,输入,传感器,工位3夹爪1,接近开关,工位3,输入 ST3-PRX-S1；工位3夹爪1 到位\r\nST4-PRX-S1,I0.4,输入,传感器,工位4夹爪1,接近开关,工位4,输入 ST4-PRX-S1；工位4夹爪1 到位\r\nST5-PRX-S1,I0.5,输入,传感器,工位5夹爪1,接近开关,工位5,输入 ST5-PRX-S1；工位5夹爪1 到位\r\nST6-PRX-S1,I0.6,输入,传感器,工位6夹爪1,接近开关,工位6,输入 ST6-PRX-S1；工位6夹爪1 到位\r\nST1-GRIP-A1,Q0.0,输出,执行机构,工位1夹爪1,夹爪·夹紧,工位1,输出 ST1-GRIP-A1；工位1夹爪1 夹紧\r\nST1-ROT-A2,Q0.1,输出,执行机构,工位1旋转轴2,旋转轴·旋转,工位1,输出 ST1-ROT-A2；工位1旋转轴2 旋转\r\nST2-GRIP-A1,Q0.2,输出,执行机构,工位2夹爪1,夹爪·夹紧,工位2,输出 ST2-GRIP-A1；工位2夹爪1 夹紧\r\nST2-ROT-A2,Q0.3,输出,执行机构,工位2旋转轴2,旋转轴·旋转,工位2,输出 ST2-ROT-A2；工位2旋转轴2 旋转\r\nST3-GRIP-A1,Q0.4,输出,执行机构,工位3夹爪1,夹爪·夹紧,工位3,输出 ST3-GRIP-A1；工位3夹爪1 夹紧\r\nST3-ROT-A2,Q0.5,输出,执行机构,工位3旋转轴2,旋转轴·旋转,工位3,输出 ST3-ROT-A2；工位3旋转轴2 旋转\r\nST4-GRIP-A1,Q0.6,输出,执行机构,工位4夹爪1,夹爪·夹紧,工位4,输出 ST4-GRIP-A1；工位4夹爪1 夹紧\r\nST4-ROT-A2,Q0.7,输出,执行机构,工位4旋转轴2,旋转轴·旋转,工位4,输出 ST4-ROT-A2；工位4旋转轴2 旋转\r\nST5-GRIP-A1,Q1.0,输出,执行机构,工位5夹爪1,夹爪·夹紧,工位5,输出 ST5-GRIP-A1；工位5夹爪1 夹紧\r\nST5-ROT-A2,Q1.1,输出,执行机构,工位5旋转轴2,旋转轴·旋转,工位5,输出 ST5-ROT-A2；工位5旋转轴2 旋转\r\nST6-GRIP-A1,Q1.2,输出,执行机构,工位6夹爪1,夹爪·夹紧,工位6,输出 ST6-GRIP-A1；工位6夹爪1 夹紧\r\nST6-ROT-A2,Q1.3,输出,执行机构,工位6旋转轴2,旋转轴·旋转,工位6,输出 ST6-ROT-A2；工位6旋转轴2 旋转"
+  },
+  "screenshotValidation": {
+    "schemaVersion": 1,
+    "kind": "machine-screenshots",
+    "size": {
+      "width": 1600,
+      "height": 1000
+    },
+    "minBytes": 20480,
+    "minUniqueColors": 500,
+    "shots": [
+      {
+        "label": "机型方案卡",
+        "name": "15-machine-design-card.png",
+        "width": 1600,
+        "height": 1000,
+        "bytes": 442439,
+        "uniqueColors": 6695
+      },
+      {
+        "label": "6 工位 3D 联调",
+        "name": "16-machine-3d.png",
+        "width": 1600,
+        "height": 1000,
+        "bytes": 375732,
+        "uniqueColors": 6179
+      },
+      {
+        "label": "BOM 真实型号",
+        "name": "17-machine-bom.png",
+        "width": 1600,
+        "height": 1000,
+        "bytes": 133553,
+        "uniqueColors": 2604
+      },
+      {
+        "label": "PLC IO 点位",
+        "name": "18-machine-iomap.png",
+        "width": 1600,
+        "height": 1000,
+        "bytes": 129433,
+        "uniqueColors": 2737
+      }
+    ]
+  }
+}

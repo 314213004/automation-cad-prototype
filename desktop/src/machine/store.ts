@@ -23,6 +23,9 @@ export interface MachineBomRow {
   category: string;
   note?: string;
   source: 'machine-design';
+  partId?: string;
+  packId?: string;
+  pendingSelection?: boolean;
 }
 
 export interface ActiveMachinePointer {
@@ -146,6 +149,9 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
       const item: MachineBomItem = { kind, name, qty };
       if (typeof raw.note === 'string' && raw.note.trim()) item.note = raw.note.trim();
       if (typeof raw.model === 'string' && raw.model.trim()) item.model = raw.model.trim();
+      if (typeof raw.partId === 'string' && raw.partId.trim()) item.partId = raw.partId.trim();
+      if (typeof raw.packId === 'string' && raw.packId.trim()) item.packId = raw.packId.trim();
+      if (raw.pendingSelection === true) item.pendingSelection = true;
       return item;
     });
     bomDraft = { items };
@@ -168,7 +174,29 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
     if (typeof bottleneck !== 'string' || !bottleneck.trim()) {
       throw new Error('design.cycle.bottleneck 不能为空');
     }
-    normalized.cycle = { perMin, secondsPerPiece, bottleneck: bottleneck.trim() };
+    const optionalNumber = (key: string): number | undefined => {
+      const raw = value.cycle && typeof value.cycle === 'object'
+        ? (value.cycle as Record<string, unknown>)[key]
+        : undefined;
+      return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+    };
+    const estimated = optionalNumber('estimatedSecondsPerPiece') ?? secondsPerPiece;
+    const baseSeconds = optionalNumber('baseSeconds') ?? 0;
+    const slowestActionSeconds = optionalNumber('slowestActionSeconds') ?? Math.max(0, estimated - baseSeconds);
+    const requiredParallelStations = Math.max(1, Math.trunc(optionalNumber('requiredParallelStations') ?? 1));
+    const stations = normalized.config.stations.length;
+    normalized.cycle = {
+      perMin,
+      secondsPerPiece,
+      estimatedSecondsPerPiece: estimated,
+      baseSeconds,
+      slowestStation: Math.max(1, Math.trunc(optionalNumber('slowestStation') ?? 1)),
+      slowestActionSeconds,
+      requiredParallelStations,
+      requiredTotalStations: Math.trunc(optionalNumber('requiredTotalStations') ?? stations * requiredParallelStations),
+      meetsTarget: value.cycle.meetsTarget === true || estimated <= secondsPerPiece,
+      bottleneck: bottleneck.trim()
+    };
   }
   if (isRecord(value.power)) {
     const va = value.power.va;
@@ -348,6 +376,9 @@ export function buildMachineBomRows(design: NormalizedMachineDesign): MachineBom
       source: 'machine-design'
     };
     if (item.note) row.note = item.note;
+    if (item.partId) row.partId = item.partId;
+    if (item.packId) row.packId = item.packId;
+    if (item.pendingSelection === true) row.pendingSelection = true;
     return row;
   });
 }
@@ -359,14 +390,16 @@ function csvCell(value: unknown): string {
 
 export function renderMachineBomCsv(rows: readonly MachineBomRow[]): string {
   const lines = [
-    ['序号', '名称', '型号', '数量', '分类', '来源', '备注'].map(csvCell).join(','),
+    ['序号', '名称', '型号', '数量', '分类', '来源包', '来源', '待选型', '备注'].map(csvCell).join(','),
     ...rows.map((row, index) => [
       index + 1,
       row.name,
       row.model,
       row.qty,
       row.category,
+      row.packId ?? '',
       row.source,
+      row.pendingSelection ? '是' : '否',
       row.note ?? ''
     ].map(csvCell).join(','))
   ];

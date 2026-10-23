@@ -502,7 +502,12 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
   const sensors = Array.isArray(card.config.sensors) ? card.config.sensors.length : 0;
   const name = typeof card.config.name === 'string' ? card.config.name : '机型方案';
   const perMin = typeof card.cycle?.perMin === 'number' ? card.cycle.perMin : null;
-  const seconds = typeof card.cycle?.secondsPerPiece === 'number' ? card.cycle.secondsPerPiece : null;
+  const seconds = typeof card.cycle?.estimatedSecondsPerPiece === 'number'
+    ? card.cycle.estimatedSecondsPerPiece
+    : typeof card.cycle?.secondsPerPiece === 'number'
+      ? card.cycle.secondsPerPiece
+      : null;
+  const targetSeconds = typeof card.cycle?.secondsPerPiece === 'number' ? card.cycle.secondsPerPiece : null;
   const va = typeof card.power?.va === 'number' ? card.power.va : null;
   const warnings = card.warnings.length > 0
     ? card.warnings.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
@@ -517,7 +522,7 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
         <span><b>${actuators}</b> 执行机构</span>
         <span><b>${sensors}</b> 传感器</span>
         <span><b>${perMin === null ? '—' : perMin}</b> 件/分钟</span>
-        <span><b>${seconds === null ? '—' : seconds.toFixed(2)}</b> 秒/件</span>
+        <span title="${targetSeconds === null ? '' : `目标 ${targetSeconds.toFixed(2)} 秒/件`}"><b>${seconds === null ? '—' : seconds.toFixed(2)}</b> 估算秒/件</span>
         <span><b>${va === null ? '—' : Math.round(va)}</b> VA</span>
       </div>
       <div class="acp-machine-warnings">${warnings}</div>
@@ -544,8 +549,8 @@ async function applyMachineDesignCard(callId: string): Promise<void> {
       plan: {
         steps: [{
           tool: 'apply_machine_design',
-          args: { design: card.design, withBom: true },
-          why: '把机型方案写入当前工程并刷新 3D/BOM',
+          args: { design: card.design, withBom: true, withPlc: true },
+          why: '把机型方案写入当前工程并刷新 3D/BOM/IO',
           readOnly: false
         }],
         confidence: 1

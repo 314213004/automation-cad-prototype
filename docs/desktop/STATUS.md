@@ -4,8 +4,8 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`）；集成分支 `integ/3d-all` 合并迭代 34/35/36 三条 3D 分支，本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1228/1228 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34；沙箱需 `TZ=Asia/Shanghai`）。
-- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`，最终 `SMOKE_OK`。
+- 测试：**1237/1237 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9；沙箱需 `TZ=Asia/Shanghai`）。
+- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.2.0` NSIS `AutomationCAD-Setup-0.2.0.exe`；`v0.3.0` 安装包需老王通知后手动触发构建。
 
@@ -14,9 +14,10 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1228 pass / 0 fail / 0 skipped |
+| `npm test` | 1237 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
+| `npm run screenshots:machine` | 4 张 1600×1000 真实 Electron 截图，尺寸/文件大小/颜色数校验通过 |
 | `npm run eval:agent` | `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
 
 ## Smoke 断言清单
@@ -66,7 +67,7 @@
 | `SMOKE_MACHINE_TEMPLATES_OK` | `templates=5 clarify=1 multi=1`，五类工艺模板与追问上限 |
 | `SMOKE_MACHINE_GEOMETRY_OK` | `layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`，参数化整机几何 |
 | `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=5 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
-| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=364 query=D2 hits=1`，离线知识索引可检索 |
+| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=367 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_ORBIT_VIEW_OK` | `mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`，主视口 3D 降级路径 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |
@@ -97,7 +98,7 @@
 | P8 PLC 程序生成 | 🔄 | 预检、变量表、五个基础块、自动序列/报警/安全、11 文件、UI/zip/历史、模拟器 | `b36635b`、`ccbd0fc`、`1f50bac`、`a6b0534` | P8-5 厂商工程文件未做 |
 | P9 参数化建模 | 🔄 | build123d sidecar、特征树、防抖重建、STEP/STL、多实体装配与 BOM/成本联动 | `5c2a8c3`、`9eda660`、`8867853`、`449d060` | P9-4 草图约束未做；依赖 Python |
 
-补充：P10 产品截图更新已完成（`e409ea8`），14 张 Electron 实跑截图位于 `docs/desktop/screenshots/`。
+补充：P10 产品截图更新已完成（`e409ea8`）；机型全流程截图新增 15–18，共 18 张 Electron 实跑截图位于 `docs/desktop/screenshots/`。六工位案例见 [MACHINE-DESIGN-DEMO.md](MACHINE-DESIGN-DEMO.md)。
 
 ## 已知限制
 
@@ -137,13 +138,14 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 1228 条单测/集成测试
+npm test                            # 1237 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
 npm run eval:agent                  # 74 条中文 Agent 评估集
 npm run sync:e2e                    # 本地临时 DB 的设计同步端到端
 npm run screenshots                 # 真实 Electron 截图（14 张）
+npm run screenshots:machine         # 机型全流程截图（15–18，离线桩 + 真实 Electron）
 ```
 
 本轮加固的逐项代码改动与原因见 [HARDENING.md](HARDENING.md)。

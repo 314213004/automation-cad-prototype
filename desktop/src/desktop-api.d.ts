@@ -608,6 +608,22 @@ interface Window {
     };
     machine: {
       active(): Promise<{ ok: boolean; design?: unknown; message?: string }>;
+      ioMap(): Promise<{
+        ok: boolean;
+        message?: string;
+        machine?: { id: string; name: string; stations: number; actuators: number; sensors: number };
+        rows?: Array<{
+          point: string;
+          address: string;
+          direction: '输入' | '输出';
+          ownerType: string;
+          owner: string;
+          type: string;
+          station: string;
+          comment: string;
+        }>;
+        csv?: string;
+      }>;
     };
     packs: {
       list(): Promise<DesktopPackInfo[]>;
