@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
@@ -133,4 +133,39 @@ test('工具层：schema 含 withGeometry/withSolids 且拒绝非布尔；design
   assert.equal(designed.geometry.envelopeMm.length, 3);
   assert.ok(designed.geometry.envelopeMm.every((value) => value > 0));
   assert.ok(designed.summary.length <= 600);
+});
+
+test('withSolids：清掉上一次遗留的 part-N.step（撤销可恢复），并把近似件写进 warning 与 ids', async () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'cad-fake-step-'));
+  roots.push(scratch);
+  let chunk = 0;
+  const { root, bus } = setup({
+    buildSolids: async () => {
+      chunk += 1;
+      const path = join(scratch, `chunk-${chunk}.step`);
+      writeFileSync(path, `ISO-10303-21; chunk ${chunk}`);
+      return { ok: true, files: { step: { path, bytes: 30 } } };
+    }
+  });
+  const paths = machineGeometryPaths(root, 'design-screw-3st');
+  mkdirSync(paths.solidsDir, { recursive: true });
+  const stale = join(paths.solidsDir, 'part-9.step');
+  writeFileSync(stale, 'ISO-10303-21; 上一次的旧块');
+  const result = await bus.execute('apply_machine_design', { brief: BRIEF, withSolids: true });
+  assert.equal(result.ok, true);
+  const solids = result.data.geometry.solids;
+  assert.equal(solids.mode, 'solids');
+  assert.equal(existsSync(stale), false, '旧分块应被清理');
+  for (const path of solids.stepPaths) assert.ok(existsSync(path), path);
+  // 近似件：count 与 id 列表都要透出，且有中文 warning 点名
+  const approximated = result.data.geometry.approximatedIds;
+  assert.ok(Array.isArray(approximated));
+  assert.equal(approximated.length, result.data.geometry.approximated);
+  assert.equal(approximated.length > 0, true);
+  assert.ok(result.data.warnings.some((warning) => /等截面方棒近似/.test(warning)));
+  // 撤销：清掉的旧块按快照恢复，本次新写入的 STEP 被删除
+  assert.equal((await bus.undoLast()).ok, true);
+  assert.ok(existsSync(stale), '撤销应恢复旧分块');
+  for (const path of solids.stepPaths) assert.equal(existsSync(path), false, path);
+  assert.equal(readFileSync(stale, 'utf8'), 'ISO-10303-21; 上一次的旧块');
 });

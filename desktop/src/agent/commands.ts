@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
@@ -1376,6 +1376,16 @@ function registerMachineApplyCommand(bus: CommandBus): void {
             const report = await buildMachineSolids(bundle, ctx.buildSolids);
             const stepPaths: string[] = [];
             if (report.mode === 'solids') {
+              // 上一次 apply 可能留下更多分块的 part-N.step：先全部入撤销快照再清掉，
+              // 避免旧 STEP 混进本次整机（撤销时按快照逐个恢复）。
+              const stale = existsSync(paths.solidsDir)
+                ? readdirSync(paths.solidsDir).filter((name) => /^part-\d+\.step$/.test(name))
+                : [];
+              for (const name of stale) {
+                const stalePath = join(paths.solidsDir, name);
+                snapshot(stalePath);
+                rmSync(stalePath, { force: true });
+              }
               report.stepFiles.forEach((source, index) => {
                 const target = join(paths.solidsDir, `part-${index + 1}.step`);
                 try {
@@ -1387,6 +1397,12 @@ function registerMachineApplyCommand(bus: CommandBus): void {
                   warnings.push(`STEP 文件复制失败：${error instanceof Error ? error.message : String(error)}`);
                 }
               });
+              if (bundle.approximated.length > 0) {
+                const names = bundle.approximated.slice(0, 8).map((id) => geometry.parts.find((part) => part.id === id)?.name ?? id);
+                warnings.push(
+                  `STEP 实体化把 ${bundle.approximated.length} 个水平圆柱按等截面方棒近似（${names.join('、')}${bundle.approximated.length > 8 ? ' 等' : ''}）；STL/glTF 网格不受影响`
+                );
+              }
             } else {
               warnings.push(report.message);
             }
@@ -1397,6 +1413,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
             stlBytes: stl.byteLength,
             sidecarChunks: bundle.chunks.length,
             approximated: bundle.approximated.length,
+            approximatedIds: bundle.approximated,
             jsonPath: paths.json,
             stlPath: paths.stl,
             gltfPath: paths.gltf,
