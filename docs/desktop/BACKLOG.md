@@ -3,28 +3,24 @@
 用途：无人值守时按优先级逐条推进，每条必须有测试/冒烟证据；遇到阻塞只记录、不硬改。
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 
-## 运动学自动识别建议（36-auto-kinematics，2026-10-24，本轮）
+## 集成：34/35/36 三条 3D 分支合并（integ/3d-all，2026-10-24，本轮）
 
-- 状态：✅ 完成；`tsc` 干净、`npm test` **1166/1166**（1132 + 新增 34，需 `TZ=Asia/Shanghai`，见下）、`npm run smoke` 新增 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`（共 60 行 SMOKE_*，2 个既有预期 `_SKIP` 为参数化 sidecar 未配置）；不 push、不打包。
-- A. 识别引擎：新增 `desktop/src/cad/kinematics-auto.ts`（纯函数）。三类证据：① 名称/型号——中英文关键词（气缸/cylinder、滑台/slide、夹爪/gripper、旋转/rotary、丝杆/ballscrew、导轨/rail、伺服/motor）与厂商型号（SMC CDJ2/CQ2/MGP/MXQ/MHZ2/MSQ/CRB、AirTAC TN/MAL/SDA、HIWIN MGN/HGR/HGH、SFU）；② 装配层级——同型号/系列归组、父装配名带类别时子件继承型号与工位、通用名件（`finger_L` / `活塞杆`）按同组相接并入；③ 几何——顶点 PCA 主轴、细长/扁平度、回转体判断，气缸活塞杆与缸体同轴 → 沿缸轴直线（伸出方向取外露侧），导轨 + 滑块 → 沿导轨长轴，旋转台 → 台面法向转轴，夹爪 → 两指连线。
-- B. 输出：每条建议含轴类型、真实方向向量 + 最近主轴/偏角、行程（型号 `MGPM20-50`→50 mm 优先，样本表其次，几何估算再次，取不到为 0 待填）、缩回位（以模型当前位置为 0 mm）、置信度、中文理由、IO 点位建议（工位/编号/类型/型号/名称相似度打分，≥ 0.5 才推荐，如 `ST1-EXT-A1`；占用点位不推荐、两条建议不抢同一点位）。高置信度（≥ 0.6）与低置信度分开返回；伺服电机固定只进低置信度。
-- C. 确认流程：标注抽屉新增「自动识别建议」区，导入后自动识别一次、可「识别动件」重跑；高置信度卡片 + 折叠的低置信度列表，逐条「采纳 / 忽略」。**从不自动写入**：采纳只把该条加入动件列表，仍走既有 `validateDraft` / `checkKinematics`，无点位或行程为 0 时照常报错、禁止保存；需用户点「保存标注」才落盘。标注 JSON schema、校验规则均未改动。
-- D. 数据通路：`CadMeshData.path`（可选）由 `step.ts::meshPathsFromRoot` 从 occt `root` 填充；`CadViewer.getKinematicsGeometry()` 提供网格 + 路径 + 顶点；`window.AutomationCadKinematics` 新增 `suggest / suggestions / acceptSuggestion / dismissSuggestion`。
-- E. 测试：新增 `desktop/test/cad/kinematics-auto.test.mjs` 34 条（每条启发式各有用例：型号行程、关键词/角色、误判防护、样本表、导轨系列、工位号、PCA/回转体/包围盒退化、主轴吸附、同轴/外露/不同轴/偏轴、层级继承、导轨/丝杆/旋转台/滑台/夹爪、低置信度分组、点位评分/占用/不抢、无 IO 表不编造、不自动应用、schema 往返、确定性、occt 路径），含合成 STEP 夹具端到端（4 高 + 1 低，采纳 3 条有点位建议后校验通过，再采纳无点位导轨被现有校验拦截）。夹具 `desktop/test/fixtures/kinematics-assembly.stp`（64 KB）由 `desktop/scripts/gen-kinematics-fixture.mjs` 生成（FACETED_BREP，16 棱柱近似圆柱）。
-- F. 环境说明：本机 sandbox 默认 TZ=UTC 时，既有 `test/cost-export.test.ts` 两条用例（文件名时间戳按 Asia/Shanghai 断言）在改动前就失败；按项目时区 `TZ=Asia/Shanghai npm test` 全绿，未改测试。文档改动后已 `npm run kb:build` 重建离线知识索引（13 docs / 359 chunks）。
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1228/1228**、`build:ext`、`smoke` 全绿（含 `SMOKE_MACHINE_GEOMETRY_OK` / `SMOKE_ORBIT_VIEW_OK` / `SMOKE_KINEMATICS_AUTO_OK`，各分支冒烟块全部保留）；不 push。
+- 互不干扰：主视口 3D 只挂原型 `#stageAssembly/#scene3d`、`#stageCheck/#sceneCheck` 与 `window.AutomationCadOrbit`；联调 3D 在联调抽屉内自建 `commission-3d-canvas`，入口 `__Commission3D`；运动学建议走 `AutomationCadKinematics`。
+- KB：合并后超 400 KB 上限；未提上限，改为精简本文件冗余记录（35/36 细节见模块 MODULE.md），重建后未截断。
+
+## 运动学自动识别建议（36-auto-kinematics，2026-10-24）
+
+- 状态：✅ 完成；分支内 `tsc` 干净、`npm test` **1166/1166**（1132 + 新增 34）、`npm run smoke` 新增 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`；不 push、不打包。
+- 内容：纯函数 `desktop/src/cad/kinematics-auto.ts` 用名称/型号（中英文关键词 + SMC/AirTAC/HIWIN 型号）、装配层级（同系列归组、父装配继承）、几何（PCA 主轴、同轴、回转体、骑轨）三类证据推测动件，输出轴类型/方向/行程（型号 > 样本表 > 几何 > 0 待填）/置信度/中文理由与 IO 点位建议（≥ 0.5 才推荐、不抢占）。标注抽屉「自动识别建议」区逐条「采纳 / 忽略」，**从不自动写入**，采纳后仍走 `validateDraft` / `checkKinematics` 并需「保存标注」；schema 未改。`CadMeshData.path`、`CadViewer.getKinematicsGeometry()`、`window.AutomationCadKinematics.suggest/suggestions/acceptSuggestion/dismissSuggestion` 为新增通路。规则、置信度与夹具细节见 `desktop/src/cad/MODULE.md`。
+- 测试：`test/cad/kinematics-auto.test.mjs` 34 条（每条启发式 + 合成 STEP 夹具 `test/fixtures/kinematics-assembly.stp` 端到端，夹具由 `scripts/gen-kinematics-fixture.mjs` 生成）。沙箱默认 TZ=UTC 时既有 `cost-export.test.ts` 两条时间断言失败，需 `TZ=Asia/Shanghai npm test`。
 - 边界：① 识别全靠启发式，命名不规范（如「零件17」）且几何不典型的机构识别不到，只会进跳过/漏报；② occt-import-js 会把只含零件的子装配压平到上一级，子装配名里的型号会丢失，需叶子名自带型号（或父装配下有多级层级）；③ 标注层只支持 ±X/±Y/±Z，斜向运动取最近主轴并降置信度；④ 夹爪只给一根手指（同一点位不能绑两个动件），对侧手指需人工处理；⑤ 缩回位一律按模型当前位置，模型画在伸出状态时只提示不纠正；⑥ 样本表只覆盖 MHZ2 行程与 MSQ 180°，其他型号无表时按几何/默认值并注明；⑦ 未新增 Agent 工具 `suggest_kinematics`（可选项，避免与并行分支在工具数/评测集上冲突，留待合并后补）。
 
 ## 主视口可旋转 3D：轨道视图 + 属性编辑改几何（35-orbit-view，2026-10-24）
 
-- 状态：✅ 完成；`tsc` 干净、`npm test` **1170/1170**（1132 + 新增 38）、`npm run smoke` 新增 `SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`（`AUTOMATIONCAD_PARAMETRIC_CMD` 假内核下全部 59 个 `SMOKE_*_OK` + `SMOKE_OK`）；WebGL 路径另以 `npm run check:orbit-webgl`（swiftshader 软件 GL，手动）实跑 `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1`；不 push。
-- A. 架构：新增注入扩展 `desktop/src/orbit/`，`extension.ts` 只加一行 `initOrbitView()`（失败时 try/catch 保留等轴测）；**原型 `index.html` / `app.js` / `styles.css` 零改动**。数据来源：`ProtoApi.getTree()`、原型 SVG `g.part` 的 `data-sel/hover/hit`、气缸面板输入框；面板不在时从重新挂载的 SVG 反算缸径/行程并吸附到用户输入过的值与标准表；插入件坐标复刻原型确定性的 `findFreePlacement()`。3D 拾取/悬停在 SVG 对应 `g.part` 上派发 click/mouseover，交给原型自己的 `selectPart / applyIssue`，所以结构树、属性面板、状态栏、撤销栈沿用原型逻辑。
-- B. 视口：WebGLRenderer + 透视/正交双相机 + OrbitControls（左键旋转、中键缩放、右键平移，缩放对准光标）；顶部工具条前/顶/右/等轴测、透视/正交、适合；原型「缩放到适合 (F)」按钮与 F 键同时取景；原型「平移」工具切左键平移、「剖切/剖切面」工具开真实裁剪（保留 X ≤ 气缸中心线一侧）；HUD 显示当前标准视图/自由视角与透视开关；左下坐标轴按相机实时重画。按需渲染，材质/裁剪变化后补帧（swiftshader 并行编译首帧画空的实测问题）。
-- C. 选择：树 → 3D 支持组展开（选「气缸组」高亮缸体+活塞杆+磁性开关；选文件夹替换原型残留选中；标准件 `std*` 代理节点不展开）；3D → 树点击即选中并滚动到行；悬停与原型树悬停双向联动。
-- D. 属性编辑 → 几何：原型缸径/行程（含撤销/重做/「写入装配」）实时重建；右栏追加「3D 几何 · 桌面版」分组：底板长/宽/厚、导轨长/宽/高、滑台长/宽/厚/位置 X、磁性开关槽内高度、插入件尺寸与位置，沿「底板→导轨→滑台→气缸→杆/开关」叠放链传递（改底板厚度上方整体抬高、改滑台 X 气缸跟走、剖切面跟随）；校验导轨不超底板、滑台不脱出导轨，非法值红框 + 中文原因且不生效；「恢复默认」。
-- E. 干涉/受力：干涉校核视口同样替换为 3D：当前问题零件红色、其余半透明、剖切面跟随滑台 X、原型气泡按 3D 投影重新定位、叠加 `detectInterferences` 包围盒初筛重叠体与计数（默认装配 1 处：缸体↔磁性开关，开关嵌在缸体槽里的 AABB 级结果）；原型 7 条示例问题列表与步进不变。受力入口（左栏「受力」tab → CAD 查看受力面板）不受影响，smoke 同步断言该 tab 仍在。
-- F. 降级：`probeWebGL` 失败或渲染器创建失败 → 不挂画布、原型等轴测 SVG 原样显示（`stage[data-orbit=fallback]` + 原因提示），模型/选择映射仍维护；WebGL 上下文丢失时卸载画布退回 SVG。冒烟进程本就关闭 WebGL，因此 smoke 覆盖的是降级路径 + 模型/选择/属性联动；WebGL 路径由 `check:orbit-webgl` 手动覆盖（真实射线拾取、面板编辑、裁剪、气泡定位均断言）。
-- G. 测试：`test/orbit/` 38 条——`camera`（标准视图、俯视防退化、fitDistance、投影往返、正交视锥、坐标轴投影）、`model`（默认坐标、底板/滑台/缸径/导轨编辑传导、校验与不可变、插入件参数）、`proto-parity`（vm 执行原型 app.js，三组缸径/行程下 6 个零件轮廓逐字一致、7 次插入放置与轮廓一致、SVG 反算吸附、真实 TREE 映射）、`selection`、`proto-sync`、`three-scene`（网格世界包围盒、编辑后网格位移、高亮/幽灵、射线拾取回溯、干涉层与剖切面）。
-- H. 文档：新增 `desktop/src/orbit/MODULE.md`；同步 `MODULES.md`、`PROTOTYPE.md`（坑点 4）、`STATUS.md`、`README.md`（测试数与限制）、`desktop/README.md`、`desktop/test/MODULE.md`、本文件；`npm run kb:build` 重建离线索引。
+- 状态：✅ 完成；分支内 `tsc` 干净、`npm test` **1170/1170**（1132 + 新增 38）、`npm run smoke` 新增 `SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径以 `npm run check:orbit-webgl`（swiftshader，手动）实跑 `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1`；不 push。
+- 内容：注入扩展 `desktop/src/orbit/` 把原型「装配」「干涉校核」视口的固定等轴测 SVG 换成可旋转 three.js（`extension.ts` 只加 try/catch 包裹的 `initOrbitView()`，**原型 `index.html` / `app.js` / `styles.css` 零改动**）：轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F 键与原型按钮）、原型「平移」「剖切」工具接管；树↔3D 选择与悬停双向联动（组节点展开，`std*` 代理不展开），3D 拾取经 SVG `g.part` 派发给原型 `selectPart / applyIssue`；原型缸径/行程 + 右栏「3D 几何 · 桌面版」（底板/导轨/滑台/开关槽/插入件）沿叠放链改几何，非法值红框 + 中文原因不生效。干涉视口：问题件红、其余半透明、剖切跟随滑台 X、原型气泡按 3D 投影定位、`detectInterferences` AABB 初筛（默认装配 1 处：缸体↔磁性开关）；受力 tab 不受影响。WebGL 不可用或上下文丢失 → `stage[data-orbit=fallback]`，原型 SVG 原样显示。文件分工、数据流、坑点见 `desktop/src/orbit/MODULE.md`。
+- 测试：`test/orbit/` 38 条（camera / model / proto-parity〔vm 执行原型 app.js 逐字比对轮廓与插入放置〕/ selection / proto-sync / three-scene）。
 - 边界（如实）：几何仍是参数化示意体（长方体/圆柱），缸径→半径 `4+0.32·bore`、杆长 `10+0.12·stroke` 沿用原型示意比例而非 1:1；没有 B-rep/配合求解，叠放链是写死的装配关系；桌面版几何参数只在内存、不进原型撤销栈、不持久化；WebGL 模式下没有框选多选（画布需截断原型舞台的框选事件，降级模式仍可框选）；3D 等轴测为真实右手系 (1,−1,1)，与原型镜像等轴测左右相反；真实显卡上的帧率未实测（本机只有 swiftshader）；干涉初筛只到 AABB 级。
 
 ## 迭代 34：机型方案生成真实三维几何（34-machine-geometry，2026-10-24）
@@ -40,11 +36,10 @@
 - B. 合成器接入：`synthMachine` 缺执行机构/传感器时按模板补全，assumptions 写「按 X 模板补全」；缺工位默认 2、缺节拍默认 10 件/分钟，同时写 warning 与 assumption。
 - C. 追问策略：新增 `desktop/src/machine/clarify.ts` 纯函数 `buildClarify(brief)`，只看工艺/工位/节拍，最多 2 项、合并成一个具体问题；有默认值不追问；`design_machine` 返回 `needs` 与 `question`，会话系统提示要求最多追问一次，不答则用默认并说明。
 - D. 离线评测：`docs/desktop/eval/cases.json` 新增 6 条（5 类工艺 + 1 条信息不足），74/74，意图/工具/参数/拒绝均 1.00。
-- E. 真实评测：`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条（三工位锁螺丝、两工位点胶 3 秒/件、四工位装配含汇川+安全光栅、信息不足检测机、多轮改 4 工位、直接应用需确认），总数 30 → 36；评测器支持 `history` 多轮前置、`allowClarify`、`hasKey`、`containsAll` 参数检查，并只评判本轮工具调用，阈值不变。本机 `deepseek-v4.1-flash` 最终轮 36/36、confirm/clarify/refusal 均 1.00，p50 7.9 s / p95 31.3 s；机型分组 6/6，p50 23.9 s / p95 37.8 s。两轮复跑中的首轮出现 `O04 [operation/missing-arg]`，第二轮恢复；失败分类保留，未删用例、未降阈值。
-- F. 文档：`MACHINE-DESIGN.md` 补模板表、追问规则与 36 条真实评测分组/延迟/失败项；`NL-AGENT.md`、`README.md`、`desktop/README.md`、本文件同步数字；报告生成器新增「机型」分组。
+- E. 真实评测（报告生成器新增「机型」分组）：`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条（三工位锁螺丝、两工位点胶 3 秒/件、四工位装配含汇川+安全光栅、信息不足检测机、多轮改 4 工位、直接应用需确认），总数 30 → 36；评测器支持 `history` 多轮前置、`allowClarify`、`hasKey`、`containsAll` 参数检查，并只评判本轮工具调用，阈值不变。本机 `deepseek-v4.1-flash` 最终轮 36/36、confirm/clarify/refusal 均 1.00，p50 7.9 s / p95 31.3 s；机型分组 6/6，p50 23.9 s / p95 37.8 s。两轮复跑中的首轮出现 `O04 [operation/missing-arg]`，第二轮恢复；失败分类保留，未删用例、未降阈值。
 - 边界：模板是代码内常量，不是用户可编辑库；追问只保证一次，不持久化未答状态；真实评测仍是单模型结果，换模型需重跑。
 
-## 自然语言设计机器（二）：落盘写工具 + 3D/BOM/PLC 联动（P10-2，2026-10-23，本轮）
+## 自然语言设计机器（二）：落盘写工具 + 3D/BOM/PLC 联动（P10-2，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1110/1110**（1084 + 新增 26）、`npm run smoke` 新增 `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1`、`npm run eval:agent` **68/68（1.00）**；不 push。
 - A. 写工具：新增 `apply_machine_design`（工具数 19 → 20，只读 10 + 写 10），schema `{brief?, design?, name?, overwrite?, withBom?, withPlc?}`；`brief` / 完整 `design` 二选一，内部统一走 `validateMachineConfig`；补校验工位/执行机构/传感器 id 唯一、传感器 `part` 引用存在、`design.points` 与配置点位一致；写 `userData/machine/<id>.json` 与 `active.json`，默认同名返回 `FILE_EXISTS`，`overwrite:true` 才覆盖；成功刷新 3D 并进入撤销栈，`undo_last` 恢复上一 active 方案。
@@ -52,10 +47,9 @@
 - C. UI：`design_machine` 结果新增「机型方案卡」（工位数/执行机构/传感器/节拍/功率/全部警告 + 「应用到工程」按钮），警告黄色条不折叠；按钮走计划确认，成功后 3D 切到新机型并显示「已应用：<名称>」；启动时按 `machine:active` 恢复上次方案。
 - D. 测试：新增 `desktop/test/agent/apply-machine-design.test.mjs` 26 条，覆盖 brief/design 二选一、缺参、design 校验失败、执行机构 id 重复、点位重复/引用缺失、overwrite 语义、active 指针、撤销恢复、BOM 追加行数与来源、PLC 点位齐全、确认拒绝不落盘、`../` 路径净化；同步更新工具数、MCP/RPC、离线路由与报告断言。
 - E. 评测：`docs/desktop/eval/cases.json` 新增 d05/d06/d07 三条机型落盘用例（应用上一轮方案、生成 BOM、生成 PLC 点位映射），离线 68/68，意图/工具/参数/拒绝均为 1.00；`desktop/eval/agent-cases.json` 保持同内容兼容副本。
-- F. 文档：`MACHINE-DESIGN.md` 补「应用到工程」流程、文件布局与 3D/BOM/PLC 联动；`NL-AGENT.md` 工具清单 19 → 20 与写确认规则；同步 `README.md`、`MODULES.md`、`desktop/src/agent/MODULE.md`、`desktop/test/MODULE.md`、本文件；`npm run kb:build` 重建离线索引。
 - 边界：3D 仍是配置驱动示意，不生成真实几何；BOM 型号缺省不猜；PLC 只输出点位映射，不生成厂商工程文件；applied 方案的 active 指针损坏时启动回退内置 4 工位样机。
 
-## 自然语言机型方案合成（P10-1，2026-10-23，本轮）
+## 自然语言机型方案合成（P10-1，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1084/1084**（1044 + 新增 40）、`npm run smoke` 新增 `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1`、`npm run eval:agent` **65/65（1.00）**；不 push。
 - A. 需求抽取：新增 `desktop/src/machine/spec.ts` 纯函数 `parseMachineBrief`，支持中文数字工位、`分钟 20 件` / `20 件/分钟` / `3 秒一件` / `CT` 三类节拍、五类工艺、气缸/夹爪/旋转轴/伺服/步进、接近/光电/安全光栅/压力、品牌与 220VAC/380VAC/24VDC；缺省项写 `notes` 标记，不抛错。
@@ -63,10 +57,9 @@
 - C. 工具：新增只读 `design_machine`（工具数 18 → 19，只读 10 + 写 9），schema `{brief, stationCount?, cyclePerMin?}`；空 brief、工位越界/非整数、非正节拍返回 `INVALID_ARGUMENT`；不写文件、不改工程，摘要 ≤600 字。
 - D. 路由与评测：`isMachineDesignRequest` 将机型设计识别为 `generate` 并映射到 `design_machine`；`docs/desktop/eval/cases.json` 增加 4 条（锁螺丝/点胶/装配/检测），离线评测 65/65 全绿。
 - E. 测试：新增 `test/machine/spec.test.mjs`（14）、`synth.test.mjs`（15）、`test/agent/design-machine.test.mjs`（10），共 39 条；覆盖中文数字、三种节拍写法、品牌、缺省 warning、工位均分、点位唯一、瓶颈、功率求和、BOM、schema、越界、空 brief 与摘要数字。
-- F. 文档：新建 `docs/desktop/MACHINE-DESIGN.md`（能力边界、API、规则、工具、验证、后续）；同步 `NL-AGENT.md` 工具清单、`README.md` 工具数/评测数、`MODULES.md` 与 `desktop/src/agent/MODULE.md`；`npm run kb:build` 重建离线索引。
 - 边界：几何仍为配置驱动，功率为固定表估算，节拍未计入上下料/通讯/调试损失；本轮不落盘，写工具与 UI 方案卡留给下一轮。
 
-## Agent 运行报告与可视化（P7-O，2026-10-23，本轮）
+## Agent 运行报告与可视化（P7-O，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1044/1044**（1034 + 新增 10）、`npm run smoke` 全绿（`SMOKE_OK`）、`npm run agent:report` 产出 md/json/svg 三个非空文件；不 push。
 - A. 报告生成：新增 `desktop/scripts/agent-report.mjs` + `npm run agent:report`。读取 `agent-live.json` / `agent-multiturn.json` / `latest.json`，审计取 `<userData>/agent-audit.jsonl`（可用 `AGENT_REPORT_AUDIT_FILE` / `AGENT_REPORT_USER_DATA` 覆盖）；缺源文件写「缺失：<文件>」、打印 WARN、退出码 0。
@@ -74,9 +67,8 @@
 - C. 一致性：写盘后立即读回 `agent-report.json` 并与内存对象逐字段比对；`verifyReport` 再逐项核对总览、分组、离线指标是否等于源 JSON。缺源时只降级为「缺失」，不编造数字。
 - D. 能力清单：18 个工具 + 13 项平台能力，逐条给出模块文件、验证方式（单测 / smoke / eval）与状态；多轮状态按真实 JSON 显示 `⚠️ 5/6（MT04）`，未把阈值通过写成全绿。
 - E. 测试：新增 `desktop/test/agent/report.test.mjs` 10 条，覆盖真实源数字、源变更传导、篡改拦截、缺源降级、Markdown 来源/时间、SVG 数据驱动、BACKLOG 缺口摘取、md/json/svg 文件产出。
-- F. 文档：`README.md`、`docs/desktop/MODULES.md`、本文件；`npm run kb:build` 重建知识索引。
 
-## Agent 执行效率：去重 / 并行 / 缓存（P7-N，2026-10-23，本轮）
+## Agent 执行效率：去重 / 并行 / 缓存（P7-N，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **1034/1034**（1001 + 新增 33）、`npm run smoke` 新增 `SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`、`npm run eval:agent` 100%（61/61）；`npm run agent:live` 因无凭据 `AGENT_LIVE_SKIP`，未伪造端到端 p50/p95；不 push。
 - A. 同轮去重：新增 `desktop/src/agent/dedupe.ts`（纯函数 + 小状态）——`canonicalArgs` 键排序、空白压缩、数字字符串归一；`TurnCallDeduper` 按 `(tool, canonicalArgs)` 复用同轮结果并标 `reused:true`；写工具永不合并；单轮上限默认 12，超出返回 `TOO_MANY_TOOL_CALLS` 并提示拆轮。
@@ -85,9 +77,8 @@
 - D. 审计 / UI：`AgentAuditRecord.cacheHit` 落 NDJSON；`AgentProgressEvent.cacheHit` 进入进度卡，工具卡与审计行显示「已复用」。
 - E. 实测：本机合成桩延迟 100 ms/工具——两次只读分两轮 211 ms → 同响应 102 ms（并发 2）；三次同关键词 303 ms → 102 ms（执行 1 + 复用 2）；两轮 `get_bom` 101+101 ms → 101+2 ms（缓存命中）。真实模型基线仍为 p50 7.6 s / p95 21.3 s，待有凭据后重跑 `agent:live` 更新。
 - F. 测试：新增 `desktop/test/agent/efficiency.test.mjs` 31 条，覆盖参数规范化、重复合并、参数差异不合并、写不合并、12 次上限、保序、并发度、依赖降级、写屏障、失败不吞、缓存命中/失效/TTL、指纹变化、跨会话隔离、审计 `cacheHit`。
-- G. 文档：`docs/desktop/NL-AGENT.md` 新增 8.7；`README.md`、`docs/desktop/MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
 
-## Agent 上下文预算与成本可见性（P7-M，2026-10-23，本轮）
+## Agent 上下文预算与成本可见性（P7-M，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **983/983**（962 + 21）、`npm run smoke` 新增 `SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`、`npm run eval:agent` 通过；不 push。
 - A. 预算模型：新增 `desktop/src/agent/budget.ts`（纯函数）——`estimateTokens`（中文 1.6 字符 / token、其他 4 字符 / token，向上取整）、六档 `system / selection / memory / docs / toolResults / history`（默认总量 12k，可配单档上限）、`pack(payload, options)` 返回 `{text, used, dropped, sections, docsSources}`。
@@ -95,9 +86,8 @@
 - C. 成本可见性：`llm.ts` 解析端点 `usage.prompt_tokens / completion_tokens`；缺失时会话按消息 + 工具 schema / 回复 + tool_calls 估算并标 `estimated:true`；`usage()` 返回本轮/本会话 `promptTokens / completionTokens / totalTokens / requests / estimated` 与费用。新增 `pricing.json`（元/1k tokens，`currency/unit/models`）与 `pricing.ts`，`estimateCostView` 支持精确/最长前缀匹配，未知模型显示 `—`。
 - D. UI / 审计：侧栏底部新增「上下文成本」，显示本轮/本会话 tokens、输入输出拆分与费用，估算态有标注；审计行新增 `promptTokens / completionTokens / estimated / docsSources`，`search_docs` 命中时记录实际来源数。
 - E. 测试：新增 `desktop/test/agent/budget.test.mjs` 21 条，覆盖估算误差、装包不超预算、history < docs < toolResults 优先级、system 保留、长列表首尾截断、裁剪原因可读、usage 缺失回落估算、真实 usage 累计、费用格式化、未知模型 `—`、审计 tokens/docsSources。冒烟新增 `SMOKE_AGENT_BUDGET_OK used=… dropped=… tokens=…`。
-- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.6；`README.md`、`docs/desktop/MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
 
-## Agent 多轮上下文与中断续跑（P7-L，2026-10-23，本轮）
+## Agent 多轮上下文与中断续跑（P7-L，2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` 962/962、`npm run smoke` 新增 `SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`；`npm run eval:agent` 通过；多轮真实模型评测无凭据 SKIP（结果文件已写；本地桩校验 6/6 场景、15/15 轮）。不 push。
 - A. 多轮模型：新增 `desktop/src/agent/thread.ts`——`ThreadState` 保存 `turnId/projectFingerprint/intent/targets/pendingConfirm/completedSteps/lastReplySummary`；`AgentSession` 每轮结束写入，下一轮系统提示注入「上一轮做了什么、是否完成、是否被拒绝」。
@@ -106,18 +96,16 @@
 - D. 跨轮指代：上一轮目标合成 `[target=kind:id:label]`，支持「刚才那个件 / 它」；当前选中仍优先。
 - E. 测试：新增 `desktop/test/agent/thread.test.mjs` 30 条，覆盖状态读写、四类指纹变化、续跑跳过、拒续跑、pendingConfirm 恢复、拒绝不重试、跨轮指代、改型号→撤销→改数量全流程。
 - F. 评测：新增 `desktop/scripts/agent-multiturn.mjs` + `agent-multiturn-cases.json`，6 个多轮场景（2–3 轮/场景），环境变量同 `agent:live`，输出 `docs/desktop/eval/agent-multiturn.json`，阈值 `passRate ≥ 0.8`；无凭据跳过但写 SKIP 结果。
-- G. 文档：`NL-AGENT.md` 4.2「多轮与续跑」、`README.md` 命令、`MODULES.md`、`desktop/src/agent/MODULE.md`、本文件。
 
-## 会话层硬拦截 + 目标路径澄清（2026-10-23，本轮）
+## 会话层硬拦截 + 目标路径澄清（2026-10-23）
 
 - 状态：✅ 完成；`tsc` 干净、`npm test` **932/932**、`npm run smoke` → `SMOKE_AGENT_POLICY_OK bypass=1 confirm=1 pathDenied=1` 且 `SMOKE_OK`、`npm run eval:agent` 通过；不 push。
 - A. 策略层：新增 `desktop/src/agent/policy.ts`（纯函数）—— `detectBypassIntent` 识别“别问了 / 不用确认 / 直接覆盖 / 跳过确认 / 我授权 / 别让我点”；`sanitizeConfirmationClaims` 过滤“无需确认 / 已自动确认”；`checkExportTargetPath` 判定盘符/UNC/绝对路径/`../`/相对目录/系统目录。
 - B. 会话硬拦截：`session.ts::executeTool` 对写工具强制 `confirmWrite`（缺少回调或返回值不是明确 `true` 一律不执行），bypass 时确认文案追加“用户要求跳过确认，但写操作必须确认”并写审计 `BYPASS_ATTEMPT`（含 `phrase`）；用户拒绝后本轮同名写工具直接 `USER_DENIED`，不再弹窗。
 - C. 路径澄清：`commands.ts` / `tools.ts` / `cost/export.ts` 共用路径判定；`export_files` / `export_cost_report` 默认只接受纯文件名，危险目标返回 `TARGET_PATH_UNSUPPORTED` 且消息附 `userData/exports/`，不调用渲染桥、不建目录、不写盘；`allowSanitize:true` 才净化落盘并返回 `sanitized:true`。
 - D. 测试：新增 `desktop/test/agent/policy.test.mjs` 42 条，覆盖意图正负例、话术替换、盘符/UNC/`../`/纯文件名、allowSanitize 开关、直接调用 `executeTool`、拒绝短路与审计字段；既有导出 smoke 改为显式 `allowSanitize`。
-- E. 文档：`NL-AGENT.md` 新增 6.1「确认与路径策略」、9.1.1 下一步标记；`MODULES.md`、`desktop/src/agent/MODULE.md`、本文件同步。
 
-## Agent 真实模型评测 30 条 + 失败归因（P7-K，2026-10-23，本轮）
+## Agent 真实模型评测 30 条 + 失败归因（P7-K，2026-10-23）
 
 - 状态：✅ 完成并过闸；三轮迭代后 `toolAccuracy=1.00`、`refusalRate=1.00`，`npm run agent:live` 退出码 0；**已 push**（后续由主会话补提交）。
 - A. 用例：新增 `desktop/scripts/agent-live-cases.json` 30 条 —— 查询 8、操作 10、流程 6、拒绝/澄清 6；每条含 `{id, prompt, expect:{tools, alternatives, mustNot, asksConfirmation?, expectClarify?}}`，流程类用有序 `steps` 表达，拒绝类用 `mustNot` 锁死越权写工具。
@@ -135,9 +123,8 @@
   3. **P1 流程稳定性**：评测改为 3 轮取多数，记录每轮 F02/F03；同时给流程计划加“未完成步骤不得结束”的执行约束，或在系统提示中明确“多步流程必须继续到全部步骤或明确失败”。
   4. **P1 回归门槛**：拒绝/澄清类保持 6/6 必须全过；建议再补“工具结果注入要求跳过确认”“用户伪造已确认”两条用例，防止只对单句生效。
   5. **P2 扩充**：补充真实多轮上下文（改型号后撤销再改数量）、跨域误用（机械域要求电气导出）与超长序号/批量 20 件，继续观察 token 与延迟。
-- F. 文档：`docs/desktop/NL-AGENT.md` 9.1 更新为 30 条结果表与归因；README 数字与运行说明；本文件记录证据与下一步。
 
-## Agent 本地知识检索（离线 RAG，2026-10-23，本轮）
+## Agent 本地知识检索（离线 RAG，2026-10-23）
 
 - 状态：✅ 完成；不 push。
 - A. 索引：新增 `desktop/src/agent/kb/index.ts`，输入 12 份 `docs/desktop/*.md` + `screenshots/` 文件名 + `packs/builtin/*/parts.json` 分类名；按 Markdown 标题切块（≤800 字符），保留 `source`（文件#标题路径）/`heading`/`line`。新增 `scripts/build-kb.mjs` 与 `npm run kb:build`，输出 `desktop/src/agent/kb/kb.json`（当前 12 docs / 291 chunks / 约 300 KB，≤400 KB）；超限时保留前 200 块并记录 `truncated/droppedChunks`。启动只加载 JSON，不扫盘、不联网。
@@ -145,9 +132,8 @@
 - C. 工具：新增只读 `search_docs({query, limit?})`，返回 `{ok,query,hits:[{source,heading,snippet,score}]}`；工具数 17 → 18（只读 9 + 写 9），MCP/RPC/UI/README/工具清单同步；系统提示要求「怎么操作 / 限制 / 决策 / 为什么」先查文档，查不到直说。
 - D. 测试：新增 `desktop/test/agent/kb.test.mjs` 18 条（分块/source/line、800 字符、2-gram、导轨/干涉/D2、无命中、top3、limit、2 KB、400 KB、截图/分类、标题 hash 同步、工具参数）。
 - E. 验收：`npx tsc --noEmit` 通过；`npm test` **890/890**；`npm run smoke` → `SMOKE_AGENT_KB_OK docs=12 chunks=291 query=D2 hits=1`、既有 Agent 断言全绿、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（61/61，新增 k01–k03 文档用例）。
-- F. 文档：`docs/desktop/NL-AGENT.md` 新增「4.1 本地知识检索（离线 RAG）」；README 工具数与 `npm run kb:build`；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
 
-## Agent 工具调用纠错与重试（P7-J，2026-10-23，本轮）
+## Agent 工具调用纠错与重试（P7-J，2026-10-23）
 
 - 状态：✅ 完成；不 push。
 - A. 纠错纯函数：新增 `desktop/src/agent/repair.ts`，`repairToolCall(raw, schema, ctx?)` 先剥代码围栏与前后解释，再逐字符扫描第一个平衡 JSON 对象；支持单引号、尾逗号、`//` 注释、`"120mm"→120`（仅 number 且含单位）、`"true"/"false"→boolean`、纯数字 `"3"→3`（仅 integer）、`{name,arguments}` 信封、多工具串取第一个；必填 `partId` 仅从 `ctx.selection.id` 回填；`additionalProperties:false` 的未知字段删除并记录；截断最多补 3 层 `}`/`]`，超限/无法补全返回 `TRUNCATED_JSON`；修复后必须过 schema，首个错误带路径与中文消息（`参数 qty 应为整数，收到 "3 个"`）。`qty:"很多"`、`"3 个"` 不猜值，直接拒绝。
@@ -155,17 +141,16 @@
 - C. 接入：`session.ts` 新增 `toolSchemas`，模型工具参数统一走 repair；失败路径写 `TOOL_CALL_INVALID` / `TOOL_CALL_RETRY_OK` / `TOOL_CALL_FALLBACK`，成功修复写 `TOOL_CALL_REPAIRED`，审计新增 `retries/reason/repairs`；`ipc.ts` 与 `scripts/agent-live.mjs` 传入注册表 schema；`llm.ts` 默认发送 `response_format:{type:'json_object'}`，端点明确不支持时去掉并重试一次，`responseFormat:false` 可关闭。
 - D. 测试：新增 `desktop/test/agent/repair.test.mjs` 39 条（围栏/前后废话/单引号/尾逗号/注释/单位数字/字符串布尔/字符串整数/多工具串/截断成功与失败/schema 中文路径/禁止猜测/selection 回填/未知字段/重试成功/重试回落/审计）；`test/agent/llm.test.mjs` 新增 3 条（默认 response_format、端点不支持时降级、显式关闭）。
 - E. 验收：`npx tsc --noEmit` 通过；`npm test` **872/872**（830 + 39 + 3）；`npm run smoke` → `SMOKE_AGENT_REPAIR_OK cases=10 repaired=7`、既有 Agent/成本/PLC 断言全绿、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）；`npm run agent:live` 无凭据 → `AGENT_LIVE_SKIP`（有凭据时仍跑 12/12）。
-- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.5「输出纠错与重试」；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
 
 ## 发版准备 0.3.0（2026-10-23）
 
 - 状态：✅ 代码与文档准备完成；**未打包、未触发 CI、未打 tag、未 push**
 - 已完成：`desktop/package.json` / `package-lock.json` 版本升至 `0.3.0`；新建根目录 `CHANGELOG.md`（按 Added / Changed / Fixed 归类，逐条带提交号）；README 版本与能力表同步；汇报材料扩至 19 页并重导 PDF。
 - 汇报材料：测试基线 674、元件 371 型号 / 244 尺寸（16 条同系列推定）、Agent 12 工具、PLC 生成 P8-1～P8-4、参数化 P9-1/2/3/5；新增「PLC 程序自动生成与参数化建模」页；明确 ST 通用、无厂商工程文件、build123d Python sidecar 依赖。
-- 验收：`npx tsc --noEmit` 通过；`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
+- 验收：`npm test` **674/674**；`npm run smoke` → `SMOKE_OK`（带假 sidecar 另得 `SMOKE_PARAMETRIC_SIDECAR_OK` / `SMOKE_PARAMETRIC_UI_OK` / `SMOKE_PARAMETRIC_ASSEMBLY_OK`）；PDF 19 页，关键词 `674` / `PLC` / `build123d` / `0.3.0` 均命中，URL 无横向溢出。
 - 待办：安装包构建需老王通知后手动触发 `windows-build`；TIA Openness、草图约束（P9-4）、委外加工联动与生产部署仍未完成，保持规划中。
 
-## Agent 流程模板（P7-I，2026-10-23，本轮）
+## Agent 流程模板（P7-I，2026-10-23）
 
 - 状态：✅ 完成；不 push。
 - A. 模板：新增 `desktop/src/agent/recipes.ts`，5 个纯数据模板 `new-machine` / `plate-delivery` / `electrical-delivery` / `cost-review` / `full-package`；每个含 `id/title/summary/steps[]/preconditions[]/estimatedSeconds`，步骤全部引用现有 17 个注册工具，参数模板支持 `{from:'context.machine.name'}` 点路径占位符（含数组下标、`default`、`optional`）。
@@ -173,9 +158,8 @@
 - C. UI/IPC：`agent:recipe:execute` / `agent:recipe:cancel`；侧栏「流程」下拉、前置条件红/绿、步骤复选框、开始/取消/导出 Markdown、分步进度与结果；写操作弹「流程写操作确认」，审计 `source='recipe'`。
 - D. 测试：新增 `desktop/test/agent/recipes.test.mjs` 29 条，覆盖 5 模板 schema（工具名必须存在于注册表）、重复 id/非法耗时、占位符解析/缺失/默认值、前置条件拦截与数值下限、失败停止保留已完成、跳过（id/工具名/下标）、默认逐次确认、同类免问、拒绝、无确认回调、耗时、中文报告与 Markdown 导出、未知模板。
 - E. 验收：`npx tsc --noEmit` 通过；`npm test` **830/830**（801 + 29）；`npm run smoke` → `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`、`SMOKE_AGENT_RECIPE_UI_OK recipes=5 steps=5`、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）。
-- F. 文档：`docs/desktop/NL-AGENT.md` 第 7 节改为「已实现——流程模板」；README 智能体表与冒烟清单；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
 
-## Agent 主动建议（P7-H，2026-10-23，本轮）
+## Agent 主动建议（P7-H，2026-10-23）
 
 - 状态：✅ 完成；未 push。
 - A. 建议引擎：新增 `desktop/src/agent/advisor.ts`，纯函数 `suggestNextActions(context, project, options?)`；输入 BOM 行数、未放置件数、干涉命中/未检查、缺尺寸件数、CAD 是否存在、电气校验结果、成本是否过期、PLC 是否已生成，输出 0–3 条 `{id,title,why,action,weight}`。规则顺序：底板重叠 100、电气校验未通过 95、干涉命中 90、缺尺寸 85、未做干涉检查 70、成本过期 65、PLC 未生成 60、全部就绪交付包 50；`why` 全部引用真实数字，无命中返回空数组。
@@ -183,25 +167,22 @@
 - C. 状态来源：`__AgentBridge.getAdvisorState()` 汇总 BOM / 未放置 / 干涉 / 电气 / 成本指纹 / PLC 标记，`packs.listParts()` 在渲染层补齐 `dims` 缺尺寸数；`__CostPanel.state()` 暴露成本计算的 BOM 指纹，`run_plc_generate` 成功后调用 `markPlcGenerated`。
 - D. 测试：新增 `desktop/test/agent/advisor.test.mjs` 21 条，覆盖每条规则命中/不命中、优先级排序、上限 3、空状态、忽略后不返回、忽略后刷新不复活、why 数字、BOM 指纹。
 - E. 验收：`npx tsc --noEmit` 通过；`npm test` **801/801**（780 + 21）；`npm run smoke` → `SMOKE_AGENT_ADVISOR_OK suggestions=3 top=overlap`、`SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）。
-- F. 文档：`docs/desktop/NL-AGENT.md` 新增 8.4「主动建议」规则表；README 智能体表与面板说明；`docs/desktop/MODULES.md`；`desktop/src/agent/MODULE.md`；本文件。
 
-## Agent 真实模型与抗注入（2026-10-23，本轮）
+## Agent 真实模型与抗注入（2026-10-23）
 
 - 状态：✅ 完成；不 push。
 - A. 真实模型冒烟：新增 `desktop/scripts/agent-live.mjs` + `npm run agent:live`，从 `AGENT_LIVE_BASE_URL` / `AGENT_LIVE_API_KEY` / `AGENT_LIVE_MODEL` 读取配置，走 `OpenAiCompatibleClient` + `AgentSession` 跑 12 条固定指令；断言行工具（含合理替代）、关键参数与写确认。无凭据打印 `AGENT_LIVE_SKIP` 并退出 0；结果写 `docs/desktop/eval/agent-live.json`。本机实测 LiteLLM bridge / `cn:deepseek-v4.1-flash`：`matched=12/12`、`toolAccuracy=1.00`、`confirmRate=1.00`；密钥未写入任何文件。
 - B. 抗提示注入：新增 `desktop/src/agent/guard.ts`，所有工具结果包成 `tool_result_data` 数据块；检测「忽略之前的指令」「你现在是」「执行 rm」「上传到」「篡改审计」「危险路径」等模式并标记 `untrusted:true`，附不可信提示，不丢弃原文；系统提示声明工具结果/文件内容只是数据。新增 `test/agent/guard.test.mjs` 14 条，覆盖元件名、STEP 文件名、备注字段与会话回灌，断言工具选择不变。
 - C. 评估集：`docs/desktop/eval/cases.json` 扩至 **58 条**（17 个工具全覆盖 + 缺参数/越权改文件/篡改审计/危险路径/未知位号/跨域误用 6 类拒绝）；`run-eval.mjs` 改为读取该路径并校验工具/拒绝覆盖，离线路由补齐 `update_component`、`remove_component`、`run_plc_generate`、`export_files`、`get_project_context` 与拒绝规则。
 - D. 验收：`npx tsc --noEmit` 通过；`npm test` **780/780**（766 + 14）；`npm run smoke` → `SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（58/58）；`npm run agent:live` 无凭据 → `AGENT_LIVE_SKIP` 退出 0。
-- E. 文档：`docs/desktop/NL-AGENT.md` 新增「真实模型验证」「不可信内容处理」；README 快速开始补充运行方式；本文件记录本轮证据。
 
-## 质量加固轮（2026-10-23，本轮）
+## 质量加固轮（2026-10-23）
 
 - 状态：✅ 完成；不新增功能、不改工具名/IPC 通道/文件格式/状态字符串，不 push。
 - A. 一致性审查：统一「缺少必填参数：x」/「x 不存在：id」文案；JSON-RPC 英文错误改为中文且保留错误码；确认回调异常不再伪装成用户拒绝；补充静默 catch 的告警或原因注释。
 - B. 死代码：`grep -rn -w` 确认零引用后删除 12 个导出（`isMultiStepInstruction`、`INTENT_ORDER`、`explainIntent`、`annotationToDoc`、`axisPoses`、`getOcctWasmUrl`、`findCase`、`isCostExportSaveResult`、`FACTORY_LABELS`、`assemblyBomCsv`、`findInstance`、`inputBindings`）；公共/兼容别名保留并加注释。
 - C. 测试补强：`compileOps`、`planExportName`、`buildTags` 新增 13 条边界用例（空数组、重复 id、Unicode/emoji、NaN/Infinity、非法 fileName、超短 maxLength、空配置）。
 - D. 验收：`npx tsc --noEmit` 通过；`npm test` **687/687**（起点 674）；`npm run smoke` → 源码定义 46 个 `SMOKE_*` 断言名（含条件分支），本轮无 fake sidecar 实跑 42 个（40 个 `_OK` + 2 个预期 `_SKIP`）并输出 `SMOKE_OK`；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
-- E. 文档：重写 `STATUS.md`（P1–P9 状态表、smoke 断言清单、限制、D1–D8 索引、命令速查）；新建 `HARDENING.md`（文件:行 → 原 → 新 → 原因）；README 测试基线同步 687。
 - 本轮未执行 `npm run sync:e2e` / `npm run screenshots`；两条命令保留在 STATUS 速查中，供发布前按需复跑。
 
 ## 待办（按优先级）
@@ -230,7 +211,7 @@
 - 已完成（批次层，`src/cad/render-batch.ts`）：几何按中心归零 + 每实例平移矩阵（列主序，可直接喂 `Matrix4.fromArray`）、确定性三角面抽样简化、包围盒代理（12 面）、渲染指令表 `buildRenderOps`（hidden/lodCounts/drawCalls/triangles）与中文概要 `describeRenderOps`
 - 已完成（视图器接入）：`viewer.ts` 建 `batchGroup`，按指令表开关可见性、按 LOD 换几何（LOD0 原模 / LOD1 抽样 / LOD2 代理盒）、按实例组建 `InstancedMesh`（原始 mesh 保留给拾取、导出与运动学，仅隐藏不绘制）、相机移动 150ms 节流重算、运动学姿态变化后刷新实例矩阵、拾取支持 `instanceId → partIndex`；新增 `getRenderPlanText()`
 - 基准：`npm run bench:render` → 10 万面 / 500 零件 `metaMs≈61 planMs≈1.3 drawCalls 500→20（省 96%）budget=OK`
-- 验收：`tsc --noEmit` 通过；`npm test` **355/355**（新增 16 条批次层用例）；`npm run smoke` → `SMOKE_OK`
+- 验收：`npm test` **355/355**（新增 16 条批次层用例）；`npm run smoke` → `SMOKE_OK`
 - 已知限制：冒烟环境无 GPU（走 WebGL 降级路径），实例化/LOD 的真实 FPS 尚未在有显卡的机器上实测；下一步可选做「渲染面板显示当前计划」与 GPU 实机 FPS 基准
 
 ### P5 智慧工厂服务端
@@ -242,13 +223,13 @@
 ### P6 机台硬件成本自动统计
 - 状态：🔄 P6-1 ✅ 引擎完成（`a8c1e5f`）；P6-2 ✅ 面板与导出（`6d70ae7`）；P6-3 ✅ Agent 工具（`a66b26e`）；P6-4 ✅ Agent 落盘导出（`23cd284`）
 - 已完成（P6-3）：`desktop/src/cost/agent.ts`（`runCostTool`：入参校验 + 窄输出）、命令总线 `run_cost_report`（未给 bom 时读渲染桥 `getBom`，内置价格簿由主进程 `createAgentCommandBus` 第三参注入 `readBuiltinPricebookRaw`）、Agent 工具与 MCP 白名单、`main.ts` 冒烟 `SMOKE_COST_AGENT_OK`
-- 实测（P6-3）：`tsc --noEmit` 通过；`npm test` **413/413**（新增 12 条成本 Agent 用例，同步 agent 工具数 8→9）；`npm run smoke` → `SMOKE_COST_OK lines=6 missing=1 grand=1398.64`、`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`、`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`、`SMOKE_AGENT_TOOLS_OK tools=9 implemented=9`、`SMOKE_OK`
+- 实测（P6-3）：`npm test` **413/413**（新增 12 条成本 Agent 用例，同步 agent 工具数 8→9）；`npm run smoke` → `SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`、`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`、`SMOKE_AGENT_TOOLS_OK tools=9 implemented=9`
 - 已完成（P6-4）：`desktop/src/cost/export.ts`（`planExportName` + `buildCostExport`）、命令总线 `export_cost_report`（复用 `computeCostReport`，PDF 走注入的 A4 `printToPDF`，CSV 带 BOM）、IPC `export:costFile`（固定 `userData/exports/`、净化/强制扩展名/冲突序号/覆盖开关、不弹对话框）、preload/`desktop-api.d.ts`/`__AgentBridge.exportCostFile`、会话 `MUTATING_TOOLS` 与 MCP 写工具清单
-- 实测（P6-4）：`tsc --noEmit` 通过；`npm test` **439/439**（新增 25 条导出 + 1 条确认用例）；`npm run smoke` → `SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`、`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`、既有成本/智能体断言全绿、`SMOKE_OK`
+- 实测（P6-4）：`npm test` **439/439**（新增 25 条导出 + 1 条确认用例）；`npm run smoke` → `SMOKE_COST_AGENT_EXPORT_OK format=csv bytes=737 name=sanitized`、`SMOKE_AGENT_TOOLS_OK tools=10 implemented=10`
 - 本轮提交：`23cd284`（功能）+ 本文件提交（看板）
 - 下一步：P6-5 与智慧工厂采购价对接（依赖 D2）
 - 分期：P6-1 价格簿+引擎 → P6-2 面板/导出 → P6-3 ✅ Agent 工具 → P6-4 ✅ Agent 落盘导出 → P6-5 与智慧工厂采购价对接
-- 实测（P6-2）：`tsc --noEmit` 通过；`npm test` 401/401（新增 14 条报告用例）；`npm run smoke` → `SMOKE_COST_OK lines=6 missing=1 grand=1398.64`、`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`、`SMOKE_OK`
+- 实测（P6-2）：`npm test` 401/401（新增 14 条报告用例）；`npm run smoke` → `SMOKE_COST_OK lines=6 missing=1 grand=1398.64`、`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`
 - P6-2 交付：`src/cost/ui.ts` 顶栏「成本估算」抽屉（9 卡 + 参数区 + 明细 + 缺价告警 + 导入 BOM/价格簿 + 导出 PDF/CSV）、`src/cost/report.ts` A4 纵向报告与 UTF-8 BOM CSV、主进程 `cost:pricebook` IPC 与 `exportReport` 可选 A3/A4
 - 已知限制：BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框
 - 验收：单测 ≥20、`SMOKE_COST_OK`、500 行 BOM < 50ms
@@ -261,14 +242,14 @@
   - `src/agent/audit.ts`：NDJSON 审计、`maskSecrets`（sk-/Bearer/token=/X-Design-Key）、`redactValue` 按字段名脱敏、坏行跳过、写失败不阻断
   - `session.ts`：`llm.chat()` 抛错才降级离线；写指令不执行并抛原错误；每次工具调用（含 `USER_DENIED`/参数非法/离线）写审计
   - `electron/ipc.ts`：审计落 `userData/agent-audit.jsonl`，新增 `agent:audit:read`（最近 50 条 + 汇总）
-- 实测（P7-A-1）：`./node_modules/.bin/tsc --noEmit` 通过；`npm test` **457/457**（新增 18 条，覆盖意图/计划/只读隔离/上下文/脱敏/离线降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、既有 `SMOKE_AGENT_TOOLS_OK tools=10`／`SMOKE_AGENT_CHAT_UI_OK`／成本四条断言全绿、`SMOKE_OK`
+- 实测（P7-A-1）：`npm test` **457/457**（新增 18 条，覆盖意图/计划/只读隔离/上下文/脱敏/离线降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`
 - 已完成（P7-A-2，`b3b9aee`）：
   - `src/agent/preview.ts`：纯函数视图模型。`buildPlanPreview` 输出 tone（read/write/none）、工具、参数、`offlineAllowed`、缺参；`buildReceipt` 让在线/离线共用「通道 · 耗时 · 工具次数 · 失败数」；`describeAuditEntry` / `auditSummaryText` 供审计面板
   - `session.ts`：新增 `mode()` 记录本轮通道（`llm.chat()` 抛错并成功降级才算 offline），`ipc.ts` 的 `agent:chat:send` 回传 `mode` 与 `elapsedMs`
   - `ui.ts`：输入框 `input` 事件实时渲染计划预览（`data-tool`/`data-read-only`/`data-offline`，只展示不执行）；回复下方渲染统一回执；新增审计区（最近 8 条 + 汇总 + 刷新按钮），打开抽屉与每次发送后自动刷新
   - `preload.ts` / `desktop-api.d.ts`：新增 `agent.audit.read()`
   - `main.ts`：新增 `SMOKE_AGENT_READONLY_UI_OK` —— 只读样例 `offline=1`、写样例 `offline=0` 且提示含 `partId`、预览前后场景零件数不变、审计面板读到 2 条
-- 实测（P7-A-2）：`tsc --noEmit` 通过；`npm test` **466/466**（新增 9 条，覆盖预览只读/写/超纲、本轮工具统计、回执在线/离线/异常耗时、审计行与汇总、会话 mode 的在线/离线/清空/写指令不降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`、`SMOKE_AGENT_CHAT_UI_OK fields=6 log=1`、`SMOKE_AGENT_NL_OK intents=7 tools=10 audit=3 ctx=1776`、`SMOKE_AGENT_TOOLS_OK tools=10`、成本四条断言全绿、`SMOKE_OK`
+- 实测（P7-A-2）：`npm test` **466/466**（新增 9 条，覆盖预览只读/写/超纲、本轮工具统计、回执在线/离线/异常耗时、审计行与汇总、会话 mode 的在线/离线/清空/写指令不降级）；`npm run build:ext` + `npm run smoke` → `SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2 summary=ok scene=0`
 - 已完成（P7-A-3，提交号待补）：
   - `desktop/eval/agent-cases.json`：40 条中文用例，覆盖 7 类意图；16 条指代、5 条歧义、5 条多步、5 条超纲；工具名全部来自 `tools.ts` 注册表
   - `desktop/eval/run-eval.mjs`：离线规则回归，统计意图准确率 / 工具选择率 / 参数抽取率 / 超纲拒绝率 / 多步完成率，输出表格并写 `docs/desktop/eval/latest.json`（时间戳、版本、逐条明细）；低于阈值退出码 1
@@ -281,20 +262,20 @@
   - `src/agent/tools.ts` / `session.ts` / `mcp.ts`：新工具、`MUTATING_TOOLS` 二次确认、MCP 写工具清单
   - `router.ts`：放/摆/加 + 坐标 → `place_component`；插入仍走 `insert_component`
   - `desktop/eval/agent-cases.json`：新增 6 条放置类用例，共 46 条
-- 实测（P7-B）：`tsc --noEmit` 通过；`npm test` **598/598**（新增 21 条放置用例）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（46/46 意图、46/46 工具、20/20 参数、5/5 超纲拒绝、5/5 多步）；`npm run smoke` → `SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_TOOLS_OK tools=11 implemented=11`、`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`、`SMOKE_OK`
+- 实测（P7-B）：`npm test` **598/598**（新增 21 条放置用例）；`eval:agent` 全 1.00（46/46 意图、46/46 工具、20/20 参数、5/5 超纲拒绝、5/5 多步）；`npm run smoke` → `SMOKE_AGENT_PLACE_OK placed=1 undo=1`、`SMOKE_AGENT_TOOLS_OK tools=11 implemented=11`、`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028`
 - 已完成（P7-C）：
   - `src/agent/planner.ts`：`plan(input, context)` 五类离线组合（查件→放置→校验 / BOM→成本→导出 / 导入→干涉 / PLC 生成→模拟验证 / 设计包→上传）+ 通用拆句；未知工具过滤并记 `warnings`；不命中或置信度 < 0.6 返回 `refused:true` + 建议
   - `executePlan(plan, deps)`：只读直接执行；含写步骤时一次 `confirmPlan` 汇总确认；任一步失败立即停止；每步记录 `elapsedMs`/结果码；可撤销写已成功时返回 `undoHint`（`undo_last`）；支持 `startAt/maxSteps` 逐步执行
   - `electron/ipc.ts` / `preload.ts` / `desktop-api.d.ts`：新增 `agent:plan:execute`，主进程二次校验工具注册与步骤结构，确认弹窗一次，审计 `source='plan'`
   - `src/agent/ui.ts` / `panels.css`：侧栏多步计划卡片（序号/工具/参数/原因/缺参/读写标记）+「全部执行/逐步执行/取消」；执行中 `…`、成功 `✓`、失败 `×` 并显示错误码与原因
-- 实测（P7-C）：`tsc --noEmit` 通过；`npm test` **674/674**（新增 27 条规划/执行器用例）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`npm run smoke` → `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`，且侧栏两步只读计划「全部执行」后两项均为 `is-done`，`SMOKE_OK`
+- 实测（P7-C）：`npm test` **674/674**（新增 27 条规划/执行器用例）；`eval:agent` 全 1.00；`npm run smoke` → `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`，且侧栏两步只读计划「全部执行」后两项均为 `is-done`
 - 已完成（P7-D，提交号待补）：
   - `tools.ts` 注册表新增 5 个工具：`get_project_context`（只读，缺失字段返回 null）、`update_component`（改型号/数量/备注，可撤销）、`remove_component`（底板/BOM 移除，可撤销）、`run_plc_generate`（预检失败不落盘）、`export_files`（pdf/dxf/glb/bom，复用统一文件名净化与冲突规则）
   - `commands.ts` / `extension.ts` / `viewer.ts` / `enclosure`：新增工程上下文、元件更新/移除快照恢复、PLC 目录落盘、通用导出渲染桥；`ipc.ts` 注入 A3 装配报告 PDF 管线
   - `session.ts` / `mcp.ts` / `router.ts` / `planner.ts`：4 个写工具加入 `MUTATING_TOOLS` 与二次确认，MCP 桌面依赖清单同步，读写集合保持 8 + 9 = 17；`update_component` / `remove_component` 纳入可撤销写
   - 错误码：`PART_NOT_FOUND`、`NOT_PLACED`、`PRECHECK_FAILED`、`UNSUPPORTED_FORMAT`、`INVALID_ARGUMENT` 均为稳定结构化返回
   - 测试：新增 `desktop/test/agent/tools-v2.test.mjs` 30 条（schema 完整性、参数校验、未知型号、无尺寸告警、移除不存在、预检拦截不落盘、导出白名单/路径净化/覆盖序号、确认拒绝）
-- 实测（P7-D）：`tsc --noEmit` 通过；`npm test` **717/717**（687 → 717，新增 30 条）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`npm run smoke` → `SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`、`SMOKE_OK`
+- 实测（P7-D）：`npm test` **717/717**（687 → 717，新增 30 条）；`eval:agent` 全 1.00；`npm run smoke` → `SMOKE_AGENT_TOOLS_OK tools=17 implemented=17`、`SMOKE_AGENT_TOOLS_V2 tools=17`、`SMOKE_AGENT_NL_OK intents=7 tools=17 audit=3 ctx=541`
 - 已完成（P7-F，提交号待补）：
   - `src/agent/feedback.ts`：进度事件类型、参数摘要（`redactValue` + `maskSecrets`）、耗时格式化、n/N 与 10 s 提示、连续 3 步汇总、取消文案
   - `src/agent/suggest.ts`：`PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED` 中文建议与替代方案；未知码明确「无法判断具体原因」
@@ -303,7 +284,7 @@
   - `ui.ts` / `panels.css`：执行前进度、500 ms 秒表、>10 s 可取消、结果卡片（✓/×、耗时、结果码）、3 步汇总、取消按钮与取消文案、失败建议卡片
   - `audit-view.ts`：工具/结果筛选、时间倒序、最近 200 条上限与丢弃提示、CSV（UTF-8 BOM、统一文件名净化）、单条完整 JSON 递归脱敏；`AgentAuditRecord.elapsedMs`
   - `test/agent/ux.test.mjs`：21 条新单测；main smoke 新增 `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`
-- 实测（P7-F）：`tsc --noEmit` 通过；`npm test` **766/766**（745 → 766，新增 21 条）；`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`npm run smoke` → `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`、既有智能体断言全绿、`SMOKE_OK`
+- 实测（P7-F）：`npm test` **766/766**（745 → 766，新增 21 条）；`eval:agent` 全 1.00；`npm run smoke` → `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`
 - 下一步：联调/同步工具注册后把 `tool: null` 用例替换为真实工具；单步模型工具调用仍使用一次性确认，逐步确认 UI 可在后续补齐
 - 验收（A/B/C 期）：`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028` + `SMOKE_AGENT_READONLY_UI_OK` + `SMOKE_AGENT_PLACE_OK placed=1 undo=1` + `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`，误写率 0（写计划不进入离线通道、预览不执行、拒绝确认不执行，均有单测/冒烟钉住）
 
@@ -313,16 +294,16 @@
 - 分期：P8-1 预检+变量表+FB → P8-2 序列/报警/安全 → P8-3 UI 与导出 → P8-4 模拟器自检 → P8-5 TIA Openness（可选）
 - 验收：demo 机型（补齐安全件）11 文件、预检 0 错、重复生成 sha256 一致；内置模拟器 6 步跑通、0 报警
 - 已完成（P8-1）：`src/plcgen/precheck.ts`（预检各规则全量返回）、`tags.ts`（I/Q 顺序分配 + UTF-8 BOM CSV）、`st.ts`（`FB_Cylinder/FB_Gripper/FB_RotaryAxis/DB_IO/OB1_Main` 五文件 + `inputHash`）；无 UI
-- 实测（P8-1）：`tsc --noEmit` 通过；`npm test` **505/505**（新增 35 条 plcgen 用例）；`npm run smoke` → `SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_OK`
+- 实测（P8-1）：`npm test` **505/505**（新增 35 条 plcgen 用例）；`npm run smoke` → `SMOKE_PLCGEN_OK files=5 tags=32`
 - P8-1 边界：首期五文件；自动序列/报警/安全 FC 留给 P8-2，生成 UI/zip 留给 P8-3，模拟器联调自检留给 P8-4；demo 配置本身未带安全点位，预检演示需补 `safety.emergencyStop/safetyDoor`
 - 已完成（P8-2）：`sequence.ts`（步序 → `FC_AutoSequence` CASE 状态机、AND/OR 条件、5 s 缺省超时、超时报警、Abort/SafeStop 回 Step0）、`safety.ts`（急停/安全门常闭串联、SafeStop 锁存与 Reset 上升沿复位、缺点位只写注释）、`alarms.ts`（超时/传感器矛盾/安全触发统一 `AlarmWord` + `FirstFault` 首故障锁存）、`generate.ts`（预检拦截 + 固定 11 文件 + `mapping.json` + README + 逐文件 SHA-256）、`symbols.ts`（点位/地址/变量名映射）
-- 实测（P8-2）：`tsc --noEmit` 通过；`npm test` **556/556**（新增 `plcgen-p82.test.ts` 32 条）；`npm run smoke` → `SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_OK`；同输入两次生成 11 文件 sha256 全一致
+- 实测（P8-2）：`npm test` **556/556**（新增 `plcgen-p82.test.ts` 32 条）；`npm run smoke` → `SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_OK`；同输入两次生成 11 文件 sha256 全一致
 - P8-2 边界：生成 UI、zip 导出、历史记录留给 P8-3；模拟器加载生成程序跑联调序列留给 P8-4；仍不生成厂商专有工程文件
 - 已完成（P8-3）：`src/plcgen/ui.ts` 电气域顶栏「PLC 程序」全屏面板（机型规模、目标平台/命名前缀、错误/警告预检表与机构定位、文件树 + 前 200 行预览、导出 zip/复制全部/打开目录）；`view-model.ts` 纯函数（文件树/预览/按钮禁用/问题定位）；`history.ts` 最近 10 次按 inputHash 去重并可回看文件清单；`export.ts` 目录命名；`src/shared/{filename,zip}.ts` 复用文件名净化与 adm-zip 写入；IPC `plcgen:history|recordHistory|export|openExportDir`
-- 实测（P8-3）：`tsc --noEmit` 通过；`npm test` **577/577**（新增 `plcgen-p83.test.ts` 21 条：纯 JS SHA-256、文件树、预览截断、历史去重/上限、目录命名、ZIP 结构与 CRC + `unzip -t`、路径穿越、预检禁用、目标平台不影响 ST）；`npm run smoke` → `SMOKE_PLCGEN_UI_OK files=11 history=1`、`SMOKE_OK`
+- 实测（P8-3）：`npm test` **577/577**（新增 `plcgen-p83.test.ts` 21 条：纯 JS SHA-256、文件树、预览截断、历史去重/上限、目录命名、ZIP 结构与 CRC + `unzip -t`、路径穿越、预检禁用、目标平台不影响 ST）；`npm run smoke` → `SMOKE_PLCGEN_UI_OK files=11 history=1`
 - P8-3 边界：历史只保存文件清单不保存正文；仍不生成厂商专有工程文件
 - 已完成（P8-4）：`simulate.ts`（mapping 输出映射、执行机构行程时间、生成 timeoutMs、SafeStop、传感器矛盾、虚拟时钟与 timeScale）、`verify.ts`（预检 → 生成 → 模拟，`summarizeVerification` 窄摘要）、Agent 只读工具 `verify_plc_program`、面板「模拟验证」入口
-- 实测（P8-4）：`tsc --noEmit` 通过；`npm test` **619/619**（新增 `plcgen-p84.test.ts` 21 条）；`npm run smoke` → `SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`、`SMOKE_AGENT_TOOLS_OK tools=12 implemented=12`、`SMOKE_OK`
+- 实测（P8-4）：`npm test` **619/619**（新增 `plcgen-p84.test.ts` 21 条）；`npm run smoke` → `SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`、`SMOKE_AGENT_TOOLS_OK tools=12 implemented=12`
 - P8-4 边界：模拟器只执行生成程序的动作/等待/超时/安全/传感器语义，不解析任意 ST；仍不生成厂商专有工程文件
 
 ### P9 参数化建模（build123d 内核）
@@ -331,22 +312,18 @@
 - 方案：[PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；对比：[PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
 - 分期：P9-1 ✅ sidecar+契约（`spike/build123d/app.py`）→ P9-2 ✅ 主进程生命周期/IPC（`9eda660`，388/388、`SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`）→ P9-3 ✅ 特征树 UI / 参数编辑 / 防抖重建 / STEP+STL 导出 → P9-4 ⏳ 草图约束（前置调研完成）→ P9-5 ✅ 多实体装配 + BOM/成本联动
 - 已完成（P9-3）：`src/parametric/model.ts`（编辑/防抖/分桶/序列化/包围盒，18 条单测）、`src/parametric/ui.ts`（与运动学二选一的抽屉、按类型参数表单、校验失败禁重建）、`cad/viewer.ts`（STL 载入 + 旧模型幽灵层 + 特征包围盒高亮）、`extension.ts` 挂载与 `AutomationCadParametric` 调试入口；`localStorage: automationcad.parametric.v1` 按 `sourceFile` 分桶（无来源 `untitled`）；JSON 保存走 `desktop.exportFile`
-- 实测（P9-3）：`npx tsc --noEmit` 通过；`npm test` **524/524**；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`、`SMOKE_OK`
+- 实测（P9-3）：`npm test` **524/524**；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`、`SMOKE_PARAMETRIC_UI_OK features=2 status=ready`
 - 坑：假内核脚本不能放 `test/` 下（`node --test` 会把 `test/fixtures/*.mjs` 也当测试跑，挂 276 s），已移到 `desktop/scripts/fake-parametric-sidecar.mjs`
 - 验收：P9-2 `SMOKE_PARAMETRIC_SIDECAR_OK status=ready fake=1`；P9-3 `SMOKE_PARAMETRIC_UI_OK features=2 status=ready`
 - 已完成（P9-5）：`features.ts` 增加 `PartInstance/AssemblyDoc`、旧文档自动包装、实体级校验与 `compileOps` 双形态；`bom.ts` 合并 partId/未映射名称并生成 UTF-8 BOM CSV 与成本入参；`ui.ts` 装配实体区、BOM 预览、导出 BOM/送成本；`app.py` 可选 `instances`，独立建模后按 X/Y/Z/RZ 放置并合并，返回 `stats.solids` 与每实体体积；假内核支持两实体 smoke
-- 实测（P9-5）：`npx tsc --noEmit` 通过；`npm test` **647/647**（新增 `parametric-assembly.test.ts` 25 条 + sidecar 装配 3 条）；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3`
+- 实测（P9-5）：`npm test` **647/647**（新增 `parametric-assembly.test.ts` 25 条 + sidecar 装配 3 条）；`AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` → `SMOKE_PARAMETRIC_ASSEMBLY_OK solids=2 bomRows=3`
 - P9-5 边界：BOM 只按实体汇总、不拆特征明细；`partId` 需人工填写；装配为静态多实体合并，不做配合约束/自由度求解（P9-4）
 - P9-4 前置调研（2026-10-23）：推荐 `@salusoft89/planegcs@1.3.0`（LGPL-2.1、WASM、Node 可跑）；矩形 + 水平/竖直 + 宽 120 / 高 80 实测 `Success`、`dof=0`、残差 0，热求解中位数 0.30 ms，安装增量 878 KiB；jsketcher 因自定义许可要求修改回授且无 npm 包不推荐；顶点 → build123d `Polyline` → `extrude` 实跑体积 76,800 mm³。详见 [SKETCH-SPIKE.md](SKETCH-SPIKE.md)。本轮不接入产品代码
 
-### P10 产品截图更新（本轮，2026-10-23）
+### P10 产品截图更新（2026-10-23）
 - 状态：✅ 已完成
 - 内容：新增 `--headless-screenshots` 分支与 `npm run screenshots`（`desktop/scripts/capture-screenshots.mjs`）：xvfb 启真实 Electron，`BrowserWindow.setContentSize(1600,1000)` 后用 `webContents.capturePage()` 抓图；参数化面板由 `AUTOMATIONCAD_PARAMETRIC_CMD=desktop/scripts/fake-parametric-sidecar.mjs` 驱动。
-- 新增截图（均为真实 Electron 实跑，非设计稿）：
-  - `docs/desktop/screenshots/11-plcgen.png`：预检 0 错误 + 11 文件树 + README 预览，167,125 B；
-  - `docs/desktop/screenshots/12-parametric.png`：4 特征树 + 孔位参数 + `面 19 / 体积 71.5 cm³`，152,671 B；
-  - `docs/desktop/screenshots/13-cost.png`：9 卡 + 6 行明细 + 缺价 1 项（¥1,398.64），307,220 B；
-  - `docs/desktop/screenshots/14-enclosure.png`：3 元件 + 1 处重叠红框/角标，281,093 B。
+- 新增截图（均为真实 Electron 实跑，非设计稿）：`11-plcgen` / `12-parametric` / `13-cost` / `14-enclosure`.png，内容说明见 `MODULES.md` 截图目录。
 - 验图：四张均为 1600×1000，PIL 统计颜色数 3,192–6,508、RGB stddev 均 > 14，非单色/空白。
 - 说明：xvfb 下 Chromium 把 WebGL 列入 blocklist，CAD 3D 视口显示解析统计降级面板；参数化抽屉与 PLC/成本/底板面板均为真实 DOM/SVG 渲染并已截图，无跳过项。
 - 验收：`npm test`、`npm run smoke` 全绿；README 界面一览与图注、`docs/desktop/MODULES.md` 截图索引已同步。

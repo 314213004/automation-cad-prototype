@@ -60,7 +60,7 @@ SMOKE_AGENT_TOOLS_V2 tools=20
 SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1
 SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
 SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
-SMOKE_AGENT_KB_OK docs=13 chunks=347 query=D2 hits=1
+SMOKE_AGENT_KB_OK docs=13 chunks=364 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1
 SMOKE_AGENT_PLACE_OK placed=1 undo=1
@@ -97,7 +97,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 1110 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
+- ✅ 1228 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D）
 - ✅ smoke 含智能体 20 工具/机型方案合成与落盘/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出/本地知识检索、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动与故障诊断断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立
