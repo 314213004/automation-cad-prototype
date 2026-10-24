@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**1408 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、整机形态库（工艺 × 布局 × 机型）、追问策略、BOM/PLC 联动、参数化整机几何（STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
+- 质量基线：**1479 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型）、追问策略、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -207,7 +207,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | **Agent 能力报告** | 在 `desktop/` 下运行 `npm run agent:report`，读取单轮 / 多轮 / 离线评测 JSON 与本机 `<userData>/agent-audit.jsonl`，生成 `docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json` 和深色一页图 `docs/desktop/agent-report.svg`；每个数字标注来源文件与生成时间，缺源文件写「缺失：<文件>」并打印 WARN（退出码 0） | ✅ |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
 | 通用产能引擎 | `desktop/src/machine/flow.ts` 的 `evaluateFlow` 按 `single / linear / dial / parallel / cell` 五种布局，由任意工位组成、工序时间、转移/分度时间与目标节拍统一求 cycle、产能、瓶颈和所需工位数；`synthMachine` 只做 `FlowModel` 映射。6 个机型回归（6 工位并行锁螺丝 ≈113 件/分钟、转盘点胶、5 工位直线、单工位检测、2×2 单元、2 副本并行点胶），见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ |
-| 自然语言完整方案 | 21 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、106 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并把「工艺 × 布局」选到 6 种整机形态（转盘/直线/龙门/双轨），联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 21 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、106 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并把「工艺 × 布局」选到 11 种整机形态（转盘/直线/龙门/双轨/转盘+直线混合/单元矩阵），联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -283,7 +283,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（1408 个）
+│   ├── test/                                 # node:test 单测与集成测试（1479 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -311,7 +311,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 1408 个单测（node:test）
+npm test          # 1479 个单测（node:test）
 npm run diagnose  # 输出环境/WebGL/userData/数据包/KB/审计/最近 20 条错误（不含密钥）
 npm run perf:baseline # 200/1000/3000 件场景构建、tick 与堆峰值基线
 npm run agent:report # 生成 Agent 汇报报告（md / json / svg）
@@ -332,7 +332,7 @@ smoke 覆盖并断言：
 - 3D 联动机型规模（`SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16`）与故障诊断；
 - 智慧工厂 demo 连接与设计包同步（manifest / ZIP / 幂等）；
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
-- 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`：三工位锁螺丝机示例、fallback 取达标且最近的 gantry-2、非标工位 warning、模板补全与功率估算）；节拍模型（`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`：六工位锁螺丝机按双轨 (3.18 + 0.60) / 2 秒/件估算 31.75 件/分钟）；工艺模板与追问（`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`：5 类模板、多缺项合并为一次追问）；整机形态库（`SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`：6 种形态字段合法、六工位锁螺丝按产能优先选中双轨 cell）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`：写方案与 active 指针、3D 切到 3 工位、5 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；参数化整机几何（`SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`：三工位锁螺丝机按 form.geometry 生成龙门机架 57 个 mm 级零件与 6 条运动轴，落盘 geometry.json / STL / glTF / sidecar 实体列表，3D 场景零件数一致，撤销后删除）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=21`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
+- 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`：三工位锁螺丝机示例、fallback 取达标且最近的 gantry-2、非标工位 warning、模板补全与功率估算）；节拍模型（`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`：六工位锁螺丝机按双轨 (3.18 + 0.60) / 2 秒/件估算 31.75 件/分钟）；工艺模板与追问（`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`：5 类模板、多缺项合并为一次追问）；整机形态库（`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`：11 种形态字段合法、六工位锁螺丝按产能优先选中双轨 cell，龙门多头/混合线/单元矩阵几何可生成）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`：写方案与 active 指针、3D 切到 3 工位、5 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；参数化整机几何（`SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`：三工位锁螺丝机按 form.geometry 生成龙门机架 57 个 mm 级零件与 6 条运动轴，落盘 geometry.json / STL / glTF / sidecar 实体列表，3D 场景零件数一致，撤销后删除）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=21`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`、`SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…`、`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=…`，最后 `SMOKE_OK`。
 

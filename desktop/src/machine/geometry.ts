@@ -108,7 +108,7 @@ export interface GeomStation {
   sensorPoints: string[];
 }
 
-export type GeomLayout = 'single' | 'linear' | 'dial' | 'gantry' | 'dual';
+export type GeomLayout = 'single' | 'linear' | 'dial' | 'gantry' | 'dual' | 'hybrid' | 'cell';
 
 export interface MachineGeometry {
   schemaVersion: 1;
@@ -208,6 +208,12 @@ export const GEOMETRY_DIMENSIONS = {
   safetyPostSection: 35,
   safetyPostHeight: 600,
   safetyPostOffset: 40,
+  safetyFenceHeight: 1800,
+  safetyRailSection: 30,
+  safetyFenceMargin: 80,
+  hybridTransferWidth: 180,
+  hybridTransferLength: 140,
+  cellGroupGap: 120,
   conveyorWidth: 140,
   conveyorHeight: 70,
   conveyorBeltWidth: 110,
@@ -841,6 +847,114 @@ function footprintFor(build: StationBuild, placement: Placement): GeomFootprint 
   };
 }
 
+function partsBounds(parts: readonly Pick<GeomPart, 'shape' | 'center' | 'rotationZDeg'>[]): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const part of parts) {
+    const box = partBounds(part);
+    minX = Math.min(minX, box.min[0]);
+    maxX = Math.max(maxX, box.max[0]);
+    minY = Math.min(minY, box.min[1]);
+    maxY = Math.max(maxY, box.max[1]);
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+function footprintAabb(fp: GeomFootprint): { minX: number; maxX: number; minY: number; maxY: number } {
+  const rad = (fp.rotationZDeg * Math.PI) / 180;
+  const ex = fp.half[0] * Math.abs(Math.cos(rad)) + fp.half[1] * Math.abs(Math.sin(rad));
+  const ey = fp.half[0] * Math.abs(Math.sin(rad)) + fp.half[1] * Math.abs(Math.cos(rad));
+  return {
+    minX: fp.center[0] - ex,
+    maxX: fp.center[0] + ex,
+    minY: fp.center[1] - ey,
+    maxY: fp.center[1] + ey
+  };
+}
+
+/** 在工位与控制件外围加一圈安全围栏（立柱 + 上下横杆）。 */
+function addSafetyFence(
+  target: GeomPart[],
+  usedIds: Set<string>,
+  content: { minX: number; maxX: number; minY: number; maxY: number }
+): void {
+  const margin = D.safetyFenceMargin;
+  const section = D.safetyPostSection;
+  const rail = D.safetyRailSection;
+  const height = D.safetyFenceHeight;
+  const x0 = Math.floor((content.minX - margin) / 10) * 10;
+  const x1 = Math.ceil((content.maxX + margin) / 10) * 10;
+  const y0 = Math.floor((content.minY - margin) / 10) * 10;
+  const y1 = Math.ceil((content.maxY + margin) / 10) * 10;
+  const add = (part: GeomPart): void => {
+    usedIds.add(part.id);
+    target.push(part);
+  };
+  const corners: Array<[string, number, number]> = [
+    ['fl', x0, y0],
+    ['fr', x1, y0],
+    ['bl', x0, y1],
+    ['br', x1, y1]
+  ];
+  corners.forEach(([label, x, y], index) => {
+    add({
+      id: `safety-fence-post-${index + 1}`,
+      name: `安全围栏立柱 ${label.toUpperCase()}`,
+      role: 'safety',
+      shape: { type: 'box', size: [section, section, height] },
+      center: [x, y, height / 2],
+      rotationZDeg: 0,
+      color: COLORS.safety,
+      material: 'AL6063-T5 型材',
+      bomGroup: 'structure'
+    });
+  });
+  for (const [level, z] of [['low', 600], ['top', height - rail / 2]] as const) {
+    for (const [label, y] of [['front', y0], ['back', y1]] as const) {
+      add({
+        id: `safety-fence-rail-x-${level}-${label}`,
+        name: `安全围栏横杆（${label === 'front' ? '前' : '后'}，${level === 'low' ? '下' : '上'}）`,
+        role: 'safety',
+        shape: { type: 'box', size: [x1 - x0, rail, rail] },
+        center: [(x0 + x1) / 2, y, z],
+        rotationZDeg: 0,
+        color: COLORS.safety,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+    }
+    for (const [label, x] of [['left', x0], ['right', x1]] as const) {
+      add({
+        id: `safety-fence-rail-y-${level}-${label}`,
+        name: `安全围栏横杆（${label === 'left' ? '左' : '右'}，${level === 'low' ? '下' : '上'}）`,
+        role: 'safety',
+        shape: { type: 'box', size: [rail, y1 - y0, rail] },
+        center: [x, (y0 + y1) / 2, z],
+        rotationZDeg: 0,
+        color: COLORS.safety,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+    }
+  }
+}
+
+interface FormGeometryHint {
+  layout: GeomLayout;
+  heads?: number;
+  rows?: number;
+  cols?: number;
+  dialStations?: number;
+  linearStations?: number;
+}
+
 type MachineGeometryInput = MachineConfig | {
   config: MachineConfig;
   form?: { geometry?: { kind?: unknown }; layout?: unknown };
@@ -850,16 +964,36 @@ function isMachineDesignLike(value: unknown): value is { config: MachineConfig; 
   return typeof value === 'object' && value !== null && 'config' in value && typeof (value as { config: unknown }).config === 'object';
 }
 
-function formGeometryLayout(value: unknown): GeomLayout | undefined {
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function formGeometryHint(value: unknown): FormGeometryHint | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const form = (value as { form?: unknown }).form;
   if (!form || typeof form !== 'object') return undefined;
   const geometry = (form as { geometry?: unknown }).geometry;
   if (!geometry || typeof geometry !== 'object') return undefined;
-  const kind = (geometry as { kind?: unknown }).kind;
-  return kind === 'dial' || kind === 'linear' || kind === 'gantry' || kind === 'dual'
+  const record = geometry as Record<string, unknown>;
+  const kind = record.kind;
+  const layout = kind === 'dial' || kind === 'linear' || kind === 'gantry'
+    || kind === 'dual' || kind === 'hybrid' || kind === 'cell'
     ? kind
     : undefined;
+  if (!layout) return undefined;
+  const heads = positiveInteger(record.heads) ?? positiveInteger(record.axes);
+  const rows = positiveInteger(record.rows);
+  const cols = positiveInteger(record.cols);
+  const dialStations = positiveInteger(record.dialStations);
+  const linearStations = positiveInteger(record.linearStations);
+  return {
+    layout,
+    ...(heads === undefined ? {} : { heads }),
+    ...(rows === undefined ? {} : { rows }),
+    ...(cols === undefined ? {} : { cols }),
+    ...(dialStations === undefined ? {} : { dialStations }),
+    ...(linearStations === undefined ? {} : { linearStations })
+  };
 }
 
 /**
@@ -871,7 +1005,8 @@ export function generateMachineGeometry(
 ): MachineGeometry {
   const config = validateMachineConfig(isMachineDesignLike(input) ? input.config : input);
   const process = options.process ?? inferProcess(config);
-  const formLayout = formGeometryLayout(input);
+  const formHint = formGeometryHint(input);
+  const formLayout = formHint?.layout;
   const layout = options.layout
     ?? (config.stations.length <= 1 ? 'single' : undefined)
     ?? formLayout
@@ -882,7 +1017,8 @@ export function generateMachineGeometry(
         config,
         process,
         layout,
-        formLayout: formLayout ?? null
+        formLayout: formLayout ?? null,
+        formHint: formHint ?? null
       });
   if (cacheKey) {
     const cached = geometryCache.get(cacheKey);
@@ -907,6 +1043,10 @@ export function generateMachineGeometry(
 
   const builds = config.stations.map((station, index) => buildStation(config, station, index, usedIds));
   for (const build of builds) warnings.push(...build.warnings);
+  const requestedGantryHeads = formHint?.heads ?? 2;
+  const gantryHeads = layout === 'gantry'
+    ? Math.min(builds.length, Math.max(2, requestedGantryHeads))
+    : 0;
 
   const stationTopZ = D.tableHeight + D.stationPlateThickness;
   const placements: Placement[] = [];
@@ -990,6 +1130,174 @@ export function generateMachineGeometry(
       });
     }
     assumptions.push(`分度转盘布局：${n} 工位沿 Ø${dialRadius * 2} 转盘均布，工位中心半径约 ${Math.round(radius)} mm；转盘分度运动未接入点位。`);
+  } else if (layout === 'hybrid') {
+    // 转盘段在前、直线段沿 +X 延伸；两段只保留一个转接位。
+    const n = builds.length;
+    const requestedDial = formHint?.dialStations ?? Math.min(4, n);
+    const dialCount = Math.max(1, Math.min(n, requestedDial));
+    const dialBuilds = builds.slice(0, dialCount);
+    const linearBuilds = builds.slice(dialCount);
+    const dialRadius = Math.max(D.dialMinRadius, Math.round(dialCount * 70));
+    const halfDepthMax = Math.max(...dialBuilds.map((build) => (build.local.maxY - build.local.minY) / 2));
+    const angleOf = (index: number): number => 90 + (360 / dialCount) * index;
+    let dialPlaceRadius = dialRadius + D.dialClearance + halfDepthMax;
+    const tryDial = (r: number): Placement[] =>
+      dialBuilds.map((build, index) => {
+        const theta = angleOf(index);
+        const [cx, cy] = rotateXY(r, 0, theta);
+        const rotation = theta - 90;
+        const offsetY = (build.local.minY + build.local.maxY) / 2;
+        const [ox, oy] = rotateXY(0, offsetY, rotation);
+        return { origin: [cx - ox, cy - oy, stationTopZ], rotationZDeg: rotation };
+      });
+    let dialPlacements = tryDial(dialPlaceRadius);
+    for (let guard = 0; guard < 400; guard += 1) {
+      const fps = dialBuilds.map((build, index) => footprintFor(build, dialPlacements[index] as Placement));
+      let clash = false;
+      for (let i = 0; i < fps.length && !clash; i += 1) {
+        for (let j = i + 1; j < fps.length; j += 1) {
+          if (footprintsOverlap(fps[i] as GeomFootprint, fps[j] as GeomFootprint)) {
+            clash = true;
+            break;
+          }
+        }
+      }
+      if (!clash) break;
+      dialPlaceRadius += 20;
+      dialPlacements = tryDial(dialPlaceRadius);
+    }
+    dialPlaceRadius += D.stationGap / 2;
+    dialPlacements = tryDial(dialPlaceRadius);
+    placements.push(...dialPlacements);
+
+    layoutPart({
+      id: 'dial-indexer',
+      name: '混合线转盘分度器',
+      role: 'transfer',
+      shape: { type: 'box', size: [D.dialIndexerSize, D.dialIndexerSize, D.dialIndexerHeight] },
+      center: [0, 0, D.tableHeight + D.dialIndexerHeight / 2],
+      rotationZDeg: 0,
+      color: COLORS.conveyor,
+      material: '铸铁壳体',
+      bomGroup: 'structure'
+    });
+    layoutPart({
+      id: 'dial-plate',
+      name: `混合线分度转盘 Ø${dialRadius * 2}×${D.dialThickness}`,
+      role: 'transfer',
+      shape: { type: 'cylinder', radius: dialRadius, length: D.dialThickness, axis: 'z' },
+      center: [0, 0, D.tableHeight + D.dialIndexerHeight + D.dialThickness / 2],
+      rotationZDeg: 0,
+      color: COLORS.dial,
+      material: 'AL6061',
+      bomGroup: 'structure'
+    });
+    for (let index = 0; index < dialCount; index += 1) {
+      const [x, y] = rotateXY(dialRadius - D.fixture[0] / 2 - 20, 0, angleOf(index));
+      layoutPart({
+        id: `dial-nest-${index + 1}`,
+        name: `混合线转盘治具 ${index + 1}`,
+        role: 'fixture',
+        shape: { type: 'box', size: [...D.fixture] },
+        center: [x, y, D.tableHeight + D.dialIndexerHeight + D.dialThickness + D.fixture[2] / 2],
+        rotationZDeg: angleOf(index) - 90,
+        color: COLORS.fixture,
+        material: 'POM',
+        bomGroup: 'structure'
+      });
+    }
+
+    const dialFps = dialBuilds.map((build, index) => footprintFor(build, dialPlacements[index] as Placement));
+    const dialMaxX = Math.max(...dialFps.map((fp) => footprintAabb(fp).maxX));
+    if (linearBuilds.length > 0) {
+      let cursor = 0;
+      const startX = dialMaxX + D.stationGap * 2;
+      const linearCenters: number[] = [];
+      for (const build of linearBuilds) {
+        const span = build.local.maxX - build.local.minX;
+        linearCenters.push(startX + cursor + span / 2);
+        cursor += span + D.stationGap;
+      }
+      const total = cursor - D.stationGap;
+      linearBuilds.forEach((build, index) => {
+        const localCenterX = (build.local.minX + build.local.maxX) / 2;
+        placements.push({
+          origin: [(linearCenters[index] ?? startX) - localCenterX, 0, stationTopZ],
+          rotationZDeg: 0
+        });
+      });
+      const frontMax = Math.max(...linearBuilds.map((build) => -build.local.minY));
+      const conveyorY = -frontMax - D.conveyorClearance - D.conveyorWidth / 2;
+      const length = total + 2 * D.conveyorOverhang;
+      const conveyorX = startX + total / 2;
+      layoutPart({
+        id: 'hybrid-conveyor-frame',
+        name: `混合线直线段输送机架 ${Math.round(length)}×${D.conveyorWidth}`,
+        role: 'transfer',
+        shape: { type: 'box', size: [length, D.conveyorWidth, D.conveyorHeight] },
+        center: [conveyorX, conveyorY, D.tableHeight + D.conveyorHeight / 2],
+        rotationZDeg: 0,
+        color: COLORS.conveyor,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+      layoutPart({
+        id: 'hybrid-conveyor-belt',
+        name: `混合线直线段输送皮带 宽 ${D.conveyorBeltWidth}`,
+        role: 'transfer',
+        shape: { type: 'box', size: [length - 40, D.conveyorBeltWidth, 6] },
+        center: [conveyorX, conveyorY, D.tableHeight + D.conveyorHeight + 3],
+        rotationZDeg: 0,
+        color: COLORS.belt,
+        material: 'PVC',
+        bomGroup: 'structure'
+      });
+      layoutPart({
+        id: 'hybrid-transfer',
+        name: '转盘-直线转接滑台',
+        role: 'transfer',
+        shape: { type: 'box', size: [D.hybridTransferLength, D.hybridTransferWidth, 80] },
+        center: [dialMaxX + D.stationGap, 0, stationTopZ + 40],
+        rotationZDeg: 0,
+        color: COLORS.rotaryBase,
+        material: 'AL6061',
+        bomGroup: 'structure'
+      });
+    }
+    assumptions.push(
+      `混合布局：前 ${dialCount} 工位沿 Ø${dialRadius * 2} 转盘均布，后 ${linearBuilds.length} 工位沿 +X 直线延伸；` +
+      `转盘工位中心半径约 ${Math.round(dialPlaceRadius)} mm，中间只保留 1 处转接滑台。`
+    );
+  } else if (layout === 'cell') {
+    // rows × cols 矩阵：组内沿列串行、组间并排。
+    const n = builds.length;
+    const requestedCols = formHint?.cols;
+    const requestedRows = formHint?.rows;
+    let cols = requestedCols ?? (requestedRows ? Math.ceil(n / requestedRows) : Math.ceil(Math.sqrt(n)));
+    cols = Math.max(1, Math.min(n, cols));
+    const rows = Math.max(1, requestedRows ?? Math.ceil(n / cols));
+    const maxSpanX = Math.max(...builds.map((build) => build.local.maxX - build.local.minX));
+    const maxDepthY = Math.max(...builds.map((build) => build.local.maxY - build.local.minY));
+    const pitchX = maxSpanX + D.stationGap;
+    const pitchY = maxDepthY + D.cellGroupGap;
+    const totalX = cols * maxSpanX + (cols - 1) * D.stationGap;
+    const totalY = rows * maxDepthY + (rows - 1) * D.cellGroupGap;
+    builds.forEach((build, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const centerX = -totalX / 2 + maxSpanX / 2 + col * pitchX;
+      const centerY = totalY / 2 - maxDepthY / 2 - row * pitchY;
+      const localCenterX = (build.local.minX + build.local.maxX) / 2;
+      const localCenterY = (build.local.minY + build.local.maxY) / 2;
+      placements.push({
+        origin: [centerX - localCenterX, centerY - localCenterY, stationTopZ],
+        rotationZDeg: 0
+      });
+    });
+    assumptions.push(
+      `单元矩阵布局：${n} 工位按 ${rows} 行 × ${cols} 列排布，行/组间距 ${D.cellGroupGap} mm；` +
+      `组内工位串行、组间并行，矩阵外框约 ${Math.round(totalX)}×${Math.round(totalY)} mm。`
+    );
   } else if (layout === 'dual') {
     // 双轨：两排工位各自沿 X 排开，外侧各一条输送线。
     const laneCount = 2;
@@ -1042,6 +1350,74 @@ export function generateMachineGeometry(
       });
     }
     assumptions.push(`双轨布局：${builds.length} 工位分 ${laneCount} 轨、每轨约 ${perLane} 工位，轨间距 ${Math.round(pitch)} mm；两轨可独立停线/换型。`);
+  } else if (layout === 'gantry' && gantryHeads > 2) {
+    // 多个独立龙门头：按 heads 分成矩阵，每个龙门头独立覆盖一个工位。
+    const cols = Math.ceil(Math.sqrt(gantryHeads));
+    const rows = Math.ceil(builds.length / cols);
+    const maxSpanX = Math.max(...builds.map((build) => build.local.maxX - build.local.minX));
+    const maxDepthY = Math.max(...builds.map((build) => build.local.maxY - build.local.minY));
+    const pitchX = maxSpanX + D.stationGap * 2;
+    const pitchY = maxDepthY + D.cellGroupGap;
+    const totalX = cols * maxSpanX + (cols - 1) * D.stationGap * 2;
+    const totalY = rows * maxDepthY + (rows - 1) * D.cellGroupGap;
+    builds.forEach((build, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      const centerX = -totalX / 2 + maxSpanX / 2 + col * pitchX;
+      const centerY = totalY / 2 - maxDepthY / 2 - row * pitchY;
+      const localCenterX = (build.local.minX + build.local.maxX) / 2;
+      const localCenterY = (build.local.minY + build.local.maxY) / 2;
+      placements.push({
+        origin: [centerX - localCenterX, centerY - localCenterY, stationTopZ],
+        rotationZDeg: 0
+      });
+    });
+    const gantryHeight = 760;
+    builds.forEach((build, index) => {
+      const fp = footprintFor(build, placements[index] as Placement);
+      const span = fp.half[0] * 2 + 2 * D.frameMargin;
+      const uprightX = span / 2;
+      const beamSpan = span + D.uprightSection;
+      for (const side of [-1, 1] as const) {
+        layoutPart({
+          id: `gantry-head-${index + 1}-upright-${side < 0 ? 'l' : 'r'}`,
+          name: `龙门头${index + 1}立柱（${side < 0 ? '左' : '右'}）`,
+          role: 'frame',
+          shape: { type: 'box', size: [D.uprightSection, D.uprightSection, gantryHeight] },
+          center: [fp.center[0] + side * uprightX, fp.center[1], stationTopZ + gantryHeight / 2],
+          rotationZDeg: 0,
+          color: COLORS.upright,
+          material: 'AL6063-T5 型材',
+          bomGroup: 'structure'
+        });
+      }
+      layoutPart({
+        id: `gantry-head-${index + 1}-beam`,
+        name: `龙门头${index + 1}横梁 ${Math.round(beamSpan)}×${D.beamSection}`,
+        role: 'frame',
+        shape: { type: 'box', size: [beamSpan, D.beamSection, D.beamSection] },
+        center: [fp.center[0], fp.center[1], stationTopZ + gantryHeight - D.beamSection / 2],
+        rotationZDeg: 0,
+        color: COLORS.upright,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+      layoutPart({
+        id: `gantry-head-${index + 1}-carriage`,
+        name: `龙门头${index + 1}三轴滑台`,
+        role: 'transfer',
+        shape: { type: 'box', size: [180, 120, 90] },
+        center: [fp.center[0], fp.center[1], stationTopZ + gantryHeight - D.beamSection - 45],
+        rotationZDeg: 0,
+        color: COLORS.rotaryBase,
+        material: 'AL6061',
+        bomGroup: 'structure'
+      });
+    });
+    assumptions.push(
+      `龙门多工位布局：${builds.length} 个独立龙门头按 ${rows} 行 × ${cols} 列排布，每个龙门头只覆盖 1 个工位；` +
+      `单头横梁约 ${Math.round(maxSpanX + 2 * D.frameMargin)} mm，避免大件跨工位搬运。`
+    );
   } else {
     // single / linear / gantry：工位沿 X 排开。
     const frontMax = Math.max(...builds.map((build) => -build.local.minY));
@@ -1168,6 +1544,13 @@ export function generateMachineGeometry(
       sensorPoints: build.sensorPoints
     });
   });
+  if (layout === 'hybrid' || layout === 'cell' || (layout === 'gantry' && gantryHeads > 2)) {
+    const content = partsBounds([...parts, ...machineParts]);
+    addSafetyFence(machineParts, usedIds, content);
+    assumptions.push(
+      `安全围栏：沿机体外轮廓加 ${Math.round(D.safetyFenceHeight)} mm 高立柱与上下横杆，围栏边距 ${D.safetyFenceMargin} mm。`
+    );
+  }
   parts.push(...machineParts);
 
   // 机架：按内容 XY 包络 + 边距生成台面、立腿与下横梁。
@@ -1339,12 +1722,20 @@ function buildStructureBom(
   for (const [spec, qty] of plateSpecs) rows.push({ name: '工位底板', spec, qty, material: 'AL6061' });
   const uprights = parts.filter((part) => /-upright-[lr]$/.test(part.id)).length;
   if (uprights > 0) rows.push({ name: '门架立柱', spec: `${D.uprightSection}×${D.uprightSection} 型材`, qty: uprights, material: 'AL6063-T5' });
-  const beams = parts.filter((part) => /^st\d+-beam$/.test(part.id)).length;
+  const beams = parts.filter(
+    (part) => /^st\d+-beam$/.test(part.id) || /^gantry-(?:head-\d+-)?beam$/.test(part.id)
+  ).length;
   if (beams > 0) rows.push({ name: '门架横梁', spec: `${D.beamSection}×${D.beamSection} 型材`, qty: beams, material: 'AL6063-T5' });
   const fixtures = parts.filter((part) => part.role === 'fixture').length;
   if (fixtures > 0) rows.push({ name: '治具（占位）', spec: '按产品定制', qty: fixtures, material: 'POM' });
-  if (parts.some((part) => part.id === 'conveyor-frame')) rows.push({ name: '皮带输送线', spec: `宽 ${D.conveyorBeltWidth} mm`, qty: 1, material: '型材 + PVC' });
+  const conveyors = parts.filter((part) => /(?:^|-)(?:hybrid-)?conveyor-frame$/.test(part.id)
+    || /^conveyor-frame-l\d+$/.test(part.id)).length;
+  if (conveyors > 0) rows.push({ name: '皮带输送线', spec: `宽 ${D.conveyorBeltWidth} mm`, qty: conveyors, material: '型材 + PVC' });
   if (parts.some((part) => part.id === 'dial-plate')) rows.push({ name: '分度转盘 + 凸轮分度器', spec: '分度数 = 工位数', qty: 1, material: 'AL6061 / 铸铁' });
+  const fencePosts = parts.filter((part) => /^safety-fence-post-\d+$/.test(part.id)).length;
+  if (fencePosts > 0) {
+    rows.push({ name: '安全围栏', spec: `${D.safetyFenceHeight} mm 高，${D.safetyPostSection} 方立柱`, qty: fencePosts, material: 'AL6063-T5 + 钣金网片' });
+  }
   return rows;
 }
 

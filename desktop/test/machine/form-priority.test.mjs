@@ -13,10 +13,10 @@ function assertSelectedMeets(result, label) {
   assert.equal(result.evaluation.meetsTarget, true, `${label}: ${result.form.id} 未达标`);
 }
 
-test('四工位锁螺丝 20 件/分钟：选中覆盖 4 工位且达标的 dual-lane', () => {
+test('四工位锁螺丝 20 件/分钟：选中覆盖 4 工位且达标的 gantry-4', () => {
   const result = pick('四工位锁螺丝机，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
-  assert.equal(result.form.layout, 'cell');
+  assert.equal(result.form.id, 'gantry-4');
+  assert.equal(result.form.layout, 'parallel');
   assertSelectedMeets(result, '4/20');
 });
 
@@ -90,7 +90,7 @@ test('无达标形态且工位不覆盖时，warning 同时给出最佳产能与
   const result = pick('一工位锁螺丝机，120 件/分钟');
   assert.equal(result.form.id, 'gantry-2');
   assert.equal(result.evaluation.meetsTarget, false);
-  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 双轨并行线 只能给 31\.75 件\/分钟/);
+  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 单元式四工位 只能给 32\.61 件\/分钟/);
   assert.match(result.warning, /已选 双工位龙门机 预估 18\.87 件\/分钟/);
 });
 
@@ -102,7 +102,7 @@ test('工位覆盖是硬约束：六工位 10 件/分钟不会因为 gantry-2 �
 });
 
 test('双轨 cell 可被显式单元式需求选中，并按两条轨道预演', () => {
-  const result = pick('六工位单元式检测线，20 件/分钟');
+  const result = pick('六工位单元式锁螺丝线，20 件/分钟');
   assert.equal(result.form.id, 'dual-lane');
   assert.equal(result.form.layout, 'cell');
   assert.equal(result.evaluation.notes.some((note) => /2 条轨道并行/.test(note)), true);
@@ -128,6 +128,6 @@ test('cell 的 lanes 参数只缩放节拍，不改变单工位时间', () => {
   assert.equal(twoLanes.meetsTarget, true);
 });
 
-test('形态库仍为 6 种，排序修复不引入隐式形态', () => {
-  assert.equal(MACHINE_FORMS.length, 6);
+test('形态库仍为 11 种，排序修复不引入隐式形态', () => {
+  assert.equal(MACHINE_FORMS.length, 11);
 });

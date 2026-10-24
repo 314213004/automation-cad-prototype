@@ -1101,7 +1101,8 @@ function initAgentBridge(): void {
       const source = payload as Record<string, unknown>;
       try {
         const layout = source.layout === 'single' || source.layout === 'linear' || source.layout === 'dial'
-          || source.layout === 'gantry' || source.layout === 'dual'
+          || source.layout === 'gantry' || source.layout === 'dual' || source.layout === 'hybrid'
+          || source.layout === 'cell'
           ? source.layout
           : null;
         commission.setMachineConfig(source.config ? source.config as MachineConfig : null, layout);

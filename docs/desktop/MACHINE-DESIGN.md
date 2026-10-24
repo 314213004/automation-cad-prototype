@@ -162,11 +162,22 @@ pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
 | `linear-8` | 八工位直线线体 | `linear` | 5–8 | 8 | 8 | 装配 / 检测 / 包装 / 锁螺丝 / 点胶 | 1.55 | `linear` |
 | `gantry-2` | 双工位龙门机 | `parallel` | 1–2 | 2 | 2 | 点胶 / 锁螺丝 / 装配 / 检测 / 包装 | 0.90 | `gantry` |
 | `dual-lane` | 双轨并行线 | `cell` | 4–6 | 6 | 6 | 检测 / 包装 / 装配 / 锁螺丝 / 点胶 | 1.35 | `dual` |
+| `gantry-4` | 龙门四工位 | `parallel` | 4–4 | 4 | 4 | 点胶 / 锁螺丝 / 装配 / 检测 | 1.70 | `gantry`（4 头） |
+| `hybrid-dial-linear` | 转盘+直线混合线 | `cell` | 6–6 | 6 | 6 | 装配 / 检测 / 包装 | 1.30 | `hybrid`（4 转盘 + 2 直线） |
+| `cell-4` | 单元式四工位 | `cell` | 4–4 | 4 | 4 | 装配 / 检测 / 包装 | 1.20 | `cell`（2×2） |
+| `linear-12` | 十二工位长线体 | `linear` | 8–12 | 10 | 12 | 装配 / 检测 / 包装 / 锁螺丝 / 点胶 | 2.20 | `linear` |
+| `dial-12` | 十二工位转盘机 | `dial` | 8–12 | 10 | 12 | 检测 / 锁螺丝 / 装配 / 包装 | 1.35 | `dial` |
 
 - 形态声明 `minStations / defaultStations / maxStations`，`stationRange` 由最小工位与 `maxStations` 推导，避免区间、推荐值与上限三处各写一份。
 - 加载期执行 `assertMachineFormsConsistent()`：任一形态违反 `stationRange[0] <= defaultStations <= stationRange[1]`、`maxStations === stationRange[1]`（或区间倒置）时直接抛错；`validateMachineForms()` 仍负责收集全部可读错误（id 唯一、布局对齐、工艺/几何兼容等）。
-- 形态参数进入产能模型：转盘 `indexSeconds`（dial-6 0.6 s、dial-8 0.45 s）、直线/双轨 `transferSeconds`（linear-8 0.8 s、dual-lane 0.6 s）；双轨 `cell` 的 `geometry.lanes=2` 同时进入 `FlowModel.lanes`，节拍 = `(最慢工位 + transferSeconds) / lanes`。
-- 几何层优先使用 `form.geometry.kind`：`dial` / `linear` / `gantry` / `dual` 分别生成转盘、直线输送、龙门机架、双轨两排工位；1 工位仍回退单工位几何。
+- 形态参数进入产能模型：转盘 `indexSeconds`（dial-6 0.6 s、dial-8 0.45 s、dial-12 0.45 s）、直线/单元 `transferSeconds`（linear-8 0.8 s、linear-12 0.9 s、dual-lane 0.6 s、cell-4 0.5 s、hybrid 0.75 s）；`cell` 的 `geometry.lanes=2`（dual-lane、cell-4）同时进入 `FlowModel.lanes`，节拍 = `(最慢工位 + transferSeconds) / lanes`。
+- 几何层优先使用 `form.geometry.kind`：`dial` / `linear` / `gantry` / `dual` / `hybrid` / `cell` 分别生成转盘、直线输送、独立龙门头、双轨、转盘+直线拼接、矩阵单元；1 工位仍回退单工位几何。
+- 几何示意与工艺适配：
+  - `gantry-4`：4 个独立龙门头按 2×2 排布，每头只覆盖 1 个工位，立柱/横梁/三轴滑台独立；大件点胶、锁螺丝不需要跨工位搬运。占地系数 1.70，明显高于双工位龙门 0.90。
+  - `hybrid-dial-linear`：前 4 工位沿转盘均布，后 2 工位沿 +X 直线延伸，中间只保留 1 个转接滑台；适合「装配→检测」两段工艺，占地 1.30，比 2×3 双轨 1.35 更紧凑。
+  - `cell-4`：2×2 矩阵，行/组间距 120 mm，组内串行、组间并行并可独立停线；适合多品种小件装配，占地 1.20。
+  - `linear-12`：8–12 工位沿 X 拉成长线，链板输送、0.9 s 转移；适合多工序批量装配，占地 2.20，是库内最长形态。
+  - `dial-12`：8–12 工位转盘，转盘直径按工位数增长（`max(Ø560, n×70×2)`），12 工位直径大于 4 工位；适合小件高速检测/装配。
 - 落盘 `machine/<id>.json` 同时写 `form.id`、`form.geometry` 与两条备选，之后可复现同一形态。
 
 边界：形态只在典型范围与静态节拍上选型，不包含占地 CAD 校核、换型时间、报价与真实结构干涉；warning 是提醒换型/扩产，不是自动改图。
@@ -284,7 +295,7 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 `generateMachineGeometry(config | design, { process?, layout? })`：纯函数、确定性；Z 向上、mm，X 为物料流向，-Y 为操作侧。典型值集中在 `GEOMETRY_DIMENSIONS`。
 
-- 布局：1 工位 `single`；锁螺丝/装配 2–8 工位 `dial`（分度器 + 转盘，工位 -Y 朝向圆心，半径逐步加大到相邻占地不重叠再留 30 mm）；其余 `linear`（工位间距 60 mm，操作侧输送线 + 电机）。工艺缺省从 `config.id` 推断。
+- 布局：`chooseLayout` 保持原规则（1 工位 `single`；锁螺丝/装配 2–8 工位 `dial`；其余 `linear`），形态可用 `form.geometry.kind` 覆盖为 `dial / linear / gantry / dual / hybrid / cell`。`dial` 为分度器 + 转盘，工位 -Y 朝向圆心，半径逐步加大到相邻占地不重叠再留 30 mm；`linear` 为工位间距 60 mm、操作侧输送线 + 电机；`gantry` 的 `heads>2` 时按 2×2 网格布置独立龙门头（每头两根立柱 + 横梁 + 滑台）；`hybrid` 把前 `dialStations` 个工位放在转盘上、其余工位沿 +X 接直线输送；`cell` 按 `rows × cols` 矩阵摆放，并加立柱 + 上下横杆安全围栏。工艺缺省从 `config.id` 推断。
 - 机架：台面 20 mm、顶面 850 mm；60 方立腿 830 mm，跨距 >1200 mm 加中腿；4 根下横梁。
 - 工位：底板 深 300 × 厚 15，宽 = 槽位之和（气缸 110 / 夹爪 130 / 旋转台 170）+ 100，最小 320；门架横梁高度按最长气缸反算，保证伸出不撞治具。
 - 气缸：竖直下压，缸体 Ø40×(行程+70) + 活塞杆 Ø12 + 压头，缩回位露杆 25；轴 `linear` [0,0,-1]，`strokeMm = travelMm`。夹爪：本体 64×40×56 + 双指，张开位，轴 `gripper` 每指半行程。旋转台：底座 Ø110 + 台面 Ø140 + 偏心治具，轴 `rotary` 绕 Z 0→90°。
@@ -295,11 +306,11 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 ## 7. 验证
 
-- 几何（迭代 34）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`。
+- 几何（迭代 34 + 形态扩展）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5）、`forms-expansion.test.mjs`（27），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退，以及 gantry 多头排布、hybrid 转盘+直线拼接、cell 矩阵、转盘直径随工位数增长。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`。
 - 产能引擎：`test/machine/flow.test.mjs` 覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs` 覆盖六工位同工序并行、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs` 覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dual-lane`、`mode=cell`、`stationSeconds=3.18`、`lanes=2`、`throughputPerMin=31.75`、`meetsTarget=true`（20 件/分钟目标下余量 1.59 倍）。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
-- 全量测试：`TZ=Asia/Shanghai npm test` **1316/1316**（基线 1297，新增 19）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
+- 全量测试：`TZ=Asia/Shanghai npm test` **1479/1479**（含本轮形态库扩展与几何回归）。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
 ### 7.1 真实模型评测（2026-10-24）

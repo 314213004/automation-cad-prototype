@@ -4,6 +4,14 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+## 形态库扩展（一）：新增 5 种机架 + 几何生成（2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1479/1479**、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`；未 push、未打包、未触发 CI。
+- 形态：`forms.ts` 在原有 6 种上新增 `gantry-4`（parallel，4 独立龙门头）、`hybrid-dial-linear`（cell，4 转盘 + 2 直线）、`cell-4`（cell，2×2）、`linear-12`（linear，8–12）、`dial-12`（dial，8–12）；每种含 `suits / rationale / footprintScale / transferSeconds / indexSeconds / geometry`，占地系数在同布局内随工位数单调增长。
+- 几何：`geometry.ts` 新增 `gantry` 多头矩阵、`hybrid`（转盘 + 沿 X 直线段拼接、转接滑台）、`cell`（rows×cols 矩阵）三类生成；三种新布局均有机架、工位底板/门架/治具与安全围栏。转盘直径按 `max(Ø560, n×140)` 随工位数增长，12 工位 Ø1680 > 4 工位 Ø560。`chooseLayout` 规则未改。
+- 测试：新增 `desktop/test/machine/forms-expansion.test.mjs`（27 条），覆盖 11 种形态字段与 range、几何 kind、转盘直径单调、龙门 heads 排布、hybrid 拼接尺寸、cell 矩阵、占地系数单调和 8 条选型回归；同步更新原 `forms.test.mjs` / `form-priority.test.mjs` 的 6 → 11 断言。
+- 文档：`MACHINE-DESIGN.md` 形态表补 5 行与几何示意说明；README / MODULES 能力数字与 smoke 口径同步。
+
 ## 选型优先级修正：产能优先 + 案例数字一致性（2026-10-24，本轮）
 
 - 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1452/1452**、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`、`npm run eval:agent` **1.00**；未 push、未打包、未触发 CI。

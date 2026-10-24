@@ -24,19 +24,19 @@ function pick(text, options = {}) {
   return pickForm(parseMachineBrief(text), TEMPLATES, options);
 }
 
-test('形态库恰好 6 种，id 唯一且字段合法', () => {
-  assert.equal(MACHINE_FORMS.length, 6);
-  assert.equal(new Set(MACHINE_FORMS.map((form) => form.id)).size, 6);
+test('形态库恰好 11 种，id 唯一且字段合法', () => {
+  assert.equal(MACHINE_FORMS.length, 11);
+  assert.equal(new Set(MACHINE_FORMS.map((form) => form.id)).size, 11);
   assert.deepEqual(validateMachineForms(), []);
 });
 
-test('6 种形态的 layout 都与 flow.ts 对齐', () => {
+test('11 种形态的 layout 都与 flow.ts 对齐', () => {
   for (const form of MACHINE_FORMS) {
     assert.ok(FLOW_LAYOUTS.has(form.layout), form.id);
   }
 });
 
-test('6 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
+test('11 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
   for (const form of MACHINE_FORMS) {
     const [min, max] = form.stationRange;
     assert.ok(Number.isInteger(min) && Number.isInteger(max), form.id);
@@ -44,7 +44,7 @@ test('6 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
   }
 });
 
-test('6 种形态的占地系数、工艺适配与理由都不为空', () => {
+test('11 种形态的占地系数、工艺适配与理由都不为空', () => {
   for (const form of MACHINE_FORMS) {
     assert.ok(form.footprintScale > 0, form.id);
     assert.ok(form.suits.length > 0, form.id);
@@ -57,7 +57,7 @@ test('dial 形态有正分度时间，linear/dual 有非负转移时间', () => 
   for (const form of MACHINE_FORMS.filter((entry) => entry.layout === 'dial')) {
     assert.ok(form.indexSeconds > 0, form.id);
   }
-  for (const id of ['linear-8', 'dual-lane']) {
+  for (const id of ['linear-8', 'linear-12', 'dual-lane', 'cell-4', 'gantry-4', 'hybrid-dial-linear']) {
     const form = MACHINE_FORMS.find((entry) => entry.id === id);
     assert.ok(form);
     assert.ok(form.transferSeconds >= 0, id);
@@ -71,7 +71,12 @@ test('geometry.kind 与 layout 映射正确', () => {
     'linear-4': 'linear',
     'linear-8': 'linear',
     'gantry-2': 'gantry',
-    'dual-lane': 'dual'
+    'dual-lane': 'dual',
+    'gantry-4': 'gantry',
+    'hybrid-dial-linear': 'hybrid',
+    'cell-4': 'cell',
+    'linear-12': 'linear',
+    'dial-12': 'dial'
   };
   for (const form of MACHINE_FORMS) assert.equal(form.geometry.kind, expected[form.id], form.id);
 });
@@ -119,10 +124,11 @@ test('两工位点胶 → gantry-2', () => {
   assert.equal(result.form.layout, 'parallel');
 });
 
-test('六工位单元式检测线 → dual-lane', () => {
+test('六工位单元式检测线 → 转盘+直线混合线', () => {
   const result = pick('六工位单元式检测线，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
+  assert.equal(result.form.id, 'hybrid-dial-linear');
   assert.equal(result.form.layout, 'cell');
+  assert.equal(result.form.geometry.kind, 'hybrid');
 });
 
 test('工位超范围但有达标形态时优先取达标且工位最近的形态', () => {
@@ -188,15 +194,18 @@ test('synthMachine 的 cycle.mode 跟随 form.layout，并把形态写入 assump
   assert.ok(design.assumptions.some((line) => line.includes('整机形态：六工位转盘机')));
 });
 
-test('几何 layout 由 form.geometry 覆盖 chooseLayout 默认猜测（dial/gantry/dual）', () => {
+test('几何 layout 由 form.geometry 覆盖 chooseLayout 默认猜测（dial/gantry/hybrid/cell）', () => {
   const dial = synthMachine(parseMachineBrief('六工位转盘锁螺丝机，10 件/分钟'));
   assert.equal(generateMachineGeometry(dial).layout, 'dial');
   const gantry = synthMachine(parseMachineBrief('两工位点胶机，18 件/分钟'));
   assert.equal(gantry.form.id, 'gantry-2');
   assert.equal(generateMachineGeometry(gantry).layout, 'gantry');
   const dual = synthMachine(parseMachineBrief('六工位单元式检测线，20 件/分钟'));
-  assert.equal(dual.form.id, 'dual-lane');
-  assert.equal(generateMachineGeometry(dual).layout, 'dual');
+  assert.equal(dual.form.id, 'hybrid-dial-linear');
+  assert.equal(generateMachineGeometry(dual).layout, 'hybrid');
+  const cell = synthMachine(parseMachineBrief('四工位单元式小件装配机，20 件/分钟'));
+  assert.equal(cell.form.id, 'cell-4');
+  assert.equal(generateMachineGeometry(cell).layout, 'cell');
 });
 
 test('preferredLayout 对显式关键词保持可解释', () => {
@@ -267,7 +276,7 @@ test('dual-lane 工位区间 [4,6]，推荐 6，硬上限 6', () => {
   assert.equal(form.maxStations, 6);
 });
 
-test('六种形态的 defaultStations 都在区间内，maxStations 等于区间上限', () => {
+test('11 种形态的 defaultStations 都在区间内，maxStations 等于区间上限', () => {
   assert.doesNotThrow(() => assertMachineFormsConsistent());
   for (const form of MACHINE_FORMS) {
     assert.ok(form.stationRange[0] <= form.defaultStations, form.id);
@@ -331,13 +340,13 @@ test('gantry-2 永不被选给 3–12 工位需求', () => {
   }
 });
 
-test('无形态覆盖工位数时 warning 写明实际范围、需求值与生成依据', () => {
-  const result = pick('十二工位锁螺丝流水线，节拍 10 件/分钟');
-  assert.equal(result.form.id, 'linear-8');
+test('无覆盖但有达标形态时 warning 写明实际范围、需求值与生成依据', () => {
+  const result = pick('十二工位锁螺丝流水线，节拍 20 件/分钟');
+  assert.equal(result.form.id, 'dual-lane');
   assert.ok(result.warning);
-  assert.match(result.warning, /该形态支持 5–8 工位/);
+  assert.match(result.warning, /该形态支持 4–6 工位/);
   assert.match(result.warning, /需求 12 工位/);
-  assert.match(result.warning, /已按 5\/8 生成/);
+  assert.match(result.warning, /已按 4\/6 生成/);
   assert.match(result.warning, /请确认是否需要非标设计/);
 });
 

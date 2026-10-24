@@ -1598,7 +1598,7 @@ function createWindow(): BrowserWindow {
         const formPick = pickForm(formBrief, TEMPLATES);
         const formErrors = validateMachineForms();
         if (
-          MACHINE_FORMS.length !== 6 ||
+          MACHINE_FORMS.length !== 11 ||
           formErrors.length > 0 ||
           formPick.form.id !== 'dual-lane' ||
           formPick.form.stationRange[0] > 6 ||
@@ -1609,7 +1609,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1');
+        console.log('SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1');
 
         const applied = await activeTools.call('apply_machine_design', {
           brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',

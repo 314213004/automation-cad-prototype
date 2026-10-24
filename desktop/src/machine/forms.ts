@@ -9,7 +9,7 @@ import type { FlowEvaluation, FlowModel, FlowOp, MachineLayout } from './flow.ts
 import { evaluateFlow } from './flow.ts';
 import { templateFor, templateKinds, type MachineTemplate } from './templates.ts';
 
-export type MachineFormGeometryKind = 'dial' | 'linear' | 'gantry' | 'dual';
+export type MachineFormGeometryKind = 'dial' | 'linear' | 'gantry' | 'dual' | 'hybrid' | 'cell';
 
 export interface MachineFormGeometry {
   /** 交给 geometry.ts 的几何布局种类。 */
@@ -20,6 +20,16 @@ export interface MachineFormGeometry {
   stationsPerLane?: number;
   /** 龙门轴数，仅 gantry 使用。 */
   axes?: number;
+  /** 独立龙门头数量，仅 gantry 使用；> 2 时按网格排布。 */
+  heads?: number;
+  /** 单元矩阵行数，仅 cell 使用。 */
+  rows?: number;
+  /** 单元矩阵列数，仅 cell 使用。 */
+  cols?: number;
+  /** 混合布局的转盘工位数（前 N 个工位），仅 hybrid 使用。 */
+  dialStations?: number;
+  /** 混合布局的直线段工位数，仅 hybrid 使用。 */
+  linearStations?: number;
   /** 输送形式，仅 linear/dual 使用。 */
   conveyor?: 'belt' | 'chain';
   /** 分度器形式，仅 dial 使用。 */
@@ -179,6 +189,72 @@ const FORM_SEEDS: readonly MachineFormSeed[] = [
     suits: ['inspection', 'packaging', 'assembly', 'screw', 'dispense'],
     rationale: '双轨各三工位，组内串行、两轨并行；一条轨换型/停线时另一条仍可生产，适合检测与包装的并行产出。',
     geometry: { kind: 'dual', lanes: 2, stationsPerLane: 3, conveyor: 'belt' }
+  },
+  {
+    id: 'gantry-4',
+    name: '龙门四工位',
+    layout: 'parallel',
+    minStations: 4,
+    defaultStations: 4,
+    maxStations: 4,
+    transferSeconds: 0,
+    footprintScale: 1.7,
+    suits: ['dispense', 'screw', 'assembly', 'inspection'],
+    rationale: '四个独立龙门头各压一个工位，横梁只需跨单件，大件不必在工位间搬动；点胶/锁螺丝换头即可切换，适合尺寸大、节拍中等的工件。',
+    geometry: { kind: 'gantry', heads: 4, axes: 3 }
+  },
+  {
+    id: 'hybrid-dial-linear',
+    name: '转盘+直线混合线',
+    layout: 'cell',
+    minStations: 6,
+    defaultStations: 6,
+    maxStations: 6,
+    transferSeconds: 0.75,
+    indexSeconds: 0.5,
+    footprintScale: 1.3,
+    suits: ['assembly', 'inspection', 'packaging'],
+    rationale: '前段四工位转盘把上料、装配、预检压在同一圆周内，后段两工位直线留出检测与下料缓存；只在转盘到直线处搬运一次，适合「装配→检测」两段工艺。',
+    geometry: { kind: 'hybrid', dialStations: 4, linearStations: 2, indexer: 'dd', conveyor: 'belt' }
+  },
+  {
+    id: 'cell-4',
+    name: '单元式四工位',
+    layout: 'cell',
+    minStations: 4,
+    defaultStations: 4,
+    maxStations: 4,
+    transferSeconds: 0.5,
+    footprintScale: 1.2,
+    suits: ['assembly', 'inspection', 'packaging'],
+    rationale: '2 组 × 2 工位并排，每组独立完成一套小件装配并可单独停线换型；组间并行不互相拖节拍，适合多品种、小批量的单元式生产。',
+    geometry: { kind: 'cell', rows: 2, cols: 2, lanes: 2 }
+  },
+  {
+    id: 'linear-12',
+    name: '十二工位长线体',
+    layout: 'linear',
+    minStations: 8,
+    defaultStations: 10,
+    maxStations: 12,
+    transferSeconds: 0.9,
+    footprintScale: 2.2,
+    suits: ['assembly', 'inspection', 'packaging', 'screw', 'dispense'],
+    rationale: '8–12 工位把上料、装配、锁付、检测、下料拉成连续流，工序可按瓶颈拆分或合并；长线体用 0.9 秒节拍转移换取每站只做一道工序，适合多工序批量装配。',
+    geometry: { kind: 'linear', conveyor: 'chain' }
+  },
+  {
+    id: 'dial-12',
+    name: '十二工位转盘机',
+    layout: 'dial',
+    minStations: 8,
+    defaultStations: 10,
+    maxStations: 12,
+    indexSeconds: 0.45,
+    footprintScale: 1.35,
+    suits: ['inspection', 'screw', 'assembly', 'packaging'],
+    rationale: '8–12 工位把拍照、复检、分选与上下料拆到独立站位，DD 分度 0.45 秒适合小件高速检测；转盘直径随工位数增长，避免 12 个治具挤在固定圆盘上。',
+    geometry: { kind: 'dial', indexer: 'dd' }
   }
 ] as const;
 
@@ -201,7 +277,15 @@ const PROCESSES: ReadonlySet<MachineProcess> = new Set([
   'packaging',
   'unknown'
 ]);
-const GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set(['dial', 'linear', 'gantry', 'dual']);
+const GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set([
+  'dial',
+  'linear',
+  'gantry',
+  'dual',
+  'hybrid',
+  'cell'
+]);
+const CELL_GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set(['dual', 'hybrid', 'cell']);
 
 function isInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
@@ -270,8 +354,29 @@ export function validateMachineForm(form: MachineForm): string[] {
     if (form.layout === 'parallel' && form.geometry.kind === 'dial') {
       errors.push(`${form.id || '?'}：parallel 布局不能使用 dial 几何`);
     }
-    if (form.layout === 'cell' && form.geometry.kind !== 'dual') {
-      errors.push(`${form.id || '?'}：cell 形态当前只支持 dual 几何`);
+    if (form.layout === 'cell' && !CELL_GEOMETRY_KINDS.has(form.geometry.kind)) {
+      errors.push(`${form.id || '?'}：cell 形态只支持 dual/hybrid/cell 几何`);
+    }
+    for (const key of ['heads', 'rows', 'cols', 'dialStations', 'linearStations'] as const) {
+      const value = form.geometry[key];
+      if (value !== undefined && (!isInteger(value) || value <= 0)) {
+        errors.push(`${form.id || '?'}：geometry.${key} 必须是正整数`);
+      }
+    }
+    if (form.geometry.kind === 'gantry' && form.geometry.heads !== undefined && form.geometry.heads < 2) {
+      errors.push(`${form.id || '?'}：gantry heads 至少为 2`);
+    }
+    if (form.geometry.kind === 'hybrid') {
+      const dialStations = form.geometry.dialStations;
+      const linearStations = form.geometry.linearStations;
+      if (dialStations !== undefined && linearStations !== undefined) {
+        const [min, max] = form.stationRange;
+        if (dialStations + linearStations < min || dialStations + linearStations > max) {
+          errors.push(
+            `${form.id || '?'}：hybrid 的 dialStations + linearStations 应覆盖 stationRange ${min}–${max}`
+          );
+        }
+      }
     }
   }
   return errors;

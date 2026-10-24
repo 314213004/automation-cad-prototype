@@ -4,8 +4,8 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`）；集成分支 `integ/3d-all` 合并迭代 34/35/36 三条 3D 分支，本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1316/1316 全绿**（1297 + 并行/流水线节拍模型 19；沙箱需 `TZ=Asia/Shanghai`）。
-- 冒烟：`npm run smoke` 全绿；`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`，并保留 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
+- 测试：**1479/1479 全绿**（含 11 种整机形态与多头龙门/混合线/单元矩阵几何回归；沙箱需 `TZ=Asia/Shanghai`）。
+- 冒烟：`npm run smoke` 全绿；`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`，并保留 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
 - 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（102/102 意图、102/102 工具、53/53 参数、7/7 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.3.0` NSIS `AutomationCAD-Setup-0.3.0.exe`（129 MB，未签名，Windows runner 1248 单测 0 失败）；上一版 `v0.2.0`。
 
@@ -14,7 +14,7 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1316 pass / 0 fail / 0 skipped |
+| `npm test` | 1479 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
 | `npm run screenshots:machine` | 4 张 1600×1000 真实 Electron 截图，尺寸/文件大小/颜色数校验通过 |
