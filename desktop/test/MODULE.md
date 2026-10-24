@@ -57,7 +57,8 @@ SMOKE_COMMISSION_3D_SCALE_OK stations=4 actuators=12 sensors=16 parts=16 ticks=.
 SMOKE_DIAGNOSE_OK codes=1
 SMOKE_AGENT_TOOLS_OK tools=20 implemented=20
 SMOKE_AGENT_TOOLS_V2 tools=20
-SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=6 warnings=1
+SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0
+SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1
 SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
 SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
 SMOKE_AGENT_KB_OK docs=13 chunks=364 query=D2 hits=1

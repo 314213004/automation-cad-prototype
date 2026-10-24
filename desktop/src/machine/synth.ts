@@ -8,27 +8,36 @@ import type { MachineConfig } from '../commission/machine-config.ts';
 import { validateMachineConfig } from '../commission/machine-config.ts';
 import {
   DEFAULT_NOTE_CYCLE,
+  DEFAULT_NOTE_LAYOUT,
   DEFAULT_NOTE_STATIONS,
   MACHINE_DEFAULT_CYCLE_PER_MIN,
   MACHINE_STATIONS_MAX,
   MACHINE_STATIONS_MIN,
   type MachineActuatorKind,
   type MachineBrief,
+  type MachineLayout,
   type MachineProcess,
   type MachineSensorKind
 } from './spec.ts';
 import { templateFor, templateKinds } from './templates.ts';
 
 export interface MachineCycleEstimate {
+  /** 布局模型：parallel = 同工序并行，line = 流水线分工序。 */
+  mode: 'parallel' | 'line';
   perMin: number;
   /** 目标节拍，60 / perMin。 */
   secondsPerPiece: number;
-  /** 慢工位估算节拍；高于 secondsPerPiece 时表示当前方案不达标。 */
+  /** 单工位单件时间（工艺固定余量 + 该工位动作时间）。 */
+  stationSeconds: number;
+  /** 估算产能（件/分钟）。 */
+  throughputPerMin: number;
+  /** 兼容旧字段：单工位单件时间；parallel 下不再是整机节拍。 */
   estimatedSecondsPerPiece: number;
   baseSeconds: number;
   slowestStation: number;
   slowestActionSeconds: number;
   requiredParallelStations: number;
+  /** 达标所需总工位：parallel = ceil(目标 × 单工位时间 / 60)，line = 工位数 × 瓶颈复制数。 */
   requiredTotalStations: number;
   meetsTarget: boolean;
   bottleneck: string;
@@ -219,6 +228,15 @@ function servoDetected(brief: MachineBrief): boolean {
   return brief.notes.some((note) => /伺服|步进/.test(note));
 }
 
+function resolveLayout(brief: MachineBrief): { mode: 'parallel' | 'line'; fallback: boolean } {
+  const declared: MachineLayout = brief.layout ?? 'auto';
+  if (declared === 'line') return { mode: 'line', fallback: false };
+  if (declared === 'parallel') return { mode: 'parallel', fallback: false };
+  // auto：解析器通常已给出结论；手工构造的 brief 只能按工序数量兜底。
+  if ((brief.processes?.length ?? 0) >= 2) return { mode: 'line', fallback: false };
+  return { mode: 'parallel', fallback: true };
+}
+
 function templateDescription(kinds: readonly string[]): string {
   return kinds.join('、');
 }
@@ -303,7 +321,7 @@ function buildSummary(design: MachineDesign): string {
   const text = [
     `机型方案：${config.name}`,
     `工位：${config.stations.length} 个；执行机构：${config.actuators.length} 个（${actuatorText || '无'}）；传感器：${config.sensors.length} 个（${sensorText || '无'}）`,
-    `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.estimatedSecondsPerPiece.toFixed(2)} 秒/件；瓶颈：${cycle.bottleneck}`,
+    `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.throughputPerMin.toFixed(2)} 件/分钟（单工位 ${cycle.stationSeconds.toFixed(2)} 秒/件）；瓶颈：${cycle.bottleneck}`,
     `功率：约 ${power.va} VA（固定表估算）`,
     `风险：${risk}`,
     '说明：三维几何为按配置生成的标准件外形，功率与节拍均为估算，需人工确认。'
@@ -315,6 +333,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const stations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
+  const layout = resolveLayout(brief);
   const template = templateFor(process);
   const templateActuatorKinds = templateKinds(template.actuators);
   const templateSensorKinds = templateKinds(template.sensors);
@@ -322,9 +341,18 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const warnings: string[] = [];
   const assumptions: string[] = [
     '功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。',
-    '节拍按单工位串行动作加固定工艺余量估算，未计入上下料、通讯、人工干预与调试损失。',
+    '节拍按单工位动作加固定工艺余量估算；同工序并行与流水线分工序使用不同产能公式，均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
+
+  if (layout.mode === 'line') {
+    const chain = brief.processes?.length ? brief.processes.join(' → ') : '多道工序';
+    assumptions.push(`布局按流水线（line）估算：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
+  } else if (brief.notes.includes(DEFAULT_NOTE_LAYOUT) || layout.fallback) {
+    assumptions.push('未识别布局，按同工序并行估算；如实际为流水线，请显式指定 layout=line。');
+  } else {
+    assumptions.push(`布局按同工序并行（parallel）估算：${stations} 个工位执行同一工艺「${PROCESS_LABEL[process]}」，整机产能 = 工位数 / 单工位时间 × 60。`);
+  }
 
   if (process === 'unknown') {
     warnings.push('未识别工艺：已按通用工艺模板（每工位 1 气缸 + 1 接近开关）合成，请确认工艺类型。');
@@ -345,6 +373,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   if (brief.notes.includes(DEFAULT_NOTE_CYCLE) && brief.cyclePerMin !== null) {
     // 理论上不会同时出现；保留显式标记的防御分支，避免外部构造的 brief 丢失缺省说明。
     assumptions.push('brief 标记了节拍缺省，但已提供 cyclePerMin；以 cyclePerMin 为准。');
+  }
+  if ((layout.fallback || brief.notes.includes(DEFAULT_NOTE_LAYOUT)) && stations > 1) {
+    warnings.push('未识别布局：已按同工序并行估算；如实际为流水线，请在需求中写明「流水线/线体/产线」或显式指定 layout。');
   }
 
   let actuatorKinds = flattened(brief.actuators);
@@ -450,17 +481,53 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     if (seconds > slowest.seconds) slowest = { station: stationIndex + 1, seconds, kind: stationKind };
   }
   const secondsPerPiece = round(60 / cyclePerMin);
-  const meetsTarget = slowest.seconds <= secondsPerPiece;
-  const parallel = meetsTarget ? 1 : Math.max(1, Math.ceil(slowest.seconds / secondsPerPiece - 1e-9));
-  if (!meetsTarget) {
-    warnings.push(
-      `节拍瓶颈：工位${slowest.station} 估算 ${round(slowest.seconds, 2).toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
-      `建议每道工序至少 ${parallel} 个并行工位（总工位建议 ≥ ${stations * parallel}）。`
-    );
+  const stationSeconds = round(slowest.seconds, 3);
+  const stationLabel =
+    `工艺固定 ${baseSeconds.toFixed(2)}s + ${ACTUATOR_LABEL[slowest.kind]} ${ACTUATOR_SECONDS[slowest.kind].toFixed(2)}s`;
+  let throughputPerMin: number;
+  let meetsTarget: boolean;
+  let requiredParallelStations: number;
+  let requiredTotalStations: number;
+  let bottleneck: string;
+
+  if (layout.mode === 'parallel') {
+    // 同工序并行：N 个工位各做一件，整机产能按工位数线性放大。
+    const rawThroughput = (stations / slowest.seconds) * 60;
+    throughputPerMin = round(rawThroughput, 2);
+    meetsTarget = rawThroughput >= cyclePerMin - 1e-9;
+    requiredTotalStations = Math.max(1, Math.ceil((cyclePerMin * stationSeconds) / 60 - 1e-9));
+    requiredParallelStations = requiredTotalStations;
+    const margin = throughputPerMin / cyclePerMin;
+    bottleneck =
+      `单工位 ${stationSeconds.toFixed(2)} 秒/件，${stations} 工位并行 → ${throughputPerMin.toFixed(2)} 件/分钟` +
+      `（${stationLabel}；目标 ${cyclePerMin} 件/分钟${meetsTarget ? `，余量 ${margin.toFixed(2)} 倍` : '，未达标'}）`;
+    if (!meetsTarget) {
+      warnings.push(
+        `节拍瓶颈（并行同工序）：单工位估算 ${stationSeconds.toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
+        `${stations} 工位并行产能 ${throughputPerMin.toFixed(2)} 件/分钟，低于目标 ${cyclePerMin} 件/分钟；` +
+        `建议总工位 ≥ ${requiredTotalStations}（每道工序并行工位 ≥ ${requiredParallelStations}）。`
+      );
+    }
+  } else {
+    // 流水线分工序：每站一道工序，整线产能由最慢工位决定，补工位只针对瓶颈工序。
+    const rawThroughput = 60 / slowest.seconds;
+    throughputPerMin = round(rawThroughput, 2);
+    meetsTarget = rawThroughput >= cyclePerMin - 1e-9;
+    requiredParallelStations = meetsTarget
+      ? 1
+      : Math.max(1, Math.ceil(slowest.seconds / secondsPerPiece - 1e-9));
+    requiredTotalStations = stations * requiredParallelStations;
+    bottleneck =
+      `流水线最慢工序为工位${slowest.station}，单件 ${stationSeconds.toFixed(2)} 秒 → ${throughputPerMin.toFixed(2)} 件/分钟` +
+      `（${stationLabel}；目标 ${cyclePerMin} 件/分钟${meetsTarget ? '，满足' : '，未达标'}）`;
+    if (!meetsTarget) {
+      warnings.push(
+        `流水线节拍瓶颈：工位${slowest.station} 估算 ${stationSeconds.toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
+        `整线产能 ${throughputPerMin.toFixed(2)} 件/分钟，低于目标 ${cyclePerMin} 件/分钟；` +
+        `建议复制瓶颈工序，每道工序并行工位 ≥ ${requiredParallelStations}（总工位 ≥ ${requiredTotalStations}）。`
+      );
+    }
   }
-  const bottleneck =
-    `工位${slowest.station} 估算 ${round(slowest.seconds, 2).toFixed(2)} 秒/件` +
-    `（工艺固定 ${baseSeconds.toFixed(2)}s + ${ACTUATOR_LABEL[slowest.kind]} ${ACTUATOR_SECONDS[slowest.kind].toFixed(2)}s）`;
 
   if (servo) {
     assumptions.push('检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。');
@@ -478,14 +545,17 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     config,
     points,
     cycle: {
+      mode: layout.mode,
       perMin: cyclePerMin,
       secondsPerPiece,
-      estimatedSecondsPerPiece: round(slowest.seconds),
+      stationSeconds,
+      throughputPerMin,
+      estimatedSecondsPerPiece: stationSeconds,
       baseSeconds,
       slowestStation: slowest.station,
       slowestActionSeconds: round(slowest.seconds - baseSeconds),
-      requiredParallelStations: parallel,
-      requiredTotalStations: stations * parallel,
+      requiredParallelStations,
+      requiredTotalStations,
       meetsTarget,
       bottleneck
     },

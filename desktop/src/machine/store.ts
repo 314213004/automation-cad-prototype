@@ -185,16 +185,25 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
     const slowestActionSeconds = optionalNumber('slowestActionSeconds') ?? Math.max(0, estimated - baseSeconds);
     const requiredParallelStations = Math.max(1, Math.trunc(optionalNumber('requiredParallelStations') ?? 1));
     const stations = normalized.config.stations.length;
+    const rawMode = (value.cycle as Record<string, unknown>).mode;
+    const mode: 'parallel' | 'line' = rawMode === 'parallel' ? 'parallel' : 'line';
+    const stationSeconds = optionalNumber('stationSeconds') ?? estimated;
+    const throughputPerMin = optionalNumber('throughputPerMin')
+      ?? (stationSeconds > 0 ? Math.round((60 / stationSeconds) * 100) / 100 : 0);
     normalized.cycle = {
+      mode,
       perMin,
       secondsPerPiece,
+      stationSeconds,
+      throughputPerMin,
       estimatedSecondsPerPiece: estimated,
       baseSeconds,
       slowestStation: Math.max(1, Math.trunc(optionalNumber('slowestStation') ?? 1)),
       slowestActionSeconds,
       requiredParallelStations,
       requiredTotalStations: Math.trunc(optionalNumber('requiredTotalStations') ?? stations * requiredParallelStations),
-      meetsTarget: value.cycle.meetsTarget === true || estimated <= secondsPerPiece,
+      meetsTarget: value.cycle.meetsTarget === true
+        || (throughputPerMin > 0 ? throughputPerMin >= perMin - 1e-9 : estimated <= secondsPerPiece),
       bottleneck: bottleneck.trim()
     };
   }

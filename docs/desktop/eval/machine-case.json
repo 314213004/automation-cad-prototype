@@ -6,6 +6,10 @@
     "process": "screw",
     "stations": 6,
     "cyclePerMin": 20,
+    "layout": "parallel",
+    "processes": [
+      "锁螺丝"
+    ],
     "actuators": [
       {
         "kind": "gripper",
@@ -29,7 +33,8 @@
     "brand": "汇川",
     "voltage": null,
     "notes": [
-      "伺服/步进执行机构 6 台（750W）：按旋转轴建模"
+      "伺服/步进执行机构 6 台（750W）：按旋转轴建模",
+      "布局推断：单一工艺「锁螺丝」按同工序并行，按同工序并行估算"
     ]
   },
   "design": {
@@ -275,16 +280,19 @@
       "ST6-PRX-S1"
     ],
     "cycle": {
+      "mode": "parallel",
       "perMin": 20,
       "secondsPerPiece": 3,
+      "stationSeconds": 3.18,
+      "throughputPerMin": 113.21,
       "estimatedSecondsPerPiece": 3.18,
       "baseSeconds": 2.2,
       "slowestStation": 1,
       "slowestActionSeconds": 0.98,
       "requiredParallelStations": 2,
-      "requiredTotalStations": 12,
-      "meetsTarget": false,
-      "bottleneck": "工位1 估算 3.18 秒/件（工艺固定 2.20s + 旋转轴 0.70s）"
+      "requiredTotalStations": 2,
+      "meetsTarget": true,
+      "bottleneck": "单工位 3.18 秒/件，6 工位并行 → 113.21 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，余量 5.66 倍）"
     },
     "power": {
       "va": 4628,
@@ -308,13 +316,13 @@
       ]
     },
     "warnings": [
-      "节拍瓶颈：工位1 估算 3.18 秒/件，超过目标 3.00 秒/件；建议每道工序至少 2 个并行工位（总工位建议 ≥ 12）。",
       "安全光栅：已初选 F3SG-4SRA0640-14（14 mm、保护高度 640 mm），安装距离需按 ISO 13855 用实测停机时间核算，保护高度需覆盖实际上料开口。"
     ],
     "assumptions": [
       "功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。",
-      "节拍按单工位串行动作加固定工艺余量估算，未计入上下料、通讯、人工干预与调试损失。",
+      "节拍按单工位动作加固定工艺余量估算；同工序并行与流水线分工序使用不同产能公式，均未计入上下料、通讯、人工干预与调试损失。",
       "三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。",
+      "布局按同工序并行（parallel）估算：6 个工位执行同一工艺「锁螺丝」，整机产能 = 工位数 / 单工位时间 × 60。",
       "检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。",
       "品牌按需求中的「汇川」记录，具体型号待选型。",
       "执行机构按需求数量均分到各工位。",
@@ -434,17 +442,20 @@
     }
   },
   "cycleAnalysis": {
+    "mode": "parallel",
     "targetPerMin": 20,
     "targetSecondsPerPiece": 3,
+    "stationSeconds": 3.18,
+    "throughputPerMin": 113.21,
     "estimatedSecondsPerPiece": 3.18,
     "baseSeconds": 2.2,
     "slowestStation": 1,
     "slowestActionSeconds": 0.98,
-    "meetsTarget": false,
+    "meetsTarget": true,
     "requiredParallelStations": 2,
-    "requiredTotalStations": 12,
-    "verdict": "当前方案未满足目标节拍，按现估算需每道工序 2 个并行工位，总工位至少 12 个",
-    "bottleneck": "工位1 估算 3.18 秒/件（工艺固定 2.20s + 旋转轴 0.70s）"
+    "requiredTotalStations": 2,
+    "verdict": "当前方案按同工序并行满足目标节拍：单工位 3.18 秒/件 × 6 工位 ≈ 113.21 件/分钟",
+    "bottleneck": "单工位 3.18 秒/件，6 工位并行 → 113.21 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，余量 5.66 倍）"
   },
   "stations": [
     {

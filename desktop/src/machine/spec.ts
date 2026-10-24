@@ -14,10 +14,21 @@ export type MachineActuatorKind = 'cylinder' | 'gripper' | 'rotary';
 export type MachineSensorKind = 'proximity' | 'photoelectric' | 'safety' | 'pressure';
 export type MachineVoltage = '220VAC' | '380VAC' | '24VDC';
 
+/**
+ * 布局模型：
+ * - parallel：N 个工位做同一道工序，产能随工位数放大（复制式布局）。
+ * - line：工位串成流水线，每站一道工序，产能由最慢工序决定。
+ * - auto：未显式指定，由解析器按需求文本推断。
+ */
+export type MachineLayout = 'parallel' | 'line' | 'auto';
+
 export interface MachineBrief {
   process: MachineProcess;
   stations: number;
   cyclePerMin: number | null;
+  layout: MachineLayout;
+  /** 需求中显式列出的工序名，按出现顺序去重。 */
+  processes?: string[];
   actuators: { kind: MachineActuatorKind; count: number }[];
   sensors: { kind: MachineSensorKind; count: number }[];
   brand: string | null;
@@ -33,6 +44,7 @@ export const MACHINE_DEFAULT_CYCLE_PER_MIN = 10;
 export const DEFAULT_NOTE_STATIONS = `缺省：未识别工位数，按 ${MACHINE_DEFAULT_STATIONS} 工位合成`;
 export const DEFAULT_NOTE_CYCLE = `缺省：未识别节拍，按 ${MACHINE_DEFAULT_CYCLE_PER_MIN} 件/分钟估算`;
 export const DEFAULT_NOTE_PROCESS = '缺省：未识别工艺，按通用工艺方案合成';
+export const DEFAULT_NOTE_LAYOUT = '缺省：未识别布局，按同工序并行估算；可显式指定 layout（parallel/line）';
 
 const PROCESS_RULES: Array<{ process: Exclude<MachineProcess, 'unknown'>; pattern: RegExp }> = [
   { process: 'screw', pattern: /锁螺丝|锁付|拧螺丝|打螺丝|螺丝机|上螺丝/ },
@@ -41,6 +53,65 @@ const PROCESS_RULES: Array<{ process: Exclude<MachineProcess, 'unknown'>; patter
   { process: 'inspection', pattern: /检测|检查|检验|视觉|测量|AOI/i },
   { process: 'packaging', pattern: /包装|装箱|装盒|封箱|贴标|码垛/ }
 ];
+
+/**
+ * 工序名与主工艺（process）分开：主工艺只保留五类可合成模板，
+ * 上料/下料/搬运等工序用于判断是否为流水线分工序布局。
+ */
+const PROCESS_NAME_RULES: Array<{ name: string; pattern: RegExp }> = [
+  { name: '上料', pattern: /上料|进料|供料/ },
+  { name: '锁螺丝', pattern: /锁螺丝|锁付|拧螺丝|打螺丝|上螺丝/ },
+  { name: '点胶', pattern: /点胶|涂胶|灌胶|滴胶/ },
+  { name: '装配', pattern: /装配|组装|压装|压合/ },
+  { name: '检测', pattern: /检测|检查|检验|视觉|测量|AOI/i },
+  { name: '包装', pattern: /包装|装箱|装盒|封箱|贴标|码垛/ },
+  { name: '下料', pattern: /下料|卸料|出料/ },
+  { name: '搬运', pattern: /搬运|移载|转运/ }
+];
+
+const LINE_KEYWORD = /流水线|线体|产线|生产线|装配线|包装线|检测线|自动线|输送线/;
+
+/** 传感器/上下料描述里的「检测」不是独立工序，推断布局前先屏蔽。 */
+function maskNonProcessPhrases(text: string): string {
+  return text
+    .replace(/到位检测|位置检测|有无检测|检测开关|检测传感器|传感器检测/g, ' ')
+    .replace(/自动上下料|上下料/g, ' ');
+}
+
+function detectProcessNames(text: string): string[] {
+  const masked = maskNonProcessPhrases(text);
+  const found: Array<{ name: string; index: number }> = [];
+  for (const rule of PROCESS_NAME_RULES) {
+    const match = rule.pattern.exec(masked);
+    if (match?.index !== undefined) found.push({ name: rule.name, index: match.index });
+  }
+  return found
+    .sort((left, right) => left.index - right.index)
+    .map((entry) => entry.name)
+    .filter((name, index, names) => names.indexOf(name) === index);
+}
+
+/**
+ * 布局推断规则（可测）：
+ * - 出现流水线/线体/产线等词，或两个及以上不同工序 → line；
+ * - 已知单一工艺 → parallel（同工序并行是更常见的复制式布局）；
+ * - 无法判断且工位数 > 1 → parallel，并在 notes 里提示可显式指定 layout。
+ */
+function detectLayout(text: string, process: MachineProcess, processNames: string[]): {
+  layout: Exclude<MachineLayout, 'auto'>;
+  inferred: string;
+} {
+  if (LINE_KEYWORD.test(text)) {
+    return { layout: 'line', inferred: '需求含流水线/线体/产线线索' };
+  }
+  if (processNames.length >= 2) {
+    return { layout: 'line', inferred: `识别到多个不同工序（${processNames.join('、')}）` };
+  }
+  if (process !== 'unknown') {
+    return { layout: 'parallel', inferred: `单一工艺「${processNames[0] ?? process}」按同工序并行` };
+  }
+  return { layout: 'parallel', inferred: '无法判断布局，按同工序并行估算' };
+}
 
 const BRANDS = [
   '罗克韦尔',
@@ -406,6 +477,8 @@ export function parseMachineBrief(text: string): MachineBrief {
   const process = detectProcess(source);
   if (process === 'unknown') notes.push(DEFAULT_NOTE_PROCESS);
 
+  const processNames = detectProcessNames(source);
+
   const stationMatch = detectStations(source);
   let stations = MACHINE_DEFAULT_STATIONS;
   if (stationMatch === null) {
@@ -426,11 +499,22 @@ export function parseMachineBrief(text: string): MachineBrief {
   const sensors = detectSensors(source, stations);
   const brand = detectBrand(source);
   const voltage = detectVoltage(source);
+  const inferred = detectLayout(source, process, processNames);
+  if (process === 'unknown' && stations > 1) notes.push(DEFAULT_NOTE_LAYOUT);
+  if (inferred.layout === 'parallel' && process !== 'unknown') {
+    notes.push(`布局推断：${inferred.inferred}，按同工序并行估算`);
+  } else if (inferred.layout === 'line') {
+    notes.push(`布局推断：${inferred.inferred}，按流水线分工序估算`);
+  } else {
+    notes.push(`布局推断：${inferred.inferred}`);
+  }
 
   return {
     process,
     stations,
     cyclePerMin,
+    layout: inferred.layout,
+    ...(processNames.length > 0 ? { processes: processNames } : {}),
     actuators,
     sensors,
     brand,

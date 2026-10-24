@@ -84,8 +84,11 @@ const caseData = {
     bomDraft: design.bomDraft
   },
   cycleAnalysis: {
+    mode: design.cycle.mode,
     targetPerMin: design.cycle.perMin,
     targetSecondsPerPiece: design.cycle.secondsPerPiece,
+    stationSeconds: design.cycle.stationSeconds,
+    throughputPerMin: design.cycle.throughputPerMin,
     estimatedSecondsPerPiece: design.cycle.estimatedSecondsPerPiece,
     baseSeconds: design.cycle.baseSeconds,
     slowestStation: design.cycle.slowestStation,
@@ -94,8 +97,12 @@ const caseData = {
     requiredParallelStations: design.cycle.requiredParallelStations,
     requiredTotalStations: design.cycle.requiredTotalStations,
     verdict: design.cycle.meetsTarget
-      ? '当前工位数满足目标节拍'
-      : `当前方案未满足目标节拍，按现估算需每道工序 ${design.cycle.requiredParallelStations} 个并行工位，总工位至少 ${design.cycle.requiredTotalStations} 个`,
+      ? design.cycle.mode === 'parallel'
+        ? `当前方案按同工序并行满足目标节拍：单工位 ${design.cycle.stationSeconds} 秒/件 × ${brief.stations} 工位 ≈ ${design.cycle.throughputPerMin} 件/分钟`
+        : `当前流水线方案满足目标节拍：最慢工位 ${design.cycle.stationSeconds} 秒/件 → ${design.cycle.throughputPerMin} 件/分钟`
+      : design.cycle.mode === 'parallel'
+        ? `当前并行方案未满足目标节拍，按现估算总工位至少 ${design.cycle.requiredTotalStations} 个`
+        : `当前流水线方案未满足目标节拍，按现估算需每道工序 ${design.cycle.requiredParallelStations} 个并行工位，总工位至少 ${design.cycle.requiredTotalStations} 个`,
     bottleneck: design.cycle.bottleneck
   },
   stations: stationTable(design),
@@ -122,5 +129,5 @@ mkdirSync(dirname(outFile), { recursive: true });
 writeFileSync(outFile, `${JSON.stringify(caseData, null, 2)}\n`, 'utf8');
 console.log(`MACHINE_CASE_OK ${outFile}`);
 console.log(`stations=${design.config.stations.length} actuators=${design.config.actuators.length} sensors=${design.config.sensors.length} points=${ioMap.rows.length}`);
-console.log(`cycle=${design.cycle.estimatedSecondsPerPiece}s meetsTarget=${design.cycle.meetsTarget} requiredStations=${design.cycle.requiredTotalStations}`);
+console.log(`cycle mode=${design.cycle.mode} station=${design.cycle.stationSeconds}s throughput=${design.cycle.throughputPerMin}/min meetsTarget=${design.cycle.meetsTarget} requiredStations=${design.cycle.requiredTotalStations}`);
 console.log(`bomRows=${mapping.items.length} realParts=${caseData.bom.realPartCount} pending=${caseData.bom.pendingCount}`);

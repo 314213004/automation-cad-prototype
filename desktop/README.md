@@ -24,7 +24,7 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 主视口可旋转 3D：冒烟进程关闭 WebGL，验证装配/干涉视口保留原型等轴测 SVG（降级），同时扩展模型与原型逐字一致、3D↔结构树选择映射、原型缸径编辑与撤销驱动几何、桌面版几何参数沿叠放链联动与越界拒绝（`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`）；WebGL 路径另用 `npm run check:orbit-webgl`（swiftshader，手动）验证，输出 `ORBIT_WEBGL_OK`；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
 - 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
-- 智能体注册表为 20 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`），渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1` / `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=360 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
+- 智能体注册表为 21 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`），渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0` / `SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1` / `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=350 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
 
 ## MCP（stdio）接入
 

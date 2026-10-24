@@ -1359,7 +1359,7 @@ function createWindow(): BrowserWindow {
           machineDesign.design?.cycle?.perMin !== 20 ||
           machineDesign.design?.cycle?.secondsPerPiece !== 3 ||
           !(Number(machineDesign.design?.power?.va) > 0) ||
-          machineDesign.design?.warnings?.length !== 1 ||
+          machineDesign.design?.warnings?.length !== 0 ||
           !Array.isArray(machineDesign.design?.assumptions) ||
           typeof machineDesign.summary !== 'string' ||
           machineDesign.summary.length > 600
@@ -1368,7 +1368,34 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1');
+        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0');
+
+        const cycleDesign = await activeTools.call('design_machine', {
+          brief: '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅'
+        }) as {
+          ok?: boolean;
+          design?: {
+            cycle?: {
+              mode?: string;
+              stationSeconds?: number;
+              throughputPerMin?: number;
+              meetsTarget?: boolean;
+            };
+          };
+        };
+        const cycle = cycleDesign.design?.cycle;
+        if (
+          !cycleDesign.ok ||
+          cycle?.mode !== 'parallel' ||
+          cycle?.stationSeconds !== 3.18 ||
+          Math.round(Number(cycle?.throughputPerMin)) !== 113 ||
+          cycle?.meetsTarget !== true
+        ) {
+          console.error('SMOKE_FAIL machine_cycle', JSON.stringify(cycleDesign));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_MACHINE_CYCLE_OK mode=${cycle.mode} throughput=${Math.round(Number(cycle.throughputPerMin))} meets=${cycle.meetsTarget ? 1 : 0}`);
 
         const templateCount = Object.keys(TEMPLATES).length;
         const clarify = buildClarify(parseMachineBrief('随便设计一台检测机'));

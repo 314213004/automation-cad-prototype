@@ -4,9 +4,9 @@
 
 - 分支：`main`（GitHub `owlco001/automation-cad-prototype`）；集成分支 `integ/3d-all` 合并迭代 34/35/36 三条 3D 分支，本轮不 push。
 - 版本：`desktop/package.json` → **0.3.0**（源码与文档就绪；本轮未打包、未触发 CI、未打 tag）。
-- 测试：**1297/1297 全绿**（1132 + 迭代 34 整机几何 24 + 35 主视口 3D 38 + 36 运动学自动识别 34 + P10-4 六工位案例 9 + Agent `suggest_kinematics` 9 + KB 余量守卫 1 + STEP 分块清理/近似件透出 1 + Agent 审计轮转/同义词/MT04 22 + 主视口撤销/持久化/框选 25 + 安全光栅案例 2；沙箱需 `TZ=Asia/Shanghai`）。
-- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
-- 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（74/74 意图、74/74 工具、40/40 参数、5/5 超纲、5/5 多步）；真实模型 36/36。
+- 测试：**1316/1316 全绿**（1297 + 并行/流水线节拍模型 19；沙箱需 `TZ=Asia/Shanghai`）。
+- 冒烟：`npm run smoke` 全绿；新增 `SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1`，并保留 `SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_ORBIT_VIEW_OK`、`SMOKE_KINEMATICS_AUTO_OK`、`SMOKE_AGENT_KINEMATICS_OK`（P10-4 起另有 `npm run screenshots:machine` 四张案例截图），最终 `SMOKE_OK`。
+- 评估：`npm run eval:agent` → `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`（102/102 意图、102/102 工具、53/53 参数、7/7 超纲、5/5 多步）；真实模型 36/36。
 - 最近发布：`v0.3.0` NSIS `AutomationCAD-Setup-0.3.0.exe`（129 MB，未签名，Windows runner 1248 单测 0 失败）；上一版 `v0.2.0`。
 
 ## 验证记录（本轮真实执行）
@@ -14,7 +14,7 @@
 | 命令 | 结果 |
 |------|------|
 | `npx tsc --noEmit` | 通过，0 错误 |
-| `npm test` | 1297 pass / 0 fail / 0 skipped |
+| `npm test` | 1316 pass / 0 fail / 0 skipped |
 | `npm run build:ext` | 通过（Vite 扩展 + Electron main/preload + MCP） |
 | `npm run smoke` | 全绿；含机型落盘/3D/BOM/PLC/撤销断言，最终 `SMOKE_OK` |
 | `npm run screenshots:machine` | 4 张 1600×1000 真实 Electron 截图，尺寸/文件大小/颜色数校验通过 |
@@ -66,7 +66,8 @@
 | `SMOKE_COST_UI_OK` | `rows=6 cards=9 grand=1398.64 book=6 pdf=1` |
 | `SMOKE_AGENT_TOOLS_OK` | `tools=20 implemented=20` |
 | `SMOKE_AGENT_TOOLS_V2` | `tools=20`，新增工具全部注册 |
-| `SMOKE_MACHINE_DESIGN_OK` | `stations=3 actuators=6 sensors=3 warnings=1` |
+| `SMOKE_MACHINE_DESIGN_OK` | `stations=3 actuators=6 sensors=3 warnings=0`，同工序并行 56.60 件/分钟 |
+| `SMOKE_MACHINE_CYCLE_OK` | `mode=parallel throughput=113 meets=1`，六工位 3.18 秒/件并行放大 |
 | `SMOKE_MACHINE_TEMPLATES_OK` | `templates=5 clarify=1 multi=1`，五类工艺模板与追问上限 |
 | `SMOKE_MACHINE_GEOMETRY_OK` | `layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`，参数化整机几何 |
 | `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=5 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
@@ -141,7 +142,7 @@ BACKLOG 另含 D9（离线规则是否在模型可用时前置）与 D10（评�
 ```bash
 cd desktop
 npx tsc --noEmit                    # 类型检查
-npm test                            # 1297 条单测/集成测试
+npm test                            # 1316 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
 npm run smoke                       # xvfb + Electron headless（无 WebGL）
 AUTOMATIONCAD_PARAMETRIC_CMD="$PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke

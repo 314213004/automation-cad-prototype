@@ -51,6 +51,8 @@ test('六工位 brief：解析出 6 工位、6 伺服轴、6 气爪、6 到位�
   assert.equal(brief.process, 'screw');
   assert.equal(brief.stations, 6);
   assert.equal(brief.cyclePerMin, 20);
+  assert.equal(brief.layout, 'parallel');
+  assert.deepEqual(brief.processes, ['锁螺丝']);
   assert.deepEqual(brief.actuators, [
     { kind: 'gripper', count: 6 },
     { kind: 'rotary', count: 6 }
@@ -71,17 +73,22 @@ test('方案合成：6 工位、12 执行机构、7 传感器，点位 19 个且
   assert.equal(design.power.va, 4628);
 });
 
-test('节拍如实记录：目标 3.00 秒/件，估算 3.18 秒/件，需 12 个总工位', () => {
+test('节拍按同工序并行：3.18 秒/件 × 6 工位 ≈ 113.21 件/分钟，满足 20 件/分钟', () => {
   const design = caseDesign();
+  assert.equal(design.cycle.mode, 'parallel');
   assert.equal(design.cycle.perMin, 20);
   assert.equal(design.cycle.secondsPerPiece, 3);
+  assert.equal(design.cycle.stationSeconds, 3.18);
+  assert.equal(design.cycle.throughputPerMin, 113.21);
   assert.equal(design.cycle.estimatedSecondsPerPiece, 3.18);
-  assert.equal(design.cycle.meetsTarget, false);
+  assert.equal(design.cycle.meetsTarget, true);
   assert.equal(design.cycle.requiredParallelStations, 2);
-  assert.equal(design.cycle.requiredTotalStations, 12);
+  assert.equal(design.cycle.requiredTotalStations, 2);
   assert.match(design.cycle.bottleneck, /3\.18/);
-  assert.ok(design.warnings.some((warning) => /超过目标 3\.00 秒\/件/.test(warning)));
-  assert.ok(design.warnings.some((warning) => /总工位建议 ≥ 12/.test(warning)));
+  assert.match(design.cycle.bottleneck, /6 工位并行/);
+  assert.match(design.cycle.bottleneck, /113\.21 件\/分钟/);
+  assert.ok(design.assumptions.some((line) => /按同工序并行/.test(line)));
+  assert.ok(!design.warnings.some((warning) => /节拍瓶颈/.test(warning)));
 });
 
 test('BOM 型号存在性：每个 partId 都在声明的 builtin 包中，型号完全匹配', () => {
@@ -192,6 +199,10 @@ test('machine-case.json 与实时计算结果一致，且截图校验齐全', ()
   assert.equal(stored.design.config.sensors.length, design.config.sensors.length);
   assert.equal(stored.cycleAnalysis.estimatedSecondsPerPiece, design.cycle.estimatedSecondsPerPiece);
   assert.equal(stored.cycleAnalysis.requiredTotalStations, design.cycle.requiredTotalStations);
+  assert.equal(stored.cycleAnalysis.mode, 'parallel');
+  assert.equal(stored.cycleAnalysis.stationSeconds, 3.18);
+  assert.equal(stored.cycleAnalysis.throughputPerMin, 113.21);
+  assert.equal(stored.cycleAnalysis.meetsTarget, true);
   assert.equal(stored.ioMap.rowCount, 19);
   assert.equal(stored.bom.items.length, 12);
   assert.equal(stored.bom.pendingCount, 0);
