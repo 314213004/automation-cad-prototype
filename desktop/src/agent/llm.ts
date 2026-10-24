@@ -43,7 +43,7 @@ export interface AgentLlmOptions {
   baseUrl: string;
   apiKey: string;
   model: string;
-  tools: AgentToolSummary[];
+  tools: AgentToolSummary[] | (() => AgentToolSummary[]);
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
   /** 是否发送 response_format=json_object（端点不支持时自动降级重试一次）。 */
@@ -137,7 +137,7 @@ export class OpenAiCompatibleClient implements LlmClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly model: string;
-  private readonly tools: Array<Record<string, unknown>>;
+  private readonly getTools: () => AgentToolSummary[];
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof fetch;
   private responseFormat: boolean;
@@ -147,7 +147,7 @@ export class OpenAiCompatibleClient implements LlmClient {
     assertSafeApiKeyUrl(new URL(this.baseUrl));
     this.apiKey = options.apiKey;
     this.model = options.model;
-    this.tools = toOpenAiTools(options.tools);
+    this.getTools = typeof options.tools === 'function' ? options.tools : () => options.tools as AgentToolSummary[];
     this.timeoutMs = options.timeoutMs ?? 60_000;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.responseFormat = options.responseFormat !== false;
@@ -213,19 +213,20 @@ export class OpenAiCompatibleClient implements LlmClient {
   }
 
   async chat(messages: LlmMessage[]): Promise<LlmChatResponse> {
+    const tools = toOpenAiTools(this.getTools());
     const body: Record<string, unknown> = {
       model: this.model,
       messages,
-      ...(this.tools.length > 0 ? { tools: this.tools, tool_choice: 'auto' } : {})
+      ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {})
     };
-    if (this.responseFormat && this.tools.length > 0) {
+    if (this.responseFormat && tools.length > 0) {
       body.response_format = { type: 'json_object' };
     }
     let payload: unknown;
     try {
       payload = await this.post(body);
     } catch (error) {
-      if (this.responseFormat && this.tools.length > 0 && isUnsupportedResponseFormat(error)) {
+      if (this.responseFormat && tools.length > 0 && isUnsupportedResponseFormat(error)) {
         this.responseFormat = false;
         delete body.response_format;
         payload = await this.post(body);

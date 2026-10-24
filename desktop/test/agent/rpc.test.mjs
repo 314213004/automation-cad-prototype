@@ -11,6 +11,9 @@ let sandbox;
 let server;
 let url;
 let token;
+let plcgenEnabled = true;
+let elecValidationEnabled = true;
+let costEstimationEnabled = true;
 
 async function startWriteRpc(confirmWrite) {
   const calls = [];
@@ -76,7 +79,9 @@ before(async () => {
   });
   token = createAgentToken();
   server = new AgentRpcServer({
-    tools: new AgentTools(registry),
+    tools: new AgentTools(registry, undefined, {
+      isModuleEnabled: (id) => id === 'plcgen' ? plcgenEnabled : id === 'elec.validation' ? elecValidationEnabled : id === 'cost.estimation' ? costEstimationEnabled : false
+    }),
     token,
     version: '0.1.0-test',
     host: '127.0.0.1',

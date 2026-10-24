@@ -8,6 +8,7 @@ import {
 import type { AgentTools } from './tools.ts';
 import { authorizeAgentToolCall, type ConfirmAgentToolWrite } from './policy.ts';
 import { WRITE_TOOLS } from './router.ts';
+import { AGENT_TOOL_MODULES } from '../modules/tool-gates.ts';
 import {
   DesktopRpcError,
   DesktopRpcUnavailableError,
@@ -31,7 +32,9 @@ const DESKTOP_REQUIRED_TOOLS = new Set([
   'get_project_context',
   'run_interference_check',
   'suggest_kinematics',
-  'run_cost_report'
+  'run_cost_report',
+  'run_electrical_check',
+  'verify_plc_program'
 ]);
 
 const DESKTOP_NOT_RUNNING = {
@@ -64,13 +67,24 @@ export function buildMcpServer(
 ): Server {
   const server = new Server(info, { capabilities: { tools: {} } });
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.summaries().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema as Tool['inputSchema']
-    }))
-  }));
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    let summaries = tools.summaries();
+    if (options.proxy) {
+      try {
+        summaries = await options.proxy.listTools();
+      } catch {
+        // 桌面状态不可读时隐藏有模块归属的工具，不能用本地默认状态猜测开关值。
+        summaries = summaries.filter((tool) => !AGENT_TOOL_MODULES[tool.name]);
+      }
+    }
+    return {
+      tools: summaries.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema as Tool['inputSchema']
+      }))
+    };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args } = request.params;
