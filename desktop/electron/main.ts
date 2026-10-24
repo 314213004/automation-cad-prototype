@@ -3233,17 +3233,20 @@ function createWindow(): BrowserWindow {
         const counts = {
           servo: smokeRegistry.listParts({ packId: 'servo-cn' }).length,
           sensor: smokeRegistry.listParts({ packId: 'sensor-cn' }).length,
-          pneumatic: smokeRegistry.listParts({ packId: 'pneumatic-cn' }).length
+          pneumatic: smokeRegistry.listParts({ packId: 'pneumatic-cn' }).length,
+          vision: smokeRegistry.listParts({ packId: 'vision-cn' }).length,
+          drive: smokeRegistry.listParts({ packId: 'drive-cn' }).length
         };
-        if (lazyMetrics.packCount !== 6 || lazyMetrics.loadedPacks !== 2 ||
+        if (lazyMetrics.packCount !== 8 || lazyMetrics.loadedPacks !== 2 ||
             lazyMetrics.searchMs > 25 || coldMs > 120 ||
-            counts.servo < 24 || counts.sensor < 30 || counts.pneumatic < 24) {
+            counts.servo < 24 || counts.sensor < 30 || counts.pneumatic < 24 ||
+            counts.vision < 26 || counts.drive < 30) {
           console.error('SMOKE_FAIL packs_lazy', JSON.stringify({ coldMs, lazyMetrics, counts }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
         console.log(`SMOKE_PACKS_LAZY_OK packs=${lazyMetrics.packCount} loaded=${lazyMetrics.loadedPacks} searchMs=${lazyMetrics.searchMs} coldMs=${coldMs.toFixed(1)} parts=${lazyMetrics.partsLoaded}`);
-        console.log(`SMOKE_PACKS_COUNT servo=${counts.servo} sensor=${counts.sensor} pneumatic=${counts.pneumatic}`);
+        console.log(`SMOKE_PACKS_COUNT servo=${counts.servo} sensor=${counts.sensor} pneumatic=${counts.pneumatic} vision=${counts.vision} drive=${counts.drive}`);
       } catch (error) {
         console.error('SMOKE_FAIL packs_lazy_exception', error);
         setTimeout(() => app.exit(1), 100);

@@ -45,7 +45,7 @@
 | `SMOKE_COMMISSION_3D_OK` | `ticks=57 parts=16` |
 | `SMOKE_COMMISSION_3D_SCALE_OK` | `stations=4 actuators=12 sensors=16 parts=16 ticks=57` |
 | `SMOKE_DIAGNOSE_OK` | `codes=2`，故障诊断卡片 |
-| `SMOKE_UI_OK` | `stations=2 tags=8 packs=2 parts=16 overlay=1`，工厂/数据包/覆盖层 |
+| `SMOKE_UI_OK` | `stations=2 tags=8 packs=8 parts=55 overlay=1`，工厂/数据包/覆盖层 |
 | `SMOKE_PLCGEN_OK` | `files=5 tags=32`，基础 ST 五文件 |
 | `SMOKE_PLCGEN_SEQ_OK` | `files=11 steps=2`，11 文件与自动序列 |
 | `SMOKE_PLCGEN_SIM_OK` | `steps=6 ok=1 alarms=0`，内置模拟器 |
@@ -56,7 +56,7 @@
 | `SMOKE_PARAMETRIC_ASSEMBLY_OK` | `solids=2 bomRows=3`（假 sidecar 多实体） |
 | `SMOKE_PARAMETRIC_SIDECAR_SKIP` | 未设置 fake sidecar 时的条件跳过分支 |
 | `SMOKE_PARAMETRIC_UI_SKIP` | 未设置 fake sidecar 时的条件跳过分支 |
-| `SMOKE_ELEC_LIB_OK` | `parts=371 categories=26 symbols=219` |
+| `SMOKE_ELEC_LIB_OK` | `parts=377 categories=26 symbols=219` |
 | `SMOKE_ENCLOSURE_CANVAS_OK` | `placed=2 overlap=1 ratio>0` |
 | `SMOKE_ELEC_CHECK_OK` | `findings=4 errors=3`，线号/功率/截面规则 |
 | `SMOKE_ELEC_CHECK_UI_OK` | `rows=4 cards=9 pdf=true` |

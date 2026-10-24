@@ -4,21 +4,16 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## 元器件库扩展与模块化按需加载（2026-10-24，本轮）
+## 视觉与传动扩包（2026-10-24，本轮）
 
-- 状态：✅ 完成；新增 `servo-cn`（25 条）、`sensor-cn`（32 条）、`pneumatic-cn`（44 条），内置元器件包增至 5 个 + `pricebook-cn` 价格簿（manifest 6 个）。未 push、未提交。
-- 数据口径：型号/参数取自厂商公开样本/数据表；每条 `specs.数据来源`、有官方依据的 `dims.source` 记录出处。汇川 MS1H1/MS1H3 尺寸取自 SV660P 硬件手册尺寸表；雷赛 57CM 尺寸/转矩取自官方产品页；查不到官方尺寸的条目不写 `dims`。
-- 懒加载：`scan()` 只读 manifest；`listParts` 按 `manifest.categories` / 包名/关键词预过滤，命中包才 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局 partId 索引；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs/packCount/indexedParts`。
-- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1582/1582**（+32）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=5.267 coldMs=5.9 parts=404`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44`；`npm run eval:agent` 1.00；`npm run diagnose` 含 `packMetrics`（loadedPacks=2 / partsLoaded=404 / packLoadMs≈4.6 / searchMs≈6.2）。
-- 性能/体积：冷启动到可搜索 ≈5.3 ms（目标 ≤120 ms）；6 包全量命中搜索 ≈3.2–4.8 ms（目标 ≤25 ms）；最大单包 `iec-cn/parts.json` 160 KB（目标 ≤400 KB）。
-
-## 价格数据回填与成本覆盖率（2026-10-24，本轮）
-
-- 状态：✅ 完成；价格簿升级到 `schemaVersion: 2`，保留 v1 兼容；真实条目从 0 条提升到 **64 条**（另有 4 条 `EXAMPLE-*`，不参与统计/计价）。未 push、未提交。
-- 来源：西域 EHSY 公开商品页 63 条 + 供应商网 1 条；每条均记录可点击 `source`、`sourceType=distributor`、`checkedAt=2026-10-24`、`model`、`category`。西域条目标注含税（页面同时列 13% 未税价）；PNOZ s3 页面未标注税额，`taxIncluded=null` 并在 `note` 说明。
-- 案例覆盖：六工位 BOM 12 行中已计价 **9 行（75%）**，缺价从 9 行降到 **3 行**：`MS1H1-75B30CB`、`F3SG-4SRA0640-14`、`CP1E-N40DR-A`。`machine-case.json` 更新为材料 6654 / 电气 12283.91 / 人工 15552 / 合计 34489.91。
-- 成本模型：新增 `priceMeta { coveragePct, pricedCount, totalCount, missing, stale, unknownSource }`；`checkedAt` 严格超过 180 天才标过期，v1 缺 `sourceType/checkedAt` 的条目照常计价但标「来源不明」。方案卡显示「已计价 N/M 行（覆盖率 X%）、缺价 K 项、过期 L 项」。
-- 验收：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1550/1550**、`npm run smoke` 输出 `SMOKE_PRICEBOOK_OK items=64 caseCoverage=9/12`、`demo-doc.test.mjs` 4/4；15/16 号机型截图已重拍，方案卡显示 9/12 与 ¥34,489.91。新增 v1/v2 兼容、URL/来源类型/日期/税额校验、示例隔离、180 天边界、tiers、来源不明、覆盖率与案例 9/12 等断言；详见 [`PRICING.md`](PRICING.md)。
+- 状态：✅ 完成；新增 `vision-cn`（32 条 / 6 分类）与 `drive-cn`（33 条 / 8 分类），内置 manifest 增至 8 个；元器件合计 551 条 / 551 个唯一 id。未 push、未提交。
+- 视觉覆盖：海康 MV-CS/CE 500/1200 万（GigE/USB3）、大恒 MER2、Basler ace 2；Computar/海康 8/12/16/25 mm 定焦 + Computar 远心；海康/奥普特环形/条形/背光与 2 条光源控制器；海康 ID3000/ID5000 与基恩士 SR-1000；海康 VisionMaster MV-VC3000 与基恩士 CV-X100。
+- 传动覆盖：HIWIN R16/R20/R25 C7 与 TBI SFU 1605/2005/2505/2510/3205；HIWIN HGH15/20/25/30CA；Neugart PLE、APEX AB、绿的谐波 LCS；KTR ROTEX 与 R+W BK2；Gates GT2/HTD 5M 带与米思米带轮；KHK 齿条；HIWIN KK60/KK86 模组。
+- 数据口径：每条 `specs.数据来源` 记录官方样本/数据表与页码/链接；尺寸只录官方，查不到留空；Basler 3 条相机带官方 `dims` + `dims.source`；新包不录价格。
+- 去重：跨 8 包按 id 与型号双重扫描均唯一。历史重复 `D-M9B` 保留在 `smc-cn`（BOM 演示引用），删除 `iec-cn` 副本；`SR-1000` 保留在 `vision-cn`，删除 `iec-cn` 旧副本。`iec-cn` 调整为 377 条。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1604/1604**（+22）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=5.079 coldMs=5.7 parts=402`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33`、`SMOKE_UI_OK ... packs=8 ...`、`SMOKE_ELEC_LIB_OK parts=377 categories=26 symbols=219`；`npm run diagnose` 的 `dataPack.count=8` 且列表含 8 个包；`npm run eval:agent` 1.00。
+- 性能/体积：`vision-cn/parts.json` 17,386 B、`drive-cn/parts.json` 14,876 B，均 ≤400 KB；最大单包 `iec-cn` 162,897 B；8 包全量搜索由单测与 smoke 断言 ≤25 ms。
+- 新增测试：`desktop/test/packs/vision-drive.test.mjs` 22 条（容量、类型字段、来源/尺寸、无价格、8 包 id/型号唯一、体积、manifest 版本与 partsCount、懒加载未命中不读 parts、packId 过滤、型号搜索、分类聚合、smoke 计数口径）。
 
 ## 待办（按优先级）
 

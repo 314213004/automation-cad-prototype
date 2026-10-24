@@ -418,12 +418,12 @@ test('冷启动到可搜索不超过 120 ms', async () => {
   assert.ok(coldMs <= 120, `冷启动 ${coldMs.toFixed(1)} ms > 120 ms`);
 });
 
-test('6 个包全量命中搜索不超过 25 ms', () => {
+test('8 个包全量命中搜索不超过 25 ms', () => {
   const registry = realRegistry();
   registry.listParts();
   const startedAt = performance.now();
   const parts = registry.listParts();
   const searchMs = performance.now() - startedAt;
-  assert.ok(parts.length >= 480);
+  assert.ok(parts.length >= 550);
   assert.ok(searchMs <= 25, `全量搜索 ${searchMs.toFixed(1)} ms > 25 ms`);
 });

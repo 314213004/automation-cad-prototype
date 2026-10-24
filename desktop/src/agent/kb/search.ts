@@ -26,6 +26,7 @@ const B = 0.75;
 const DEFAULT_LIMIT = 3;
 const MAX_LIMIT = 5;
 const SNIPPET_CHARS = 240;
+const DOC_SOURCE_BOOST = 1;
 export const SEARCH_CONTEXT_MAX_BYTES = 2048;
 
 const CJK = /[\u3400-\u9fff\uf900-\ufaff]/;
@@ -169,7 +170,10 @@ export function searchDocs(query: string, options: SearchDocsOptions | number = 
       matched += 1;
       score += idf(token) * ((termFrequency * (K1 + 1)) / (termFrequency + normalizer));
     }
-    if (matched > 0 && score > 0) scored.push({ entry, score, matched });
+    if (matched > 0 && score > 0) {
+      if (entry.chunk.file.startsWith('docs/desktop/')) score += DOC_SOURCE_BOOST;
+      scored.push({ entry, score, matched });
+    }
   }
 
   scored.sort((left, right) => {

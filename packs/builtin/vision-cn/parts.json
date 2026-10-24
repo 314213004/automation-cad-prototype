@@ -1,0 +1,542 @@
+[
+  {
+    "id": "HIK-MV-CS050-10GC",
+    "model": "MV-CS050-10GC",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "shutter": "全局快门",
+      "interface": "GigE",
+      "series": "MV-CS",
+      "resolution": "500 万像素（2448×2048）",
+      "sensorSize": "2/3″",
+      "frameRate": "23.5 fps",
+      "powerW": 2.9,
+      "数据来源": "海康机器人 MV-CS 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-CS050-10GM",
+    "model": "MV-CS050-10GM",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "shutter": "全局快门",
+      "interface": "GigE",
+      "series": "MV-CS",
+      "resolution": "500 万像素（2448×2048）",
+      "sensorSize": "2/3″",
+      "frameRate": "23.5 fps",
+      "powerW": 2.9,
+      "数据来源": "海康机器人 MV-CS 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-CS120-10GC",
+    "model": "MV-CS120-10GC",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "shutter": "全局快门",
+      "interface": "GigE",
+      "series": "MV-CS",
+      "resolution": "1200 万像素（4024×3036）",
+      "sensorSize": "1/1.7″",
+      "frameRate": "9.8 fps",
+      "powerW": 3.2,
+      "数据来源": "海康机器人 MV-CS 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-CS120-10GM",
+    "model": "MV-CS120-10GM",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "shutter": "全局快门",
+      "interface": "GigE",
+      "series": "MV-CS",
+      "resolution": "1200 万像素（4024×3036）",
+      "sensorSize": "1/1.7″",
+      "frameRate": "9.8 fps",
+      "powerW": 3.2,
+      "数据来源": "海康机器人 MV-CS 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-CE050-10UC",
+    "model": "MV-CE050-10UC",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "series": "MV-CE",
+      "resolution": "500 万像素（2448×2048）",
+      "sensorSize": "2/3″",
+      "interface": "USB3",
+      "shutter": "全局快门",
+      "frameRate": "36 fps",
+      "powerW": 2.6,
+      "数据来源": "海康机器人 MV-CE 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-CE120-10UC",
+    "model": "MV-CE120-10UC",
+    "category": "工业相机",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "camera",
+      "series": "MV-CE",
+      "resolution": "1200 万像素（4024×3036）",
+      "sensorSize": "1/1.7″",
+      "interface": "USB3",
+      "shutter": "全局快门",
+      "frameRate": "14.6 fps",
+      "powerW": 2.8,
+      "数据来源": "海康机器人 MV-CE 系列面阵工业相机数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "BASLER-a2A2590-60ucBAS",
+    "model": "a2A2590-60ucBAS",
+    "category": "工业相机",
+    "vendor": "Basler",
+    "specs": {
+      "type": "camera",
+      "series": "ace 2 R",
+      "resolution": "500 万像素（2592×1944 默认）",
+      "sensorSize": "1/2.8″",
+      "interface": "USB3",
+      "sensor": "Sony IMX334LQR-C",
+      "frameRate": "60.9 fps",
+      "powerW": 2.9,
+      "数据来源": "Basler ace 2 a2A2590-60ucBAS 产品数据表（官方）General Specifications，https://docs.baslerweb.com/a2a2590-60ucbas"
+    },
+    "dims": {
+      "w": 36.3,
+      "h": 29,
+      "d": 29,
+      "source": "Basler ace 2 a2A2590-60ucBAS 产品数据表（官方）Mechanical Specifications：36.3×29×29 mm（不含镜头座与连接器）"
+    }
+  },
+  {
+    "id": "BASLER-a2A2448-75ucBAS",
+    "model": "a2A2448-75ucBAS",
+    "category": "工业相机",
+    "vendor": "Basler",
+    "specs": {
+      "type": "camera",
+      "series": "ace 2 R",
+      "resolution": "500 万像素（2448×2048 默认）",
+      "sensorSize": "1/1.8″",
+      "interface": "USB3",
+      "sensor": "Sony IMX547-AAQJ-C",
+      "frameRate": "71.8 fps",
+      "powerW": 3.1,
+      "数据来源": "Basler ace 2 a2A2448-75ucBAS 产品数据表（官方）General Specifications，https://docs.baslerweb.com/a2a2448-75ucbas"
+    },
+    "dims": {
+      "w": 36.3,
+      "h": 29,
+      "d": 29,
+      "source": "Basler ace 2 a2A2448-75ucBAS 产品数据表（官方）Mechanical Specifications：36.3×29×29 mm（不含镜头座与连接器）"
+    }
+  },
+  {
+    "id": "BASLER-a2A1920-160umBAS",
+    "model": "a2A1920-160umBAS",
+    "category": "工业相机",
+    "vendor": "Basler",
+    "specs": {
+      "type": "camera",
+      "series": "ace 2 R",
+      "resolution": "230 万像素（1920×1200 默认）",
+      "sensorSize": "1/2.3″",
+      "interface": "USB3",
+      "sensor": "Sony IMX392LLR-C",
+      "frameRate": "164 fps",
+      "powerW": 2.8,
+      "数据来源": "Basler ace 2 a2A1920-160umBAS 产品数据表（官方）General Specifications，https://docs.baslerweb.com/a2a1920-160umbas"
+    },
+    "dims": {
+      "w": 36.3,
+      "h": 29,
+      "d": 29,
+      "source": "Basler ace 2 a2A1920-160umBAS 产品数据表（官方）Mechanical Specifications：36.3×29×29 mm（不含镜头座与连接器）"
+    }
+  },
+  {
+    "id": "DAHENG-MER2-503-36U3C",
+    "model": "MER2-503-36U3C",
+    "category": "工业相机",
+    "vendor": "大恒图像",
+    "specs": {
+      "type": "camera",
+      "series": "MER2",
+      "resolution": "500 万像素（2448×2048）",
+      "sensorSize": "2/3″",
+      "interface": "USB3",
+      "sensor": "Sony IMX264",
+      "frameRate": "36 fps",
+      "powerW": 2.8,
+      "数据来源": "大恒图像 MER2 系列 USB3.0 工业相机数据手册（官方）P2–P5，https://www.daheng-imaging.com/"
+    }
+  },
+  {
+    "id": "DAHENG-MER2-1220-32U3C",
+    "model": "MER2-1220-32U3C",
+    "category": "工业相机",
+    "vendor": "大恒图像",
+    "specs": {
+      "type": "camera",
+      "series": "MER2",
+      "resolution": "1200 万像素（4024×3036）",
+      "sensorSize": "1/1.7″",
+      "interface": "USB3",
+      "sensor": "Sony IMX226",
+      "frameRate": "32 fps",
+      "powerW": 3.0,
+      "数据来源": "大恒图像 MER2 系列 USB3.0 工业相机数据手册（官方）P2–P5，https://www.daheng-imaging.com/"
+    }
+  },
+  {
+    "id": "COMPUTAR-M0824-MPW2",
+    "model": "M0824-MPW2",
+    "category": "镜头",
+    "vendor": "Computar",
+    "specs": {
+      "type": "lens",
+      "focalLength": "8 mm",
+      "aperture": "F2.4",
+      "sensorSize": "2/3″",
+      "interface": "C-mount",
+      "fov": "2/3″ @ 0.5 m：约 550×413 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "Computar MPW2 系列机器视觉镜头规格书（官方）P2–P4，https://www.computar.com/"
+    }
+  },
+  {
+    "id": "COMPUTAR-M1224-MPW2",
+    "model": "M1224-MPW2",
+    "category": "镜头",
+    "vendor": "Computar",
+    "specs": {
+      "type": "lens",
+      "focalLength": "12 mm",
+      "aperture": "F2.4",
+      "sensorSize": "2/3″",
+      "interface": "C-mount",
+      "fov": "2/3″ @ 0.5 m：约 367×275 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "Computar MPW2 系列机器视觉镜头规格书（官方）P2–P4，https://www.computar.com/"
+    }
+  },
+  {
+    "id": "COMPUTAR-M1614-MPW2",
+    "model": "M1614-MPW2",
+    "category": "镜头",
+    "vendor": "Computar",
+    "specs": {
+      "type": "lens",
+      "focalLength": "16 mm",
+      "aperture": "F1.4",
+      "sensorSize": "2/3″",
+      "interface": "C-mount",
+      "fov": "2/3″ @ 0.5 m：约 275×206 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "Computar MPW2 系列机器视觉镜头规格书（官方）P2–P4，https://www.computar.com/"
+    }
+  },
+  {
+    "id": "COMPUTAR-M2514-MPW2",
+    "model": "M2514-MPW2",
+    "category": "镜头",
+    "vendor": "Computar",
+    "specs": {
+      "type": "lens",
+      "focalLength": "25 mm",
+      "aperture": "F1.4",
+      "sensorSize": "2/3″",
+      "interface": "C-mount",
+      "fov": "2/3″ @ 0.5 m：约 176×132 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "Computar MPW2 系列机器视觉镜头规格书（官方）P2–P4，https://www.computar.com/"
+    }
+  },
+  {
+    "id": "HIK-MVL-HF0828M-6MPE",
+    "model": "MVL-HF0828M-6MPE",
+    "category": "镜头",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "lens",
+      "focalLength": "8 mm",
+      "aperture": "F2.8",
+      "sensorSize": "1/1.8″",
+      "interface": "C-mount",
+      "fov": "1/1.8″ @ 0.5 m：约 450×338 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "海康机器人 MVL-HF 系列定焦镜头数据手册（官方）P2–P5，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MVL-HF1228M-6MPE",
+    "model": "MVL-HF1228M-6MPE",
+    "category": "镜头",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "lens",
+      "focalLength": "12 mm",
+      "aperture": "F2.8",
+      "sensorSize": "1/1.8″",
+      "interface": "C-mount",
+      "fov": "1/1.8″ @ 0.5 m：约 300×225 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "海康机器人 MVL-HF 系列定焦镜头数据手册（官方）P2–P5，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MVL-HF1628M-6MPE",
+    "model": "MVL-HF1628M-6MPE",
+    "category": "镜头",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "lens",
+      "focalLength": "16 mm",
+      "aperture": "F2.8",
+      "sensorSize": "1/1.8″",
+      "interface": "C-mount",
+      "fov": "1/1.8″ @ 0.5 m：约 225×169 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "海康机器人 MVL-HF 系列定焦镜头数据手册（官方）P2–P5，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MVL-HF2528M-6MPE",
+    "model": "MVL-HF2528M-6MPE",
+    "category": "镜头",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "lens",
+      "focalLength": "25 mm",
+      "aperture": "F2.8",
+      "sensorSize": "1/1.8″",
+      "interface": "C-mount",
+      "fov": "1/1.8″ @ 0.5 m：约 144×108 mm",
+      "workingDistance": "100 mm–∞",
+      "数据来源": "海康机器人 MVL-HF 系列定焦镜头数据手册（官方）P2–P5，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "COMPUTAR-TEC-M55",
+    "model": "TEC-M55",
+    "category": "镜头",
+    "vendor": "Computar",
+    "specs": {
+      "type": "lens",
+      "focalLength": "55 mm",
+      "aperture": "F2.8",
+      "sensorSize": "2/3″",
+      "interface": "C-mount",
+      "fov": "0.5×：2/3″ 约 17.6×13.2 mm",
+      "workingDistance": "约 140 mm",
+      "数据来源": "Computar TEC-M55 远心镜头规格书（官方）P1–P2，https://www.computar.com/",
+      "magnification": "0.5×"
+    }
+  },
+  {
+    "id": "HIK-MVL-LR12030W",
+    "model": "MVL-LR12030W",
+    "category": "光源",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "light",
+      "shape": "环形",
+      "color": "白光",
+      "size": "外径 120 mm / 发光面 30 mm",
+      "voltage": "24 V DC",
+      "powerW": 8.4,
+      "interface": "M12 4-pin",
+      "数据来源": "海康机器人 MVL-LR/LB/LF 系列工业光源数据手册（官方）P2–P8，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "OPT-OPT-RI12030-W",
+    "model": "OPT-RI12030-W",
+    "category": "光源",
+    "vendor": "奥普特",
+    "specs": {
+      "type": "light",
+      "shape": "环形",
+      "color": "白光",
+      "size": "外径 120 mm / 发光面 30 mm",
+      "voltage": "24 V DC",
+      "powerW": 7.2,
+      "interface": "M12 4-pin",
+      "数据来源": "奥普特 OPT-RI/LI/FL 系列光源选型手册（官方）P3–P9，https://www.optmv.com/"
+    }
+  },
+  {
+    "id": "OPT-OPT-LI12030-W",
+    "model": "OPT-LI12030-W",
+    "category": "光源",
+    "vendor": "奥普特",
+    "specs": {
+      "type": "light",
+      "shape": "条形",
+      "color": "白光",
+      "size": "120×30 mm",
+      "voltage": "24 V DC",
+      "powerW": 9.6,
+      "interface": "M12 4-pin",
+      "数据来源": "奥普特 OPT-RI/LI/FL 系列光源选型手册（官方）P3–P9，https://www.optmv.com/"
+    }
+  },
+  {
+    "id": "HIK-MVL-LB12030W",
+    "model": "MVL-LB12030W",
+    "category": "光源",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "light",
+      "shape": "条形",
+      "color": "白光",
+      "size": "120×30 mm",
+      "voltage": "24 V DC",
+      "powerW": 8.4,
+      "interface": "M12 4-pin",
+      "数据来源": "海康机器人 MVL-LR/LB/LF 系列工业光源数据手册（官方）P2–P8，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "OPT-OPT-FL120120-W",
+    "model": "OPT-FL120120-W",
+    "category": "光源",
+    "vendor": "奥普特",
+    "specs": {
+      "type": "light",
+      "shape": "背光",
+      "color": "白光",
+      "size": "120×120 mm",
+      "voltage": "24 V DC",
+      "powerW": 12.0,
+      "interface": "M12 4-pin",
+      "数据来源": "奥普特 OPT-RI/LI/FL 系列光源选型手册（官方）P3–P9，https://www.optmv.com/"
+    }
+  },
+  {
+    "id": "HIK-MVL-DPA2024-4",
+    "model": "MVL-DPA2024-4",
+    "category": "光源控制器",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "controller",
+      "controllerType": "光源控制器",
+      "channels": 4,
+      "output": "24 V / 2 A 每通道",
+      "interface": "RS-232 / 以太网",
+      "powerW": 96,
+      "数据来源": "海康机器人 MVL-DPA 系列光源控制器数据手册（官方）P2–P4，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "OPT-OPT-DPA2024E-4",
+    "model": "OPT-DPA2024E-4",
+    "category": "光源控制器",
+    "vendor": "奥普特",
+    "specs": {
+      "type": "controller",
+      "controllerType": "光源控制器",
+      "channels": 4,
+      "output": "24 V / 2 A 每通道",
+      "interface": "RS-232 / 以太网",
+      "powerW": 96,
+      "数据来源": "奥普特 OPT-DPA 系列数字光源控制器说明书（官方）P2–P6，https://www.optmv.com/"
+    }
+  },
+  {
+    "id": "HIK-MV-ID3013M-12M-08S-W",
+    "model": "MV-ID3013M-12M-08S-W",
+    "category": "读码器",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "reader",
+      "series": "MV-ID3000",
+      "resolution": "130 万像素（1280×1024）",
+      "sensorSize": "1/2.7″",
+      "interface": "GigE",
+      "readRate": "60 fps",
+      "powerW": 6,
+      "数据来源": "海康机器人 MV-ID3000 系列固定式读码器数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "HIK-MV-ID5060M-08S-W",
+    "model": "MV-ID5060M-08S-W",
+    "category": "读码器",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "reader",
+      "series": "MV-ID5000",
+      "resolution": "500 万像素（2592×1944）",
+      "sensorSize": "1/2.5″",
+      "interface": "GigE",
+      "readRate": "45 fps",
+      "powerW": 8,
+      "数据来源": "海康机器人 MV-ID5000 系列固定式读码器数据手册（官方）P2–P6，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "KEYENCE-SR-1000",
+    "model": "SR-1000",
+    "category": "读码器",
+    "vendor": "基恩士",
+    "specs": {
+      "type": "reader",
+      "series": "SR-1000",
+      "resolution": "约 130 万像素",
+      "sensorSize": "1/3″",
+      "interface": "Ethernet / RS-232C",
+      "readRate": "最高 60 次/秒",
+      "powerW": 4.5,
+      "数据来源": "基恩士 SR-1000 系列固定式读码器产品目录（官方）P2–P5，https://www.keyence.com.cn/products/barcode/"
+    }
+  },
+  {
+    "id": "HIK-MV-VC3000",
+    "model": "MV-VC3000",
+    "category": "视觉控制器",
+    "vendor": "海康机器人",
+    "specs": {
+      "type": "controller",
+      "controllerType": "视觉控制器",
+      "series": "VisionMaster / VC3000",
+      "resolution": "支持 500 万 / 1200 万像素相机",
+      "sensorSize": "不适用",
+      "interface": "GigE ×4 / USB3 ×4",
+      "powerW": 120,
+      "数据来源": "海康机器人 VisionMaster 视觉控制器硬件手册（官方）P2–P5，https://www.hikrobotics.com/en/machinevision/product"
+    }
+  },
+  {
+    "id": "KEYENCE-CV-X100",
+    "model": "CV-X100",
+    "category": "视觉控制器",
+    "vendor": "基恩士",
+    "specs": {
+      "type": "controller",
+      "controllerType": "视觉控制器",
+      "series": "CV-X",
+      "resolution": "支持最高 500 万像素相机",
+      "sensorSize": "不适用",
+      "interface": "Ethernet / USB",
+      "powerW": 90,
+      "数据来源": "基恩士 CV-X 系列图像处理系统产品目录（官方）P4–P8，https://www.keyence.com.cn/products/vision/"
+    }
+  }
+]

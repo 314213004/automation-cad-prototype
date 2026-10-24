@@ -6,11 +6,13 @@
 
 ```
 packs/builtin/
-├── iec-cn/        # 379 条，电气元件
+├── iec-cn/        # 377 条，电气元件
 ├── smc-cn/        # 8 条，SMC 常用气动
 ├── servo-cn/      # 25 条，汇川/台达/雷赛伺服与步进
 ├── sensor-cn/     # 32 条，接近/光电/磁性/压力/光纤
 ├── pneumatic-cn/  # 44 条，SMC 气缸/气爪/阀/气源/接头
+├── vision-cn/     # 32 条，工业相机/镜头/光源/读码器/视觉控制器
+├── drive-cn/      # 33 条，丝杠/导轨/减速机/联轴器/带传动/齿条/模组
 └── pricebook-cn/  # pricebook.json，价格簿（无 parts.json）
 ```
 
@@ -46,7 +48,7 @@ packs/builtin/
 }
 ```
 
-当前 6 个内置包（manifest 6 个）：`iec-cn` 379、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`pricebook-cn` 0（价格簿）。元器件包合计 488 条 / 487 个唯一 id；`D-M9B` 在 `iec-cn` 与 `smc-cn` 历史数据重复，搜索结果按内置优先只返回一次。
+当前 8 个内置包（manifest 8 个）：`iec-cn` 377、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`vision-cn` 32、`drive-cn` 33、`pricebook-cn` 0（价格簿）。元器件包合计 551 条 / 551 个唯一 id。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`，`SR-1000` 保留在 `vision-cn`。
 
 ## 坑点
 

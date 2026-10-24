@@ -1,0 +1,500 @@
+[
+  {
+    "id": "HIWIN-R16-5-C7",
+    "model": "R16-5-C7",
+    "category": "滚珠丝杠",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "16 mm",
+      "lead": 5,
+      "accuracy": "C7",
+      "nutType": "单螺母",
+      "loadRating": "动载 7.4 kN / 静载 14.8 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "HIWIN 滚珠丝杠产品技术手册（官方）P10–P38，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-R20-10-C7",
+    "model": "R20-10-C7",
+    "category": "滚珠丝杠",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "20 mm",
+      "lead": 10,
+      "accuracy": "C7",
+      "nutType": "单螺母",
+      "loadRating": "动载 13.6 kN / 静载 28.1 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "HIWIN 滚珠丝杠产品技术手册（官方）P10–P38，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-R25-16-C7",
+    "model": "R25-16-C7",
+    "category": "滚珠丝杠",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "25 mm",
+      "lead": 16,
+      "accuracy": "C7",
+      "nutType": "单螺母",
+      "loadRating": "动载 18.6 kN / 静载 41.2 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "HIWIN 滚珠丝杠产品技术手册（官方）P10–P38，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "TBI-SFU1605-4",
+    "model": "SFU1605-4",
+    "category": "滚珠丝杠",
+    "vendor": "TBI MOTION",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "16 mm",
+      "lead": 5,
+      "accuracy": "C7",
+      "nutType": "4 圈单螺母",
+      "loadRating": "动载 7.6 kN / 静载 15.2 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "TBI MOTION 滚珠丝杠 SFU 系列样本（官方）P5–P20，https://www.tbimotion.com/"
+    }
+  },
+  {
+    "id": "TBI-SFU2005-4",
+    "model": "SFU2005-4",
+    "category": "滚珠丝杠",
+    "vendor": "TBI MOTION",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "20 mm",
+      "lead": 5,
+      "accuracy": "C7",
+      "nutType": "4 圈单螺母",
+      "loadRating": "动载 10.5 kN / 静载 22.5 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "TBI MOTION 滚珠丝杠 SFU 系列样本（官方）P5–P20，https://www.tbimotion.com/"
+    }
+  },
+  {
+    "id": "TBI-SFU2510-4",
+    "model": "SFU2510-4",
+    "category": "滚珠丝杠",
+    "vendor": "TBI MOTION",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "25 mm",
+      "lead": 10,
+      "accuracy": "C7",
+      "nutType": "4 圈单螺母",
+      "loadRating": "动载 17.5 kN / 静载 36.5 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "TBI MOTION 滚珠丝杠 SFU 系列样本（官方）P5–P20，https://www.tbimotion.com/"
+    }
+  },
+  {
+    "id": "TBI-SFU2505-4",
+    "model": "SFU2505-4",
+    "category": "滚珠丝杠",
+    "vendor": "TBI MOTION",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "25 mm",
+      "lead": 5,
+      "accuracy": "C7",
+      "nutType": "4 圈单螺母",
+      "loadRating": "动载 15.8 kN / 静载 33.4 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "TBI MOTION 滚珠丝杠 SFU 系列样本（官方）P5–P20，https://www.tbimotion.com/"
+    }
+  },
+  {
+    "id": "TBI-SFU3205-4",
+    "model": "SFU3205-4",
+    "category": "滚珠丝杠",
+    "vendor": "TBI MOTION",
+    "specs": {
+      "type": "ballscrew",
+      "nominalDiameter": "32 mm",
+      "lead": 5,
+      "accuracy": "C7",
+      "nutType": "4 圈单螺母",
+      "loadRating": "动载 24.6 kN / 静载 54.2 kN",
+      "repeatability": "±0.05 mm/300 mm（C7）",
+      "length": "按行程定制（样本 ≤3000 mm）",
+      "数据来源": "TBI MOTION 滚珠丝杠 SFU 系列样本（官方）P5–P20，https://www.tbimotion.com/"
+    }
+  },
+  {
+    "id": "HIWIN-HGH15CA",
+    "model": "HGH15CA",
+    "category": "直线导轨",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "rail",
+      "railWidth": "15 mm",
+      "blockType": "CA（四列圆弧接触）",
+      "loadRating": "动载 11.8 kN / 静载 23.5 kN",
+      "repeatability": "±0.005 mm",
+      "length": "1000 mm（样本 ≤4000 mm 定制）",
+      "数据来源": "HIWIN HG 系列直线导轨技术手册（官方）P8–P40，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-HGH20CA",
+    "model": "HGH20CA",
+    "category": "直线导轨",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "rail",
+      "railWidth": "20 mm",
+      "blockType": "CA（四列圆弧接触）",
+      "loadRating": "动载 17.8 kN / 静载 34.2 kN",
+      "repeatability": "±0.005 mm",
+      "length": "1000 mm（样本 ≤4000 mm 定制）",
+      "数据来源": "HIWIN HG 系列直线导轨技术手册（官方）P8–P40，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-HGH25CA",
+    "model": "HGH25CA",
+    "category": "直线导轨",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "rail",
+      "railWidth": "25 mm",
+      "blockType": "CA（四列圆弧接触）",
+      "loadRating": "动载 24.8 kN / 静载 50.5 kN",
+      "repeatability": "±0.005 mm",
+      "length": "1000 mm（样本 ≤4000 mm 定制）",
+      "数据来源": "HIWIN HG 系列直线导轨技术手册（官方）P8–P40，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-HGH30CA",
+    "model": "HGH30CA",
+    "category": "直线导轨",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "rail",
+      "railWidth": "30 mm",
+      "blockType": "CA（四列圆弧接触）",
+      "loadRating": "动载 37.9 kN / 静载 83.4 kN",
+      "repeatability": "±0.005 mm",
+      "length": "1000 mm（样本 ≤4000 mm 定制）",
+      "数据来源": "HIWIN HG 系列直线导轨技术手册（官方）P8–P40，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "NEUGART-PLE60-5-S2-P1",
+    "model": "PLE60-5-S2-P1",
+    "category": "减速机",
+    "vendor": "Neugart",
+    "specs": {
+      "type": "reducer",
+      "ratio": 5,
+      "torqueNm": 18,
+      "backlash": "≤8 arcmin（P1）",
+      "repeatability": "≤2 arcmin",
+      "数据来源": "Neugart PLE 系列行星减速机产品目录（官方）P4–P20，https://www.neugart.com/"
+    }
+  },
+  {
+    "id": "NEUGART-PLE80-10-S2-P1",
+    "model": "PLE80-10-S2-P1",
+    "category": "减速机",
+    "vendor": "Neugart",
+    "specs": {
+      "type": "reducer",
+      "ratio": 10,
+      "torqueNm": 40,
+      "backlash": "≤8 arcmin（P1）",
+      "repeatability": "≤2 arcmin",
+      "数据来源": "Neugart PLE 系列行星减速机产品目录（官方）P4–P20，https://www.neugart.com/"
+    }
+  },
+  {
+    "id": "NEUGART-PLE120-20-S2-P1",
+    "model": "PLE120-20-S2-P1",
+    "category": "减速机",
+    "vendor": "Neugart",
+    "specs": {
+      "type": "reducer",
+      "ratio": 20,
+      "torqueNm": 120,
+      "backlash": "≤8 arcmin（P1）",
+      "repeatability": "≤2 arcmin",
+      "数据来源": "Neugart PLE 系列行星减速机产品目录（官方）P4–P20，https://www.neugart.com/"
+    }
+  },
+  {
+    "id": "APEX-AB060-5-S2-P1",
+    "model": "AB060-5-S2-P1",
+    "category": "减速机",
+    "vendor": "APEX Dynamics（台湾精锐）",
+    "specs": {
+      "type": "reducer",
+      "ratio": 5,
+      "torqueNm": 15,
+      "backlash": "≤3 arcmin（P1）",
+      "repeatability": "≤1 arcmin",
+      "数据来源": "APEX Dynamics AB 系列行星减速机样本（官方）P6–P22，https://www.apexdyna.com/"
+    }
+  },
+  {
+    "id": "APEX-AB090-10-S2-P1",
+    "model": "AB090-10-S2-P1",
+    "category": "减速机",
+    "vendor": "APEX Dynamics（台湾精锐）",
+    "specs": {
+      "type": "reducer",
+      "ratio": 10,
+      "torqueNm": 38,
+      "backlash": "≤3 arcmin（P1）",
+      "repeatability": "≤1 arcmin",
+      "数据来源": "APEX Dynamics AB 系列行星减速机样本（官方）P6–P22，https://www.apexdyna.com/"
+    }
+  },
+  {
+    "id": "APEX-AB090-20-S2-P1",
+    "model": "AB090-20-S2-P1",
+    "category": "减速机",
+    "vendor": "APEX Dynamics（台湾精锐）",
+    "specs": {
+      "type": "reducer",
+      "ratio": 20,
+      "torqueNm": 38,
+      "backlash": "≤3 arcmin（P1）",
+      "repeatability": "≤1 arcmin",
+      "数据来源": "APEX Dynamics AB 系列行星减速机样本（官方）P6–P22，https://www.apexdyna.com/"
+    }
+  },
+  {
+    "id": "LEADER-LCS-17-50",
+    "model": "LCS-17-50",
+    "category": "减速机",
+    "vendor": "绿的谐波",
+    "specs": {
+      "type": "reducer",
+      "ratio": 50,
+      "torqueNm": 27,
+      "backlash": "≤20 arcsec",
+      "repeatability": "≤10 arcsec",
+      "数据来源": "绿的谐波 LCS 系列谐波减速器样本（官方）P5–P18，https://www.leadergroup.com/"
+    }
+  },
+  {
+    "id": "LEADER-LCS-20-100",
+    "model": "LCS-20-100",
+    "category": "减速机",
+    "vendor": "绿的谐波",
+    "specs": {
+      "type": "reducer",
+      "ratio": 100,
+      "torqueNm": 40,
+      "backlash": "≤20 arcsec",
+      "repeatability": "≤10 arcsec",
+      "数据来源": "绿的谐波 LCS 系列谐波减速器样本（官方）P5–P18，https://www.leadergroup.com/"
+    }
+  },
+  {
+    "id": "KTR-ROTEX-19-98SHA-GS",
+    "model": "ROTEX 19 98ShA-GS",
+    "category": "联轴器",
+    "vendor": "KTR",
+    "specs": {
+      "type": "coupling",
+      "kind": "梅花（弹性体）",
+      "torqueNm": 17,
+      "length": "30 mm",
+      "数据来源": "KTR ROTEX 系列梅花联轴器样本（官方）P8–P30，https://www.ktr.com/"
+    }
+  },
+  {
+    "id": "KTR-ROTEX-24-98SHA-GS",
+    "model": "ROTEX 24 98ShA-GS",
+    "category": "联轴器",
+    "vendor": "KTR",
+    "specs": {
+      "type": "coupling",
+      "kind": "梅花（弹性体）",
+      "torqueNm": 35,
+      "length": "38 mm",
+      "数据来源": "KTR ROTEX 系列梅花联轴器样本（官方）P8–P30，https://www.ktr.com/"
+    }
+  },
+  {
+    "id": "RW-BK2-15",
+    "model": "BK2-15",
+    "category": "联轴器",
+    "vendor": "R+W",
+    "specs": {
+      "type": "coupling",
+      "kind": "膜片",
+      "torqueNm": 15,
+      "length": "26 mm",
+      "数据来源": "R+W BK2 系列膜片联轴器样本（官方）P4–P16，https://www.rw-couplings.com/"
+    }
+  },
+  {
+    "id": "GATES-200-2GT-6",
+    "model": "200-2GT-6",
+    "category": "同步带",
+    "vendor": "Gates",
+    "specs": {
+      "type": "belt",
+      "profile": "GT2",
+      "pitch": "2 mm",
+      "length": 200,
+      "teeth": 100,
+      "width": "6 mm",
+      "数据来源": "Gates PowerGrip GT2 同步带产品目录（官方）P3–P12，https://www.gates.com/"
+    }
+  },
+  {
+    "id": "GATES-400-2GT-6",
+    "model": "400-2GT-6",
+    "category": "同步带",
+    "vendor": "Gates",
+    "specs": {
+      "type": "belt",
+      "profile": "GT2",
+      "pitch": "2 mm",
+      "length": 400,
+      "teeth": 200,
+      "width": "6 mm",
+      "数据来源": "Gates PowerGrip GT2 同步带产品目录（官方）P3–P12，https://www.gates.com/"
+    }
+  },
+  {
+    "id": "GATES-450-5M-15",
+    "model": "450-5M-15",
+    "category": "同步带",
+    "vendor": "Gates",
+    "specs": {
+      "type": "belt",
+      "profile": "HTD 5M",
+      "pitch": "5 mm",
+      "length": 450,
+      "teeth": 90,
+      "width": "15 mm",
+      "数据来源": "Gates PowerGrip HTD 5M 同步带产品目录（官方）P3–P12，https://www.gates.com/"
+    }
+  },
+  {
+    "id": "MISUMI-20-2GT-6",
+    "model": "20-2GT-6",
+    "category": "同步带轮",
+    "vendor": "米思米",
+    "specs": {
+      "type": "belt",
+      "partKind": "pulley",
+      "profile": "GT2",
+      "pitch": "2 mm",
+      "teeth": 20,
+      "width": "6 mm",
+      "bore": "按订货孔",
+      "数据来源": "米思米 2GT 同步带轮选型样本（官方）P2–P18，https://www.misumi.com.cn/"
+    }
+  },
+  {
+    "id": "MISUMI-40-2GT-6",
+    "model": "40-2GT-6",
+    "category": "同步带轮",
+    "vendor": "米思米",
+    "specs": {
+      "type": "belt",
+      "partKind": "pulley",
+      "profile": "GT2",
+      "pitch": "2 mm",
+      "teeth": 40,
+      "width": "6 mm",
+      "bore": "按订货孔",
+      "数据来源": "米思米 2GT 同步带轮选型样本（官方）P2–P18，https://www.misumi.com.cn/"
+    }
+  },
+  {
+    "id": "MISUMI-18-5M-15",
+    "model": "18-5M-15",
+    "category": "同步带轮",
+    "vendor": "米思米",
+    "specs": {
+      "type": "belt",
+      "partKind": "pulley",
+      "profile": "HTD 5M",
+      "pitch": "5 mm",
+      "teeth": 18,
+      "width": "15 mm",
+      "bore": "按订货孔",
+      "数据来源": "米思米 HTD 5M 同步带轮选型样本（官方）P2–P18，https://www.misumi.com.cn/"
+    }
+  },
+  {
+    "id": "KHK-SR1-0505",
+    "model": "SR1-0505",
+    "category": "齿轮齿条",
+    "vendor": "KHK",
+    "specs": {
+      "type": "rack",
+      "module": "1",
+      "length": 500,
+      "teeth": 159,
+      "loadRating": "许用传递力 1.2 kN（样本值）",
+      "数据来源": "KHK SR 系列齿条产品样本（官方）P2–P10，https://www.khkgears.co.jp/"
+    }
+  },
+  {
+    "id": "KHK-SR1.5-1005",
+    "model": "SR1.5-1005",
+    "category": "齿轮齿条",
+    "vendor": "KHK",
+    "specs": {
+      "type": "rack",
+      "module": "1.5",
+      "length": 1000,
+      "teeth": 212,
+      "loadRating": "许用传递力 2.7 kN（样本值）",
+      "数据来源": "KHK SR 系列齿条产品样本（官方）P2–P10，https://www.khkgears.co.jp/"
+    }
+  },
+  {
+    "id": "HIWIN-KK60-10",
+    "model": "KK60-10",
+    "category": "直线模组",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "module",
+      "stroke": 100,
+      "lead": 10,
+      "loadRating": "水平负载 20 kg",
+      "repeatability": "±0.01 mm",
+      "length": "400 mm（行程 100 mm）",
+      "数据来源": "HIWIN KK 系列线性模组技术手册（官方）P5–P28，https://www.hiwin.com/"
+    }
+  },
+  {
+    "id": "HIWIN-KK86-10",
+    "model": "KK86-10",
+    "category": "直线模组",
+    "vendor": "HIWIN",
+    "specs": {
+      "type": "module",
+      "stroke": 200,
+      "lead": 10,
+      "loadRating": "水平负载 40 kg",
+      "repeatability": "±0.01 mm",
+      "length": "600 mm（行程 200 mm）",
+      "数据来源": "HIWIN KK 系列线性模组技术手册（官方）P5–P28，https://www.hiwin.com/"
+    }
+  }
+]

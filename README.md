@@ -5,7 +5,7 @@
 - 当前版本：**v0.3.0**（源码与文档就绪；本次未发布安装包，构建需老王通知后手动触发）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**1529 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
+- 质量基线：**1604 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -88,13 +88,13 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 *数据包：内置包只读展示，支持 ZIP 导入、启停与型号 / 厂商 / 类别检索；启停即时影响标准件搜索结果，「插入」写入渲染层覆盖层而不修改原型代码。*
 
-*内置 6 个包：`iec-cn` 379 条、`smc-cn` 8 条、`servo-cn` 25 条、`sensor-cn` 32 条、`pneumatic-cn` 44 条、`pricebook-cn` 价格簿。启动只读 manifest 索引；`listParts` 先按 `manifest.categories` / 包名预过滤，命中包才 `loadPack` 并缓存，`unloadPack` 可释放；跨包同 id 去重且内置优先，`getPartById` 懒建全局索引。`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=…`，`npm run diagnose` 输出 `packMetrics`。*
+*内置 8 个包：`iec-cn` 377 条、`smc-cn` 8 条、`servo-cn` 25 条、`sensor-cn` 32 条、`pneumatic-cn` 44 条、`vision-cn` 32 条、`drive-cn` 33 条、`pricebook-cn` 价格簿；元器件合计 551 条 / 551 个唯一型号。启动只读 manifest 索引；`listParts` 先按 `manifest.categories` / 包名预过滤，命中包才 `loadPack` 并缓存，`unloadPack` 可释放；跨包同 id 去重且内置优先，`getPartById` 懒建全局索引。`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=…`，`npm run diagnose` 输出 `packMetrics`。*
 
-### 电气元件库：379 型号 / 26 分类 / 244 个真实尺寸
+### 电气元件库：377 型号 / 26 分类 / 265 个可核实尺寸
 
 ![电气元件库：按需加载与放入图纸](docs/desktop/screenshots/08-elec-library.png)
 
-*电气元件库：iec-cn 数据包按需加载，26 个分类共 379 个型号，其中 219 个带原理图符号、244 个录入了可核实的外形尺寸（`dims{w,h,d}`）与导轨 / 模数信息；其中 16 条为同系列同壳架推定并带 `dims.estimated` 标记。卡片标注符号位号，点「放入图纸」即插入原理图，点「放入底板」即进入布置画布。*
+*电气元件库：iec-cn 数据包按需加载，26 个分类共 377 个型号，其中 219 个带原理图符号、265 个录入了可核实的外形尺寸（`dims{w,h,d}`）与导轨 / 模数信息；其中 16 条为同系列同壳架推定并带 `dims.estimated` 标记。卡片标注符号位号，点「放入图纸」即插入原理图，点「放入底板」即进入布置画布。*
 
 ### 底板布置画布：真实毫米与重叠标红
 
@@ -146,7 +146,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 电气原理图 | A3 横向白纸、图框与标题栏、主回路 / 控制回路、符号拖放与交叉引用 | ✅ 原型 |
 | IO 规划 | 点位表、建议 / 未分配 / 冲突编码、机械派生链追溯 | ✅ 原型 |
 | 柜体布置（原型） | 柜门与侧视图、导轨吸附、温升 / 载流 / 空间余量重算 | ✅ 原型 |
-| 电气元件库 | iec-cn 数据包：379 型号 / 26 分类 / 219 符号 / 244 尺寸（16 条推定），插件式加载 | ✅ 桌面 |
+| 电气元件库 | iec-cn 数据包：377 型号 / 26 分类 / 219 符号 / 265 尺寸（16 条推定），插件式加载 | ✅ 桌面 |
 | **底板布置画布** | 毫米坐标 SVG、底板尺寸可设、1mm 吸附、两条 35mm 导轨、重叠标红、利用率统计、JSON 导出与刷新恢复 | ✅ 桌面 |
 | **电气合规校验** | 线号（缺号 / 格式 / 同网重复 / 跨网重号 / 相线电位不符 / 跳号）、功率统计（kW / kVA / 分相电流 / 不平衡度 / 主断路器与进线截面建议 / 24V 余量）、导线截面 vs 载流量；A3 PDF 报告 | ✅ 桌面 |
 | **参数化建模（P9-5）** | build123d sidecar + 右侧「参数化」抽屉：多实体装配（独立特征树 + X/Y/Z/RZ + partId，旧单件文档自动包装）、特征树增删/排序/抑制/改名、按类型参数表单（box/holes/slot/fillet/cylinder）、300 ms 防抖自动重建、旧模型半透明对比、特征包围盒高亮、STEP/STL 导出；BOM 按相同 partId / 未映射名称合并，导出 UTF-8 BOM CSV 并一键送成本（未映射走 `NO_PART_ID`，不猜物料号） | ✅ 生命周期 + IPC + 装配/BOM 联动 |
@@ -161,7 +161,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 大装配实测 | 424 KB 装配体 → 5,040 三角面，解析 559 ms | ✅ |
 | 运动学标注 | 任意装配体：动件 → 轴 / 行程 / 方向 / 缩回位 / 点位；校验 + 姿态解算 + 滑块预览 | ✅ |
 | 无 WebGL 降级 | 渲染不可用时退化为解析统计面板，不白屏；标注仍可编辑 | ✅ |
-| 数据包 | 6 个内置 manifest + 用户 ZIP 导入、manifest 校验、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重与全局索引 | ✅ |
+| 数据包 | 8 个内置 manifest + 用户 ZIP 导入、manifest 校验、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重与全局索引 | ✅ |
 
 ### PLC / 联调 / 工厂
 
@@ -285,11 +285,11 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（1529 个）
+│   ├── test/                                 # node:test 单测与集成测试（1604 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
-├── packs/builtin/                            # 5 个元器件包（iec-cn 379 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44）+ pricebook-cn 价格簿
+├── packs/builtin/                            # 7 个元器件包（iec-cn 377 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44 / vision-cn 32 / drive-cn 33）+ pricebook-cn 价格簿
 ├── docs/
 │   ├── desktop/                              # 需求、架构、看板、二期方案、工厂对接
 │   ├── desktop/screenshots/                  # 桌面版真实截图（18 张）
@@ -313,7 +313,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 1582 个单测（node:test）
+npm test          # 1604 个单测（node:test）
 npm run diagnose  # 输出环境/WebGL/userData/数据包/KB/审计/最近 20 条错误（不含密钥）
 npm run perf:baseline # 200/1000/3000 件场景构建、tick 与堆峰值基线
 npm run agent:report # 生成 Agent 汇报报告（md / json / svg）
@@ -336,7 +336,7 @@ smoke 覆盖并断言：
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
 - 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`：三工位锁螺丝机示例、选覆盖 3 工位的 linear-4 并给出缺口 warning、模板补全；`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` 与 `SMOKE_MACHINE_COST_OK total=10938 missing=8`：统一功率模型给出 kW/A/断路器，成本按材料/电气/人工分项并统计缺价）；节拍模型（`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`：六工位锁螺丝机按双轨 (3.18 + 0.60) / 2 秒/件估算 31.75 件/分钟）；工艺模板与追问（`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`：5 类模板、多缺项合并为一次追问）；整机形态库（`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`：11 种形态字段合法、十二工位转盘检测按覆盖优先选中 dial-12，龙门多头/混合线/单元矩阵几何可生成）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`：写方案与 active 指针、3D 切到 3 工位、7 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；参数化整机几何（`SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`：三工位锁螺丝机按 form.geometry 生成直线机架 56 个 mm 级零件与 6 条运动轴，落盘 geometry.json / STL / glTF / sidecar 实体列表，3D 场景零件数一致，撤销后删除）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=21`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
 
-输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`、`SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…`、`SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=…`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44`、`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=…`，最后 `SMOKE_OK`。
+输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=334 query=D2 hits=1`、`SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…`、`SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=…`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33`、`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=…`，最后 `SMOKE_OK`。
 
 诊断与崩溃现场：
 

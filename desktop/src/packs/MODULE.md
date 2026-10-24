@@ -62,7 +62,7 @@ interface PackInfo {
 
 ## 进度
 
-- ✅ 内置 5 个元器件包 + 价格簿：`iec-cn` 379、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44；启动只读 manifest，按需加载/卸载与全局索引已实现
+- ✅ 内置 7 个元器件包 + 价格簿：`iec-cn` 377、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`vision-cn` 32、`drive-cn` 33；启动只读 manifest，按需加载/卸载与全局索引已实现
 - ✅ 懒加载单测 32 条：manifest 校验、read spy、缓存命中、unload 重载、分类/包名过滤、跨包去重、全局索引、体积/字段/性能
 - ✅ 扫描 / 校验 / ZIP 导入 / 启停 / 删除 / 搜索
 - ✅ 面板：列表、开关、导入、删除、搜索并插入（写入 localStorage 覆盖层）

@@ -2,6 +2,22 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 上一轮：元器件库扩展与模块化按需加载（2026-10-24）
+
+- 状态：✅ 完成；新增 `servo-cn`（25 条）、`sensor-cn`（32 条）、`pneumatic-cn`（44 条），内置元器件包增至 5 个 + `pricebook-cn` 价格簿（manifest 6 个）。未 push、未提交。
+- 数据口径：型号/参数取自厂商公开样本/数据表；每条 `specs.数据来源`、有官方依据的 `dims.source` 记录出处。汇川 MS1H1/MS1H3 尺寸取自 SV660P 硬件手册尺寸表；雷赛 57CM 尺寸/转矩取自官方产品页；查不到官方尺寸的条目不写 `dims`。
+- 懒加载：`scan()` 只读 manifest；`listParts` 按 `manifest.categories` / 包名/关键词预过滤，命中包才 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局 partId 索引；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs/packCount/indexedParts`。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1582/1582**（+32）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=5.267 coldMs=5.9 parts=404`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44`；`npm run eval:agent` 1.00；`npm run diagnose` 含 `packMetrics`（loadedPacks=2 / partsLoaded=404 / packLoadMs≈4.6 / searchMs≈6.2）。
+- 性能/体积：冷启动到可搜索 ≈5.3 ms（目标 ≤120 ms）；6 包全量命中搜索 ≈3.2–4.8 ms（目标 ≤25 ms）；最大单包 `iec-cn/parts.json` 160 KB（目标 ≤400 KB）。
+
+## 价格数据回填与成本覆盖率（2026-10-24，本轮）
+
+- 状态：✅ 完成；价格簿升级到 `schemaVersion: 2`，保留 v1 兼容；真实条目从 0 条提升到 **64 条**（另有 4 条 `EXAMPLE-*`，不参与统计/计价）。未 push、未提交。
+- 来源：西域 EHSY 公开商品页 63 条 + 供应商网 1 条；每条均记录可点击 `source`、`sourceType=distributor`、`checkedAt=2026-10-24`、`model`、`category`。西域条目标注含税（页面同时列 13% 未税价）；PNOZ s3 页面未标注税额，`taxIncluded=null` 并在 `note` 说明。
+- 案例覆盖：六工位 BOM 12 行中已计价 **9 行（75%）**，缺价从 9 行降到 **3 行**：`MS1H1-75B30CB`、`F3SG-4SRA0640-14`、`CP1E-N40DR-A`。`machine-case.json` 更新为材料 6654 / 电气 12283.91 / 人工 15552 / 合计 34489.91。
+- 成本模型：新增 `priceMeta { coveragePct, pricedCount, totalCount, missing, stale, unknownSource }`；`checkedAt` 严格超过 180 天才标过期，v1 缺 `sourceType/checkedAt` 的条目照常计价但标「来源不明」。方案卡显示「已计价 N/M 行（覆盖率 X%）、缺价 K 项、过期 L 项」。
+- 验收：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1550/1550**、`npm run smoke` 输出 `SMOKE_PRICEBOOK_OK items=64 caseCoverage=9/12`、`demo-doc.test.mjs` 4/4；15/16 号机型截图已重拍，方案卡显示 9/12 与 ¥34,489.91。新增 v1/v2 兼容、URL/来源类型/日期/税额校验、示例隔离、180 天边界、tiers、来源不明、覆盖率与案例 9/12 等断言；详见 [`PRICING.md`](PRICING.md)。
+
 ## 修复形态选型「越界预览」（2026-10-24，上一轮）
 
 - 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1529/1529**（较上轮 +20）、`npm run smoke` 更新为 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`；未 push、未打包。

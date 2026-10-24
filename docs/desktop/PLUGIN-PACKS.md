@@ -78,18 +78,20 @@
 
 尺寸只允许两种来源：厂商样本/PDS 的明确数值，或**同系列同壳架**的官方尺寸推定。推定必须在 `dims.source` 写参照型号并设 `dims.estimated: true`；不得跨厂商借尺寸。
 
-## 2. 内置包清单（6 个）
+## 2. 内置包清单（8 个）
 
-| 包 | 条目 | 分类 | 内容 |
-|----|------|------|------|
-| `iec-cn` | 379 | 26 | 低压配电、控制、PLC/HMI、变频/伺服/步进、传感器、安全件等 |
-| `smc-cn` | 8 | 6 | SMC 气缸、气爪、电磁阀、磁性开关、接头、气源处理 |
-| `servo-cn` | 25 | 2 | 汇川 SV660P/N + MS1H1/MS1H3，台达 ASDA-B3/A3 + ECMA，雷赛 57CM |
-| `sensor-cn` | 32 | 1 | 电感/光电/磁性/压力/光纤，欧姆龙、倍加福、西克、基恩士、图尔克等 |
-| `pneumatic-cn` | 44 | 5 | SMC CDQ2/MXQ/MGP/CQ2、MHZ2/MHL2、SY/VQ、AW/AC、KQ2 |
-| `pricebook-cn` | 0 | 1 | 人民币价格簿（`pricebook.json`，不进入元器件检索） |
+| 包 | 条目 | 分类 | 体积 | 加载方式 | 内容 |
+|----|------|------|------|----------|------|
+| `iec-cn` | 377 | 26 | 159.1 KB | manifest 索引；命中后 `loadPack` 懒加载 | 低压配电、控制、PLC/HMI、变频/伺服/步进、传感器、安全件等 |
+| `smc-cn` | 8 | 6 | 2.2 KB | manifest 索引；命中后 `loadPack` 懒加载 | SMC 气缸、气爪、电磁阀、磁性开关、接头、气源处理 |
+| `servo-cn` | 25 | 2 | 17.5 KB | manifest 索引；命中后 `loadPack` 懒加载 | 汇川 SV660P/N + MS1H1/MS1H3，台达 ASDA-B3/A3 + ECMA，雷赛 57CM |
+| `sensor-cn` | 32 | 1 | 20.6 KB | manifest 索引；命中后 `loadPack` 懒加载 | 电感/光电/磁性/压力/光纤，欧姆龙、倍加福、西克、基恩士、图尔克等 |
+| `pneumatic-cn` | 44 | 5 | 24.0 KB | manifest 索引；命中后 `loadPack` 懒加载 | SMC CDQ2/MXQ/MGP/CQ2、MHZ2/MHL2、SY/VQ、AW/AC、KQ2 |
+| `vision-cn` | 32 | 6 | 17.0 KB | manifest 索引；命中后 `loadPack` 懒加载 | 海康/大恒/Basler 相机、Computar/海康镜头、环形/条形/背光、光源控制器、读码器、视觉控制器 |
+| `drive-cn` | 33 | 8 | 14.5 KB | manifest 索引；命中后 `loadPack` 懒加载 | HIWIN/TBI 丝杠、HIWIN 导轨、Neugart/APEX/绿的谐波减速机、KTR/R+W 联轴器、GT2/HTD 5M 带与带轮、齿条、HIWIN KK 模组 |
+| `pricebook-cn` | 0 | 1 | 26.0 KB | 价格簿按需读取（`pricebook.json`） | 人民币价格簿（不进入元器件检索） |
 
-元器件包合计 488 条、487 个唯一 id。`D-M9B` 在 `iec-cn` 与 `smc-cn` 历史数据中各有一条，跨包搜索只返回一次（内置包优先）。
+元器件包合计 551 条、551 个唯一 id。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`（BOM 演示引用），`SR-1000` 保留在 `vision-cn`。
 
 ## 3. 懒加载机制
 
@@ -118,10 +120,10 @@
 暴露位置：
 
 - `npm run diagnose` 的 `packMetrics` 字段与「包加载」文本行；
-- `npm run smoke`：`SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=… coldMs=… parts=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=…`；
+- `npm run smoke`：`SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=… coldMs=… parts=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=…`；
 - 单测直接断言 `metrics()`。
 
-当前实测目标：冷启动到可搜索 ≤ 120 ms；单包 `parts.json` ≤ 400 KB；6 包全量命中搜索 ≤ 25 ms。2026-10-24 本机 smoke：`coldMs≈5.9`、`searchMs≈5.3`；单测内 6 包全量复用缓存搜索 ≈3.2 ms。
+当前实测目标：冷启动到可搜索 ≤ 120 ms；单包 `parts.json` ≤ 400 KB；8 包全量命中搜索 ≤ 25 ms。2026-10-24 本机 smoke 与单测直接断言 `metrics()`；新增 `vision-cn` / `drive-cn` 后由 `TZ=Asia/Shanghai npm test` 与 `npm run smoke` 复核。
 
 ## 5. 导入与安全
 
