@@ -229,27 +229,37 @@ export function applyParamEdit(inputs: AssemblyInputs, partId: string, key: stri
   overrides[partId] = { ...(overrides[partId] ?? {}), [key]: value };
   const next: AssemblyInputs = { ...inputs, overrides };
 
-  const base = effectiveParams('base', next);
-  const rail = effectiveParams('rail', next);
-  const car = effectiveParams('carriage', next);
+  const violation = assemblyViolation(next);
+  if (violation) return { ok: false, message: violation };
+  return { ok: true, overrides, value };
+}
+
+/**
+ * 装配合理性校验（导轨不超出底板、滑台不脱出导轨）。合法返回 null，否则返回中文原因。
+ * 编辑校验与「从工程存储恢复」共用，保证落盘数据被手改坏时不会画出脱轨的装配。
+ */
+export function assemblyViolation(inputs: Pick<AssemblyInputs, 'inserted' | 'overrides'>): string | null {
+  const base = effectiveParams('base', inputs);
+  const rail = effectiveParams('rail', inputs);
+  const car = effectiveParams('carriage', inputs);
   if ((rail.length as number) > (base.length as number)) {
-    return { ok: false, message: `导轨长度 ${rail.length} mm 不能超过底板长度 ${base.length} mm` };
+    return `导轨长度 ${rail.length} mm 不能超过底板长度 ${base.length} mm`;
   }
   if ((rail.width as number) > (base.width as number)) {
-    return { ok: false, message: `导轨宽度 ${rail.width} mm 不能超过底板宽度 ${base.width} mm` };
+    return `导轨宽度 ${rail.width} mm 不能超过底板宽度 ${base.width} mm`;
   }
   const railX0 = ((base.length as number) - (rail.length as number)) / 2;
   const railX1 = railX0 + (rail.length as number);
   const carHalf = (car.length as number) / 2;
   const carX = car.x as number;
   if ((car.length as number) > (rail.length as number)) {
-    return { ok: false, message: `滑台长度 ${car.length} mm 不能超过导轨长度 ${rail.length} mm` };
+    return `滑台长度 ${car.length} mm 不能超过导轨长度 ${rail.length} mm`;
   }
   if (carX - carHalf < railX0 - 1e-9 || carX + carHalf > railX1 + 1e-9) {
     const lo = railX0 + carHalf, hi = railX1 - carHalf;
-    return { ok: false, message: `滑台会脱出导轨：位置 X 需在 ${round1(lo)}–${round1(hi)} mm` };
+    return `滑台会脱出导轨：位置 X 需在 ${round1(lo)}–${round1(hi)} mm`;
   }
-  return { ok: true, overrides, value };
+  return null;
 }
 
 /** 清除某零件的全部覆盖（恢复原型默认尺寸 / 放置）。 */

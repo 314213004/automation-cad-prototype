@@ -28,3 +28,5 @@
 .orbit-geom .orbit-reset{margin:2px 10px 6px; height:22px; padding:0 8px; font-size:11px; border-radius:2px;
   color:var(--text-2); border:1px solid var(--stroke)}
 .orbit-geom .orbit-reset:hover{color:var(--text-1); background:var(--hover)}
+.st-undo .orbit-hist{margin-left:5px; padding:0 4px; height:14px; line-height:14px; border-radius:2px; font-size:10px;
+  color:var(--accent); background:rgba(20,184,166,.14)}
