@@ -333,6 +333,8 @@ smoke 覆盖并断言：
 
 输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=332 query=D2 hits=1`，最后 `SMOKE_OK`。
 
+**仓库镜像**：主仓库 GitHub `owlco001/automation-cad-prototype`，镜像 Gitee 同名仓库（公开）。`origin` 已配置双 push 地址，`git push origin main` 会同时推两边；推 tag 用 `git bothpush`（等价 `git push origin main && git push origin --tags`）。任一远端失败即整体失败，不要只推一边；详见 `docs/desktop/BACKLOG.md`「仓库双推约定」。
+
 **CI**：`.github/workflows/windows.yml` 在 `windows-latest` 上跑 `npm ci → build:ext → test → electron-builder --win nsis --x64`，产物为 `AutomationCAD-Setup-*.exe` + blockmap。当前**仅手动触发**：`gh workflow run windows-build --ref main`；推 `v*` tag 时额外发布到 GitHub Release。本地只想出免安装包可用 `npx electron-builder --win zip --x64`。
 
 ## 已知限制
