@@ -375,11 +375,12 @@ function buildSummary(design: MachineDesign): string {
 }
 
 export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): MachineDesign {
-  const stations = assertStations(options.stationCount ?? brief.stations);
+  const requestedStations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
-  const resolvedLayout = resolveLayout(brief, stations);
-  const formPick = pickForm(brief, TEMPLATES, { stationCount: stations, cyclePerMin });
+  const formPick = pickForm(brief, TEMPLATES, { stationCount: requestedStations, cyclePerMin });
+  const stations = formPick.stations;
+  const resolvedLayout = resolveLayout(brief, requestedStations);
   const selectedForm = formPick.form;
   const layout = {
     ...resolvedLayout,
@@ -398,6 +399,14 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     '节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
+
+  if (stations !== requestedStations) {
+    const [min, max] = selectedForm.stationRange;
+    assumptions.push(
+      `工位数夹紧：需求 ${requestedStations} 工位超出形态 ${selectedForm.name}（${selectedForm.id}）的 ${min}–${max} 工位能力，` +
+      `实际按 ${stations} 工位生成；差额需非标设计或拆分机台。`
+    );
+  }
 
   if (layout.auto) {
     assumptions.push(`布局自动推断为 ${layout.mode}：${layout.inferred}。`);
@@ -433,7 +442,10 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   }
   if (options.stationCount === undefined) {
     const invalidStationNote = brief.notes.find((note) => /^工位数\s*\d+\s*(?:无效|超出)/.test(note));
-    if (invalidStationNote) warnings.push(invalidStationNote);
+    if (invalidStationNote) {
+      warnings.push(invalidStationNote);
+      assumptions.push(`${invalidStationNote}；实际按 ${stations} 工位生成，差额需非标设计或拆分机台。`);
+    }
   }
   if (options.cyclePerMin === undefined && brief.cyclePerMin === null) {
     warnings.push(`未提供节拍：已按缺省值 ${MACHINE_DEFAULT_CYCLE_PER_MIN} 件/分钟（${(60 / MACHINE_DEFAULT_CYCLE_PER_MIN).toFixed(1)} 秒/件）估算，请确认目标产能。`);

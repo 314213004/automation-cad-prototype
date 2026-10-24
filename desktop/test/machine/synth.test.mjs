@@ -15,16 +15,16 @@ function sensorKind(point) {
   return 'proximity';
 }
 
-test('三工位锁螺丝机：6 执行机构、3 传感器，按达标形态预演并提示非标工位', () => {
+test('三工位锁螺丝机：6 执行机构、3 传感器，选覆盖 3 工位的 linear-4 并提示缺口', () => {
   const design = synthMachine(basicBrief(), { stationCount: 3 });
   assert.equal(design.config.stations.length, 3);
   assert.equal(design.config.actuators.length, 6);
   assert.equal(design.config.sensors.length, 3);
-  assert.equal(design.form.id, 'gantry-2');
-  assert.equal(design.cycle.mode, 'parallel');
-  assert.equal(design.cycle.throughputPerMin, 56.6);
-  assert.equal(design.cycle.meetsTarget, true);
-  assert.ok(design.warnings.some((warning) => /非标设计/.test(warning)));
+  assert.equal(design.form.id, 'linear-4');
+  assert.equal(design.cycle.mode, 'linear');
+  assert.equal(design.cycle.throughputPerMin, 18.87);
+  assert.equal(design.cycle.meetsTarget, false);
+  assert.ok(design.warnings.some((warning) => /形态选型.*缺口/.test(warning)));
 });
 
 test('工位均分：每个工位至少 1 个动作、至少 1 个检测', () => {

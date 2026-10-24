@@ -131,13 +131,13 @@ test('六工位单元式检测线 → 转盘+直线混合线', () => {
   assert.equal(result.form.geometry.kind, 'hybrid');
 });
 
-test('工位超范围但有达标形态时优先取达标且工位最近的形态', () => {
+test('十二工位需求优先选覆盖形态，并按夹紧后的缺口给出 warning', () => {
   const result = pick('十二工位锁螺丝流水线，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
-  assert.equal(result.evaluation.meetsTarget, true);
+  assert.ok(result.form.stationRange[0] <= 12 && result.form.stationRange[1] >= 12);
+  assert.equal(result.evaluation.meetsTarget, false);
   assert.ok(result.warning);
   assert.match(result.warning, /12 工位/);
-  assert.match(result.warning, /4–6 工位/);
+  assert.match(result.warning, /缺口 \d+\.\d{2} 件\/分钟/);
 });
 
 test('节拍不达标时不硬凑达标，warning 给出产能缺口', () => {
@@ -340,14 +340,16 @@ test('gantry-2 永不被选给 3–12 工位需求', () => {
   }
 });
 
-test('无覆盖但有达标形态时 warning 写明实际范围、需求值与生成依据', () => {
-  const result = pick('十二工位锁螺丝流水线，节拍 20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
+test('无覆盖时 warning 写明支持范围、需求值与实际生成工位数', () => {
+  const result = pick('十四工位锁螺丝机，节拍 10 件/分钟', { stationCount: 14 });
+  assert.equal(result.form.stationRange[1], Math.max(...MACHINE_FORMS.map((form) => form.stationRange[1])));
+  assert.equal(result.stations, result.form.stationRange[1]);
   assert.ok(result.warning);
-  assert.match(result.warning, /该形态支持 4–6 工位/);
-  assert.match(result.warning, /需求 12 工位/);
-  assert.match(result.warning, /已按 4\/6 生成/);
-  assert.match(result.warning, /请确认是否需要非标设计/);
+  assert.match(result.warning, /无形态覆盖 14 工位/);
+  assert.match(result.warning, /支持 8–12 工位/);
+  assert.match(result.warning, /需求 14 工位/);
+  assert.match(result.warning, /实际按 12 工位预演\/生成/);
+  assert.match(result.warning, /非标设计/);
 });
 
 test('design_machine 返回的 form 含一致性字段', async () => {

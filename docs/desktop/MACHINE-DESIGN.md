@@ -154,15 +154,18 @@ interface FlowOp {
 
 ### 3.2 整机形态库 `desktop/src/machine/forms.ts`
 
-同一工艺可以落在不同机架上。`pickForm(brief, templates, options?)` 使用固定的硬约束顺序：
+同一工艺可以落在不同机架上。`pickForm(brief, templates, options?)` 的候选池按四档优先级收敛：
 
-1. **工位覆盖**：`stationRange` 必须覆盖需求工位数；不覆盖的形态不能作为正常候选。
-2. **产能达标**：`evaluateFlow(...).meetsTarget === true` 优先于一切软偏好；只要存在覆盖且达标的形态，就绝不会选中不达标形态。
-3. **工艺适配**：`suits` 包含需求工艺。
-4. **布局偏好**：只做 tie-breaker，不参与候选过滤；需求倾向 `parallel` 时，同分优先 `parallel`。
-5. **占地与推荐工位**：`footprintScale` 小者优先，再按 `|defaultStations - 需求工位|` 小者。
+1. **覆盖且达标**：`stationRange` 覆盖需求，且夹紧后的 `evaluateFlow(...).meetsTarget === true`。存在这类形态时只在这一档内按工艺适配 → 布局偏好 → 占地系数 → 推荐工位距离排序。
+2. **仅覆盖**：没有覆盖且达标的形态时，只在覆盖形态中选，按「达标缺口最小 → 工艺适配 → 布局偏好 → 占地系数」排序。此时不把未达标硬标成达标，`warning` 写清目标、所选形态产能与缺口。
+3. **仅达标（无覆盖时兜底）**：只有确实没有任何形态覆盖需求工位数时才允许进入这一档，取达标且工位距离最近的形态，并强制输出「无形态覆盖 N 工位」warning。
+4. **全量按工位距离**：既不覆盖也不达标时，才在全部形态中按工位距离由近到远选择，并保留正式的非标工位 warning。
 
-若没有任何形态同时覆盖工位且达标，先取「达标且工位最近」的形态；仍不达标则取「工位最近」的形态。此时 `warning` 必须写清「需要 X 件/分钟，最佳形态 Y 只能给 Z 件/分钟，差 W」，并另写非标工位回退说明。**不把未达标硬标成达标，也不允许有达标形态时选不达标形态。**
+**预览夹紧**：预览前先把需求工位数夹紧到形态能力区间，即 `previewStations = clamp(需求, stationRange)`。`Candidate` 记录 `clamped` 与 `previewStations`，`evaluateFlow` 只使用夹紧后的工位数，避免「4 工位的 gantry-4 按 12 工位计算」造成产能虚高。`FormPick.stations` 返回实际预演工位数；`synthMachine` 用它生成 `config.stations`，因此 `config.stations.length` 不会超过所选形态的 `maxStations`。若被夹紧，`assumptions` 会写明需求值、支持范围与实际生成工位数。
+
+覆盖判定仍用需求工位数，不用夹紧后的值：`noCoverage = !chosen.inRange`。无覆盖 warning 必须同时给出「支持范围 + 需求工位数 + 实际生成工位数」，例如「无形态覆盖 14 工位：已选 十二工位转盘机 支持 8–12 工位，需求 14 工位，实际按 12 工位预演/生成」。
+
+典型回归：`十二工位转盘检测机，节拍 60 件/分钟` 现在只按 `dial-12` 的 12 工位预演，产能 `22.64` 件/分钟、`meetsTarget=false`，并给出 `37.36` 件/分钟缺口；不会再把 `gantry-4` 按 12 工位虚高成 `109.09` 件/分钟。
 
 ```ts
 pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
@@ -276,7 +279,7 @@ estimateCost(design: MachineDesign, options?): MachineCostEstimate
 
 `summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。`needs` / `question` 来自 `buildClarify(brief)`，供会话层决定是否先追问；完整需求返回空数组与 `null`。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。
 
-示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟；功率约 `1.09 kW / 1.84 A`，建议 `6 A / 3P` 断路器，24 V 余量约 `87%`；成本粗估 `¥10,614`（材料 `¥2,568` / 电气 `¥1,242` / 人工 `¥6,804`，缺价 `8` 行）。覆盖 3 工位的形态均不达标时，按 fallback 取达标且工位最近的 `gantry-2`（支持 1–2 工位），按 `parallel` 模型估算 3 工位并发生能为 `56.60` 件/分钟，`meetsTarget=true`，同时输出「该形态支持 1–2 工位，需求 3 工位」的非标 warning。原始 BOM 草案 7 行（夹爪、旋转轴、接近开关、伺服驱动器、PLC、24 V 电源、电气控制辅材），映射到真实元件包后 11 行。
+示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟；功率约 `1.09 kW / 1.84 A`，建议 `6 A / 3P` 断路器，24 V 余量约 `87%`；成本粗估 `¥10,938`（材料 `¥2,568` / 电气 `¥1,242` / 人工 `¥7,128`，缺价 `8` 行）。覆盖 3 工位的形态是 `linear-4`（2–4 工位），按 `linear` 模型估算 `18.87` 件/分钟，`meetsTarget=false`，warning 会说明缺口 `1.13` 件/分钟；把 `gantry-4` 的 4–4 工位放宽到需求 3 工位不合法，所以不会为达标而越界选择它。原始 BOM 草案 7 行（夹爪、旋转轴、接近开关、伺服驱动器、PLC、24 V 电源、电气控制辅材），映射到真实元件包后 11 行。
 
 ### 4.1 工艺模板 `desktop/src/machine/templates.ts`
 
@@ -380,12 +383,12 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 ## 7. 验证
 
-- 几何（迭代 34 + 形态扩展）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5）、`forms-expansion.test.mjs`（27），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退，以及 gantry 多头排布、hybrid 转盘+直线拼接、cell 矩阵、转盘直径随工位数增长。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`。
+- 几何（迭代 34 + 形态扩展）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5）、`forms-expansion.test.mjs`（27），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退，以及 gantry 多头排布、hybrid 转盘+直线拼接、cell 矩阵、转盘直径随工位数增长。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`。
 - 产能引擎：`test/machine/flow.test.mjs` 覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs` 覆盖六工位同工序并行、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs` 覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dual-lane`、`mode=cell`、`stationSeconds=3.18`、`lanes=2`、`throughputPerMin=31.75`、`meetsTarget=true`（20 件/分钟目标下余量 1.59 倍）。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
 - 功率与成本：`test/machine/power-cost.test.mjs`（29 条）覆盖单相/三相电流、同时系数、负载率、效率、`cosφ`、断路器取档、24 V 余量、缺额定功率、机械/电气/人工分项、缺价计数、伺服成对计价、工时随工位数变化、参数文件缺失/非法回落、方案卡字段完整与两类断路器交叉校验。
-- 全量测试：`TZ=Asia/Shanghai npm test` **1509/1509**（较上一轮 1479 增加 30 条：功率/成本 28 条 + 文档一致性 1 条 + 方案卡大结果保留 1 条）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6`、`SMOKE_MACHINE_COST_OK total=10614 missing=8`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`，最终 `SMOKE_OK`。
+- 全量测试：`TZ=Asia/Shanghai npm test` **1529/1529**（较上一轮 1509 增加 20 条，主要为 `test/machine/form-clamp.test.mjs` 的越界夹紧与四档优先级回归）。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6`、`SMOKE_MACHINE_COST_OK total=10938 missing=8`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
 ### 7.1 真实模型评测（2026-10-24）

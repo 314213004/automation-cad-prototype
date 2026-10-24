@@ -27,19 +27,25 @@ test('六工位锁螺丝 20 件/分钟：选中覆盖 6 工位且达标的 dual-
   assertSelectedMeets(result, '6/20');
 });
 
-test('八工位锁螺丝 20 件/分钟：无覆盖达标形态时先取达标且工位最近的形态', () => {
+test('八工位锁螺丝 20 件/分钟：覆盖优先，不回退到不覆盖的 dual-lane', () => {
   const result = pick('八工位锁螺丝机，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
-  assertSelectedMeets(result, '8/20');
-  assert.match(result.warning, /4–6 工位/);
-  assert.match(result.warning, /8 工位/);
+  assert.ok(result.form.stationRange[0] <= 8 && result.form.stationRange[1] >= 8);
+  assert.notEqual(result.form.id, 'dual-lane');
+  assert.equal(result.evaluation.meetsTarget, false);
+  assert.match(result.warning, /缺口 \d+\.\d+ 件\/分钟/);
 });
 
 for (const stations of [4, 6, 8]) {
   for (const target of [10, 20, 40]) {
-    test(`${stations} 工位 / ${target} 件/分钟组合必选达标形态`, () => {
+    test(`${stations} 工位 / ${target} 件/分钟组合必选覆盖形态`, () => {
       const result = pick(`${stations} 工位锁螺丝机，${target} 件/分钟`);
-      assertSelectedMeets(result, `${stations}/${target}`);
+      assert.ok(
+        result.form.stationRange[0] <= stations && result.form.stationRange[1] >= stations,
+        `${stations}/${target}: ${result.form.id}`
+      );
+      if (result.evaluation.meetsTarget === false) {
+        assert.match(result.warning, /缺口 \d+\.\d+ 件\/分钟/, `${stations}/${target}`);
+      }
     });
   }
 }
@@ -64,34 +70,35 @@ test('工艺适配置于布局/占地之前：六工位检测 10 件/分钟选 d
   assertSelectedMeets(result, 'inspection/10');
 });
 
-test('fallback 先取达标且工位最近：八工位 20 件/分钟不选更远的 gantry-2', () => {
+test('覆盖优先：八工位 20 件/分钟不选不覆盖的 gantry-2', () => {
   const result = pick('八工位锁螺丝机，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
+  assert.ok(result.form.stationRange[0] <= 8 && result.form.stationRange[1] >= 8);
   assert.notEqual(result.form.id, 'gantry-2');
 });
 
-test('fallback 在无覆盖达标形态时仍不会选不达标形态：十二工位 20 件/分钟', () => {
+test('十二工位 20 件/分钟：只在覆盖形态中按缺口与偏好选择', () => {
   const result = pick('十二工位锁螺丝流水线，20 件/分钟');
-  assert.equal(result.form.id, 'dual-lane');
-  assertSelectedMeets(result, '12/20');
+  assert.ok(result.form.stationRange[0] <= 12 && result.form.stationRange[1] >= 12);
+  assert.notEqual(result.form.id, 'dual-lane');
+  assert.equal(result.evaluation.meetsTarget, false);
+  assert.match(result.warning, /已选 .+ 预估 \d+\.\d{2} 件\/分钟/);
 });
 
-test('所有形态都不达标时 warning 写清目标、最佳形态实际产能与差值', () => {
+test('所有形态都不达标时 warning 写清目标、最佳形态实际产能与所选缺口', () => {
   const result = pick('六工位锁螺丝机，120 件/分钟');
   assert.equal(result.evaluation.meetsTarget, false);
-  assert.match(
-    result.warning,
-    /需要 120 件\/分钟，最佳形态 双工位龙门机 只能给 100\.00 件\/分钟，差 20\.00 件\/分钟/
-  );
-  assert.match(result.warning, /已选 六工位转盘机 预估 14\.29 件\/分钟/);
+  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 .+ 只能给 \d+\.\d{2} 件\/分钟，差 \d+\.\d{2} 件\/分钟/);
+  assert.match(result.warning, /已选 .+ 预估 \d+\.\d{2} 件\/分钟/);
+  assert.match(result.warning, /缺口 \d+\.\d{2} 件\/分钟/);
 });
 
-test('无达标形态且工位不覆盖时，warning 同时给出最佳产能与所选形态缺口', () => {
+test('一工位需求有覆盖形态时，warning 只给产能缺口、不误报无覆盖', () => {
   const result = pick('一工位锁螺丝机，120 件/分钟');
   assert.equal(result.form.id, 'gantry-2');
   assert.equal(result.evaluation.meetsTarget, false);
-  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 单元式四工位 只能给 32\.61 件\/分钟/);
-  assert.match(result.warning, /已选 双工位龙门机 预估 18\.87 件\/分钟/);
+  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 .+ 只能给 \d+\.\d{2} 件\/分钟/);
+  assert.match(result.warning, /已选 双工位龙门机 预估 \d+\.\d{2} 件\/分钟/);
+  assert.doesNotMatch(result.warning, /无形态覆盖/);
 });
 
 test('工位覆盖是硬约束：六工位 10 件/分钟不会因为 gantry-2 更小而被选中', () => {

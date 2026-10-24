@@ -67,7 +67,7 @@ export interface FormPick {
   warning?: string;
   /** 选型时的预演结果，方便调用方解释为什么选它。 */
   evaluation: FlowEvaluation;
-  /** 实际参与预演的工位数（通常等于 brief.stations）。 */
+  /** 实际参与预演的工位数；超出形态能力时已夹紧到 stationRange。 */
   stations: number;
 }
 
@@ -502,9 +502,20 @@ function previewModel(
   };
 }
 
+/** 把需求工位数夹紧到形态声明的能力区间，避免用需求值虚高预演产能。 */
+function clampStations(stations: number, form: MachineForm): number {
+  const [min, max] = form.stationRange;
+  return Math.min(max, Math.max(min, stations));
+}
+
 interface Candidate {
   form: MachineForm;
+  /** 需求工位数是否落在 stationRange 内。 */
   inRange: boolean;
+  /** 预演工位数是否因需求越界而被夹紧。 */
+  clamped: boolean;
+  /** 实际用于 previewModel 的工位数。 */
+  previewStations: number;
   processFit: boolean;
   layoutFit: boolean;
   stationDistance: number;
@@ -516,6 +527,7 @@ interface Candidate {
 function scoreCandidate(
   form: MachineForm,
   stations: number,
+  previewStations: number,
   process: MachineProcess,
   intended: MachineLayout,
   evaluation: FlowEvaluation,
@@ -533,7 +545,7 @@ function scoreCandidate(
   const processScore = process === 'unknown' ? 20 : processFit ? 25 : 0;
   const throughputScore = meets ? 20 : Math.min(18, (throughput / Math.max(targetPerMin, 1e-9)) * 18);
   const footprintScore = Math.max(0, 15 - form.footprintScale * 5);
-  const closenessScore = Math.max(0, 10 - Math.abs(defaultStations - stations));
+  const closenessScore = Math.max(0, 10 - Math.abs(defaultStations - previewStations));
   return (layoutFit ? 5 : 0) + processScore + stationScore + throughputScore + footprintScore + closenessScore;
 }
 
@@ -552,6 +564,17 @@ function comparePreference(left: Candidate, right: Candidate): number {
 /** 无覆盖且达标形态时：先取工位距离最近的，再按软偏好排序。 */
 function compareByStationDistance(left: Candidate, right: Candidate): number {
   if (left.stationDistance !== right.stationDistance) return left.stationDistance - right.stationDistance;
+  return comparePreference(left, right);
+}
+
+/** 有覆盖但都不达标：先取离目标缺口最小的，再按工艺 → 布局 → 占地排序。 */
+function compareCoveringGap(left: Candidate, right: Candidate, targetPerMin: number): number {
+  const gap = (candidate: Candidate): number => Math.max(
+    0,
+    targetPerMin - candidate.evaluation.throughputPerMin
+  );
+  const delta = gap(left) - gap(right);
+  if (Math.abs(delta) > 1e-9) return delta;
   return comparePreference(left, right);
 }
 
@@ -584,9 +607,13 @@ function differenceText(chosen: MachineForm, other: MachineForm): string {
 }
 
 /**
- * 形态选型（硬约束顺序）：工位覆盖 → 产能达标 → 工艺适配 → 布局偏好 →
- * 占地系数 → 推荐工位距离。布局偏好只做 tie-breaker，不参与候选过滤。
- * 若无形态同时覆盖且达标：先取达标且工位最近的；仍不达标则取工位最近的。
+ * 形态选型四档优先级：
+ * 1. 覆盖且达标；
+ * 2. 否则只在覆盖形态中取达标缺口最小（工艺 → 布局 → 占地）；
+ * 3. 否则只在完全没有覆盖形态时，取达标且工位最近的；
+ * 4. 仍无则全量按工位距离取最近。
+ * 预览前先把需求工位数夹紧到形态 stationRange，防止小形态按大需求虚高产能。
+ * 布局偏好只做 tie-breaker，不参与候选过滤。
  */
 export function pickForm(
   brief: MachineBrief,
@@ -603,27 +630,41 @@ export function pickForm(
     brief.process === 'unknown' || form.suits.includes(brief.process);
 
   const allCandidates: Candidate[] = previewable.map((form) => {
-    const evaluation = evaluateFlow(previewModel(brief, form, stations, cyclePerMin, templates));
+    const previewStations = clampStations(stations, form);
+    const clamped = previewStations !== stations;
+    const evaluation = evaluateFlow(previewModel(brief, form, previewStations, cyclePerMin, templates));
     const [min, max] = form.stationRange;
     const inRange = stations >= min && stations <= max;
     const defaultStations = form.defaultStations ?? (min + max) / 2;
     return {
       form,
       inRange,
+      clamped,
+      previewStations,
       processFit: formMatchesProcess(form),
       layoutFit: formMatchesLayout(form),
       stationDistance: stations < min ? min - stations : stations > max ? stations - max : 0,
       defaultDistance: Math.abs(defaultStations - stations),
       evaluation,
-      score: scoreCandidate(form, stations, brief.process, intended, evaluation, cyclePerMin)
+      score: scoreCandidate(form, stations, previewStations, brief.process, intended, evaluation, cyclePerMin)
     };
   });
 
   const covering = allCandidates.filter((candidate) => candidate.inRange);
   const coveringMeeting = covering.filter((candidate) => candidate.evaluation.meetsTarget === true);
   const meeting = allCandidates.filter((candidate) => candidate.evaluation.meetsTarget === true);
-  const pool = coveringMeeting.length > 0 ? coveringMeeting : meeting.length > 0 ? meeting : allCandidates;
-  const ranked = pool.slice().sort(coveringMeeting.length > 0 ? comparePreference : compareByStationDistance);
+  const pool = coveringMeeting.length > 0
+    ? coveringMeeting
+    : covering.length > 0
+      ? covering
+      : meeting.length > 0
+        ? meeting
+        : allCandidates;
+  const ranked = pool.slice().sort((left, right) => {
+    if (coveringMeeting.length > 0) return comparePreference(left, right);
+    if (covering.length > 0) return compareCoveringGap(left, right, cyclePerMin);
+    return compareByStationDistance(left, right);
+  });
   const chosen = ranked[0] as Candidate;
   const noCoverage = !chosen.inRange;
 
@@ -634,8 +675,9 @@ export function pickForm(
   if (noCoverage) {
     const [min, max] = chosen.form.stationRange;
     warnings.push(
-      `该形态支持 ${min}–${max} 工位，需求 ${stations} 工位，已按 ${min}/${max} 生成，请确认是否需要非标设计` +
-      `（已回退到 ${chosen.form.name}）。`
+      `无形态覆盖 ${stations} 工位：已选 ${chosen.form.name} 支持 ${min}–${max} 工位，` +
+      `需求 ${stations} 工位，实际按 ${chosen.previewStations} 工位预演/生成，` +
+      `请确认是否需要非标设计或拆分机台。`
     );
   }
   if (missingCapacity > 1e-9) {
@@ -644,9 +686,14 @@ export function pickForm(
     );
     const bestGap = Math.max(0, cyclePerMin - bestCapacity.evaluation.throughputPerMin);
     const missingPct = (missingCapacity / cyclePerMin) * 100;
+    const [bestMin, bestMax] = bestCapacity.form.stationRange;
+    const bestText = bestGap > 1e-9
+      ? `最佳形态 ${bestCapacity.form.name} 只能给 ${bestCapacity.evaluation.throughputPerMin.toFixed(2)} 件/分钟，` +
+        `差 ${bestGap.toFixed(2)} 件/分钟；`
+      : `全库中 ${bestCapacity.form.name} 预估 ${bestCapacity.evaluation.throughputPerMin.toFixed(2)} 件/分钟可达标，` +
+        `但其 ${bestMin}–${bestMax} 工位不覆盖需求 ${stations} 工位；`;
     warnings.push(
-      `需要 ${cyclePerMin} 件/分钟，最佳形态 ${bestCapacity.form.name} 只能给 ` +
-      `${bestCapacity.evaluation.throughputPerMin.toFixed(2)} 件/分钟，差 ${bestGap.toFixed(2)} 件/分钟；` +
+      `需要 ${cyclePerMin} 件/分钟，${bestText}` +
       `已选 ${chosen.form.name} 预估 ${chosen.evaluation.throughputPerMin.toFixed(2)} 件/分钟，` +
       `缺口 ${missingCapacity.toFixed(2)} 件/分钟（约 ${missingPct.toFixed(1)}%）；` +
       `需增加工位/复制瓶颈或改用更高节拍形态。`
@@ -675,7 +722,7 @@ export function pickForm(
     alternatives,
     ...(warnings.length > 0 ? { warning: warnings.join(' ') } : {}),
     evaluation: chosen.evaluation,
-    stations
+    stations: chosen.previewStations
   };
 }
 

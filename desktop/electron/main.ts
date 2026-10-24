@@ -1480,10 +1480,11 @@ function createWindow(): BrowserWindow {
           !(Number(machineDesign.design?.power?.breakerSuggestion?.rating) > 0) ||
           !(Number(machineDesign.design?.cost?.total) > 0) ||
           typeof machineDesign.design?.cost?.missingCount !== 'number' ||
-          machineDesign.design?.warnings?.length !== 1 ||
+          machineDesign.design?.warnings?.length !== 2 ||
           !machineDesign.design?.warnings?.some((warning: string) => /形态选型/.test(warning)) ||
-          machineDesign.design?.form?.id !== 'gantry-2' ||
-          !machineDesign.design?.form?.stationRange?.includes(2) ||
+          machineDesign.design?.form?.id !== 'linear-4' ||
+          !(Number(machineDesign.design?.form?.stationRange?.[0]) <= 3 &&
+            Number(machineDesign.design?.form?.stationRange?.[1]) >= 3) ||
           !Array.isArray(machineDesign.design?.assumptions) ||
           typeof machineDesign.summary !== 'string' ||
           machineDesign.summary.length > 600
@@ -1492,7 +1493,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2');
+        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4');
         console.log(
           `SMOKE_MACHINE_POWER_OK kw=${machineDesign.design.power?.totalKw} ` +
           `a=${machineDesign.design.power?.currentA} breaker=${machineDesign.design.power?.breakerSuggestion?.rating}`
@@ -1611,22 +1612,23 @@ function createWindow(): BrowserWindow {
         }
         console.log('SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1');
 
-        const formBrief = parseMachineBrief('六工位锁螺丝机，20 件/分钟');
+        const formBrief = parseMachineBrief('十二工位转盘检测机，20 件/分钟');
         const formPick = pickForm(formBrief, TEMPLATES);
         const formErrors = validateMachineForms();
         if (
           MACHINE_FORMS.length !== 11 ||
           formErrors.length > 0 ||
-          formPick.form.id !== 'dual-lane' ||
-          formPick.form.stationRange[0] > 6 ||
-          formPick.form.stationRange[1] < 6 ||
+          formPick.form.id !== 'dial-12' ||
+          formPick.form.stationRange[0] > 12 ||
+          formPick.form.stationRange[1] < 12 ||
+          formPick.stations !== 12 ||
           formPick.evaluation.meetsTarget !== true
         ) {
           console.error('SMOKE_FAIL machine_forms', JSON.stringify({ forms: MACHINE_FORMS.length, formErrors, picked: formPick.form.id }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1');
+        console.log('SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1');
 
         const applied = await activeTools.call('apply_machine_design', {
           brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
@@ -1678,7 +1680,7 @@ function createWindow(): BrowserWindow {
         const machineGeometry = applied.geometry;
         if (
           !machineGeometry ||
-          machineGeometry.layout !== 'gantry' ||
+          machineGeometry.layout !== 'linear' ||
           !(Number(machineGeometry.parts) > 0) ||
           machineGeometry.movingAxes !== 6 ||
           !machineGeometry.stlPath || !existsSync(machineGeometry.stlPath) ||
@@ -1686,7 +1688,7 @@ function createWindow(): BrowserWindow {
           !machineGeometry.jsonPath || !existsSync(machineGeometry.jsonPath) ||
           !machineGeometry.sidecarPath || !existsSync(machineGeometry.sidecarPath) ||
           appliedGeometry?.parts !== machineGeometry.parts ||
-          appliedGeometry?.layout !== 'gantry'
+          appliedGeometry?.layout !== 'linear'
         ) {
           console.error('SMOKE_FAIL machine_geometry', JSON.stringify({ geometry: machineGeometry, appliedGeometry }));
           setTimeout(() => app.exit(1), 100);

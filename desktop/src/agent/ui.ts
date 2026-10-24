@@ -574,7 +574,9 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
       `<span>电气 ${escapeHtml(electrical ?? '—')}</span>` +
       `<span>人工 ${escapeHtml(labor ?? '—')}</span>` +
       `<span>合计 <b>${escapeHtml(total)}</b></span>` +
-      `${missingCount === null ? '' : `<span class="acp-machine-cost-missing">缺价 ${missingCount} 项</span>`}</div>`
+      `${missingCount !== null && missingCount > 0
+        ? `<span class="acp-machine-cost-missing">${missingCount} 项缺价，合计为不完全统计</span>`
+        : ''}</div>`
     : '';
   const form = typeof card.design.form === 'object' && card.design.form !== null && !Array.isArray(card.design.form)
     ? card.design.form as Record<string, unknown>

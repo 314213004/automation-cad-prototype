@@ -72,7 +72,7 @@ const PROCESS_NAME_RULES: Array<{ name: string; pattern: RegExp }> = [
   { name: '搬运', pattern: /搬运|移载|转运/ }
 ];
 
-const LINE_KEYWORD = /流水线|线体|产线|生产线|装配线|包装线|检测线|自动线|输送线/;
+const LINE_KEYWORD = /流水线|线体|产线|生产线|装配线|包装线|检测线|自动线|输送线|长线/;
 const DIAL_KEYWORD = /转盘|分度盘|分度转盘|回转台|圆盘|转台式|分度式/;
 const CELL_KEYWORD = /单元式|单元线|独立单元|cell/i;
 const PARALLEL_KEYWORD = /并行|复制式|多工位并行/;

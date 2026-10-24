@@ -4,7 +4,22 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## 功率与成本接入统一模型（2026-10-24，本轮）
+## 修复形态选型「越界预览」（2026-10-24，本轮）
+
+- 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1529/1529**（较上轮 +20）、`npm run smoke` 更新为 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`；未 push、未打包。
+- 缺陷：41 轮新增 8–12 工位形态后，`pickForm` 仍用**需求工位数**给所有候选算产能。`gantry-4`（4–4）被按 12 工位预演出 `109.09` 件/分钟，进入 `meeting` 池；`dial-12` 按真实 12 工位只有 `22.64` 件/分钟，最终按工位距离回退到越界的 `gantry-4`。
+- 复现（修复前输出 `gantry-4` + 非标回退 warning）：
+
+  ```bash
+  cd desktop
+  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const f=await import('./src/machine/forms.ts');const b=s.parseMachineBrief('十二工位转盘检测机，节拍 60 件/分钟');const p=f.pickForm(b,{},{stationCount:b.stations,cyclePerMin:b.cyclePerMin});console.log(p.form.id,p.warning)})"
+  ```
+
+- 根因与修复：`Candidate` 新增 `clamped` / `previewStations`；`previewModel` 统一使用 `clamp(需求, stationRange)`；选型改为四档优先级「覆盖且达标 → 仅覆盖 → 仅达标（确无覆盖时）→ 全量按工位距离」。覆盖仍按需求工位数判定，warning 同时写支持范围、需求值与实际生成工位数；`synthMachine` 用 `formPick.stations` 生成配置，被夹紧时写入 `assumptions`。
+- 回归：新增 `test/machine/form-clamp.test.mjs` 20 条，覆盖 12 工位检测/长线装配、14 工位超上限、6/8/10 工位矩阵、`config.stations.length <= form.maxStations`、夹紧后产能结论、缺价文案等。
+- 功率/成本核对：`power.totalKw=2.176`、`cost.total=23172`、`missingCount=9` 与 `machine-case.json` 一致；9 个缺价件的 `partId` 与名称已列在 `MACHINE-DESIGN-DEMO.md`。内置价格簿只有 4 条示例价，真实型号均无价格，确认不是匹配 bug；方案卡缺价文案改为「9 项缺价，合计为不完全统计」。
+
+## 功率与成本接入统一模型（2026-10-24，上一轮）
 
 - 状态：✅ 完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1509/1509**（较上轮 +30）、`npm run smoke` 新增 `SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` 与 `SMOKE_MACHINE_COST_OK total=10614 missing=8`；未 commit、未 push、未打包。
 - 功率：新增 `desktop/src/machine/power.ts` 纯函数，删除 `synth.ts` 中写死的 `POWER_VA` 表。优先读取元件库 `ratedW`（伺服/电源/安全光栅等），缺失时按类别默认值估算并逐条写 warning 与 assumption；支持 `Ks=0.7 / Kf=0.6 / η=0.9 / cosφ=0.9`、单相/三相/24V 电流、断路器取档（6–63 A）、24V 电源余量（>70% 告警）与已选总进线断路器交叉校验（超流/余量 >60% 可降档）。

@@ -62,10 +62,10 @@ test('design_machine 返回 config/cycle/power/bomDraft/warnings/assumptions 与
   assert.equal(result.design.cycle.secondsPerPiece, 3);
   assert.ok(result.design.power.va > 0);
   assert.ok(result.design.bomDraft.items.length > 0);
-  assert.ok(result.design.warnings.some((warning) => /形态选型.*非标设计/.test(warning)));
-  assert.equal(result.design.form.id, 'gantry-2');
-  assert.deepEqual(result.design.form.stationRange, [1, 2]);
-  assert.equal(result.design.form.defaultStations, 2);
+  assert.ok(result.design.warnings.some((warning) => /形态选型.*缺口/.test(warning)));
+  assert.equal(result.design.form.id, 'linear-4');
+  assert.deepEqual(result.design.form.stationRange, [2, 4]);
+  assert.equal(result.design.form.defaultStations, 4);
   assert.ok(result.design.assumptions.length >= 3);
   assert.ok(result.summary.length <= 600);
   assert.match(result.summary, /3/);
