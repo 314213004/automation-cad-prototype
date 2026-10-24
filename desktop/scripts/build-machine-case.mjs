@@ -66,6 +66,7 @@ const design = synthMachine(brief);
 const mapping = mapMachineBom(design, parts);
 design.bomDraft = { items: mapping.items };
 design.warnings.push(...mapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
+design.warnings.push(...mapping.notices);
 const ioMap = buildMachineIoMap(design.config);
 
 const caseData = {
@@ -101,6 +102,7 @@ const caseData = {
   bom: {
     items: mapping.items,
     pending: mapping.pending,
+    notices: mapping.notices,
     sourcePacks: mapping.sourcePacks,
     realPartCount: mapping.items.filter((item) => item.partId).length,
     pendingCount: mapping.items.filter((item) => item.pendingSelection).length

@@ -67,3 +67,8 @@ test('辅助：插入件按顺序、全部零件去重、路径与查找', () =>
   assert.equal(findTreeNode(TREE, 'g-std').label, '标准件');
   assert.equal(findTreeNode(TREE, 'zzz'), null);
 });
+
+test('框选多选（原型 SVG 同时选中多个零件）原样显示，不叠加当前树节点的组展开', () => {
+  assert.deepEqual(resolveSelection(TREE, ['base', 'rail', 'ins1'], 'g-cyl'), ['base', 'rail', 'ins1']);
+  assert.deepEqual(resolveSelection(TREE, ['base', 'rail'], 'g-std'), ['base', 'rail']);
+});

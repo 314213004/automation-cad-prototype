@@ -17,6 +17,7 @@ import {
   type Vec3
 } from './camera.ts';
 import type { Assembly } from './model.ts';
+import { partsInRect, rectFromPoints, type ScreenRect } from './marquee.ts';
 import {
   applyHighlight,
   buildAssemblyGroup,
@@ -36,6 +37,10 @@ export interface OrbitViewOptions {
   onPick?: (partId: string | null, event: PointerEvent) => void;
   onHover?: (partId: string | null) => void;
   onRender?: (view: OrbitView) => void;
+  /** 框选结束（拖拽超过 5 px）：客户端像素矩形 */
+  onMarquee?: (rect: ScreenRect) => void;
+  /** 拖拽中显示的框（复用原型舞台里的 `.marquee` 元素） */
+  marqueeBox?: HTMLElement | null;
 }
 
 export interface OrbitViewState {
@@ -46,6 +51,7 @@ export interface OrbitViewState {
   distance: number;
   clipping: boolean;
   renders: number;
+  marqueeMode: boolean;
 }
 
 const FOV = 40;
@@ -83,6 +89,9 @@ export class OrbitView {
   /** 用户还没动过相机时，宿主首次可见/尺寸变化会按当前标准视图重新取景（隐藏视图初始化时宽高为 0）。 */
   private autoFit = true;
   private lastView: StandardView = 'iso';
+  /** 粘滞框选模式（工具条「框选」按钮）；否则 Shift+左键拖拽临时框选 */
+  private marqueeMode = false;
+  private marqueeDrag: { x: number; y: number; active: boolean; pointerId: number } | null = null;
   onContextLost: (() => void) | null = null;
 
   static create(options: OrbitViewOptions): OrbitViewResult {
@@ -133,6 +142,8 @@ export class OrbitView {
     ['pointerdown', 'pointermove', 'pointerup', 'click', 'dblclick'].forEach((type) => {
       this.canvas.addEventListener(type, (event) => event.stopPropagation());
     });
+    // 框选要先于 OrbitControls 拿到 pointerdown：在宿主捕获阶段截获，移动/抬起在 window 捕获阶段跟踪。
+    this.host.addEventListener('pointerdown', this.onMarqueeDown, true);
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       this.contextLost = true;
@@ -317,7 +328,8 @@ export class OrbitView {
       position: [p.x, p.y, p.z],
       distance: this.currentDistance(),
       clipping: this.clipping,
-      renders: this.renders
+      renders: this.renders,
+      marqueeMode: this.marqueeMode
     };
   }
 
@@ -334,6 +346,21 @@ export class OrbitView {
       if (id) return id;
     }
     return null;
+  }
+
+  setMarqueeMode(on: boolean): void {
+    this.marqueeMode = on;
+    this.canvas.style.cursor = on ? 'crosshair' : '';
+  }
+
+  /** 客户端像素矩形内的零件（命中规则同原型框选：屏幕包围矩形相交）。 */
+  partsInClientRect(rect: ScreenRect): string[] {
+    if (!this.assembly) return [];
+    const r = this.canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return [];
+    this.camera.updateMatrixWorld();
+    return partsInRect(this.assembly, this.camera, { left: r.left, top: r.top, width: r.width, height: r.height }, rect,
+      this.clipping ? this.clipPlane.constant : null);
   }
 
   requestRender(): void {
@@ -383,6 +410,8 @@ export class OrbitView {
   dispose(): void {
     this.disposed = true;
     this.resizeObserver.disconnect();
+    this.host.removeEventListener('pointerdown', this.onMarqueeDown, true);
+    this.endMarquee();
     this.controls.dispose();
     if (this.assemblyRoot) disposeObject(this.assemblyRoot);
     if (this.overlayRoot) disposeObject(this.overlayRoot);
@@ -431,6 +460,59 @@ export class OrbitView {
     if (!this.showSection || !this.assembly) return;
     this.sectionPlane = buildSectionPlane(this.assembly.sectionX, this.assembly.bounds);
     this.scene.add(this.sectionPlane);
+  }
+
+  private readonly onMarqueeDown = (event: PointerEvent): void => {
+    if (event.target !== this.canvas || event.button !== 0) return;
+    if (!this.marqueeMode && !event.shiftKey) return;
+    event.stopPropagation();
+    event.preventDefault();
+    this.marqueeDrag = { x: event.clientX, y: event.clientY, active: false, pointerId: event.pointerId };
+    window.addEventListener('pointermove', this.onMarqueeMove, true);
+    window.addEventListener('pointerup', this.onMarqueeUp, true);
+    window.addEventListener('pointercancel', this.onMarqueeCancel, true);
+  };
+
+  private readonly onMarqueeMove = (event: PointerEvent): void => {
+    const drag = this.marqueeDrag;
+    if (!drag) return;
+    event.stopPropagation();
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!drag.active && Math.hypot(dx, dy) < 5) return;
+    drag.active = true;
+    const box = this.options.marqueeBox;
+    if (!box) return;
+    const r = this.host.getBoundingClientRect();
+    box.hidden = false;
+    box.style.left = `${Math.min(drag.x, event.clientX) - r.left}px`;
+    box.style.top = `${Math.min(drag.y, event.clientY) - r.top}px`;
+    box.style.width = `${Math.abs(dx)}px`;
+    box.style.height = `${Math.abs(dy)}px`;
+  };
+
+  private readonly onMarqueeUp = (event: PointerEvent): void => {
+    const drag = this.marqueeDrag;
+    if (!drag) return;
+    event.stopPropagation();
+    this.endMarquee();
+    if (!drag.active) {
+      // 没拖动：按普通点击拾取
+      this.options.onPick?.(this.pick(event.clientX, event.clientY), event);
+      return;
+    }
+    this.options.onMarquee?.(rectFromPoints(drag.x, drag.y, event.clientX, event.clientY));
+  };
+
+  private readonly onMarqueeCancel = (): void => {
+    this.endMarquee();
+  };
+
+  private endMarquee(): void {
+    this.marqueeDrag = null;
+    window.removeEventListener('pointermove', this.onMarqueeMove, true);
+    window.removeEventListener('pointerup', this.onMarqueeUp, true);
+    window.removeEventListener('pointercancel', this.onMarqueeCancel, true);
+    if (this.options.marqueeBox) this.options.marqueeBox.hidden = true;
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {

@@ -55,7 +55,7 @@ test('真实源文件：总览数字来自三个评测 JSON', () => {
   assert.equal(report.overview.multiTurn.total.value, multi.total);
   assert.equal(report.overview.multiTurn.passed.value, multi.passed);
   assert.equal(report.overview.multiTurn.turnPassed.value, multi.turnPassed);
-  assert.equal(report.overview.offline.metrics.intent.correct.value, 75);
+  assert.equal(report.overview.offline.metrics.intent.correct.value, 102);
   assert.equal(report.overview.testCount.value, 1042);
 });
 

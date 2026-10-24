@@ -1659,6 +1659,34 @@ function createWindow(): BrowserWindow {
         }
         console.log(`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=${readonlyUi.rows} summary=ok scene=${readonlyUi.after}`);
 
+        // 迭代：审计轮转——审计面板经 agent:audit:read 同时读到轮转文件 agent-audit.1.jsonl
+        appendFileSync(
+          join(app.getPath('userData'), 'agent-audit.1.jsonl'),
+          `${formatAuditLine({ tool: 'get_bom', ok: true, source: 'offline' }, new Date(Date.now() - 60_000))}\n{坏行\n`,
+          'utf8'
+        );
+        const rotatedUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            document.getElementById('agentAuditRefresh')?.click();
+            let rows = 0;
+            let summary = '';
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              await wait(100);
+              rows = document.querySelectorAll('#agentAuditList .acp-audit-row').length;
+              summary = document.getElementById('agentAuditSummary')?.textContent || '';
+              if (summary.includes('共 3 条')) break;
+            }
+            return { rows, summary };
+          })()`
+        ) as { rows: number; summary: string };
+        if (rotatedUi.rows < 3 || !rotatedUi.summary.includes('共 3 条')) {
+          console.error('SMOKE_FAIL agent_audit_rotated', JSON.stringify(rotatedUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_AUDIT_ROTATED_OK rows=${rotatedUi.rows} files=2`);
+
         // P7-C：多步计划卡片 + 顺序执行 + 写步骤一次确认
         const planUi = await window.webContents.executeJavaScript(
           `(async () => {
@@ -2525,6 +2553,142 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_ORBIT_VIEW_OK mode=fallback parity=${orbit.inserted} pick=1 group=3 bore=40→32 stack=+4 hits=${orbit.hits}`);
       } catch (error) {
         console.error('SMOKE_FAIL orbit_view_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        // 迭代 35 收尾：3D 几何编辑进撤销栈（与原型合成一条时间线）+ 工程存储 + 多选（降级模式走同一条原型框选路径）。
+        const undo = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const api = window.AutomationCadOrbit;
+            if (!api || typeof api.undo !== 'function') return { error: 'AutomationCadOrbit.undo 缺失' };
+            const key = (k, extra = {}) => document.body.dispatchEvent(
+              new KeyboardEvent('keydown', { key: k, ctrlKey: true, bubbles: true, cancelable: true, ...extra }));
+            const part = (id) => api.state().parts.find((p) => p.id === id).bbox;
+            document.querySelector('.mode[data-mode="assembly"]')?.click();
+            await wait(50);
+            api.select('cyl');
+            await wait(30);
+            // ① 原型：缸径 32→40；② 3D：底板厚 8→12；③ 3D：滑台 X 92→120
+            const bore = document.querySelector('input[data-field="bore"][data-part="cyl"]');
+            bore.value = '40';
+            bore.dispatchEvent(new Event('input', { bubbles: true }));
+            await wait(400);
+            const e1 = api.setParam('base', 'thickness', 12);
+            const e2 = api.setParam('carriage', 'x', 120);
+            await wait(20);
+            const tl = api.state().history.undoTimeline.slice(-3).join(',');
+            const stored1 = JSON.parse(localStorage.getItem('automationcad.orbit.v1') || 'null');
+            const badge = document.querySelector('#stUndo .orbit-hist')?.textContent || '';
+            const title = document.getElementById('stUndo').title;
+            // Ctrl+Z → 撤 ③；状态栏撤销按钮 → 撤 ②；Ctrl+Z → 放行给原型撤 ①
+            key('z'); await wait(30);
+            const x1 = part('cyl').min[0];
+            document.getElementById('stUndo').click(); await wait(30);
+            const z1 = part('rail').min[2];
+            key('z'); await wait(150);
+            const bore1 = api.state().bore;
+            // 重做顺序：Ctrl+Y → 原型 ①；Ctrl+Shift+Z → 3D ②；Ctrl+Y → 3D ③
+            key('y'); await wait(150);
+            const bore2 = api.state().bore;
+            key('z', { shiftKey: true }); await wait(30);
+            const z2 = part('rail').min[2];
+            key('y'); await wait(30);
+            const x2 = part('cyl').min[0];
+            // 撤一步后做新的 3D 编辑：重做被作废
+            const u3 = api.undo();
+            const e3 = api.setParam('sensor', 'z', 10);
+            const r3 = api.redo();
+            const stored2 = JSON.parse(localStorage.getItem('automationcad.orbit.v1') || 'null');
+            // 多选：与原型框选同一路径（state.multi）
+            const many = api.selectMany(['base', 'rail', 'cyl']).slice().sort().join(',');
+            await wait(30);
+            const manySel = api.state().selected.slice().sort().join(',');
+            const manyMsg = document.getElementById('stMsg')?.textContent || '';
+            const hidden = Array.from(document.querySelectorAll('#scene3d g.part')).filter((g) => g.style.display === 'none').length;
+            const none = api.selectMany([]).length;
+            const noneMsg = document.getElementById('stMsg')?.textContent || '';
+            const fallbackMarquee = api.marquee({ x0: 0, y0: 0, x1: 1, y1: 1 });
+            // 点选替换框选（原型 selectPart 清空 state.multi；原型在框选后 140 ms 内忽略点击，先等过这个窗口）
+            await wait(200);
+            api.select('rail');
+            await wait(30);
+            const afterPick = api.state().selected.join(',');
+            return {
+              e1: e1.ok, e2: e2.ok, tl, stored1: stored1 && stored1.overrides, badge, title,
+              x1, z1, bore1, bore2, z2, x2, u3: u3.ok && u3.by, e3: e3.ok, r3: r3.ok,
+              stored2: stored2 && stored2.overrides, many, manySel, manyMsg, hidden, none, noneMsg,
+              fallbackMarquee, afterPick
+            };
+          })()`
+        ) as {
+          error?: string; e1: boolean; e2: boolean; tl: string; stored1: Record<string, Record<string, number>> | null;
+          badge: string; title: string; x1: number; z1: number; bore1: number; bore2: number; z2: number; x2: number;
+          u3: string | false; e3: boolean; r3: boolean; stored2: Record<string, Record<string, number>> | null;
+          many: string; manySel: string; manyMsg: string; hidden: number; none: number; noneMsg: string;
+          fallbackMarquee: unknown; afterPick: string;
+        };
+        const storedOk = JSON.stringify(undo.stored1) === JSON.stringify({ base: { thickness: 12 }, carriage: { x: 120 } }) &&
+          JSON.stringify(undo.stored2) === JSON.stringify({ base: { thickness: 12 }, sensor: { z: 10 } });
+        if (undo.error || !undo.e1 || !undo.e2 || undo.tl !== 'proto,orbit,orbit' || !undo.badge.startsWith('3D ') ||
+            !undo.title.includes('滑台') || undo.x1 !== 72 || undo.z1 !== 8 || undo.bore1 !== 32 || undo.bore2 !== 40 ||
+            undo.z2 !== 12 || undo.x2 !== 100 || undo.u3 !== 'orbit' || !undo.e3 || undo.r3 || !storedOk ||
+            undo.many !== 'base,cyl,rail' || undo.manySel !== 'base,cyl,rail' || !undo.manyMsg.includes('3 个对象') ||
+            undo.hidden !== 0 || undo.none !== 3 || !undo.noneMsg.includes('未命中') || undo.fallbackMarquee !== null ||
+            undo.afterPick !== 'rail') {
+          console.error('SMOKE_FAIL orbit_undo', JSON.stringify(undo));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ORBIT_UNDO_OK timeline=${undo.tl} undo=3D,3D,proto redo=proto,3D,3D badge="${undo.badge}" redoDropped=1`);
+        console.log(`SMOKE_ORBIT_MULTI_OK mode=fallback multi=${undo.many} empty=unchanged pick=replace`);
+
+        // 重新打开：新窗口（同一 userData）加载原型 + 扩展，应从工程存储恢复 3D 几何。
+        // 渲染进程的 localStorage 写入是批量提交到浏览器进程的，先等一个提交周期。
+        await new Promise((resolveWait) => setTimeout(resolveWait, 1200));
+        const reopen = new BrowserWindow({ show: false, width: 1280, height: 800, webPreferences: { contextIsolation: true, sandbox: false } });
+        type ReopenState = { restored: boolean; overrides: Record<string, Record<string, number>>; railZ: number; sensorZ: number; reason: string | null };
+        let reopened = null as ReopenState | null;
+        try {
+          await reopen.loadFile(indexHtmlPath());
+          const extUrl = pathToFileURL(extensionPath()).href;
+          await reopen.webContents.executeJavaScript(
+            `(() => { const s = document.createElement('script'); s.src = ${JSON.stringify(extUrl)}; document.body.appendChild(s); })()`
+          );
+          reopened = await reopen.webContents.executeJavaScript(
+            `(async () => {
+              for (let i = 0; i < 100 && !window.AutomationCadOrbit; i += 1) await new Promise((r) => setTimeout(r, 50));
+              const st = window.AutomationCadOrbit.state();
+              return {
+                restored: st.store.restored, reason: st.store.reason, overrides: st.overrides,
+                railZ: st.parts.find((p) => p.id === 'rail').bbox.min[2],
+                sensorZ: st.parts.find((p) => p.id === 'sensor').bbox.min[2]
+              };
+            })()`
+          ) as ReopenState;
+        } finally {
+          reopen.destroy();
+        }
+        // 清理：主窗口恢复默认（也是可撤销动作），存储键随之删除，不影响后续冒烟。
+        const cleaned = await window.webContents.executeJavaScript(
+          `(() => {
+            const api = window.AutomationCadOrbit;
+            api.resetPart('base');
+            api.resetPart('sensor');
+            return { key: localStorage.getItem('automationcad.orbit.v1'), railZ: api.state().parts.find((p) => p.id === 'rail').bbox.min[2] };
+          })()`
+        ) as { key: string | null; railZ: number };
+        if (!reopened || !reopened.restored || reopened.railZ !== 12 ||
+            JSON.stringify(reopened.overrides) !== JSON.stringify({ base: { thickness: 12 }, sensor: { z: 10 } }) ||
+            cleaned.key !== null || cleaned.railZ !== 8) {
+          console.error('SMOKE_FAIL orbit_persist', JSON.stringify({ reopened, cleaned }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_ORBIT_PERSIST_OK key=automationcad.orbit.v1 reopen=restored railZ=${reopened.railZ} parts=2 cleared=1`);
+      } catch (error) {
+        console.error('SMOKE_FAIL orbit_undo_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

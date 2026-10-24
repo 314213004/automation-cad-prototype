@@ -6,7 +6,7 @@
  *   docs/desktop/eval/agent-live.json       真实模型单轮评测（36 条）
  *   docs/desktop/eval/agent-multiturn.json  真实模型多轮评测（6 个场景）
  *   docs/desktop/eval/latest.json           离线规则评测（61 条）
- *   <userData>/agent-audit.jsonl            审计（存在才读）
+ *   <userData>/agent-audit.jsonl            审计（存在才读；连同轮转的 agent-audit.N.jsonl 一起读）
  *   docs/desktop/BACKLOG.md                 已知限制/问题摘录
  *   desktop/src/agent/tools.ts              工具注册表
  *
@@ -412,7 +412,9 @@ function resolveAuditSource(root, options = {}) {
     };
   }
   const file = join(userDataDir, 'agent-audit.jsonl');
-  if (!existsSync(file)) {
+  // 审计按大小轮转：agent-audit.N.jsonl（N 越大越旧）。报告按「最旧 → 当前」拼接全部份数。
+  const rotated = listRotatedAuditFiles(userDataDir);
+  if (!existsSync(file) && rotated.length === 0) {
     return {
       file,
       absolute: file,
@@ -423,8 +425,35 @@ function resolveAuditSource(root, options = {}) {
       userDataDir
     };
   }
-  const loaded = readSource(root, file, 'text');
-  return { ...loaded, userDataDir };
+  const loaded = existsSync(file)
+    ? readSource(root, file, 'text')
+    : { file, absolute: file, status: 'ok', data: null, text: '', mtime: null };
+  if (rotated.length === 0 || loaded.status !== 'ok') return { ...loaded, userDataDir };
+  const parts = [];
+  for (const path of rotated) {
+    try {
+      parts.push(readFileSync(path, 'utf8'));
+    } catch {
+      // 单个轮转文件不可读时跳过，保留其余审计。
+    }
+  }
+  const text = [...parts, loaded.text ?? ''].map((part) => (part.endsWith('\n') || part === '' ? part : `${part}\n`)).join('');
+  return { ...loaded, text, rotated, userDataDir };
+}
+
+/** userData 下的轮转审计文件，按编号倒序（最旧在前）。 */
+export function listRotatedAuditFiles(userDataDir) {
+  let names = [];
+  try {
+    names = readdirSync(userDataDir);
+  } catch {
+    return [];
+  }
+  return names
+    .map((name) => ({ name, index: Number(name.match(/^agent-audit\.(\d+)\.jsonl$/)?.[1]) }))
+    .filter((entry) => Number.isInteger(entry.index) && entry.index > 0)
+    .sort((left, right) => right.index - left.index)
+    .map((entry) => join(userDataDir, entry.name));
 }
 
 export function extractToolNames(toolsText) {

@@ -93,9 +93,10 @@ export function nodePath(tree: readonly ProtoTreeNode[], nodeId: string): string
   return path;
 }
 
-/** 选择集 = 原型 SVG 选中 ∪ 组节点展开；文件夹节点（无 part）替换掉原型残留的旧零件选中。 */
+/** 选择集 = 原型 SVG 选中 ∪ 组节点展开；文件夹节点（无 part）替换掉原型残留的旧零件选中；框选多选原样返回。 */
 export function resolveSelection(treeNodes: readonly ProtoTreeNode[], svgSelected: readonly string[], nodeId: string | null): string[] {
-  if (!nodeId) return [...svgSelected];
+  // 原型 SVG 同时选中多个零件只可能来自框选（state.multi）：框选结果原样显示，不再叠加树节点展开。
+  if (!nodeId || svgSelected.length > 1) return [...svgSelected];
   const node = findTreeNode(treeNodes, nodeId);
   if (!node) return [...svgSelected];
   if (!node.part) return partsForNode(treeNodes, nodeId);

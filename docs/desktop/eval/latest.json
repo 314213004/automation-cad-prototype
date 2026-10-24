@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-10-23T23:04:14.973Z",
+  "generatedAt": "2026-10-24T02:42:02.366Z",
   "version": "0.3.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 75,
+    "count": 102,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
-    "outOfScope": 5,
+    "outOfScope": 7,
     "toolCoverage": [
       "apply_machine_design",
       "design_machine",
@@ -51,23 +51,23 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 75,
-      "total": 75,
+      "correct": 102,
+      "total": 102,
       "rate": 1
     },
     "tools": {
-      "correct": 75,
-      "total": 75,
+      "correct": 102,
+      "total": 102,
       "rate": 1
     },
     "params": {
-      "correct": 40,
-      "total": 40,
+      "correct": 53,
+      "total": 53,
       "rate": 1
     },
     "refused": {
-      "correct": 5,
-      "total": 5,
+      "correct": 7,
+      "total": 7,
       "rate": 1
     },
     "multiStep": {
@@ -2234,6 +2234,822 @@
           "missing": []
         }
       ],
+      "passed": true
+    },
+    {
+      "id": "sy01",
+      "input": "接触器都有啥",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「都有啥」口语列举",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "list_components"
+      ],
+      "actualTools": [
+        "list_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "list_components",
+          "args": {
+            "category": "接触器"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy02",
+      "input": "给我看下库里的断路器",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「看下」+「库里」不进搜索词",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "list_components"
+      ],
+      "actualTools": [
+        "list_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "list_components",
+          "args": {
+            "category": "断路器"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy03",
+      "input": "检索一下 SMC 气缸",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「检索」= 搜索",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_components"
+      ],
+      "actualTools": [
+        "search_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "SMC",
+            "category": "气缸"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy04",
+      "input": "库里有没有 24V 开关电源",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「有没有」询问库存条目",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_components"
+      ],
+      "actualTools": [
+        "search_components"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_components",
+          "args": {
+            "q": "24V",
+            "category": "开关电源"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy05",
+      "input": "把物料明细调出来",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「物料明细」= BOM",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "get_bom"
+      ],
+      "actualTools": [
+        "get_bom"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_bom",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy06",
+      "input": "底板还能塞下多少东西",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：口语问底板余量",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "get_project_context"
+      ],
+      "actualTools": [
+        "get_project_context"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_project_context",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy07",
+      "input": "整机大概要花多少",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「花多少」= 成本",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_cost_report"
+      ],
+      "actualTools": [
+        "run_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_cost_report",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy08",
+      "input": "核算一下硬件造价",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「核算/造价」= 成本计算",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_cost_report"
+      ],
+      "actualTools": [
+        "run_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_cost_report",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy09",
+      "input": "看看几个工位会不会撞到一起",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「撞到一起」= 干涉",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_interference_check"
+      ],
+      "actualTools": [
+        "run_interference_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_interference_check",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy10",
+      "input": "检查一下有没有零件打架",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「打架」= 干涉；「检查一下」不被「查一下」抢成查询",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_interference_check"
+      ],
+      "actualTools": [
+        "run_interference_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_interference_check",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy11",
+      "input": "校核一下三相平衡和线径",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「校核/三相平衡/线径」= 电气校验",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "run_electrical_check"
+      ],
+      "actualTools": [
+        "run_electrical_check"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_electrical_check",
+          "args": {},
+          "readOnly": true,
+          "missing": [
+            "wires",
+            "loads"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy12",
+      "input": "帮我认一下哪些零件会动",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「哪些零件会动」= 运动件识别",
+      "expectedIntent": "compute",
+      "actualIntent": "compute",
+      "intentOk": true,
+      "expectedTools": [
+        "suggest_kinematics"
+      ],
+      "actualTools": [
+        "suggest_kinematics"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "suggest_kinematics",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy13",
+      "input": "新增物料号 LC1D09 的接触器",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「新增」= 插入",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "insert_component"
+      ],
+      "actualTools": [
+        "insert_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "insert_component",
+          "args": {
+            "partId": "LC1D09"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy14",
+      "input": "把 QF1 的型号换为 iC65N-C10-1P",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「换为」= 改型号",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "update_component"
+      ],
+      "actualTools": [
+        "update_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "update_component",
+          "args": {
+            "ref": "QF1",
+            "model": "iC65N-C10-1P"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy15",
+      "input": "把 KM2 数量调成 3",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「调成」= 改数量",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "update_component"
+      ],
+      "actualTools": [
+        "update_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "update_component",
+          "args": {
+            "ref": "KM2",
+            "qty": 3
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy16",
+      "input": "把 QF2 从底板去掉",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「去掉」= 移除",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "remove_component"
+      ],
+      "actualTools": [
+        "remove_component"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "remove_component",
+          "args": {
+            "ref": "QF2",
+            "target": "plate"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy17",
+      "input": "回退上一步",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「回退」= 撤销",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "undo_last"
+      ],
+      "actualTools": [
+        "undo_last"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "undo_last",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy18",
+      "input": "载入 STEP 文件 D:\\fixtures\\line.step",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「载入」= 导入 CAD",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [
+        "import_cad"
+      ],
+      "actualTools": [
+        "import_cad"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "import_cad",
+          "args": {
+            "path": "D:\\fixtures\\line.step"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy19",
+      "input": "输出一份 CSV 报价",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「输出」= 导出",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_cost_report"
+      ],
+      "actualTools": [
+        "export_cost_report"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_cost_report",
+          "args": {
+            "format": "csv"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy20",
+      "input": "把装配体另存为 DXF",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「另存为」= 导出文件",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "export_files"
+      ],
+      "actualTools": [
+        "export_files"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "export_files",
+          "args": {
+            "kind": "dxf"
+          },
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy21",
+      "input": "编一个 PLC 程序",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「编一个」= 生成 PLC",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "run_plc_generate"
+      ],
+      "actualTools": [
+        "run_plc_generate"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "run_plc_generate",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy22",
+      "input": "把 PLC 程序仿真跑一遍",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「仿真」= 模拟验证",
+      "expectedIntent": "commission",
+      "actualIntent": "commission",
+      "intentOk": true,
+      "expectedTools": [
+        "verify_plc_program"
+      ],
+      "actualTools": [
+        "verify_plc_program"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "verify_plc_program",
+          "args": {},
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy23",
+      "input": "帮我规划一台三工位锁螺丝机，节拍 20 件/分钟",
+      "tags": [
+        "synonym"
+      ],
+      "note": "同义/口语改写：「规划一台」= 机型设计",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "design_machine"
+      ],
+      "actualTools": [
+        "design_machine"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "design_machine",
+          "args": {
+            "brief": "帮我规划一台三工位锁螺丝机，节拍 20 件/分钟"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy24",
+      "input": "导轨咋放",
+      "tags": [
+        "synonym",
+        "docs"
+      ],
+      "note": "同义/口语改写：「咋放」= 文档类问题",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "search_docs"
+      ],
+      "actualTools": [
+        "search_docs"
+      ],
+      "toolOk": true,
+      "paramsApplicable": true,
+      "paramsOk": true,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "search_docs",
+          "args": {
+            "query": "导轨"
+          },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sy25",
+      "input": "帮我看下明天的天气",
+      "tags": [
+        "synonym",
+        "out_of_scope"
+      ],
+      "note": "同义/口语改写：口语动词「看下」不能把非工程话题拉进查询",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "sy26",
+      "input": "算一下我的房贷月供",
+      "tags": [
+        "synonym",
+        "out_of_scope"
+      ],
+      "note": "同义/口语改写：「算一下」不能把理财话题拉进计算",
+      "expectedIntent": "out_of_scope",
+      "actualIntent": "out_of_scope",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
+      "passed": true
+    },
+    {
+      "id": "sy27",
+      "input": "拿掉 agent-audit.1.jsonl 里的失败记录",
+      "tags": [
+        "synonym",
+        "rejection",
+        "reject_audit_tamper"
+      ],
+      "note": "同义/口语改写：轮转后的审计文件同样禁止篡改",
+      "expectedIntent": "modify",
+      "actualIntent": "modify",
+      "intentOk": true,
+      "expectedTools": [],
+      "actualTools": [],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [],
       "passed": true
     }
   ]
