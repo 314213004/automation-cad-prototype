@@ -463,6 +463,7 @@ function parseMachineCard(result: DesktopAgentChatMessage | undefined): {
   warnings: string[];
   cycle: Record<string, unknown> | null;
   power: Record<string, unknown> | null;
+  cost: Record<string, unknown> | null;
 } | null {
   if (!result) return null;
   const raw = unwrapToolResultData(result.content) ?? result.content ?? '';
@@ -487,6 +488,9 @@ function parseMachineCard(result: DesktopAgentChatMessage | undefined): {
         : null,
       power: typeof designRecord.power === 'object' && designRecord.power !== null && !Array.isArray(designRecord.power)
         ? designRecord.power as Record<string, unknown>
+        : null,
+      cost: typeof designRecord.cost === 'object' && designRecord.cost !== null && !Array.isArray(designRecord.cost)
+        ? designRecord.cost as Record<string, unknown>
         : null
     };
   } catch (error) {
@@ -533,7 +537,45 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
     mode,
     targetSeconds === null ? null : `目标 ${targetSeconds.toFixed(2)} 秒/件`
   ].filter(Boolean).join('；');
-  const va = typeof card.power?.va === 'number' ? card.power.va : null;
+  const kw = typeof card.power?.totalKw === 'number'
+    ? card.power.totalKw
+    : typeof card.power?.va === 'number'
+      ? card.power.va / 1000
+      : null;
+  const currentA = typeof card.power?.currentA === 'number' ? card.power.currentA : null;
+  const breaker = typeof card.power?.breakerSuggestion === 'object' && card.power.breakerSuggestion !== null
+    && !Array.isArray(card.power.breakerSuggestion)
+    ? card.power.breakerSuggestion as Record<string, unknown>
+    : null;
+  const breakerRating = typeof breaker?.rating === 'number' ? breaker.rating : null;
+  const breakerPoles = typeof breaker?.poles === 'number' ? breaker.poles : null;
+  const dc24 = typeof card.power?.dc24 === 'object' && card.power.dc24 !== null && !Array.isArray(card.power.dc24)
+    ? card.power.dc24 as Record<string, unknown>
+    : null;
+  const dc24Margin = typeof dc24?.marginPct === 'number' ? dc24.marginPct : null;
+  const cost = card.cost;
+  const powerWarnings = Array.isArray(card.power?.warnings)
+    ? card.power.warnings.filter((value): value is string => typeof value === 'string')
+    : [];
+  const costWarnings = Array.isArray(card.cost?.warnings)
+    ? card.cost.warnings.filter((value): value is string => typeof value === 'string')
+    : [];
+  const money = (value: unknown): string | null => typeof value === 'number' && Number.isFinite(value)
+    ? `¥${Math.round(value).toLocaleString('zh-CN')}`
+    : null;
+  const material = money(cost?.material);
+  const electrical = money(cost?.electrical);
+  const labor = money(cost?.labor);
+  const total = money(cost?.total);
+  const missingCount = typeof cost?.missingCount === 'number' ? cost.missingCount : null;
+  const costLine = total
+    ? `<div class="acp-machine-cost"><span>成本粗估（非报价）</span>` +
+      `<span>材料 ${escapeHtml(material ?? '—')}</span>` +
+      `<span>电气 ${escapeHtml(electrical ?? '—')}</span>` +
+      `<span>人工 ${escapeHtml(labor ?? '—')}</span>` +
+      `<span>合计 <b>${escapeHtml(total)}</b></span>` +
+      `${missingCount === null ? '' : `<span class="acp-machine-cost-missing">缺价 ${missingCount} 项</span>`}</div>`
+    : '';
   const form = typeof card.design.form === 'object' && card.design.form !== null && !Array.isArray(card.design.form)
     ? card.design.form as Record<string, unknown>
     : null;
@@ -553,8 +595,13 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
         ).join('；')}</div>` : ''}
       </div>`
     : '';
-  const warnings = card.warnings.length > 0
-    ? card.warnings.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
+  const warningTexts = [
+    ...card.warnings,
+    ...powerWarnings.map((warning) => `功率：${warning}`),
+    ...costWarnings.map((warning) => `成本：${warning}`)
+  ].filter((warning, index, all) => all.indexOf(warning) === index);
+  const warnings = warningTexts.length > 0
+    ? warningTexts.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
     : '<div class="acp-machine-warning is-ok">无已知警告；选型、强度与安全仍需人工确认。</div>';
   return `<div class="acp-machine-card" data-machine-card="${escapeHtml(call.id)}">
       <div class="acp-machine-card-head">
@@ -567,8 +614,12 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
         <span><b>${sensors}</b> 传感器</span>
         <span><b>${perMin === null ? '—' : perMin}</b> 件/分钟</span>
         <span title="${escapeHtml(estimateTitle)}"><b>${estimate === null ? '—' : estimate.toFixed(2)}</b> ${estimateUnit}</span>
-        <span><b>${va === null ? '—' : Math.round(va)}</b> VA</span>
+        <span><b>${kw === null ? '—' : kw.toFixed(2)}</b> kW</span>
+        <span><b>${currentA === null ? '—' : currentA.toFixed(1)}</b> A</span>
+        <span><b>${breakerRating === null ? '—' : `${breakerRating}A/${breakerPoles ?? 1}P`}</b> 断路器建议</span>
+        <span><b>${dc24Margin === null ? '—' : `${dc24Margin.toFixed(0)}%`}</b> 24V 余量</span>
       </div>
+      ${costLine}
       ${formBlock}
       <div class="acp-machine-warnings">${warnings}</div>
       <div class="acp-machine-actions">

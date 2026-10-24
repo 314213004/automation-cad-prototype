@@ -2,6 +2,85 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 形态库扩展（一）：新增 5 种机架 + 几何生成（2026-10-24，本轮）
+
+- 状态：✅ 完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1479/1479**、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`；未 push、未打包、未触发 CI。
+- 形态：`forms.ts` 在原有 6 种上新增 `gantry-4`（parallel，4 独立龙门头）、`hybrid-dial-linear`（cell，4 转盘 + 2 直线）、`cell-4`（cell，2×2）、`linear-12`（linear，8–12）、`dial-12`（dial，8–12）；每种含 `suits / rationale / footprintScale / transferSeconds / indexSeconds / geometry`，占地系数在同布局内随工位数单调增长。
+- 几何：`geometry.ts` 新增 `gantry` 多头矩阵、`hybrid`（转盘 + 沿 X 直线段拼接、转接滑台）、`cell`（rows×cols 矩阵）三类生成；三种新布局均有机架、工位底板/门架/治具与安全围栏。转盘直径按 `max(Ø560, n×140)` 随工位数增长，12 工位 Ø1680 > 4 工位 Ø560。`chooseLayout` 规则未改。
+- 测试：新增 `desktop/test/machine/forms-expansion.test.mjs`（27 条），覆盖 11 种形态字段与 range、几何 kind、转盘直径单调、龙门 heads 排布、hybrid 拼接尺寸、cell 矩阵、占地系数单调和 8 条选型回归；同步更新原 `forms.test.mjs` / `form-priority.test.mjs` 的 6 → 11 断言。
+- 文档：`MACHINE-DESIGN.md` 形态表补 5 行与几何示意说明；README / MODULES 能力数字与 smoke 口径同步。
+
+## 选型优先级修正：产能优先 + 案例数字一致性（2026-10-24，本轮）
+
+- 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1452/1452**、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`、`npm run eval:agent` **1.00**；未 push、未打包、未触发 CI。
+- 缺陷：`pickForm` 先把候选按布局意图（单一工艺默认 `parallel`）过滤，导致覆盖 6 工位且可双轨达标的 `dual-lane`（`cell`）被排除，最后回退到不达标的 `dial-6`。复现命令（在 `desktop/` 下）：
+  ```bash
+  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const y=await import('./src/machine/synth.ts');const d=y.synthMachine(s.parseMachineBrief('六工位锁螺丝机，节拍 20 件/分钟'));console.log(d.form.id, d.form.layout, d.cycle.throughputPerMin, d.cycle.meetsTarget)})"
+  ```
+  修复前：`dial-6 dial 14.29 false`（显式 12 执行机构案例为 `dial-6 dial 15.87 false`）；修复后：`dual-lane cell 28.57 true`（案例 JSON 为 `31.75 true`）。
+- 修复：`forms.ts` 候选排序改为硬约束顺序「工位覆盖 → 产能达标 → 工艺适配 → 布局偏好（仅 tie-breaker）→ 占地系数 → 推荐工位距离」；无覆盖达标形态时先取达标且工位最近，仍不达标才取工位最近，并输出「需要 X 件/分钟，最佳形态 Y 只能给 Z 件/分钟，差 W」。`flow.ts` 的 `cell` 增加 `lanes`，双轨节拍按 `(最慢工位 + transferSeconds) / lanes` 计算；`synth.ts` 把 `form.geometry.lanes` 传入 FlowModel。
+- 案例与文档：`npm run build:machine-case` 重算为 `dual-lane / cell / 3.18 s / 2 轨 / 31.75 件/分钟 / meetsTarget=true / 余量 1.59× / 需 6 工位`；`MACHINE-DESIGN-DEMO.md` 的「整机形态选型」「节拍计算」「已知风险」「数字来源索引」全部改为 JSON 实际值，删除旧 `dial-6 / 15.87 / 113.21` 数字。
+- 防漂移：新增 `test/machine/demo-doc.test.mjs`，校验文档中的形态 id/name、两位小数产能、`meetsTarget`、BOM 行数与 `machine-case.json` 一致；人为改错产能或删 BOM 行会失败并提示「先重跑 build:machine-case 再更新文档」。新增 `test/machine/form-priority.test.mjs` 覆盖 4/6/8 工位 × 10/20/40 件/分钟、布局 tie-breaker、工艺优先、fallback 顺序、双轨 cell 与无达标 warning。
+
+## 整机形态选型一致性修复（2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1426/1426**（较上轮 +18）、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`npm run eval:agent` **1.00**；未 push。
+- 缺陷：第 37 轮形态库把 `gantry-2` 的 `stationRange` 写成 1–6，选型器又让布局/得分压过工位数，导致双工位龙门承接 3/6 工位需求。复现命令（在 `desktop/` 下）：
+  ```bash
+  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const y=await import('./src/machine/synth.ts'); for (const t of ['六工位锁螺丝机，节拍 20 件/分钟','三工位点胶机，节拍 15 件/分钟','四工位装配线，节拍 12 件/分钟']) {const d=y.synthMachine(s.parseMachineBrief(t)); console.log(t.slice(0,20), d.form.id, d.config.stations.length)}})"
+  ```
+  修复前输出：三工位、六工位均 `gantry-2`；修复后：`dial-6 / dial-6 / linear-4`。
+- 修复：`forms.ts` 改为 `minStations + defaultStations + maxStations` 单一来源推导 `stationRange`，六个形态区间收敛为 `gantry-2 [1,2] / dial-6 [2,6] / dial-8 [6,8] / linear-4 [2,4] / linear-8 [5,8] / dual-lane [4,6]`；加载期 `assertMachineFormsConsistent()` 校验 `stationRange[0] <= defaultStations <= stationRange[1]`，越界直接抛错。
+- 选型：`pickForm` 先按工位数硬筛，再按工艺适配 → 节拍达标 → 占地系数最小 → 推荐工位数最接近排序；布局意图只在覆盖工位数的候选内生效。无覆盖时取区间最接近形态并输出「该形态支持 X–Y 工位，需求 N 工位，已按 X/Y 生成，请确认是否需要非标设计」。
+- 一致性：`design_machine.form` 增加 `stationRange/defaultStations`；`build-machine-case.mjs` 把 `design.form` 写入 `machine-case.json`；`apply_machine_design` 落盘的 machine json 保存 `form.id/stationRange/defaultStations`，`readStoredMachineDesign` 重载后可复现 `dial-6`。
+- 后果说明：六工位案例因形态改为 `dial-6`，产能模型从 `parallel 113.21` 变为 `dial 15.87` 件/分钟；20 件/分钟目标不再达标，案例与文档保留真实缺口 warning，不硬凑达标。
+- 文档：`MACHINE-DESIGN.md` 形态表补 `defaultStations/maxStations` 与选型优先级；`MACHINE-DESIGN-DEMO.md` 写明本案例选中 `dial-6` 的理由与重算结果。
+
+
+## 软件整体优化（2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1408/1408**（较上轮 +30）、`npm run smoke` 新增 `SMOKE_PERF_OK parts=1000 buildMs=22.4 tickMs=0.092` 与新 `SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=2`、`npm run eval:agent` **1.00**；未 commit、未 push、未打包。
+- 实测：见 [PERF.md](PERF.md)，原始数据 [PERF-before.json](PERF-before.json) / [PERF-after.json](PERF-after.json)。3000 件场景构建 `184.63 → 42.34 ms`、tick `1.5007 → 0.6755 ms`、堆峰值 `60.72 → 38.52 MB`；1000 件场景构建 `73.69 → 15.09 ms`。
+
+### 已优化项
+
+1. **几何缓存**：`generateMachineGeometry` 增加 16 项 LRU（config + process + layout + form layout 为键），同内容克隆也命中；`bypassCache` 仅供诊断；3000 件热构建 8.96 → 0.85 ms。
+2. **场景资源共享**：`buildThreeMachine` 按形状/材质键复用 BufferGeometry 与 MeshStandardMaterial；3000 件材质 3000 → 410，场景构建 -77.1%。
+3. **静态矩阵冻结 + 增量变换**：非运动节点 `matrixAutoUpdate=false`；`applyAxisValue` 相同值跳过并返回 `false`，只写 mover/jaw；`Commission3DStats.transformUpdates` 可观测有效写入次数。
+4. **运动/传感器降频**：`MachineMotion.advance` 只推进 active 执行机构；传感器只在状态变化时重绘。
+5. **大输入保护**：BOM > 5,000 行、STEP > 200 MB、其它 CAD > 50 MB 在读取/追加前拒绝，错误码 `STEP_TOO_LARGE` / `FILE_TOO_LARGE` / `BOM_TOO_MANY_ROWS`，中文提示给出拆分/轻量化动作。
+6. **幂等写盘**：`apply_machine_design` 用不含 `appliedAt` 的稳定内容 hash 判重；同参数重复执行返回 `idempotent:true`，不重写方案/active/BOM，BOM 批次 id 改内容 hash，重复追加返回 0。
+7. **资源释放**：`disposeThreeMachine`、`CommissionScene3D.dispose`、`FactoryManager.dispose`、`PlcManager.dispose`、`disposeIpcRuntime` 与 `before-quit` 接通；PLC/工厂/Parametric 的 timer 走显式计数。
+8. **catch 审计**：静默返回空值的 catch 补齐 `recordDiagnosticError` 或带 `site`/`code` 的 `console.warn/debug`；UI 分支保留中文可操作提示。源码中仅注释、无处理的 catch 清零。
+9. **诊断**：`--diagnose` / `npm run diagnose` 输出环境、WebGL、userData、数据包版本、KB 条数、审计大小与最近 20 条错误；未捕获异常写 `userData/diagnostics/last-crash.json`，字段固定且脱敏。
+10. **启动路径**：smoke 的 three.js 性能 workload 改为动态加载，普通桌面启动不再静态引入几何生成器与 three.js。
+
+### 未优化项（及原因）
+
+- **GPU / WebGL 帧率**：headless 无 GPU，本机 `--diagnose` 也显示 WebGL blocklisted；缺 Windows 实机数据，贸然改 draw call / instancing 无法用当前基线验证。
+- **LRU 按条数不按字节**：实现简单、可预测；3000 件几何仍可能占数十 MB，等出现多机型频繁切换的真实用户样本后再做字节预算。
+- **tick 仍遍历全部执行机构**：3000 件 P95 0.91 ms，已远低于 16.7 ms 帧预算；引入脏集合会增加状态同步复杂度，收益不足以覆盖风险。
+- **BOM 5,000 行只覆盖渲染层追加与 BOM 导入**：CSV/XLSX 批量导入路径尚未统一接入同一限流函数，需先确认导入入口的现有分批策略。
+- **审计文件损坏行只告警跳过**：保留 AI 可读性优先，未做自动隔离/上报；`last-crash.json` 也不做自动上传，避免未授权外传。
+- **崩溃报告仅覆盖主进程未捕获异常/未处理拒绝/子进程退出**：渲染进程崩溃已记录，但 GPU 进程 OOM、原生扩展崩溃仍依赖 Electron 自身日志。
+
+## 整机形态库（2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1378/1378**（+28：`forms.test.mjs` 25 + apply 落盘 3）、smoke 新增 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`npm run eval:agent` **1.00**（106 条，新增 4 条同工艺换布局用例）；未 push、未打包、未触发 CI。
+- 数据：新增 `desktop/src/machine/forms.ts`，6 种形态 `dial-6 / dial-8 / linear-4 / linear-8 / gantry-2 / dual-lane`；纯数据字段含 `layout / stationRange / indexSeconds / transferSeconds / footprintScale / suits / rationale / geometry`，`validateMachineForms()` 校验布局与 flow 对齐、工位区间、几何映射与 id 唯一。
+- 选型：`pickForm(brief, templates)` 先按布局意图 + 工艺适配筛候选，再用 `evaluateFlow` 在工位范围内预演；达标者优先、工位范围小者优先；无匹配时回退最近形态并给 warning（工位超出/产能缺口），不硬凑达标；固定返回 2 条备选，差异文案覆盖占地、成本、换型。
+- 接入：`synthMachine` 先选形态，按 `form.layout` 与 `form.indexSeconds/transferSeconds` 构造 FlowModel；`design_machine` 返回 `design.form` 并在方案卡显示形态名/理由/备选；`generateMachineGeometry` 优先用 `form.geometry.kind`（dial/linear/gantry/dual），1 工位回退 single；`apply_machine_design` 把 `form.id` 与几何写进 machine json，3D 刷新同时传 layout。
+- 文档：`MACHINE-DESIGN.md` 新增「整机形态库」表与选型规则；`MACHINE-DESIGN-DEMO.md` 增加「同一需求的两种形态对比」；README / MODULES 已同步 smoke 与测试数。
+
+## 通用产能引擎（feat/flow-engine，2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1350/1350**（+34：`flow.test.mjs` 23 + `flow-archetypes.test.mjs` 6 + `flow-synth.test.mjs` 5）、smoke 新增 `SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`npm run eval:agent` 1.00、`build:machine-case` 重算六工位案例（`parallel` / 3.18 s / 113.21 件/分钟 / 需 2 工位）；未打包、未触发 CI、未发版、不 push。
+- 数据模型：新增 `desktop/src/machine/flow.ts` 纯函数 `evaluateFlow`，统一支持 `single / linear / dial / parallel / cell`；公式、默认值（transfer=0、index=0.6、copies=stations）、`optional` 排除、目标反解与中文非法输入错误全部在引擎内，不为单一机型写特例。
+- 对接：`synthMachine` 只把 brief/模板/工位映射为 `FlowModel`，`MachineCycleEstimate.mode` 改为 `MachineLayout`，旧字段保留；`chooseLayout` 与几何层共用 dial 工艺集合/上限，`cell` 仅显式指定；`layout:'auto'` 的推断写入 `assumptions`。
+- 回归：6 个机型覆盖 5 种布局（六工位并行锁螺丝、转盘点胶、5 工位直线、单工位检测、2×2 单元、2 副本并行点胶），每个机型断言 mode/cycle/throughput/meetsTarget/requiredStations/瓶颈工位。
+- 文档：`MACHINE-DESIGN.md` 新增五种布局公式表、字段、默认值与适用边界；`MACHINE-DESIGN-DEMO.md` 标注本案例为 `parallel` 实例；README 能力表与 KB 已同步。
+- KB：为留出 ≥5% 余量，将上一轮「并行三条」及已完成 P8/P9/P10 记录原文移入 `BACKLOG-HISTORY.md`（不进入索引）。
+
 ## 并行三条：Agent 打磨 / 主视口 3D 收尾 / 元件库补录（integ/next，2026-10-24，本轮）
 
 ### Agent 打磨：审计轮转 + 路由同义词 + MT04 离线回归（feat/agent-audit-router，2026-10-24）

@@ -6,6 +6,8 @@ import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { dirname, join } from 'node:path';
 import { validateMachineConfig, type MachineConfig } from '../commission/machine-config.ts';
 import type { MachineBomItem, MachineCycleEstimate, MachinePowerEstimate } from './synth.ts';
+import type { PowerResult } from './power.ts';
+import type { MachineCostEstimate } from './cost-model.ts';
 import { MACHINE_FORMS, type MachineFormGeometry, type MachineFormSummary } from './forms.ts';
 
 export interface NormalizedMachineDesign {
@@ -13,6 +15,7 @@ export interface NormalizedMachineDesign {
   points: string[];
   cycle?: MachineCycleEstimate;
   power?: MachinePowerEstimate;
+  cost?: MachineCostEstimate;
   bomDraft?: { items: MachineBomItem[] };
   warnings: string[];
   assumptions: string[];
@@ -255,6 +258,9 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
       if (typeof raw.model === 'string' && raw.model.trim()) item.model = raw.model.trim();
       if (typeof raw.partId === 'string' && raw.partId.trim()) item.partId = raw.partId.trim();
       if (typeof raw.packId === 'string' && raw.packId.trim()) item.packId = raw.packId.trim();
+      const roles = new Set(['servo', 'cylinder', 'gripper', 'rotary', 'sensor', 'safety', 'plc', 'psu', 'valve', 'other']);
+      if (typeof raw.role === 'string' && roles.has(raw.role)) item.role = raw.role as NonNullable<MachineBomItem['role']>;
+      if (typeof raw.ratedW === 'number' && Number.isFinite(raw.ratedW) && raw.ratedW > 0) item.ratedW = raw.ratedW;
       if (raw.pendingSelection === true) item.pendingSelection = true;
       return item;
     });
@@ -330,10 +336,36 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
         if (!name || typeof groupVa !== 'number' || !Number.isFinite(groupVa) || groupVa < 0) {
           throw new Error(`design.power.byGroup[${index}] 名称或 va 不合法`);
         }
-        return { name, va: groupVa };
+        return {
+          name,
+          count: typeof group.count === 'number' && Number.isFinite(group.count) ? group.count : 0,
+          ratedW: typeof group.ratedW === 'number' && Number.isFinite(group.ratedW) ? group.ratedW : 0,
+          va: groupVa
+        };
       })
       : [];
-    normalized.power = { va, byGroup };
+    const totalVa = typeof value.power.totalVa === 'number' && Number.isFinite(value.power.totalVa)
+      ? value.power.totalVa
+      : va;
+    const totalKw = typeof value.power.totalKw === 'number' && Number.isFinite(value.power.totalKw)
+      ? value.power.totalKw
+      : 0;
+    normalized.power = {
+      ...(value.power as unknown as PowerResult),
+      va,
+      totalVa,
+      totalKw,
+      byGroup
+    };
+  }
+  if (isRecord(value.cost)) {
+    const cost = value.cost as Record<string, unknown>;
+    for (const key of ['material', 'electrical', 'labor', 'total', 'missingCount'] as const) {
+      if (typeof cost[key] !== 'number' || !Number.isFinite(cost[key] as number) || (cost[key] as number) < 0) {
+        throw new Error(`design.cost.${key} 必须是非负数字`);
+      }
+    }
+    normalized.cost = cost as unknown as MachineCostEstimate;
   }
   if (bomDraft) normalized.bomDraft = bomDraft;
   return normalized;
@@ -496,6 +528,7 @@ export function machineDesignContent(design: NormalizedMachineDesign): string {
     points: design.points,
     cycle: design.cycle ?? null,
     power: design.power ?? null,
+    cost: design.cost ?? null,
     bomDraft: design.bomDraft ?? null,
     warnings: design.warnings,
     assumptions: design.assumptions,

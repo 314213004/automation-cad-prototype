@@ -1454,7 +1454,13 @@ function createWindow(): BrowserWindow {
           design?: {
             config?: { stations?: unknown[]; actuators?: unknown[]; sensors?: unknown[] };
             cycle?: { perMin?: number; secondsPerPiece?: number };
-            power?: { va?: number };
+            power?: {
+              totalKw?: number;
+              currentA?: number;
+              breakerSuggestion?: { rating?: number; poles?: number };
+              dc24?: { marginPct?: number } | null;
+            };
+            cost?: { total?: number; missingCount?: number; material?: number; electrical?: number; labor?: number };
             warnings?: string[];
             form?: { id?: string; stationRange?: number[] };
             assumptions?: unknown[];
@@ -1469,7 +1475,11 @@ function createWindow(): BrowserWindow {
           machineDesign.design?.config?.sensors?.length !== 3 ||
           machineDesign.design?.cycle?.perMin !== 20 ||
           machineDesign.design?.cycle?.secondsPerPiece !== 3 ||
-          !(Number(machineDesign.design?.power?.va) > 0) ||
+          !(Number(machineDesign.design?.power?.totalKw) > 0) ||
+          !(Number(machineDesign.design?.power?.currentA) > 0) ||
+          !(Number(machineDesign.design?.power?.breakerSuggestion?.rating) > 0) ||
+          !(Number(machineDesign.design?.cost?.total) > 0) ||
+          typeof machineDesign.design?.cost?.missingCount !== 'number' ||
           machineDesign.design?.warnings?.length !== 1 ||
           !machineDesign.design?.warnings?.some((warning: string) => /形态选型/.test(warning)) ||
           machineDesign.design?.form?.id !== 'gantry-2' ||
@@ -1483,6 +1493,13 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2');
+        console.log(
+          `SMOKE_MACHINE_POWER_OK kw=${machineDesign.design.power?.totalKw} ` +
+          `a=${machineDesign.design.power?.currentA} breaker=${machineDesign.design.power?.breakerSuggestion?.rating}`
+        );
+        console.log(
+          `SMOKE_MACHINE_COST_OK total=${machineDesign.design.cost?.total} missing=${machineDesign.design.cost?.missingCount}`
+        );
 
         const cycleDesign = await activeTools.call('design_machine', {
           brief: '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅'
@@ -1648,7 +1665,7 @@ function createWindow(): BrowserWindow {
           applied.stations !== 3 ||
           applied.actuators !== 6 ||
           applied.sensors !== 3 ||
-          applied.bom?.count !== 5 ||
+          applied.bom?.count !== 7 ||
           !applied.bomPath || !existsSync(applied.bomPath) ||
           !applied.plcPath || !existsSync(applied.plcPath) ||
           !applied.designPath || !existsSync(applied.designPath) ||
@@ -1693,7 +1710,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=5 undo=1`);
+        console.log(`SMOKE_MACHINE_APPLY_OK machine=${applied.machineId} stations=3 bom=7 undo=1`);
         console.log(`SMOKE_MACHINE_GEOMETRY_OK layout=${machineGeometry.layout} parts=${machineGeometry.parts} axes=${machineGeometry.movingAxes} envelope=${(machineGeometry.envelopeMm ?? []).map((value) => Math.round(value)).join('x')} chunks=${machineGeometry.sidecarChunks} scene=${appliedGeometry?.parts}`);
 
         const kbResult = await activeTools.call('search_docs', { query: 'D2', limit: 1 }) as {
@@ -3272,9 +3289,13 @@ function buildMenu(window: BrowserWindow): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-async function startAgent(registry: PackRegistry, commands: CommandBus): Promise<void> {
+async function startAgent(
+  registry: PackRegistry,
+  commands: CommandBus,
+  options: { userDataRoot: string; loadBuiltinPricebook: () => unknown }
+): Promise<void> {
   const { token, tokenFile } = createAgentTokenFile(app.getPath('userData'));
-  const tools = new AgentTools(registry, commands);
+  const tools = new AgentTools(registry, commands, options);
   agentTools = tools;
   commandBus = commands;
   agentServer = new AgentRpcServer({
@@ -3341,7 +3362,10 @@ async function bootstrap(): Promise<void> {
       return manager.build(doc);
     }
   });
-  await startAgent(registry, commandBus);
+  await startAgent(registry, commandBus, {
+    userDataRoot: app.getPath('userData'),
+    loadBuiltinPricebook: readBuiltinPricebookRaw
+  });
   registerAgentChatIpc({
     userDataDir: app.getPath('userData'),
     getTools: () => agentTools,

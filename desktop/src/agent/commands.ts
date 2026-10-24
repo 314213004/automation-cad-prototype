@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
+import type { ComponentPart } from '../shared/types.ts';
 import { CAD_EXTENSIONS, isCadExtension } from '../shared/cad.ts';
 import {
   runElectricalCheck,
@@ -29,6 +30,9 @@ import { resolvePartReference } from './placement.ts';
 import { checkExportTargetPath } from './policy.ts';
 import { parseMachineBrief } from '../machine/spec.ts';
 import { synthMachine } from '../machine/synth.ts';
+import { estimatePower } from '../machine/power.ts';
+import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import {
   activeMachinePath,
   buildMachineBomRows,
@@ -50,6 +54,7 @@ import {
   writeBytes,
   writeText,
   type MachineBomRow,
+  type NormalizedMachineDesign,
   type StoredMachineDesign
 } from '../machine/store.ts';
 import { buildMachineIoMap } from '../machine/io-map.ts';
@@ -1206,6 +1211,25 @@ interface MachineApplyUndoToken {
   geometryFiles?: { path: string; previous: string | null }[];
 }
 
+
+function machineMainBreakerRating(
+  design: NormalizedMachineDesign,
+  parts: readonly ComponentPart[]
+): number | undefined {
+  const breaker = design.bomDraft?.items.find((item) => /总进线断路器/.test(item.name));
+  if (!breaker?.partId) return undefined;
+  const part = parts.find((candidate) =>
+    candidate.id === breaker.partId && (!breaker.packId || candidate.packId === breaker.packId)
+  );
+  const raw = part?.specs['额定电流'];
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+  if (typeof raw === 'string') {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*A/i);
+    if (match?.[1]) return Number(match[1]);
+  }
+  return undefined;
+}
+
 function registerMachineApplyCommand(bus: CommandBus): void {
   bus.register({
     name: 'apply_machine_design',
@@ -1235,13 +1259,46 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       }
 
       let normalized;
+      let pricingAssumptions: readonly string[] = [];
       try {
+        const parts = ctx.registry.listParts();
+        const pricingLoad = readMachinePricing(ctx.userDataRoot);
+        pricingAssumptions = pricingLoad.assumptions;
         if (brief) {
-          const design = synthMachine(parseMachineBrief(brief), name ? { name } : {});
+          const design = synthMachine(parseMachineBrief(brief), {
+            ...(name ? { name } : {}),
+            parts,
+            pricing: pricingLoad.pricing,
+            pricingAssumptions: pricingLoad.assumptions
+          });
           normalized = validateMachineDesign(design);
         } else {
           normalized = validateMachineDesign(rawDesign);
         }
+
+        let builtinPricebook: Pricebook | undefined;
+        try {
+          if (ctx.loadBuiltinPricebook) builtinPricebook = validatePricebook(ctx.loadBuiltinPricebook());
+        } catch (error) {
+          recordDiagnosticError('MACHINE_COST_PRICEBOOK_FAILED', error, { site: 'desktop/src/agent/commands.ts' });
+        }
+        const selectedBreakerA = machineMainBreakerRating(normalized, parts);
+        normalized.power = estimatePower(normalized, {
+          parts,
+          voltage: normalized.power?.voltage ?? '380VAC',
+          simultaneity: pricingLoad.pricing.power.simultaneity,
+          loadFactor: pricingLoad.pricing.power.loadFactor,
+          efficiency: pricingLoad.pricing.power.efficiency,
+          cosPhi: pricingLoad.pricing.power.cosPhi,
+          ...(selectedBreakerA !== undefined ? { selectedBreakerA } : {}),
+          assumptions: pricingLoad.assumptions
+        });
+        normalized.cost = estimateCost(normalized, {
+          parts,
+          pricing: pricingLoad.pricing,
+          pricingAssumptions: pricingLoad.assumptions,
+          ...(builtinPricebook ? { builtinPricebook } : {})
+        });
       } catch (error) {
         throw new CommandFailure(
           'INVALID_ARGUMENT',

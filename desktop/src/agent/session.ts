@@ -9,7 +9,7 @@ import {
   type AgentContext
 } from './context.ts';
 import { AgentMemory, resultCode, summarizeToolCall } from './memory.ts';
-import { serializeToolResult } from './trim.ts';
+import { serializeToolResult, toolResultByteLimit } from './trim.ts';
 import {
   addTokenUsage,
   DEFAULT_SECTION_CAPS,
@@ -1332,7 +1332,7 @@ export class AgentSession {
     if (!result.ok) {
       return `模型暂不可用，离线规则已调用 ${plan.tool}，但返回失败：${result.error?.message ?? '未知错误'}`;
     }
-    const detail = result.data === undefined ? '' : serializeToolResult(result.data).text;
+    const detail = result.data === undefined ? '' : serializeToolResult(result.data, toolResultByteLimit(plan.tool)).text;
     const summary = detail.length > 600 ? `${detail.slice(0, 600)}…` : detail;
     const reference = plan.resolvedFrom
       ? `已使用${plan.resolvedFrom === 'selection' ? '选中对象' : plan.resolvedFrom === 'recent' ? '最近操作对象' : '底板对象'}：${plan.resolvedLabel ?? ''}`
@@ -1561,7 +1561,10 @@ export class AgentSession {
           role: 'tool',
           tool_call_id: call.id,
           name: call.function.name,
-          content: guardToolResult(serializeToolResult(results[index]).text, call.function.name).text
+          content: guardToolResult(
+            serializeToolResult(results[index], toolResultByteLimit(call.function.name)).text,
+            call.function.name
+          ).text
         });
       }
       if (options.signal?.aborted) throw new AgentCancelledError(completed);

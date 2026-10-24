@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseMachineBrief } from '../../src/machine/spec.ts';
-import { POWER_VA, summarizeMachineDesign, synthMachine } from '../../src/machine/synth.ts';
+import { summarizeMachineDesign, synthMachine } from '../../src/machine/synth.ts';
 import { validateMachineConfig } from '../../src/commission/machine-config.ts';
 
 function basicBrief(text = '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服') {
@@ -83,24 +83,24 @@ test('无效或超范围工位数会保留解析提示并进入 warnings', () =>
   }
 });
 
-test('功率按固定表求和，且假设声明为估算', () => {
+test('功率接入统一模型：分组合计等于视在功率，系数与默认值写入 assumptions', () => {
   const brief = parseMachineBrief('两工位，两个气缸，1 个夹爪，1 个旋转轴，3 个接近开关，1 套安全光栅');
   const design = synthMachine(brief, { cyclePerMin: 10 });
-  const expected =
-    2 * POWER_VA.cylinder +
-    1 * POWER_VA.gripper +
-    1 * POWER_VA.rotary +
-    3 * POWER_VA.sensor +
-    1 * POWER_VA.safety;
-  assert.equal(design.power.va, expected);
-  assert.equal(design.power.byGroup.reduce((sum, group) => sum + group.va, 0), expected);
-  assert.ok(design.assumptions.some((line) => line.includes('固定估算表')));
-  assert.ok(design.assumptions.some((line) => line.includes('粗略估算')));
+  const groupSum = design.power.byGroup.reduce((sum, group) => sum + group.va, 0);
+  assert.ok(Math.abs(groupSum - design.power.totalVa) < 0.01, `${groupSum} vs ${design.power.totalVa}`);
+  assert.ok(design.power.totalKw > 0);
+  assert.ok(design.power.currentA > 0);
+  assert.ok(design.power.warnings.some((line) => /缺少额定功率/.test(line)));
+  assert.ok(design.assumptions.some((line) => line.includes('功率按 power.ts')));
+  assert.ok(design.power.assumptions.some((line) => /同时系数 Ks=0\.7/.test(line)));
+  assert.ok(design.power.assumptions.some((line) => /功率因数 cosφ=0\.9/.test(line)));
 });
 
-test('伺服功率按 750 VA/轴计入，不再重复计旋转轴 200 VA', () => {
+test('伺服按一个轴一条负载计入，不再重复计旋转轴', () => {
   const design = synthMachine(basicBrief());
-  assert.deepEqual(design.power.byGroup.find((group) => group.name === '伺服'), { name: '伺服', va: 3 * POWER_VA.servo });
+  const servo = design.power.byGroup.find((group) => group.name === '伺服');
+  assert.equal(servo?.count, 3);
+  assert.equal(servo?.ratedW, 3 * 750);
   assert.equal(design.power.byGroup.some((group) => group.name === '旋转轴'), false);
 });
 
@@ -150,7 +150,9 @@ test('摘要 ≤600 字且包含工位/机构/传感器/节拍/功率/风险', (
   assert.match(summary, /执行机构：6/);
   assert.match(summary, /传感器：3/);
   assert.match(summary, /20 件\/分钟/);
-  assert.match(summary, /功率：约 \d+ VA/);
+  assert.match(summary, /功率：[\d.]+ kW/);
+  assert.match(summary, /[\d.]+ A \/ 断路器 \d+ A \dP/);
+  assert.match(summary, /24V 余量 [\d.]+%/);
   assert.match(summary, /风险：/);
 });
 

@@ -6,7 +6,7 @@
 
 - **几何是「按规则摆放的标准件外形」，不是结构设计**：`generateMachineGeometry` 由 `MachineConfig` 生成真实 mm 尺寸与位置的装配（典型值：台面 850 mm、缸径 Ø32、M12 接近开关、50 方门架型材），运动件带轴向/行程/点位；但**不做**强度/刚度/挠度校核、零件间干涉求解、型号选型，不生成紧固件、钣金、气路/线缆、电柜，也不建模工位与输送线/转盘之间的上下料机构；输送线驱动与转盘分度没有接入点位。仍不会从 STEP 反推机构。
 - **STEP 只能经 build123d sidecar 产出**：离线时只有 TS 三角网格（STL / glTF，圆柱为多边形近似）；sidecar 只有 box / 竖直 cylinder 与绕 Z 旋转，水平圆柱（接近开关、压力传感器、输送线电机）实体化时按**等截面积方棒近似**，并在 `approximated` 中逐个列出。
-- **功率是估算表**：气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA。它是选型前的粗略容量参考，不是实测有功功率、启动电流或断路器选型结论。
+- **功率与成本是统一模型估算**：功率优先读取元件库额定功率，再按可配置的同时系数、负载率、效率与功率因数折算；成本按机械件、电气件、人工/调试分项。两者都是方案阶段粗估，不是实测功率、短路/电缆选型结论，也不是对外报价（详见 3.3）。
 - **节拍是估算**：单工位动作时间 = 工艺固定余量 + 机构动作时间之和，再交给 `evaluateFlow` 按 `single / linear / dial / parallel / cell` 五种布局之一求值；均未计入上下料、通讯、人工干预、调试损失与真实加减速曲线。公式与边界见 3.1。
 - **不做安全决策**：不提安全等级、不替代风险评估；安全光栅数量只按需求记录。
 - **只读与写分离**：`design_machine` 只返回方案与摘要；`apply_machine_design` 才写文件、改 active 指针与联动视图，且必须经过用户确认、可用 `undo_last` 撤销。
@@ -54,6 +54,12 @@ synthMachine(brief: MachineBrief, options?: {
   cyclePerMin?: number;   // >0，覆盖 brief
   name?: string;
   id?: string;
+  parts?: readonly ComponentPart[];   // 元件库，用于读取额定功率与参考价
+  pricebook?: Pricebook;              // 企业价格簿
+  builtinPricebook?: Pricebook;       // 内置示例价格簿
+  pricing?: MachinePricing;           // machine-pricing.json 解析结果
+  pricingAssumptions?: readonly string[];
+  voltage?: '220VAC' | '380VAC' | '24VDC';
 }): MachineDesign
 ```
 
@@ -66,8 +72,22 @@ synthMachine(brief: MachineBrief, options?: {
   cycle: { mode, perMin, secondsPerPiece, stationSeconds, throughputPerMin,
            estimatedSecondsPerPiece, baseSeconds, slowestStation, slowestActionSeconds,
            requiredParallelStations, requiredTotalStations, meetsTarget, bottleneck },
-  power: { va, byGroup: { name, va }[] },
-  bomDraft: { items: { kind, name, qty, note? }[] },
+  power: {
+    va, totalVa, totalKw,
+    byGroup: { name, count, ratedW, va }[],
+    currentA,
+    breakerSuggestion: { rating, poles: 1 | 2 | 3, margin },
+    dc24: { loadW, supplyW, marginPct } | null,
+    voltage, cosPhi, simultaneity, loadFactor, efficiency,
+    assumptions: string[], warnings: string[]
+  },
+  cost: {
+    material, electrical, labor, total, missingCount,
+    byCategory: { category, subtotal, count, missing }[],
+    assumptions: string[], warnings: string[],
+    lines, laborDetail, boundary
+  },
+  bomDraft: { items: { kind, name, qty, role?, ratedW?, note? }[] },
   warnings: string[],
   assumptions: string[],
   form: { id, name, rationale, layout, geometry, score, alternatives, warning? }
@@ -82,7 +102,8 @@ synthMachine(brief: MachineBrief, options?: {
 - 点位按 `ST{工位}-{EXT|RET|GRIP|ROT|PRX|PHT|SAFE|PRS}-{A|S}{序号}` 生成，全部唯一。
 - `synthMachine` 先调用 `pickForm` 选整机形态，再用形态的 `layout` 与 `indexSeconds` / `transferSeconds` 构造 `FlowModel`；`form` 随方案返回并用于几何与落盘。
 - `secondsPerPiece = 60 / perMin`；`stationSeconds` = 工艺固定余量 + 该工位动作时间。所有布局统一由 `evaluateFlow` 求 `cycleSeconds`、`throughputPerMin`、`requiredStations` 与瓶颈；`MachineCycleEstimate.mode` 直接使用 `MachineLayout`（`single / linear / dial / parallel / cell`），旧字段保留。`parallel` 的 warning 以「并行同工序」开头，`linear` 以「流水线节拍瓶颈」开头，其余布局使用各自的 `mode` 标签。
-- 功率按固定表求和；检测到伺服/步进时，旋转轴按 750 VA/轴计入「伺服」组，不重复计 200 VA 旋转轴。
+- 功率由 `estimatePower(design, options)` 估算：优先使用 BOM/元件库中的单件 `ratedW`，缺失时按类别默认值并在 `warnings` 点名、在 `assumptions` 说明；检测到伺服/步进时，旋转轴按伺服组计入。
+- 成本由 `estimateCost(design, options)` 估算：机械件、电气件按价格簿/元件库参考价 × 数量，伺服按驱动器 + 电机成对计价；人工/调试按工位数、形态系数与可配置工时单价估算；缺价行只计数、不猜价。
 - BOM 草案按执行机构、传感器、电气分组；型号一律标「待定」，不编造品牌型号。
 - 缺工艺/工位/节拍只记 warning，不阻断；每条缺省都在 `warnings` 里点名缺省值，并在 `assumptions` 说明假设。
 
@@ -182,6 +203,59 @@ pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
 
 边界：形态只在典型范围与静态节拍上选型，不包含占地 CAD 校核、换型时间、报价与真实结构干涉；warning 是提醒换型/扩产，不是自动改图。
 
+### 3.3 功率与成本模型 `desktop/src/machine/power.ts` / `cost-model.ts`
+
+#### 功率
+
+```ts
+estimatePower(input: PowerInput, options?): PowerResult
+estimatePower(design: MachineDesign, options?): PowerResult
+```
+
+纯函数。`PowerInput.items[]` 每项包含 `role`（`servo / cylinder / gripper / rotary / sensor / safety / plc / psu / valve / other`）、`qty`、可选 `partId` 与单件 `ratedW`。计算顺序：
+
+```text
+P_eff = Σ(P_rated,i × qty_i) × Ks × Kf
+P_in  = P_eff / η
+S     = P_in / cosφ
+I_单相 = P_in / (220 × cosφ)
+I_三相 = P_in / (√3 × 380 × cosφ)
+I_24V = P_in / 24
+```
+
+- 默认系数：同时系数 `Ks=0.7`、负载率 `Kf=0.6`、效率 `η=0.9`、功率因数 `cosφ=0.9`（24 VDC 主回路按 `1.0`）；每一项都会写进 `assumptions`。
+- 断路器：`I × 1.25` 向上取 `6 / 10 / 16 / 20 / 25 / 32 / 40 / 50 / 63 A`；`380VAC → 3P`，`220VAC → 1P`（需要零线保护时可选 2P），`24VDC → 1P`。超过 63 A 时不硬凑，告警提示分回路或更大壳架。
+- 额定功率来源：优先元件库中的「额定功率 / 功率 / 输出功率」等字段；安全光栅可从样本「消耗电流」按 24 V 折算。**只有缺失时才使用类别默认值**：伺服 750 W、气缸 5 W、夹爪 15 W、旋转轴 200 W、传感器 3 W、安全光栅 20 W、PLC 25 W、24 V 电源 350 W、电磁阀 4 W、其他 10 W。默认值会逐条写入 `assumptions`，缺失项同时进入 `warnings`。
+- 24 VDC 回路单独统计传感器、安全光栅、PLC、电磁阀等负载；电源容量取 BOM 中 `psu.ratedW`，按 `(supply - load) / supply` 给出余量，负载超过电源额定 70% 时告警。
+- 已选断路器交叉校验：BOM 中「总进线断路器」的额定电流传入后，`计算电流 > 已选额定` 告警必须放大或分回路；`已选额定 / 计算电流 > 1.6`（余量超过 60%）提示可评估降档。
+
+#### 成本
+
+```ts
+estimateCost(design: MachineDesign, options?): MachineCostEstimate
+```
+
+- **机械件**：BOM 机械类按企业价格簿单价 × 数量；价格簿未命中时回退元件库参考价；仍无价格则标 `missing`，不计入合计并累加 `missingCount`。
+- **电气件**：元件库 + 价格簿；伺服按「驱动器 + 电机」成对计价，方案只列其中一件时按同数量补齐另一件并标注。缺价同样只计数、不猜价。
+- **人工/调试**：`工位数 × (机械工时 + 电气工时 + 调试工时) × 形态系数 × 工时单价`。默认每工位机械 8 h、电气 6 h、调试 4 h，工时单价 120 元/h；形态系数 `single=1.0 / parallel=1.05 / linear=1.1 / dial=1.15 / cell=1.2`。全部默认值写入 `assumptions`。
+- **参数文件**：`<userData>/machine-pricing.json`，缺失或字段非法时逐项回落默认值，并把来源/回退原因写进 `assumptions`：
+
+```json
+{
+  "power": { "simultaneity": 0.7, "loadFactor": 0.6, "efficiency": 0.9, "cosPhi": 0.9 },
+  "labor": {
+    "ratePerHour": 120,
+    "mechanicalHoursPerStation": 8,
+    "electricalHoursPerStation": 6,
+    "debugHoursPerStation": 4
+  }
+}
+```
+
+**与 `cost/engine.ts` 的分工**：这里是刚合成方案的**方案阶段粗估**，允许型号待定与缺价，输出用于方案比较和预算区间；不含报价加成、税率、运费、线缆/线槽长度、端子接线工时与阶梯价导出。正式报价仍走 `cost/engine.ts` 的价格簿、缺价清单和导出流程，`total` 不能直接对外报价。
+
+**适用范围**：方案阶段的容量粗估、断路器初选、24 V 电源余量、机械/电气/人工预算区间。**不适用**：短路电流与保护配合计算、电缆/线槽选型与压降校核、启动电流/谐波/无功补偿、电柜母排与温升、现场实测功率，以及任何对外报价或合同价格。定型前必须用驱动器、电机、电源、断路器与安全回路的最新样本复核。
+
 ## 4. Agent 工具 `design_machine`（只读）
 
 只读工具，不需要二次确认；加入写工具 `apply_machine_design` 后，工具总数为 21（只读 11 + 写 10）。
@@ -197,12 +271,12 @@ pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
 `brief` 必填；`stationCount` 为 1–12 的整数；`cyclePerMin` 必须大于 0。返回：
 
 ```ts
-{ ok: true, design: { config, cycle, power, bomDraft, warnings, assumptions, form }, summary, geometry, needs: [], question: null }
+{ ok: true, design: { config, cycle, power, cost, bomDraft, warnings, assumptions, form }, summary, geometry, needs: [], question: null }
 ```
 
 `summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。`needs` / `question` 来自 `buildClarify(brief)`，供会话层决定是否先追问；完整需求返回空数组与 `null`。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。
 
-示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟、约 `2304` VA。覆盖 3 工位的形态均不达标时，按 fallback 取达标且工位最近的 `gantry-2`（支持 1–2 工位），按 `parallel` 模型估算 3 工位并发生能为 `56.60` 件/分钟，`meetsTarget=true`，同时输出「该形态支持 1–2 工位，需求 3 工位」的非标 warning。BOM 草案 5 行（旋转轴、夹爪、接近开关、伺服驱动器、电气控制）。
+示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟；功率约 `1.09 kW / 1.84 A`，建议 `6 A / 3P` 断路器，24 V 余量约 `87%`；成本粗估 `¥10,614`（材料 `¥2,568` / 电气 `¥1,242` / 人工 `¥6,804`，缺价 `8` 行）。覆盖 3 工位的形态均不达标时，按 fallback 取达标且工位最近的 `gantry-2`（支持 1–2 工位），按 `parallel` 模型估算 3 工位并发生能为 `56.60` 件/分钟，`meetsTarget=true`，同时输出「该形态支持 1–2 工位，需求 3 工位」的非标 warning。原始 BOM 草案 7 行（夹爪、旋转轴、接近开关、伺服驱动器、PLC、24 V 电源、电气控制辅材），映射到真实元件包后 11 行。
 
 ### 4.1 工艺模板 `desktop/src/machine/templates.ts`
 
@@ -235,7 +309,7 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 ```json
 {
   "brief": "设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服",
-  "design": { "config": {}, "cycle": {}, "power": {}, "bomDraft": {} },
+  "design": { "config": {}, "cycle": {}, "power": {}, "cost": {}, "bomDraft": {} },
   "name": "三工位锁螺丝机",
   "overwrite": false,
   "withBom": true,
@@ -270,7 +344,7 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 ```
 <userData>/machine/
   active.json                  # 当前工程指向：machineId / name / file / appliedAt
-  <machineId>.json             # 完整方案：config + points + cycle + power + bomDraft + warnings
+  <machineId>.json             # 完整方案：config + points + cycle + power + cost + bomDraft + warnings
   <machineId>/bom-draft.csv    # withBom=true 时写出的 BOM 草稿
 <userData>/exports/plc/<machineId>/io-map.csv   # withPlc=true 时写出的点位映射
 ```
@@ -285,7 +359,7 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 ### 5.3 侧栏方案卡
 
-`design_machine` 工具结果在侧栏渲染「机型方案卡」：工位数、执行机构、传感器、节拍、功率、全部 warnings（黄色条，不折叠）与「应用到工程」按钮。按钮走计划确认；确认后执行 `apply_machine_design`，3D 视图切到新机型，并在卡片和反馈区显示「已应用：<名称>」。
+`design_machine` 工具结果在侧栏渲染「机型方案卡」：工位数、执行机构、传感器、节拍、kW、电流、断路器建议、24V 余量，材料/电气/人工/合计与缺价件数，以及设计/功率/成本全部 warnings（黄色条，不折叠）与「应用到工程」按钮。按钮走计划确认；确认后执行 `apply_machine_design`，3D 视图切到新机型，并在卡片和反馈区显示「已应用：<名称>」。
 
 ### 5.4 参数化几何落盘
 
@@ -309,8 +383,9 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 - 几何（迭代 34 + 形态扩展）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5）、`forms-expansion.test.mjs`（27），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退，以及 gantry 多头排布、hybrid 转盘+直线拼接、cell 矩阵、转盘直径随工位数增长。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`。
 - 产能引擎：`test/machine/flow.test.mjs` 覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs` 覆盖六工位同工序并行、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs` 覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dual-lane`、`mode=cell`、`stationSeconds=3.18`、`lanes=2`、`throughputPerMin=31.75`、`meetsTarget=true`（20 件/分钟目标下余量 1.59 倍）。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
-- 全量测试：`TZ=Asia/Shanghai npm test` **1479/1479**（含本轮形态库扩展与几何回归）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
+- 功率与成本：`test/machine/power-cost.test.mjs`（29 条）覆盖单相/三相电流、同时系数、负载率、效率、`cosφ`、断路器取档、24 V 余量、缺额定功率、机械/电气/人工分项、缺价计数、伺服成对计价、工时随工位数变化、参数文件缺失/非法回落、方案卡字段完整与两类断路器交叉校验。
+- 全量测试：`TZ=Asia/Shanghai npm test` **1509/1509**（较上一轮 1479 增加 30 条：功率/成本 28 条 + 文档一致性 1 条 + 方案卡大结果保留 1 条）。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6`、`SMOKE_MACHINE_COST_OK total=10614 missing=8`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
 ### 7.1 真实模型评测（2026-10-24）

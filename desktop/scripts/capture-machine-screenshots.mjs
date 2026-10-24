@@ -46,7 +46,7 @@ const stub = createServer((req, res) => {
     const message = hasDesignToolResult
       ? {
           role: 'assistant',
-          content: '已生成六工位锁螺丝机方案。方案卡包含 6 工位、12 个执行机构、7 个传感器；节拍估算 3.18 秒/件，高于目标 3.00 秒/件，已保留瓶颈警告。点击「应用到工程」可写入 3D、BOM 与 IO 点位。'
+          content: '已生成六工位锁螺丝机方案。方案卡包含 6 工位、12 个执行机构、7 个传感器；节拍估算 3.18 秒/件，方案功率约 2.18 kW / 3.7 A，建议 6A/3P 断路器，24V 余量 79%；成本粗估已分材料、电气、人工并标注缺价项。点击「应用到工程」可写入 3D、BOM 与 IO 点位。'
         }
       : {
           role: 'assistant',

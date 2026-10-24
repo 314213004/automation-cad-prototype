@@ -4,7 +4,8 @@
  * 三条硬约束：
  * - 列表 > 20 条：只留前 20 条，补 `total` 与 `truncated:true`；
  * - 长文本 > 2 KB：按 UTF-8 码点边界截断并附中文提示；
- * - 任何单个工具结果进入模型上下文前必须 ≤ 10 KB。
+ * - 单个工具结果默认 ≤ 10 KB；`design_machine` 例外（64 KB），因为方案卡与
+ *   「应用到工程」需要完整 config/BOM，截断后无法解析或落盘。
  */
 
 import { byteLength, truncateUtf8 } from './context.ts';
@@ -12,6 +13,12 @@ import { byteLength, truncateUtf8 } from './context.ts';
 export const LIST_RESULT_LIMIT = 20;
 export const LONG_TEXT_BYTE_LIMIT = 2048;
 export const TOOL_RESULT_BYTE_LIMIT = 10 * 1024;
+export const DESIGN_TOOL_RESULT_BYTE_LIMIT = 64 * 1024;
+
+/** 工具结果上限：design_machine 需要完整方案，其余沿用 10 KB 默认值。 */
+export function toolResultByteLimit(toolName?: string): number {
+  return toolName === 'design_machine' ? DESIGN_TOOL_RESULT_BYTE_LIMIT : TOOL_RESULT_BYTE_LIMIT;
+}
 
 const LIST_KEYS = new Set([
   'items', 'rows', 'components', 'parts', 'files', 'results',

@@ -211,16 +211,19 @@ export async function captureMachineScreenshots(
       feedback?: string;
     };
     if (!cardState.ok) throw new Error(cardState.message ?? '机型方案卡状态异常');
-    const expectedStats = ['6', '12', '7', '20', '3.18', '4628'];
+    const expectedStats = ['6', '12', '7', '20', '31.75', '2.18', '3.7', '6A/3P', '79%'];
     if (JSON.stringify(cardState.stats) !== JSON.stringify(expectedStats)) {
       throw new Error(`方案卡统计不符合预期：${JSON.stringify(cardState.stats)}`);
     }
     if (!cardState.hasButton || !cardState.drawerOpen) throw new Error('方案卡应用按钮或侧栏缺失');
-    if (!(cardState.warnings ?? []).some((text) => text.includes('节拍瓶颈'))) {
-      throw new Error(`方案卡缺少节拍瓶颈警告：${JSON.stringify(cardState.warnings)}`);
-    }
     if (!(cardState.warnings ?? []).some((text) => text.includes('安全光栅'))) {
       throw new Error(`方案卡缺少安全光栅选型/安全距离提示：${JSON.stringify(cardState.warnings)}`);
+    }
+    if (!(cardState.warnings ?? []).some((text) => text.includes('断路器'))) {
+      throw new Error(`方案卡缺少断路器交叉校验警告：${JSON.stringify(cardState.warnings)}`);
+    }
+    if (!(cardState.warnings ?? []).some((text) => text.includes('缺价'))) {
+      throw new Error(`方案卡缺少成本缺价警告：${JSON.stringify(cardState.warnings)}`);
     }
     shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡'));
 

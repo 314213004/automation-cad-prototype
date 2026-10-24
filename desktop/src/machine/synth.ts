@@ -1,10 +1,13 @@
 // 机型方案合成：纯函数。输入 MachineBrief，输出可直接喂给 createScene3D 的
 // MachineConfig，以及点位、节拍、功率、BOM 草案、警告与假设。
 //
-// 诚实边界：本文件只产出配置；三维几何由 geometry.ts 按配置生成标准件外形；功率来自固定估算表；节拍是工艺余量 + 机构动作
-// 时间的粗略估算，不替代节拍分析、结构强度、干涉和真实运动学校核。
+// 诚实边界：本文件只产出配置；三维几何由 geometry.ts 按配置生成标准件外形；功率由 power.ts
+// 按元件库额定值与可配置系数估算；成本由 cost-model.ts 做方案阶段粗估。两者都不替代
+// 正式电气设计、报价与节拍分析。
 
 import type { MachineConfig } from '../commission/machine-config.ts';
+import type { ComponentPart } from '../shared/types.ts';
+import type { Pricebook } from '../cost/pricebook.ts';
 import { validateMachineConfig } from '../commission/machine-config.ts';
 import {
   DEFAULT_NOTE_CYCLE,
@@ -16,7 +19,8 @@ import {
   type MachineActuatorKind,
   type MachineBrief,
   type MachineProcess,
-  type MachineSensorKind
+  type MachineSensorKind,
+  type MachineVoltage
 } from './spec.ts';
 import { DIAL_MAX_STATIONS, DIAL_PROCESSES } from './geometry.ts';
 import { evaluateFlow, type FlowEvaluation, type FlowModel, type FlowOp, type MachineLayout } from './flow.ts';
@@ -28,6 +32,13 @@ import {
   summarizeForm,
   type MachineFormSummary
 } from './forms.ts';
+import { estimatePower, type PowerResult } from './power.ts';
+import {
+  DEFAULT_MACHINE_PRICING,
+  estimateCost,
+  type MachineCostEstimate,
+  type MachinePricing
+} from './cost-model.ts';
 
 export interface MachineCycleEstimate {
   /** 布局模型：single / linear / dial / parallel / cell。 */
@@ -51,10 +62,7 @@ export interface MachineCycleEstimate {
   bottleneck: string;
 }
 
-export interface MachinePowerEstimate {
-  va: number;
-  byGroup: { name: string; va: number }[];
-}
+export type MachinePowerEstimate = PowerResult;
 
 export interface MachineBomItem {
   kind: 'actuator' | 'sensor' | 'electrical';
@@ -67,6 +75,10 @@ export interface MachineBomItem {
   partId?: string;
   /** 真实元件包 id；仅 BOM 映射后存在。 */
   packId?: string;
+  /** 功率/成本分类角色。 */
+  role?: 'servo' | 'cylinder' | 'gripper' | 'rotary' | 'sensor' | 'safety' | 'plc' | 'psu' | 'valve' | 'other';
+  /** 单件额定有功功率（W），来自元件库时可直接复用。 */
+  ratedW?: number;
   /** true 表示库内没有可选型号，需要补录后确认。 */
   pendingSelection?: boolean;
 }
@@ -76,6 +88,7 @@ export interface MachineDesign {
   points: string[];
   cycle: MachineCycleEstimate;
   power: MachinePowerEstimate;
+  cost: MachineCostEstimate;
   bomDraft: { items: MachineBomItem[] };
   warnings: string[];
   assumptions: string[];
@@ -88,16 +101,17 @@ export interface SynthOptions {
   cyclePerMin?: number;
   name?: string;
   id?: string;
+  /** 元件库；用于读取伺服/电源/安全光栅等额定功率。 */
+  parts?: readonly ComponentPart[];
+  /** 价格簿；方案阶段粗估用，缺省则尽量用元件库参考价。 */
+  pricebook?: Pricebook;
+  builtinPricebook?: Pricebook;
+  /** userData/machine-pricing.json 解析结果。 */
+  pricing?: MachinePricing;
+  pricingAssumptions?: readonly string[];
+  /** 供电制式；缺省沿用 brief.voltage，再缺省 380VAC。 */
+  voltage?: MachineVoltage;
 }
-
-export const POWER_VA = {
-  cylinder: 5,
-  gripper: 15,
-  rotary: 200,
-  servo: 750,
-  sensor: 3,
-  safety: 20
-} as const;
 
 const PROCESS_LABEL: Record<MachineProcess, string> = {
   screw: '锁螺丝',
@@ -283,34 +297,6 @@ function templateDescription(kinds: readonly string[]): string {
   return kinds.join('、');
 }
 
-function buildPower(actuators: readonly MachineActuatorKind[], sensors: readonly MachineSensorKind[], servo: boolean): MachinePowerEstimate {
-  const actuatorCounts = countKinds(actuators);
-  const sensorCounts = countKinds(sensors);
-  const groups: { name: string; va: number }[] = [];
-  const add = (name: string, qty: number, unit: number): void => {
-    if (qty > 0) groups.push({ name, va: qty * unit });
-  };
-
-  add('气缸', actuatorCounts.get('cylinder') ?? 0, POWER_VA.cylinder);
-  add('夹爪', actuatorCounts.get('gripper') ?? 0, POWER_VA.gripper);
-  if (servo) {
-    add('伺服', actuatorCounts.get('rotary') ?? 0, POWER_VA.servo);
-  } else {
-    add('旋转轴', actuatorCounts.get('rotary') ?? 0, POWER_VA.rotary);
-  }
-  const ordinarySensors =
-    (sensorCounts.get('proximity') ?? 0) +
-    (sensorCounts.get('photoelectric') ?? 0) +
-    (sensorCounts.get('pressure') ?? 0);
-  add('传感器', ordinarySensors, POWER_VA.sensor);
-  add('安全光栅', sensorCounts.get('safety') ?? 0, POWER_VA.safety);
-
-  return {
-    va: groups.reduce((sum, group) => sum + group.va, 0),
-    byGroup: groups
-  };
-}
-
 function buildBom(
   actuators: readonly MachineActuatorKind[],
   sensors: readonly MachineSensorKind[],
@@ -323,25 +309,40 @@ function buildBom(
 
   for (const kind of ['cylinder', 'gripper', 'rotary'] as const) {
     const qty = actuatorCounts.get(kind) ?? 0;
-    if (qty > 0) items.push({ kind: 'actuator', name: ACTUATOR_LABEL[kind], qty, note: '型号待定，按方案数量估算' });
+    if (qty > 0) {
+      const role = kind === 'rotary' && servo ? 'servo' : kind;
+      items.push({ kind: 'actuator', name: ACTUATOR_LABEL[kind], qty, role, note: '型号待定，按方案数量估算' });
+    }
   }
   for (const kind of ['proximity', 'photoelectric', 'safety', 'pressure'] as const) {
     const qty = sensorCounts.get(kind) ?? 0;
-    if (qty > 0) items.push({ kind: 'sensor', name: SENSOR_LABEL[kind], qty, note: '型号待定，按方案数量估算' });
+    if (qty > 0) {
+      items.push({
+        kind: 'sensor',
+        name: SENSOR_LABEL[kind],
+        qty,
+        role: kind === 'safety' ? 'safety' : 'sensor',
+        note: '型号待定，按方案数量估算'
+      });
+    }
   }
   if (servo) {
     items.push({
       kind: 'electrical',
       name: '伺服驱动器',
       qty: Math.max(1, actuatorCounts.get('rotary') ?? 0),
+      role: 'servo',
       note: '按伺服轴数量估算，型号待定'
     });
   }
+  items.push({ kind: 'electrical', name: 'PLC', qty: 1, role: 'plc', note: '按点位估算，待选型' });
+  items.push({ kind: 'electrical', name: '24 V 开关电源', qty: 1, role: 'psu', note: '按 24V 负载估算，待选型' });
   const voltage = brief.voltage ? `，${brief.voltage}` : '';
   items.push({
     kind: 'electrical',
-    name: '电气控制（PLC/电源/端子）',
+    name: '电气控制辅材（端子/线槽）',
     qty: 1,
+    role: 'other',
     note: `按点位估算${voltage}，待选型`
   });
   return { items };
@@ -365,7 +366,8 @@ function buildSummary(design: MachineDesign): string {
     `整机形态：${design.form.name}（${design.form.id}）`,
     `工位：${config.stations.length} 个；执行机构：${config.actuators.length} 个（${actuatorText || '无'}）；传感器：${config.sensors.length} 个（${sensorText || '无'}）`,
     `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.throughputPerMin.toFixed(2)} 件/分钟（单工位 ${cycle.stationSeconds.toFixed(2)} 秒/件）；瓶颈：${cycle.bottleneck}`,
-    `功率：约 ${power.va} VA（固定表估算）`,
+    `功率：${power.totalKw.toFixed(2)} kW / ${power.currentA.toFixed(1)} A / 断路器 ${power.breakerSuggestion.rating} A ${power.breakerSuggestion.poles}P` +
+      `${power.dc24 ? ` / 24V 余量 ${power.dc24.marginPct}%` : ''}（方案估算）`,
     `风险：${risk}`,
     '说明：三维几何为按配置生成的标准件外形，功率与节拍均为估算，需人工确认。'
   ].join('\n');
@@ -391,7 +393,8 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const warnings: string[] = [];
   const assumptions: string[] = [
     `整机形态：${selectedForm.name}（${selectedForm.id}）——${selectedForm.rationale}`,
-    '功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。',
+    '功率按 power.ts 统一模型估算：优先取元件库额定功率，同时系数/负载率/效率/功率因数逐条写入 assumptions；不是实测功率或短路计算。',
+    '成本按 cost-model.ts 做方案阶段粗估：机械/电气/人工分项，缺价行不进入合计，不替代正式报价。',
     '节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
@@ -648,7 +651,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   if (formPick.warning) warnings.push(`形态选型：${formPick.warning}`);
 
   if (servo) {
-    assumptions.push('检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。');
+    assumptions.push('检测到伺服/步进驱动：按旋转轴建模；功率优先取元件库伺服额定功率，未选型时按类别默认值并告警。');
   }
   if (brief.brand) assumptions.push(`品牌按需求中的「${brief.brand}」记录，具体型号待选型。`);
   if (brief.voltage) assumptions.push(`供电按需求中的 ${brief.voltage} 记录，未做容量与保护校验。`);
@@ -657,9 +660,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
 
   const finalActuatorKinds = actuatorBuckets.flat();
   const finalSensorKinds = sensorBuckets.flat();
-  const power = buildPower(finalActuatorKinds, finalSensorKinds, servo);
   const bomDraft = buildBom(finalActuatorKinds, finalSensorKinds, servo, brief);
-  const design: MachineDesign = {
+  const pricing = options.pricing ?? DEFAULT_MACHINE_PRICING;
+  const design = {
     config,
     points,
     cycle: {
@@ -677,12 +680,30 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
       meetsTarget,
       bottleneck
     },
-    power,
+    power: {} as PowerResult,
+    cost: {} as MachineCostEstimate,
     bomDraft,
     warnings,
     assumptions,
     form
-  };
+  } as MachineDesign;
+  design.power = estimatePower(design, {
+    ...(options.parts ? { parts: options.parts } : {}),
+    servo,
+    voltage: options.voltage ?? brief.voltage ?? '380VAC',
+    simultaneity: pricing.power.simultaneity,
+    loadFactor: pricing.power.loadFactor,
+    efficiency: pricing.power.efficiency,
+    cosPhi: pricing.power.cosPhi,
+    ...(options.pricingAssumptions ? { assumptions: options.pricingAssumptions } : {})
+  });
+  design.cost = estimateCost(design, {
+    ...(options.parts ? { parts: options.parts } : {}),
+    ...(options.pricebook ? { pricebook: options.pricebook } : {}),
+    ...(options.builtinPricebook ? { builtinPricebook: options.builtinPricebook } : {}),
+    pricing,
+    ...(options.pricingAssumptions ? { pricingAssumptions: options.pricingAssumptions } : {})
+  });
   return design;
 }
 

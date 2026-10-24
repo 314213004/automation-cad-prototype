@@ -70,7 +70,10 @@ test('方案合成：6 工位、12 执行机构、7 传感器，点位 19 个且
   assert.equal(design.config.sensors.length, 7);
   assert.equal(design.points.length, 19);
   assert.equal(new Set(design.points).size, 19);
-  assert.equal(design.power.va, 4628);
+  assert.ok(design.power.totalKw > 2);
+  assert.ok(design.power.currentA > 0);
+  assert.ok(design.power.breakerSuggestion.rating >= 6);
+  assert.ok(design.cost.total > 0);
 });
 
 test('节拍按 dual-lane：单轨 3.18 秒/件 + 0.6 秒转移，2 轨并行 → 31.75 件/分钟', () => {
@@ -210,6 +213,11 @@ test('machine-case.json 与实时计算结果一致，且截图校验齐全', ()
   assert.equal(stored.bom.items.length, 12);
   assert.equal(stored.bom.pendingCount, 0);
   assert.equal(stored.bom.realPartCount, 12);
+  assert.ok(stored.design.power.totalKw > 0);
+  assert.ok(stored.design.power.currentA > 0);
+  assert.ok(stored.design.power.breakerSuggestion.rating >= 6);
+  assert.ok(stored.design.cost.total > 0);
+  assert.ok(stored.design.cost.assumptions.some((line) => /方案阶段粗估|人工\/调试/.test(line)));
   assert.ok(stored.bom.items.some((item) => item.partId === 'F3SG-4SRA0640-14' && item.packId === 'iec-cn'));
   assert.ok(stored.design.warnings.some((warning) => /F3SG-4SRA0640-14.*ISO 13855/.test(warning)));
   assert.equal(stored.screenshotValidation.shots.length, 4);

@@ -15,6 +15,9 @@ import {
 } from '../machine/spec.ts';
 import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
 import { mapMachineBom } from '../machine/bom-map.ts';
+import { estimatePower } from '../machine/power.ts';
+import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import { buildClarify } from '../machine/clarify.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
 
@@ -29,6 +32,13 @@ export interface AgentToolSummary {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+}
+
+export interface AgentToolsOptions {
+  /** userData 根目录；读取 machine-pricing.json 用。 */
+  userDataRoot?: string;
+  /** 主进程注入的内置价格簿读取器。 */
+  loadBuiltinPricebook?: () => unknown;
 }
 
 export interface AgentCommandExecutor {
@@ -484,15 +494,36 @@ const COST_EXPORT_SCHEMA = {
   additionalProperties: false
 };
 
+
+function mainBreakerRating(
+  design: { bomDraft?: { items?: readonly { name: string; partId?: string; packId?: string }[] } },
+  parts: readonly ComponentPart[]
+): number | undefined {
+  const breaker = design.bomDraft?.items?.find((item) => /总进线断路器/.test(item.name));
+  if (!breaker?.partId) return undefined;
+  const part = parts.find((candidate) =>
+    candidate.id === breaker.partId && (!breaker.packId || candidate.packId === breaker.packId)
+  );
+  const raw = part?.specs['额定电流'];
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+  if (typeof raw === 'string') {
+    const match = raw.match(/(\d+(?:\.\d+)?)\s*A/i);
+    if (match?.[1]) return Number(match[1]);
+  }
+  return undefined;
+}
+
 export class AgentTools {
   private readonly registry: PackRegistry;
   private readonly commands: AgentCommandExecutor | undefined;
+  private readonly options: AgentToolsOptions;
   private readonly tools = new Map<string, AgentTool>();
   private signal: AbortSignal | undefined;
 
-  constructor(registry: PackRegistry, commands?: AgentCommandExecutor) {
+  constructor(registry: PackRegistry, commands?: AgentCommandExecutor, options: AgentToolsOptions = {}) {
     this.registry = registry;
     this.commands = commands;
+    this.options = options;
     this.registerDefaults();
   }
 
@@ -638,13 +669,27 @@ export class AgentTools {
             )
           };
           const clarify = buildClarify(clarifyBrief);
+          const parts = this.registry.listParts();
+          const pricingLoad = readMachinePricing(this.options.userDataRoot);
+          let builtinPricebook: Pricebook | undefined;
+          try {
+            if (this.options.loadBuiltinPricebook) {
+              builtinPricebook = validatePricebook(this.options.loadBuiltinPricebook());
+            }
+          } catch (error) {
+            console.warn(`[MACHINE_COST_PRICEBOOK_FAILED]`, { site: 'desktop/src/agent/tools.ts:650' }, error);
+          }
           const design = synthMachine(brief, {
             ...(stationCount !== undefined ? { stationCount } : {}),
-            ...(cyclePerMin !== undefined ? { cyclePerMin } : {})
+            ...(cyclePerMin !== undefined ? { cyclePerMin } : {}),
+            parts,
+            pricing: pricingLoad.pricing,
+            pricingAssumptions: pricingLoad.assumptions,
+            ...(builtinPricebook ? { builtinPricebook } : {})
           });
           let mapped = false;
           try {
-            const bomMapping = mapMachineBom(design, this.registry.listParts());
+            const bomMapping = mapMachineBom(design, parts);
             design.bomDraft = { items: bomMapping.items };
             mapped = true;
             if (bomMapping.pending.length > 0) {
@@ -655,12 +700,32 @@ export class AgentTools {
             // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
             console.warn(`[MACHINE_BOM_MAPPING_FAILED]`, { site: 'desktop/src/agent/tools.ts:654' }, error);
           }
+
+          const selectedBreakerA = mainBreakerRating(design, parts);
+          design.power = estimatePower(design, {
+            parts,
+            voltage: design.power.voltage,
+            simultaneity: pricingLoad.pricing.power.simultaneity,
+            loadFactor: pricingLoad.pricing.power.loadFactor,
+            efficiency: pricingLoad.pricing.power.efficiency,
+            cosPhi: pricingLoad.pricing.power.cosPhi,
+            ...(selectedBreakerA !== undefined ? { selectedBreakerA } : {}),
+            assumptions: pricingLoad.assumptions
+          });
+          design.cost = estimateCost(design, {
+            parts,
+            pricing: pricingLoad.pricing,
+            pricingAssumptions: pricingLoad.assumptions,
+            ...(builtinPricebook ? { builtinPricebook } : {})
+          });
+          design.assumptions.push(...pricingLoad.warnings);
           return {
             ok: true,
             design: {
               config: design.config,
               cycle: design.cycle,
               power: design.power,
+              cost: design.cost,
               bomDraft: design.bomDraft,
               warnings: design.warnings,
               assumptions: design.assumptions,

@@ -4,6 +4,7 @@
 
 import type { ComponentPart } from '../shared/types.ts';
 import type { MachineDesign } from './synth.ts';
+import { ratedPowerFromPart } from './power.ts';
 
 export interface MachineElectricalCalculation {
   id: string;
@@ -126,8 +127,10 @@ function item(
   name: string,
   part: ComponentPart,
   qty: number,
+  role: NonNullable<MachineDesign['bomDraft']['items'][number]['role']>,
   extra?: string
 ): MachineDesign['bomDraft']['items'][number] {
+  const ratedW = ratedPowerFromPart(part);
   return {
     kind,
     name,
@@ -135,6 +138,8 @@ function item(
     model: part.model,
     note: noteFor(part, extra),
     partId: part.id,
+    role,
+    ...(ratedW !== null ? { ratedW } : {}),
     ...(part.packId ? { packId: part.packId } : {})
   };
 }
@@ -173,14 +178,14 @@ export function mapMachineBom(
   const psuBreaker = partByRef(parts, MODEL_REFS.psuBreaker);
 
   if (servoDetected && servoCount > 0) {
-    items.push(item('actuator', '伺服驱动器', servoDrive, servoCount, '按 1 驱 1 电机配置'));
-    items.push(item('actuator', '伺服电机', servoMotor, servoCount, '与 SV660P 750 W 配套'));
+    items.push(item('actuator', '伺服驱动器', servoDrive, servoCount, 'servo', '按 1 驱 1 电机配置'));
+    items.push(item('actuator', '伺服电机', servoMotor, servoCount, 'servo', '与 SV660P 750 W 配套'));
   }
   if (gripperCount > 0) {
-    items.push(item('actuator', '气爪', gripper, gripperCount));
-    items.push(item('actuator', '电磁阀', valve, gripperCount, '按 1 气爪 1 阀配置'));
+    items.push(item('actuator', '气爪', gripper, gripperCount, 'gripper'));
+    items.push(item('actuator', '电磁阀', valve, gripperCount, 'valve', '按 1 气爪 1 阀配置'));
   }
-  if (proximityCount > 0) items.push(item('sensor', '到位检测（磁性开关）', proximity, proximityCount));
+  if (proximityCount > 0) items.push(item('sensor', '到位检测（磁性开关）', proximity, proximityCount, 'sensor'));
   const pending: MachineBomMapping['pending'] = [];
   const notices: string[] = [];
   const safetyCurtain = safetyCount > 0
@@ -196,6 +201,7 @@ export function mapMachineBom(
       '安全光栅',
       safetyCurtain,
       safetyCount,
+      'safety',
       `${resolution} / ${height} / ${level}，OSSD 接安全继电器`
     ));
     notices.push(
@@ -210,6 +216,7 @@ export function mapMachineBom(
       qty: safetyCount,
       model: '待选型',
       note: reason,
+      role: 'safety',
       pendingSelection: true
     });
     pending.push({ name: '安全光栅', reason });
@@ -299,18 +306,19 @@ export function mapMachineBom(
     }
   ];
 
-  items.push(item('electrical', 'PLC', plc, 1, '24 DI / 16 DO，覆盖 19 点位'));
+  items.push(item('electrical', 'PLC', plc, 1, 'plc', '24 DI / 16 DO，覆盖 19 点位'));
   items.push(item(
     'electrical',
     '安全继电器',
     safetyRelay,
     1,
+    'other',
     safetyCurtain ? `光栅/安全门监控，接 ${safetyCurtain.model} 的 OSSD` : '光栅/安全门监控'
   ));
-  items.push(item('electrical', '24 V 开关电源', psu, 1, `${psuRatedW} W / ${psuRatedA} A`));
-  items.push(item('electrical', '伺服支路断路器', servoBreaker, servoCount, `计算 ${round(servoLoadA)} A，额定 ${servoRatedA} A`));
-  items.push(item('electrical', '总进线断路器', mainBreaker, 1, `计算 ${round(mainLoadA)} A，额定 ${mainRatedA} A`));
-  items.push(item('electrical', '开关电源支路断路器', psuBreaker, 1, `计算 ${round(psuAcLoadA)} A，额定 ${psuBreakerRatedA} A`));
+  items.push(item('electrical', '24 V 开关电源', psu, 1, 'psu', `${psuRatedW} W / ${psuRatedA} A`));
+  items.push(item('electrical', '伺服支路断路器', servoBreaker, servoCount, 'other', `计算 ${round(servoLoadA)} A，额定 ${servoRatedA} A`));
+  items.push(item('electrical', '总进线断路器', mainBreaker, 1, 'other', `计算 ${round(mainLoadA)} A，额定 ${mainRatedA} A`));
+  items.push(item('electrical', '开关电源支路断路器', psuBreaker, 1, 'other', `计算 ${round(psuAcLoadA)} A，额定 ${psuBreakerRatedA} A`));
 
   const sourcePacks = [...new Set(items.map((entry) => entry.packId).filter((id): id is string => Boolean(id)))]
     .sort((left, right) => left.localeCompare(right));

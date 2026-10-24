@@ -7,6 +7,9 @@ import { parseMachineBrief } from '../src/machine/spec.ts';
 import { synthMachine } from '../src/machine/synth.ts';
 import { mapMachineBom } from '../src/machine/bom-map.ts';
 import { buildMachineIoMap } from '../src/machine/io-map.ts';
+import { estimatePower } from '../src/machine/power.ts';
+import { estimateCost, DEFAULT_MACHINE_PRICING } from '../src/machine/cost-model.ts';
+import { validatePricebook } from '../src/cost/pricebook.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, '..');
@@ -16,6 +19,7 @@ const outFile = join(repoRoot, 'docs', 'desktop', 'eval', 'machine-case.json');
 const screenshotFile = join(repoRoot, 'docs', 'desktop', 'eval', 'machine-screenshots.json');
 
 const BRIEF = '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅';
+const pricebookFile = join(builtinDir, 'pricebook-cn', 'pricebook.json');
 
 function loadBuiltinParts() {
   const parts = [];
@@ -35,6 +39,7 @@ function loadBuiltinParts() {
         model: String(row.model),
         category: String(row.category),
         specs: row.specs && typeof row.specs === 'object' ? row.specs : {},
+        ...(typeof row.price === 'number' ? { price: row.price } : {}),
         packId: entry.name,
         packName: String(manifest.name ?? entry.name)
       });
@@ -61,12 +66,48 @@ function stationTable(design) {
 }
 
 const parts = loadBuiltinParts();
+const pricebook = existsSync(pricebookFile)
+  ? validatePricebook(JSON.parse(readFileSync(pricebookFile, 'utf8')))
+  : undefined;
+const pricingAssumptions = ['machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。'];
+const pricedPricing = DEFAULT_MACHINE_PRICING;
 const brief = parseMachineBrief(BRIEF);
-const design = synthMachine(brief);
+const design = synthMachine(brief, {
+  parts,
+  pricing: pricedPricing,
+  pricingAssumptions,
+  ...(pricebook ? { builtinPricebook: pricebook } : {})
+});
 const mapping = mapMachineBom(design, parts);
 design.bomDraft = { items: mapping.items };
 design.warnings.push(...mapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
 design.warnings.push(...mapping.notices);
+const mainBreaker = mapping.items.find((item) => item.name === '总进线断路器');
+const mainBreakerPart = mainBreaker?.partId
+  ? parts.find((part) => part.id === mainBreaker.partId && part.packId === mainBreaker.packId)
+  : undefined;
+const selectedBreakerA = (() => {
+  const raw = mainBreakerPart?.specs?.['额定电流'];
+  if (typeof raw === 'number') return raw;
+  const match = typeof raw === 'string' ? raw.match(/(\d+(?:\.\d+)?)\s*A/i) : null;
+  return match?.[1] ? Number(match[1]) : undefined;
+})();
+design.power = estimatePower(design, {
+  parts,
+  voltage: design.power.voltage,
+  simultaneity: pricedPricing.power.simultaneity,
+  loadFactor: pricedPricing.power.loadFactor,
+  efficiency: pricedPricing.power.efficiency,
+  cosPhi: pricedPricing.power.cosPhi,
+  ...(selectedBreakerA !== undefined ? { selectedBreakerA } : {}),
+  assumptions: pricingAssumptions
+});
+design.cost = estimateCost(design, {
+  parts,
+  pricing: pricedPricing,
+  pricingAssumptions,
+  ...(pricebook ? { builtinPricebook: pricebook } : {})
+});
 const ioMap = buildMachineIoMap(design.config);
 
 const caseData = {
@@ -79,6 +120,7 @@ const caseData = {
     points: design.points,
     cycle: design.cycle,
     power: design.power,
+    cost: design.cost,
     form: design.form,
     warnings: design.warnings,
     assumptions: design.assumptions,
@@ -116,6 +158,7 @@ const caseData = {
     pendingCount: mapping.items.filter((item) => item.pendingSelection).length
   },
   electrical: mapping.electrical,
+  cost: design.cost,
   ioMap: {
     rowCount: ioMap.rows.length,
     rows: ioMap.rows,
@@ -133,3 +176,5 @@ console.log(`stations=${design.config.stations.length} actuators=${design.config
 console.log(`form=${design.form.id} range=${design.form.stationRange.join('-')} default=${design.form.defaultStations}`);
 console.log(`cycle mode=${design.cycle.mode} station=${design.cycle.stationSeconds}s throughput=${design.cycle.throughputPerMin}/min meetsTarget=${design.cycle.meetsTarget} requiredStations=${design.cycle.requiredTotalStations}`);
 console.log(`bomRows=${mapping.items.length} realParts=${caseData.bom.realPartCount} pending=${caseData.bom.pendingCount}`);
+console.log(`power kw=${design.power.totalKw} a=${design.power.currentA} breaker=${design.power.breakerSuggestion.rating} dc24=${design.power.dc24?.marginPct ?? 'n/a'}`);
+console.log(`cost total=${design.cost.total} material=${design.cost.material} electrical=${design.cost.electrical} labor=${design.cost.labor} missing=${design.cost.missingCount}`);

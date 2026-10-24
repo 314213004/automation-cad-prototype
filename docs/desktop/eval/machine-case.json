@@ -295,25 +295,243 @@
       "bottleneck": "单元布局：最慢工位1 单件 3.18 秒，2 轨并行 → 31.75 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，满足）"
     },
     "power": {
-      "va": 4628,
+      "va": 2417.79,
+      "totalVa": 2417.79,
+      "totalKw": 2.176,
       "byGroup": [
         {
           "name": "夹爪",
-          "va": 90
+          "count": 6,
+          "ratedW": 90,
+          "va": 46.667
         },
         {
           "name": "伺服",
-          "va": 4500
+          "count": 6,
+          "ratedW": 4500,
+          "va": 2333.333
         },
         {
           "name": "传感器",
-          "va": 18
+          "count": 6,
+          "ratedW": 18,
+          "va": 9.333
         },
         {
           "name": "安全光栅",
-          "va": 20
+          "count": 1,
+          "ratedW": 5.88,
+          "va": 3.049
+        },
+        {
+          "name": "电磁阀",
+          "count": 6,
+          "ratedW": 24,
+          "va": 12.444
+        },
+        {
+          "name": "PLC",
+          "count": 1,
+          "ratedW": 25,
+          "va": 12.963
         }
-      ]
+      ],
+      "currentA": 3.673,
+      "breakerSuggestion": {
+        "rating": 6,
+        "poles": 3,
+        "margin": 1.633
+      },
+      "assumptions": [
+        "machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。",
+        "同时系数 Ks=0.7：多负载不会同时达到额定功率，按此系数折减。",
+        "负载率 Kf=0.6：设备实际轴功率按额定功率的此比例估算。",
+        "效率 η=0.9：由机械输出折算到电输入，P_in = ΣP_rated × Ks × Kf ÷ η。",
+        "功率因数 cosφ=0.9：视在功率 S = P_in ÷ cosφ，电流按此计算。",
+        "断路器按计算电流 × 1.25 向上取标准值（6/10/16/20/25/32/40/50/63 A），极数按 380VAC 取 3P。",
+        "额定功率缺失时使用类别默认值：夹爪 6 件按 15 W、传感器 6 件按 3 W、电磁阀 6 件按 4 W、PLC 1 件按 25 W。默认值仅用于方案阶段粗估。",
+        "24 VDC 回路按连接负载 72.88 W 统计，电源容量 350 W；余量 79.2%，负载超过额定 70% 时告警。",
+        "整机连接负载 4662.88 W；经系数折算为输入有功 2176.011 W。"
+      ],
+      "warnings": [
+        "夹爪缺少额定功率（MHZ2-20D × 6），按类别默认 15 W/件估算。",
+        "传感器缺少额定功率（D-M9B × 6），按类别默认 3 W/件估算。",
+        "电磁阀缺少额定功率（SY5120-5LZD × 6），按类别默认 4 W/件估算。",
+        "PLC缺少额定功率（CP1E-N40DR-A × 1），按类别默认 25 W/件估算。",
+        "已选总进线断路器 16 A 对计算电流 3.673 A 余量 335.6% 超过 60%，可评估降一档。"
+      ],
+      "voltage": "380VAC",
+      "cosPhi": 0.9,
+      "simultaneity": 0.7,
+      "loadFactor": 0.6,
+      "efficiency": 0.9,
+      "dc24": {
+        "loadW": 72.88,
+        "supplyW": 350,
+        "marginPct": 79.2
+      }
+    },
+    "cost": {
+      "material": 5136,
+      "electrical": 2484,
+      "labor": 15552,
+      "total": 23172,
+      "missingCount": 9,
+      "byCategory": [
+        {
+          "category": "机械件",
+          "subtotal": 5136,
+          "count": 1,
+          "missing": 0
+        },
+        {
+          "category": "电气件",
+          "subtotal": 2484,
+          "count": 11,
+          "missing": 9
+        }
+      ],
+      "assumptions": [
+        "方案阶段粗估：用于方案比较与预算区间，不替代正式报价。",
+        "机械件 = 价格簿单价 × 数量；价格簿未命中时使用元件库参考价，仍无价则计入缺价。",
+        "电气件 = 元件库/价格簿单价 × 数量；伺服按驱动器 + 电机成对计价，缺一件时按同数量补齐。",
+        "人工/调试 = 6 工位 × (机械 8 h + 电气 6 h + 调试 4 h) × 形态系数 1.2（cell）× 120 元/h = 15552 元。",
+        "缺价行不猜价格、不计入合计；missingCount 为缺价 BOM 行数，需补价格簿或询价。",
+        "machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。"
+      ],
+      "warnings": [
+        "有 9 行缺价，未计入合计：伺服驱动器（SV660P 750 W） × 6；伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1；安全继电器（PNOZ s3 750103） × 1；24 V 开关电源（LRS-350-24） × 1；伺服支路断路器（iC65N 1P C6） × 6；总进线断路器（5SY63 3P C16） × 1；开关电源支路断路器（iC65N 1P C6） × 1"
+      ],
+      "lines": [
+        {
+          "name": "伺服驱动器",
+          "model": "SV660P 750 W",
+          "partId": "SV660PS5R5I",
+          "category": "电气件",
+          "qty": 6,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "伺服电机",
+          "model": "MS1H1-75B30CB 750 W",
+          "partId": "MS1H1-75B30CB",
+          "category": "电气件",
+          "qty": 6,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "气爪",
+          "model": "MHZ2-20D",
+          "partId": "MHZ2-20D",
+          "category": "机械件",
+          "qty": 6,
+          "unit": 856,
+          "subtotal": 5136,
+          "priceSource": "元件库参考价"
+        },
+        {
+          "name": "电磁阀",
+          "model": "SY5120-5LZD",
+          "partId": "SY5120-5LZD",
+          "category": "电气件",
+          "qty": 6,
+          "unit": 286,
+          "subtotal": 1716,
+          "priceSource": "元件库参考价"
+        },
+        {
+          "name": "到位检测（磁性开关）",
+          "model": "D-M9B",
+          "partId": "D-M9B",
+          "category": "电气件",
+          "qty": 6,
+          "unit": 128,
+          "subtotal": 768,
+          "priceSource": "元件库参考价"
+        },
+        {
+          "name": "安全光栅",
+          "model": "F3SG-4SRA0640-14",
+          "partId": "F3SG-4SRA0640-14",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "PLC",
+          "model": "CP1E-N40DR-A",
+          "partId": "CP1E-N40DR-A",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "安全继电器",
+          "model": "PNOZ s3 750103",
+          "partId": "PNOZ-s3-750103",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "24 V 开关电源",
+          "model": "LRS-350-24",
+          "partId": "LRS-350-24",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "伺服支路断路器",
+          "model": "iC65N 1P C6",
+          "partId": "iC65N-C6-1P",
+          "category": "电气件",
+          "qty": 6,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "总进线断路器",
+          "model": "5SY63 3P C16",
+          "partId": "5SY63-C16",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        },
+        {
+          "name": "开关电源支路断路器",
+          "model": "iC65N 1P C6",
+          "partId": "iC65N-C6-1P",
+          "category": "电气件",
+          "qty": 1,
+          "unit": 0,
+          "subtotal": 0,
+          "priceSource": "缺失"
+        }
+      ],
+      "laborDetail": {
+        "stations": 6,
+        "hourlyRate": 120,
+        "hoursPerStation": 18,
+        "formFactor": 1.2,
+        "hours": 129.6
+      },
+      "boundary": "方案阶段粗估：不含报价加成、税率、运费、线缆/线槽与端子接线工时，不替代 cost/engine.ts 的正式报价计算。"
     },
     "form": {
       "id": "dual-lane",
@@ -351,12 +569,13 @@
     ],
     "assumptions": [
       "整机形态：双轨并行线（dual-lane）——双轨各三工位，组内串行、两轨并行；一条轨换型/停线时另一条仍可生产，适合检测与包装的并行产出。",
-      "功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。",
+      "功率按 power.ts 统一模型估算：优先取元件库额定功率，同时系数/负载率/效率/功率因数逐条写入 assumptions；不是实测功率或短路计算。",
+      "成本按 cost-model.ts 做方案阶段粗估：机械/电气/人工分项，缺价行不进入合计，不替代正式报价。",
       "节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。",
       "三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。",
       "布局按单元式估算（cell）：组内工位串行、组间并行，2 条轨道并行，节拍 = (最慢工位时间 + 转移时间) / 2。",
       "产能模型：单元布局按 2 条轨道并行，单轨节拍再除以轨道数。",
-      "检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。",
+      "检测到伺服/步进驱动：按旋转轴建模；功率优先取元件库伺服额定功率，未选型时按类别默认值并告警。",
       "品牌按需求中的「汇川」记录，具体型号待选型。",
       "执行机构按需求数量均分到各工位。",
       "传感器按需求数量均分到各工位。"
@@ -370,6 +589,8 @@
           "model": "SV660P 750 W",
           "note": "来源包：iec-cn · id=SV660PS5R5I · 按 1 驱 1 电机配置",
           "partId": "SV660PS5R5I",
+          "role": "servo",
+          "ratedW": 750,
           "packId": "iec-cn"
         },
         {
@@ -379,6 +600,8 @@
           "model": "MS1H1-75B30CB 750 W",
           "note": "来源包：iec-cn · id=MS1H1-75B30CB · 与 SV660P 750 W 配套",
           "partId": "MS1H1-75B30CB",
+          "role": "servo",
+          "ratedW": 750,
           "packId": "iec-cn"
         },
         {
@@ -388,6 +611,7 @@
           "model": "MHZ2-20D",
           "note": "来源包：smc-cn · id=MHZ2-20D",
           "partId": "MHZ2-20D",
+          "role": "gripper",
           "packId": "smc-cn"
         },
         {
@@ -397,6 +621,7 @@
           "model": "SY5120-5LZD",
           "note": "来源包：smc-cn · id=SY5120-5LZD · 按 1 气爪 1 阀配置",
           "partId": "SY5120-5LZD",
+          "role": "valve",
           "packId": "smc-cn"
         },
         {
@@ -406,6 +631,7 @@
           "model": "D-M9B",
           "note": "来源包：smc-cn · id=D-M9B",
           "partId": "D-M9B",
+          "role": "sensor",
           "packId": "smc-cn"
         },
         {
@@ -415,6 +641,8 @@
           "model": "F3SG-4SRA0640-14",
           "note": "来源包：iec-cn · id=F3SG-4SRA0640-14 · 14 mm / 640 mm / Type 4 / PL e / Cat.4，OSSD 接安全继电器",
           "partId": "F3SG-4SRA0640-14",
+          "role": "safety",
+          "ratedW": 5.88,
           "packId": "iec-cn"
         },
         {
@@ -424,6 +652,7 @@
           "model": "CP1E-N40DR-A",
           "note": "来源包：iec-cn · id=CP1E-N40DR-A · 24 DI / 16 DO，覆盖 19 点位",
           "partId": "CP1E-N40DR-A",
+          "role": "plc",
           "packId": "iec-cn"
         },
         {
@@ -433,6 +662,7 @@
           "model": "PNOZ s3 750103",
           "note": "来源包：iec-cn · id=PNOZ-s3-750103 · 光栅/安全门监控，接 F3SG-4SRA0640-14 的 OSSD",
           "partId": "PNOZ-s3-750103",
+          "role": "other",
           "packId": "iec-cn"
         },
         {
@@ -442,6 +672,8 @@
           "model": "LRS-350-24",
           "note": "来源包：iec-cn · id=LRS-350-24 · 350 W / 14.6 A",
           "partId": "LRS-350-24",
+          "role": "psu",
+          "ratedW": 350,
           "packId": "iec-cn"
         },
         {
@@ -451,6 +683,7 @@
           "model": "iC65N 1P C6",
           "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 4.456 A，额定 6 A",
           "partId": "iC65N-C6-1P",
+          "role": "other",
           "packId": "iec-cn"
         },
         {
@@ -460,6 +693,7 @@
           "model": "5SY63 3P C16",
           "note": "来源包：iec-cn · id=5SY63-C16 · 计算 9.235 A，额定 16 A",
           "partId": "5SY63-C16",
+          "role": "other",
           "packId": "iec-cn"
         },
         {
@@ -469,6 +703,7 @@
           "model": "iC65N 1P C6",
           "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 2.08 A，额定 6 A",
           "partId": "iC65N-C6-1P",
+          "role": "other",
           "packId": "iec-cn"
         }
       ]
@@ -667,6 +902,8 @@
         "model": "SV660P 750 W",
         "note": "来源包：iec-cn · id=SV660PS5R5I · 按 1 驱 1 电机配置",
         "partId": "SV660PS5R5I",
+        "role": "servo",
+        "ratedW": 750,
         "packId": "iec-cn"
       },
       {
@@ -676,6 +913,8 @@
         "model": "MS1H1-75B30CB 750 W",
         "note": "来源包：iec-cn · id=MS1H1-75B30CB · 与 SV660P 750 W 配套",
         "partId": "MS1H1-75B30CB",
+        "role": "servo",
+        "ratedW": 750,
         "packId": "iec-cn"
       },
       {
@@ -685,6 +924,7 @@
         "model": "MHZ2-20D",
         "note": "来源包：smc-cn · id=MHZ2-20D",
         "partId": "MHZ2-20D",
+        "role": "gripper",
         "packId": "smc-cn"
       },
       {
@@ -694,6 +934,7 @@
         "model": "SY5120-5LZD",
         "note": "来源包：smc-cn · id=SY5120-5LZD · 按 1 气爪 1 阀配置",
         "partId": "SY5120-5LZD",
+        "role": "valve",
         "packId": "smc-cn"
       },
       {
@@ -703,6 +944,7 @@
         "model": "D-M9B",
         "note": "来源包：smc-cn · id=D-M9B",
         "partId": "D-M9B",
+        "role": "sensor",
         "packId": "smc-cn"
       },
       {
@@ -712,6 +954,8 @@
         "model": "F3SG-4SRA0640-14",
         "note": "来源包：iec-cn · id=F3SG-4SRA0640-14 · 14 mm / 640 mm / Type 4 / PL e / Cat.4，OSSD 接安全继电器",
         "partId": "F3SG-4SRA0640-14",
+        "role": "safety",
+        "ratedW": 5.88,
         "packId": "iec-cn"
       },
       {
@@ -721,6 +965,7 @@
         "model": "CP1E-N40DR-A",
         "note": "来源包：iec-cn · id=CP1E-N40DR-A · 24 DI / 16 DO，覆盖 19 点位",
         "partId": "CP1E-N40DR-A",
+        "role": "plc",
         "packId": "iec-cn"
       },
       {
@@ -730,6 +975,7 @@
         "model": "PNOZ s3 750103",
         "note": "来源包：iec-cn · id=PNOZ-s3-750103 · 光栅/安全门监控，接 F3SG-4SRA0640-14 的 OSSD",
         "partId": "PNOZ-s3-750103",
+        "role": "other",
         "packId": "iec-cn"
       },
       {
@@ -739,6 +985,8 @@
         "model": "LRS-350-24",
         "note": "来源包：iec-cn · id=LRS-350-24 · 350 W / 14.6 A",
         "partId": "LRS-350-24",
+        "role": "psu",
+        "ratedW": 350,
         "packId": "iec-cn"
       },
       {
@@ -748,6 +996,7 @@
         "model": "iC65N 1P C6",
         "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 4.456 A，额定 6 A",
         "partId": "iC65N-C6-1P",
+        "role": "other",
         "packId": "iec-cn"
       },
       {
@@ -757,6 +1006,7 @@
         "model": "5SY63 3P C16",
         "note": "来源包：iec-cn · id=5SY63-C16 · 计算 9.235 A，额定 16 A",
         "partId": "5SY63-C16",
+        "role": "other",
         "packId": "iec-cn"
       },
       {
@@ -766,6 +1016,7 @@
         "model": "iC65N 1P C6",
         "note": "来源包：iec-cn · id=iC65N-C6-1P · 计算 2.08 A，额定 6 A",
         "partId": "iC65N-C6-1P",
+        "role": "other",
         "packId": "iec-cn"
       }
     ],
@@ -888,6 +1139,168 @@
         "margin": 2.336
       }
     ]
+  },
+  "cost": {
+    "material": 5136,
+    "electrical": 2484,
+    "labor": 15552,
+    "total": 23172,
+    "missingCount": 9,
+    "byCategory": [
+      {
+        "category": "机械件",
+        "subtotal": 5136,
+        "count": 1,
+        "missing": 0
+      },
+      {
+        "category": "电气件",
+        "subtotal": 2484,
+        "count": 11,
+        "missing": 9
+      }
+    ],
+    "assumptions": [
+      "方案阶段粗估：用于方案比较与预算区间，不替代正式报价。",
+      "机械件 = 价格簿单价 × 数量；价格簿未命中时使用元件库参考价，仍无价则计入缺价。",
+      "电气件 = 元件库/价格簿单价 × 数量；伺服按驱动器 + 电机成对计价，缺一件时按同数量补齐。",
+      "人工/调试 = 6 工位 × (机械 8 h + 电气 6 h + 调试 4 h) × 形态系数 1.2（cell）× 120 元/h = 15552 元。",
+      "缺价行不猜价格、不计入合计；missingCount 为缺价 BOM 行数，需补价格簿或询价。",
+      "machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。"
+    ],
+    "warnings": [
+      "有 9 行缺价，未计入合计：伺服驱动器（SV660P 750 W） × 6；伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1；安全继电器（PNOZ s3 750103） × 1；24 V 开关电源（LRS-350-24） × 1；伺服支路断路器（iC65N 1P C6） × 6；总进线断路器（5SY63 3P C16） × 1；开关电源支路断路器（iC65N 1P C6） × 1"
+    ],
+    "lines": [
+      {
+        "name": "伺服驱动器",
+        "model": "SV660P 750 W",
+        "partId": "SV660PS5R5I",
+        "category": "电气件",
+        "qty": 6,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "伺服电机",
+        "model": "MS1H1-75B30CB 750 W",
+        "partId": "MS1H1-75B30CB",
+        "category": "电气件",
+        "qty": 6,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "气爪",
+        "model": "MHZ2-20D",
+        "partId": "MHZ2-20D",
+        "category": "机械件",
+        "qty": 6,
+        "unit": 856,
+        "subtotal": 5136,
+        "priceSource": "元件库参考价"
+      },
+      {
+        "name": "电磁阀",
+        "model": "SY5120-5LZD",
+        "partId": "SY5120-5LZD",
+        "category": "电气件",
+        "qty": 6,
+        "unit": 286,
+        "subtotal": 1716,
+        "priceSource": "元件库参考价"
+      },
+      {
+        "name": "到位检测（磁性开关）",
+        "model": "D-M9B",
+        "partId": "D-M9B",
+        "category": "电气件",
+        "qty": 6,
+        "unit": 128,
+        "subtotal": 768,
+        "priceSource": "元件库参考价"
+      },
+      {
+        "name": "安全光栅",
+        "model": "F3SG-4SRA0640-14",
+        "partId": "F3SG-4SRA0640-14",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "PLC",
+        "model": "CP1E-N40DR-A",
+        "partId": "CP1E-N40DR-A",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "安全继电器",
+        "model": "PNOZ s3 750103",
+        "partId": "PNOZ-s3-750103",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "24 V 开关电源",
+        "model": "LRS-350-24",
+        "partId": "LRS-350-24",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "伺服支路断路器",
+        "model": "iC65N 1P C6",
+        "partId": "iC65N-C6-1P",
+        "category": "电气件",
+        "qty": 6,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "总进线断路器",
+        "model": "5SY63 3P C16",
+        "partId": "5SY63-C16",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      },
+      {
+        "name": "开关电源支路断路器",
+        "model": "iC65N 1P C6",
+        "partId": "iC65N-C6-1P",
+        "category": "电气件",
+        "qty": 1,
+        "unit": 0,
+        "subtotal": 0,
+        "priceSource": "缺失"
+      }
+    ],
+    "laborDetail": {
+      "stations": 6,
+      "hourlyRate": 120,
+      "hoursPerStation": 18,
+      "formFactor": 1.2,
+      "hours": 129.6
+    },
+    "boundary": "方案阶段粗估：不含报价加成、税率、运费、线缆/线槽与端子接线工时，不替代 cost/engine.ts 的正式报价计算。"
   },
   "ioMap": {
     "rowCount": 19,
@@ -1100,24 +1513,24 @@
         "name": "15-machine-design-card.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 442439,
-        "uniqueColors": 6695
+        "bytes": 501034,
+        "uniqueColors": 7423
       },
       {
         "label": "6 工位 3D 联调",
         "name": "16-machine-3d.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 375732,
-        "uniqueColors": 6179
+        "bytes": 442022,
+        "uniqueColors": 7936
       },
       {
         "label": "BOM 真实型号",
         "name": "17-machine-bom.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 133553,
-        "uniqueColors": 2604
+        "bytes": 138299,
+        "uniqueColors": 2600
       },
       {
         "label": "PLC IO 点位",
