@@ -11,7 +11,8 @@ import {
   writeFileSync
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import type { ComponentPart, PackInfo, PackManifest } from '../shared/types';
+import type { ComponentPart, PackInfo, PackManifest, PackRequirement } from '../shared/types';
+import { assertPartsIntegrity } from './validate.ts';
 
 export interface PackRegistryOptions {
   builtinDir: string;
@@ -70,7 +71,7 @@ function validateManifest(value: unknown): PackManifest {
   for (const key of MANIFEST_REQUIRED) {
     if (!(key in value)) throw new Error(`缺少必填参数：manifest.${key}`);
   }
-  if (value.schemaVersion !== 1) throw new Error('manifest.schemaVersion 必须为 1');
+  if (value.schemaVersion !== 1 && value.schemaVersion !== 2) throw new Error('manifest.schemaVersion 必须为 1 或 2');
   if (typeof value.id !== 'string' || !PACK_ID_PATTERN.test(value.id)) throw new Error('manifest.id 格式不合法');
   for (const key of ['name', 'vendor', 'version'] as const) {
     if (typeof value[key] !== 'string' || value[key].trim() === '') {
@@ -106,7 +107,7 @@ function validateManifest(value: unknown): PackManifest {
     }
   }
   const manifest: PackManifest = {
-    schemaVersion: 1,
+    schemaVersion: value.schemaVersion,
     id: value.id,
     name: value.name as string,
     vendor: value.vendor as string,
@@ -117,6 +118,24 @@ function validateManifest(value: unknown): PackManifest {
   if (typeof value.license === 'string') manifest.license = value.license;
   if (typeof value.description === 'string') manifest.description = value.description;
   if (keywords.length > 0) manifest.keywords = keywords;
+  if (value.partsSha256 !== undefined) {
+    if (typeof value.partsSha256 !== 'string' || !/^[a-fA-F0-9]{64}$/.test(value.partsSha256)) {
+      throw new Error('manifest.partsSha256 必须是 64 位十六进制 SHA-256');
+    }
+    manifest.partsSha256 = value.partsSha256.toLowerCase();
+  }
+  if (value.requires !== undefined) {
+    if (!Array.isArray(value.requires)) throw new Error('manifest.requires 必须是数组');
+    const requires: PackRequirement[] = [];
+    value.requires.forEach((item, index) => {
+      if (!isRecord(item) || typeof item.pack !== 'string' || item.pack.trim() === '' ||
+          typeof item.version !== 'string' || item.version.trim() === '') {
+        throw new Error(`manifest.requires[${index}] 必须是 {pack, version}`);
+      }
+      requires.push({ pack: item.pack.trim(), version: item.version.trim() });
+    });
+    if (requires.length > 0) manifest.requires = requires;
+  }
   return manifest;
 }
 
@@ -144,13 +163,14 @@ function validateParts(value: unknown, packId: string, packName: string): Compon
     const rawSpecs = isRecord(item.specs) ? item.specs : {};
     const specs: Record<string, string | number> = {};
     for (const [key, spec] of Object.entries(rawSpecs)) {
-      if (typeof spec !== 'string' && typeof spec !== 'number') {
-        throw new Error(`parts[${index}].specs.${key} 必须是字符串或数字`);
+      if (typeof spec !== 'string' && (typeof spec !== 'number' || !Number.isFinite(spec))) {
+        throw new Error(`parts[${index}].specs.${key} 必须是字符串或有限数字`);
       }
       specs[key] = spec;
     }
-    if (item.price !== undefined && typeof item.price !== 'number') {
-      throw new Error(`parts[${index}].price 必须是数字`);
+    if (item.price !== undefined &&
+        (typeof item.price !== 'number' || !Number.isFinite(item.price) || item.price < 0)) {
+      throw new Error(`parts[${index}].price 必须是非负有限数`);
     }
     const part: ComponentPart = {
       id: item.id,
@@ -551,8 +571,10 @@ export class PackRegistry {
     if (!entry.manifest) throw new Error(entry.info.error ?? `数据包 manifest 无效：${entry.info.id}`);
     const startedAt = performance.now();
     try {
+      const rawParts = this.readTextFile(join(entry.dir, 'parts.json'));
+      assertPartsIntegrity(rawParts, entry.manifest.partsSha256, entry.manifest.id);
       const parts = validateParts(
-        JSON.parse(this.readTextFile(join(entry.dir, 'parts.json'))) as unknown,
+        JSON.parse(rawParts) as unknown,
         entry.manifest.id,
         entry.manifest.name
       );

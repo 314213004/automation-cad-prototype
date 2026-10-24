@@ -88,7 +88,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 *数据包：内置包只读展示，支持 ZIP 导入、启停与型号 / 厂商 / 类别检索；启停即时影响标准件搜索结果，「插入」写入渲染层覆盖层而不修改原型代码。*
 
-*内置 10 个包：`iec-cn` 377 条、`smc-cn` 8 条、`servo-cn` 25 条、`sensor-cn` 32 条、`pneumatic-cn` 44 条、`vision-cn` 32 条、`drive-cn` 33 条、`safety-cn` 33 条（28 实型号 + 5 alias）、`frame-cn` 33 条、`pricebook-cn` 价格簿；元器件合计 612 条可检索型号 / 612 个唯一型号。启动只读 manifest 索引；`listParts` 先按 `manifest.categories` / 包名预过滤，命中包才 `loadPack` 并缓存，`unloadPack` 可释放；跨包同 id 去重且内置优先，`getPartById` 懒建全局索引并解析 `aliasOf`。`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=… safety=… frame=…`，`npm run diagnose` 输出 `packMetrics`。*
+*内置 10 个包：`iec-cn` 377 条、`smc-cn` 8 条、`servo-cn` 25 条、`sensor-cn` 32 条、`pneumatic-cn` 44 条、`vision-cn` 32 条、`drive-cn` 33 条、`safety-cn` 33 条（28 实型号 + 5 alias）、`frame-cn` 33 条、`pricebook-cn` 价格簿；元器件合计 612 条可检索型号 / 612 个唯一型号。启动只读 manifest 索引；`listParts` 先按 `manifest.categories` / 包名预过滤，命中包才 `loadPack` 并缓存，`unloadPack` 可释放；跨包同 id 去重且内置优先，`getPartById` 懒建全局索引并解析 `aliasOf`。`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=…`、`SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=… safety=… frame=…` 与 `SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；`npm run diagnose` 输出 `packMetrics` 与库统计摘要。每个包的 `manifest.partsSha256` 在加载时校验，不匹配抛 `PACK_INTEGRITY_FAILED`；`npm run packs:validate` / `npm run packs:stats` 分别做全包校验与统计报表（[PACK-STATS.md](docs/desktop/PACK-STATS.md)）。*
 
 ### 电气元件库：377 型号 / 26 分类 / 265 个可核实尺寸
 
@@ -161,7 +161,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 大装配实测 | 424 KB 装配体 → 5,040 三角面，解析 559 ms | ✅ |
 | 运动学标注 | 任意装配体：动件 → 轴 / 行程 / 方向 / 缩回位 / 点位；校验 + 姿态解算 + 滑块预览 | ✅ |
 | 无 WebGL 降级 | 渲染不可用时退化为解析统计面板，不白屏；标注仍可编辑 | ✅ |
-| 数据包 | 10 个内置 manifest + 用户 ZIP 导入、manifest 校验、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重、alias 解析与全局索引 | ✅ |
+| 数据包 | 10 个内置 manifest + 用户 ZIP 导入、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重、alias 解析与全局索引；全包 schema/重复 id/依赖/`partsSha256` 校验、版本迁移与统计报表 | ✅ |
 
 ### PLC / 联调 / 工厂
 
@@ -313,8 +313,11 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 1624 个单测（node:test）
-npm run diagnose  # 输出环境/WebGL/userData/数据包/KB/审计/最近 20 条错误（不含密钥）
+npm test          # 1655 个单测（node:test）
+npm run diagnose  # 输出环境/WebGL/userData/数据包（加载指标+统计摘要）/KB/审计/最近 20 条错误（不含密钥）
+npm run packs:validate # 校验全部内置包（manifest/parts/重复 id/依赖/partsSha256）
+npm run packs:stats    # 生成 docs/desktop/PACK-STATS.md 与 pack-stats.json
+npm run packs:add -- ../packs/builtin/my-pack # 生成新包骨架（manifest + 空 parts + README）
 npm run perf:baseline # 200/1000/3000 件场景构建、tick 与堆峰值基线
 npm run agent:report # 生成 Agent 汇报报告（md / json / svg）
 npm run smoke     # xvfb + Electron headless；含 SMOKE_PERF_OK 与 SMOKE_DIAGNOSE_OK
@@ -336,11 +339,11 @@ smoke 覆盖并断言：
 - 电气元件库、底板布置（`SMOKE_ENCLOSURE_CANVAS_OK placed=2 overlap=1`）、电气校验（`SMOKE_ELEC_CHECK_OK findings=4 errors=3`）、成本引擎（`SMOKE_COST_OK lines=6 missing=1 grand=1398.64`）、成本 Agent 工具（`SMOKE_COST_AGENT_OK bomSource=argument lines=6 missing=1 grand=1398.64`，与引擎合计一致）、成本 Agent 导出（`SMOKE_COST_AGENT_EXPORT_OK format=csv bytes>0 name=sanitized`，假桥接直接调命令、不弹窗）与成本面板（`SMOKE_COST_UI_OK rows=6 cards=9 grand=1398.64 book=6 pdf=1`：打开面板 → 载入价格簿 → 计算 → 渲染 9 卡 6 行 → 导出 A4 PDF）；
 - 智能体工具注册、渲染桥读写、对话面板字段；机型方案合成（`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`：三工位锁螺丝机示例、选覆盖 3 工位的 linear-4 并给出缺口 warning、模板补全；`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` 与 `SMOKE_MACHINE_COST_OK total=17076.23 missing=2`：统一功率模型给出 kW/A/断路器，成本按材料/电气/人工分项并统计缺价）；节拍模型（`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`：六工位锁螺丝机按双轨 (3.18 + 0.60) / 2 秒/件估算 31.75 件/分钟）；工艺模板与追问（`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`：5 类模板、多缺项合并为一次追问）；整机形态库（`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`：11 种形态字段合法、十二工位转盘检测按覆盖优先选中 dial-12，龙门多头/混合线/单元矩阵几何可生成）；机型方案落盘与联动（`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`：写方案与 active 指针、3D 切到 3 工位、7 行 BOM 与 PLC `io-map.csv` 落盘，撤销后回到 4 工位样机）；参数化整机几何（`SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`：三工位锁螺丝机按 form.geometry 生成直线机架 56 个 mm 级零件与 6 条运动轴，落盘 geometry.json / STL / glTF / sidecar 实体列表，3D 场景零件数一致，撤销后删除）；上下文预算（`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`：长列表首尾收敛、history 先丢、system 保留且最终不超预算）；只读问答 UI（`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`：只读指令标可离线、写指令标需联网并点名缺 `partId`、预览不改变场景、审计面板读到 2 条）；离线规则路由（`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`：7 类意图全覆盖、写计划不进入离线通道、审计 3 条且密钥不落原文）；上下文与指代（`SMOKE_AGENT_CONTEXT_OK selection=1 recent=3`：选中对象优先、最近 3 条操作、几何排序、列表裁剪与 1.5 KB 上限）；底板放置与撤销（`SMOKE_AGENT_PLACE_OK placed=1 undo=1`：真实 `__Enclosure` 放置 1 件、吸附导轨、撤销后归零）；Agent 工具扩展（`SMOKE_AGENT_TOOLS_V2 tools=21`：机型设计/落盘、上下文、元件修改/移除、PLC 落盘、通用导出、本地知识检索全部注册）；知识检索（`SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1`：13 份文档 + 截图/分类索引，D2 命中 1 条）；执行体验（`SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`：3 步进度 start/end、3 条含耗时审计、取消后「未写入任何更改」）。流程模板（`SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`：5 个模板、5 步流程第 3 步注入失败后停止并保留前 2 步；`SMOKE_AGENT_RECIPE_UI_OK` 校验下拉、步骤与导出按钮）。
 
-输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1`、`SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…`、`SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=…`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=…`，最后 `SMOKE_OK`。
+输出形如 `SMOKE_UI_OK`、`SMOKE_PLC_OK`、`SMOKE_AGENT_TOOLS_OK`、`SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1`、`SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…`、`SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=…`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`、`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,packStats,kb,audit,recentErrors errors=…`，最后 `SMOKE_OK`。
 
 诊断与崩溃现场：
 
-- `npm run diagnose` 打印应用/Electron/Node 版本、WebGL 可用性、userData、内置数据包版本与数量、包加载指标（`packLoadMs / loadedPacks / partsLoaded / searchMs / packCount`）、KB 文档/分段/字节、审计文件大小、最近 20 条错误摘要；输出经过密钥脱敏。脚本在 Linux 下用 `xvfb-run`，Windows 桌面可直接 `npx electron . --diagnose`。
+- `npm run diagnose` 打印应用/Electron/Node 版本、WebGL 可用性、userData、内置数据包版本与数量、包加载指标（`packLoadMs / loadedPacks / partsLoaded / searchMs / packCount`）、库统计摘要（包数/条数/唯一型号/分类/错误/警告）、KB 文档/分段/字节、审计文件大小、最近 20 条错误摘要；输出经过密钥脱敏。脚本在 Linux 下用 `xvfb-run`，Windows 桌面可直接 `npx electron . --diagnose`。
 - 未捕获异常与未处理 Promise 拒绝会写 `<userData>/diagnostics/last-crash.json`，只含堆栈、版本、平台与操作类型，不保存用户输入正文。
 
 **仓库镜像**：主仓库 GitHub `owlco001/automation-cad-prototype`，镜像 Gitee 同名仓库（公开）。`origin` 已配置双 push 地址，`git push origin main` 会同时推两边；推 tag 用 `git bothpush`（等价 `git push origin main && git push origin --tags`）。任一远端失败即整体失败，不要只推一边；详见 `docs/desktop/BACKLOG.md`「仓库双推约定」。

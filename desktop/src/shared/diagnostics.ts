@@ -23,6 +23,7 @@ export interface DiagnosisReportInput {
   dataPackVersion: string;
   packCount?: number;
   packMetrics?: PackLoadMetrics;
+  packStats?: PackStatsSummary;
   kbDocs: number;
   kbChunks: number;
   kbBytes?: number;
@@ -37,6 +38,18 @@ export interface PackLoadMetrics {
   partsLoaded: number;
   searchMs: number;
   packCount?: number;
+}
+
+/** 库统计摘要，与 `npm run packs:stats` 的总计口径一致。 */
+export interface PackStatsSummary {
+  packs: number;
+  parts: number;
+  activeParts: number;
+  aliases?: number;
+  uniqueModels: number;
+  categories?: number;
+  errors: number;
+  warnings: number;
 }
 
 export interface DiagnosisReport {
@@ -55,6 +68,7 @@ export interface DiagnosisReport {
   webgl: { available: boolean; version?: string; renderer?: string };
   dataPack: { version: string; count: number };
   packMetrics: PackLoadMetrics;
+  packStats?: PackStatsSummary;
   kb: { docs: number; chunks: number; bytes?: number };
   audit: { path?: string; bytes: number };
   recentErrors: DiagnosticErrorRecord[];
@@ -227,6 +241,20 @@ export function buildDiagnosisReport(input: DiagnosisReportInput): DiagnosisRepo
       searchMs: Math.max(0, Number(input.packMetrics?.searchMs ?? 0)),
       packCount: Math.max(0, Math.trunc(input.packMetrics?.packCount ?? input.packCount ?? 0))
     },
+    ...(input.packStats
+      ? {
+          packStats: {
+            packs: Math.max(0, Math.trunc(input.packStats.packs)),
+            parts: Math.max(0, Math.trunc(input.packStats.parts)),
+            activeParts: Math.max(0, Math.trunc(input.packStats.activeParts)),
+            ...(typeof input.packStats.aliases === 'number' ? { aliases: Math.max(0, Math.trunc(input.packStats.aliases)) } : {}),
+            uniqueModels: Math.max(0, Math.trunc(input.packStats.uniqueModels)),
+            ...(typeof input.packStats.categories === 'number' ? { categories: Math.max(0, Math.trunc(input.packStats.categories)) } : {}),
+            errors: Math.max(0, Math.trunc(input.packStats.errors)),
+            warnings: Math.max(0, Math.trunc(input.packStats.warnings))
+          }
+        }
+      : {}),
     kb: {
       docs: Math.max(0, Math.trunc(input.kbDocs)),
       chunks: Math.max(0, Math.trunc(input.kbChunks)),
@@ -258,6 +286,9 @@ export function formatDiagnosisReport(report: DiagnosisReport): string {
     `WebGL：${webgl}`,
     `数据包：${report.dataPack.version}（${report.dataPack.count} 个）`,
     `包加载：已加载 ${report.packMetrics.loadedPacks}/${report.packMetrics.packCount} · 零件 ${report.packMetrics.partsLoaded} · 加载 ${report.packMetrics.packLoadMs} ms · 搜索 ${report.packMetrics.searchMs} ms`,
+    ...(report.packStats
+      ? [`包统计：${report.packStats.packs} 个包 · ${report.packStats.parts} 条（实型号 ${report.packStats.activeParts}）· 唯一型号 ${report.packStats.uniqueModels} · 分类 ${report.packStats.categories ?? 0} · 错误 ${report.packStats.errors} · 警告 ${report.packStats.warnings}`]
+      : []),
     `知识库：${report.kb.docs} 份文档 / ${report.kb.chunks} 段`,
     `审计文件：${report.audit.path ?? '(未配置)'} · ${report.audit.bytes} 字节`,
     `最近错误：${report.recentErrors.length} 条`

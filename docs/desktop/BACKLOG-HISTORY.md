@@ -2,6 +2,32 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 上一轮：安全件 + 机架结构件扩包（2026-10-24）
+
+- 状态：✅ 完成；`safety-cn` 33 条、`frame-cn` 33 条；10 个 manifest，可检索 612 条 / 612 唯一 id。
+- 安全件：F3SG-SR/PG 4 档高度、西克 deTec4/microScan3、邦纳 LS 3 档；PNOZ s5、XPSAF、3SK1/2；AZM300/400、PSEN ml、D4NS/D4GS、XB5AS8445；PNOZmulti 2、S7-1200F 两条。字段齐全 `type/pl/category/responseTimeMs/channels/voltage/dims`。
+- alias：PNOZ s3/s4、XPSAC5121、3SK1111-1AB30、NP2-BS542 已存在，`safety-cn` 仅 5 条 `aliasOf`；`listParts` 不显示 alias，`getPartById` 链式解析并防环。
+- 结构件：APAS 槽 8/10 型材 40×40/40×80/45×45/45×90/80×80；角件/内置连接/T 螺母/端盖；网框/亚克力/铝塑板；福马轮/调节脚（100–1600 kg）；安全门铰链/门框/门锁；皮带/倍速链段。
+- 数据：米重 `kg/m`、惯性矩 `cm⁴`、承载 `kg`；型材参数取自 APAS info-53/41/64/56/32，连接/脚轮取自 APAS/item24；缺失参数留空并标「未核实」，不录价格。
+- 测试：`desktop/test/packs/safety-frame.test.mjs` 20 条，覆盖容量、字段/单位、10 包 id 与型号唯一、alias 解析/防环、无价格、体积、懒加载与分类聚合。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1624/1624**（+20）；smoke `SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=5.635 coldMs=6.2 parts=402`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`；diagnose `dataPack.count=10`；`eval:agent` 1.00。
+
+## 历史已知问题原文（2026-10-24）
+
+1. **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决；STEP 不含运动学，任意装配体仍需标注层。36-auto-kinematics 起可按名称/型号/层级/几何自动给出标注**建议**（需逐条确认），但识别是启发式：命名不规范或几何不典型的机构仍需人工标注，斜向运动只能取最近主轴，夹爪对侧手指、缩回位与无型号行程仍需人工确认。 迭代 34 起机型方案的 3D 改为参数化整机几何，但仍是标准件外形，不是结构设计。
+2. **尺寸数据覆盖不全**：已补至 266/379（70.2%；16 条同系列推定，2026-10-24 第二批 22 条全部为官方尺寸），仍缺 113 条；缺失元件在底板画布上按「未标注尺寸」处理，需人工补（清单与来源见 DIMS-GAPS.md）。
+3. **OPC UA 仅 SecurityPolicy=None**：接真实 PLC 前必须加证书与 Basic256Sha256（Issue #3）。
+4. **无代码签名**：Win11 SmartScreen 会拦一次；发行前需证书。
+5. **CI 为手动触发**：按老王要求，不自动构建；要包时 `gh workflow run windows-build`。
+6. **数据准确性**：元器件参数为公开样本汇总，定型前以铭牌/最新样本为准（manifest 已声明）。
+7. **前端原型限制**：原型自身 3D 仍为固定等轴测投影（插入与撤销已真实化）。**桌面版已缓解（35-orbit-view + 收尾）**：有 WebGL 时主视口为可旋转 three.js，缸径/行程与桌面版尺寸/位置编辑沿叠放链重建几何；桌面版几何编辑已进撤销栈（与原型合成一条时间线）、内置零件覆盖持久化到工程存储，WebGL 模式支持 Shift+拖拽 / 「框选」模式多选。仍未解决：几何为参数化示意体（非 B-rep、无配合求解、缸径为原型示意比例）；插入件尺寸覆盖不持久化（原型不持久化插入件）；3D 存储为单键、不按机型分桶；撤销对账依赖原型状态栏文案（原型改文案需同步改 `parseProtoCounts`）；无 WebGL 时回到固定等轴测。
+8. **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。
+9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。 **2026-10-24 更新（feat/agent-audit-router）**：① 审计已按大小轮转 + 保留期清理（默认 5 MB × 5 份 × 90 天，可配置），面板/报告读全部保留份数；被保留期删除的份数不可恢复，CSV 仍只导出面板当前列表（≤200 条）。② 路由已系统补同义/口语词并加非工程话题拦截（评估集 102 条）；仍是关键词规则：未收录的说法照旧判超纲，「撞」「会动」「规划」等单字/泛词可能把边缘句子拉进工程意图，非工程话题表是有限枚举。回执 token 用量问题未变。
+10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（Fri 2026-10-23 8:28 PM CST (UTC+08:00)）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。 **2026-10-24 更新**：上述描述已过时——仓库内 `agent-multiturn.json` 已是修复后的真实模型结果（`cn:deepseek-v4.1-flash`，生成于 Fri 2026-10-23 10:08 PM CST (UTC+08:00)，6/6 场景、15/15 轮，MT04 通过），Agent 报告按此展示。本轮补了 `test/agent/multiturn-mt04.test.mjs` 会话层确定性回归（fake LLM 回放 MT04：原样重试与 `partId` 写法重试都被短路、不弹确认）。本机无 `AGENT_LIVE_BASE_URL/API_KEY/MODEL`，**真实模型重跑待有 key 时执行**（换模型/换措辞仍需重跑，单模型单次结果不是通用结论）。遗留边界：拒绝记忆按「工具 + 目标」匹配，模型若在「继续」后改用别的写工具动同一目标（如 `remove_component QF1`）仍会走确认框，真实评测会算违规。
+11. **两条成本导出单测依赖本地时区**：`test/cost-export.test.ts` 的文件名断言按 Asia/Shanghai 本地时间（`…-20261023-1200`）；在 UTC 环境（如本轮沙箱）直接 `npm test` 会 1130/1132，需 `TZ=Asia/Shanghai npm test`。35-orbit-view 未改这两条断言，只记录。
+12. **安全光栅型号与截图（已补录，2026-10-24）**：`iec-cn` 已补 8 条官方来源的 Type 4 安全光栅，六工位案例 BOM 初选 `F3SG-4SRA0640-14`；四张机型截图已在 xvfb + Electron 下重拍，17 号 BOM 图不再显示「待选型」。仍待：安全距离按 ISO 13855 用现场停机时间核算。
+13. ✅ **已修复（提交号：accaf9d）——节拍模型未区分「并行同工序」与「流水线分工序」**（原问题记录，2026-10-24 发现）：`synthMachine` 原先只按流水线建模——产能由最慢工位决定，补并行工位只针对瓶颈工序。因此「六工位锁螺丝机、20 件/分钟」被判为不达标（3.18 s/件 > 3.00 s/件，建议 12 工位），但 6 个**同工序并行**工位的实际产能应为 `6 / 3.18 × 60 ≈ 113 件/分钟`。影响：机型方案卡与 `machine-case.json` 的节拍结论偏保守，`MACHINE-DESIGN-DEMO.md` 已如实标注「若坚持该估算模型需 12 工位」。修复：`MachineBrief` 增加 `layout` 与 `processes`，解析器按流水线关键词/多工序推断 `line`，单一工艺推断 `parallel`；`MachineCycleEstimate` 增加 `mode`、`stationSeconds`、`throughputPerMin`，并行按 `stations / stationSeconds × 60`、流水线按 `60 / 最慢工位` 计算；新增 `test/machine/cycle-mode.test.mjs` 19 条与 `SMOKE_MACHINE_CYCLE_OK`，六工位案例重算为 `113.21 件/分钟`、`meetsTarget=true`。
+
 ## 上一轮：视觉与传动扩包（2026-10-24）
 
 - 状态：✅ 完成；新增 `vision-cn`（32 条 / 6 分类）与 `drive-cn`（33 条 / 8 分类），内置 manifest 增至 8 个；元器件合计 551 条 / 551 个唯一 id。未 push、未提交。

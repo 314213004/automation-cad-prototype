@@ -1,0 +1,1354 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-24T11:19:34.212Z",
+  "source": {
+    "packsDir": "/root/workspace/automation-cad-prototype/packs/builtin",
+    "pricebook": "/root/workspace/automation-cad-prototype/packs/builtin/pricebook-cn/pricebook.json",
+    "pricebookUpdatedAt": "2026-10-24T00:00:00+08:00",
+    "currency": "CNY"
+  },
+  "totals": {
+    "packs": 10,
+    "partPacks": 9,
+    "pricebookPacks": 1,
+    "parts": 617,
+    "activeParts": 612,
+    "aliases": 5,
+    "uniqueIds": 617,
+    "uniqueModels": 612,
+    "categories": 55,
+    "withDims": 342,
+    "dimsCoverage": 0.5588,
+    "withPrice": 44,
+    "priceCoverage": 0.0719,
+    "partsBytes": 299896,
+    "packBytes": 337474,
+    "integrity": {
+      "checked": 9,
+      "ok": 9,
+      "missing": 0,
+      "failed": 0
+    },
+    "pricebookItems": 64,
+    "commonBomHits": 8,
+    "commonBomTotal": 11
+  },
+  "packs": [
+    {
+      "id": "drive-cn",
+      "name": "传动与机械（丝杠/导轨/减速机/联轴器/带传动/模组）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 33,
+      "activeParts": 33,
+      "aliases": 0,
+      "categories": [
+        "齿轮齿条",
+        "滚珠丝杠",
+        "减速机",
+        "联轴器",
+        "同步带",
+        "同步带轮",
+        "直线导轨",
+        "直线模组"
+      ],
+      "categoryCount": 8,
+      "withDims": 0,
+      "dimsCoverage": 0,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 14876,
+      "packBytes": 16164,
+      "partsSha256": "40a25eadc5171d60f7affa7f7e5f81866a5ca4d66f2589012df1c73d6ad2a588",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "frame-cn",
+      "name": "机架与结构件（铝型材/连接件/防护/脚轮/门/输送）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 33,
+      "activeParts": 33,
+      "aliases": 0,
+      "categories": [
+        "防护板材",
+        "工业铝型材",
+        "脚轮与地脚",
+        "连接件",
+        "门与把手",
+        "输送段"
+      ],
+      "categoryCount": 6,
+      "withDims": 33,
+      "dimsCoverage": 1,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 20048,
+      "packBytes": 21334,
+      "partsSha256": "ff30c51d7e4b7c0db8f628a1df1d38d4fceb0dfc0fa7546b6ad782415a0d7c4f",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.397Z"
+    },
+    {
+      "id": "iec-cn",
+      "name": "电气元件库（常用）",
+      "version": "1.2.0",
+      "schemaVersion": 1,
+      "parts": 377,
+      "activeParts": 377,
+      "aliases": 0,
+      "categories": [
+        "安全继电器",
+        "安全件",
+        "按钮与开关",
+        "编码器",
+        "变频器",
+        "步进",
+        "传感器",
+        "伺服",
+        "端子与辅材",
+        "断路器",
+        "隔离开关",
+        "柜内温控",
+        "接触器",
+        "开关电源",
+        "浪涌保护器",
+        "热继电器",
+        "熔断器",
+        "软启动器",
+        "时间继电器",
+        "识别与视觉",
+        "行程开关",
+        "仪表",
+        "指示与信号",
+        "中间继电器",
+        "HMI",
+        "PLC"
+      ],
+      "categoryCount": 26,
+      "withDims": 265,
+      "dimsCoverage": 0.7029,
+      "withPrice": 34,
+      "priceCoverage": 0.0902,
+      "partsBytes": 162897,
+      "packBytes": 164447,
+      "partsSha256": "3ecfb1efe3a25c6e839f06662477f3caefe00904b8d748327da18ca879f5ceae",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "pneumatic-cn",
+      "name": "气动元件（SMC 常用系列）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 44,
+      "activeParts": 44,
+      "aliases": 0,
+      "categories": [
+        "电磁阀",
+        "气动接头",
+        "气缸",
+        "气源处理",
+        "气爪"
+      ],
+      "categoryCount": 5,
+      "withDims": 0,
+      "dimsCoverage": 0,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 24615,
+      "packBytes": 25545,
+      "partsSha256": "01ccedd0984b2068f2f6ffa586965529e3fbc34b9a403f07c99558163243f7fe",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "pricebook-cn",
+      "name": "人民币价格簿（中国）",
+      "version": "0.1.0",
+      "schemaVersion": 1,
+      "parts": 0,
+      "activeParts": 0,
+      "aliases": 0,
+      "categories": [],
+      "categoryCount": 0,
+      "withDims": 0,
+      "dimsCoverage": 0,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 0,
+      "packBytes": 27249,
+      "partsSha256": null,
+      "integrity": "n/a",
+      "requires": [],
+      "lastUpdated": "2026-10-24 17:37",
+      "lastUpdatedIso": "2026-10-24T09:37:34.011Z"
+    },
+    {
+      "id": "safety-cn",
+      "name": "安全件（安全光栅/继电器/门锁/急停/安全PLC）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 33,
+      "activeParts": 28,
+      "aliases": 5,
+      "categories": [
+        "安全光栅",
+        "安全继电器",
+        "安全门锁",
+        "安全PLC",
+        "急停"
+      ],
+      "categoryCount": 5,
+      "withDims": 28,
+      "dimsCoverage": 1,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 18832,
+      "packBytes": 20208,
+      "partsSha256": "199aea7df9bcda659f75136e8bc52f271de3e2ae983e4efbc346be9f75aeea6a",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "sensor-cn",
+      "name": "传感器（接近/光电/磁性/压力/光纤）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 32,
+      "activeParts": 32,
+      "aliases": 0,
+      "categories": [
+        "传感器"
+      ],
+      "categoryCount": 1,
+      "withDims": 4,
+      "dimsCoverage": 0.125,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 21109,
+      "packBytes": 22215,
+      "partsSha256": "7d9da60278da6bd4635c07dc9eee8a1a08a7ad27da157ed29192a92b36463fdd",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.397Z"
+    },
+    {
+      "id": "servo-cn",
+      "name": "伺服与运动控制（汇川/台达/雷赛）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 25,
+      "activeParts": 25,
+      "aliases": 0,
+      "categories": [
+        "步进",
+        "伺服"
+      ],
+      "categoryCount": 2,
+      "withDims": 9,
+      "dimsCoverage": 0.36,
+      "withPrice": 2,
+      "priceCoverage": 0.08,
+      "partsBytes": 17892,
+      "packBytes": 18837,
+      "partsSha256": "7619c98d69dfd492228670c7cd561226ebb06de463b38bae3dd43fc9db3d1497",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "smc-cn",
+      "name": "SMC 常用气动元件",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 8,
+      "activeParts": 8,
+      "aliases": 0,
+      "categories": [
+        "传感器",
+        "电磁阀",
+        "气动接头",
+        "气缸",
+        "气源处理",
+        "气爪"
+      ],
+      "categoryCount": 6,
+      "withDims": 0,
+      "dimsCoverage": 0,
+      "withPrice": 8,
+      "priceCoverage": 1,
+      "partsBytes": 2241,
+      "packBytes": 2971,
+      "partsSha256": "75d5b9e28f7b407d84c1b76cfd1f138ac465c03b5602f4229366e4f6f0c81bb8",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.396Z"
+    },
+    {
+      "id": "vision-cn",
+      "name": "视觉与识别（相机/镜头/光源/读码器）",
+      "version": "1.0.0",
+      "schemaVersion": 1,
+      "parts": 32,
+      "activeParts": 32,
+      "aliases": 0,
+      "categories": [
+        "读码器",
+        "工业相机",
+        "光源",
+        "光源控制器",
+        "镜头",
+        "视觉控制器"
+      ],
+      "categoryCount": 6,
+      "withDims": 3,
+      "dimsCoverage": 0.0938,
+      "withPrice": 0,
+      "priceCoverage": 0,
+      "partsBytes": 17386,
+      "packBytes": 18504,
+      "partsSha256": "f7dc8827ee7c2e491eb68a8a847b716143216e7496b5bd3f1b5cb1460600714a",
+      "integrity": "ok",
+      "requires": [],
+      "lastUpdated": "2026-10-24 19:08",
+      "lastUpdatedIso": "2026-10-24T11:08:26.395Z"
+    }
+  ],
+  "duplicates": {
+    "byId": [],
+    "byModel": []
+  },
+  "categoryMatrix": [
+    {
+      "category": "传感器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 66,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 32,
+        "servo-cn": 0,
+        "smc-cn": 1,
+        "vision-cn": 0
+      },
+      "total": 99
+    },
+    {
+      "category": "断路器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 39,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 39
+    },
+    {
+      "category": "伺服",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 16,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 22,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 38
+    },
+    {
+      "category": "PLC",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 36,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 36
+    },
+    {
+      "category": "端子与辅材",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 29,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 29
+    },
+    {
+      "category": "接触器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 20,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 20
+    },
+    {
+      "category": "按钮与开关",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 17,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 17
+    },
+    {
+      "category": "开关电源",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 17,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 17
+    },
+    {
+      "category": "安全件",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 16,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 16
+    },
+    {
+      "category": "气缸",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 13,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 3,
+        "vision-cn": 0
+      },
+      "total": 16
+    },
+    {
+      "category": "指示与信号",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 15,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 15
+    },
+    {
+      "category": "安全继电器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 5,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 9,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 14
+    },
+    {
+      "category": "热继电器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 13,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 13
+    },
+    {
+      "category": "中间继电器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 13,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 13
+    },
+    {
+      "category": "变频器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 12,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 12
+    },
+    {
+      "category": "安全光栅",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 11,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 11
+    },
+    {
+      "category": "工业相机",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 11
+      },
+      "total": 11
+    },
+    {
+      "category": "电磁阀",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 9,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 1,
+        "vision-cn": 0
+      },
+      "total": 10
+    },
+    {
+      "category": "连接件",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 10,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 10
+    },
+    {
+      "category": "脚轮与地脚",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 9,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 9
+    },
+    {
+      "category": "镜头",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 9
+      },
+      "total": 9
+    },
+    {
+      "category": "气动接头",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 8,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 1,
+        "vision-cn": 0
+      },
+      "total": 9
+    },
+    {
+      "category": "气爪",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 8,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 1,
+        "vision-cn": 0
+      },
+      "total": 9
+    },
+    {
+      "category": "安全门锁",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 8,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 8
+    },
+    {
+      "category": "柜内温控",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 8,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 8
+    },
+    {
+      "category": "滚珠丝杠",
+      "counts": {
+        "drive-cn": 8,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 8
+    },
+    {
+      "category": "减速机",
+      "counts": {
+        "drive-cn": 8,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 8
+    },
+    {
+      "category": "HMI",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 8,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 8
+    },
+    {
+      "category": "步进",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 4,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 3,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 7
+    },
+    {
+      "category": "气源处理",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 6,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 1,
+        "vision-cn": 0
+      },
+      "total": 7
+    },
+    {
+      "category": "隔离开关",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 6,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 6
+    },
+    {
+      "category": "识别与视觉",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 6,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 6
+    },
+    {
+      "category": "行程开关",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 6,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 6
+    },
+    {
+      "category": "编码器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 5,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 5
+    },
+    {
+      "category": "工业铝型材",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 5,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 5
+    },
+    {
+      "category": "光源",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 5
+      },
+      "total": 5
+    },
+    {
+      "category": "仪表",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 5,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 5
+    },
+    {
+      "category": "浪涌保护器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 4,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 4
+    },
+    {
+      "category": "门与把手",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 4,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 4
+    },
+    {
+      "category": "熔断器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 4,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 4
+    },
+    {
+      "category": "时间继电器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 4,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 4
+    },
+    {
+      "category": "直线导轨",
+      "counts": {
+        "drive-cn": 4,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 4
+    },
+    {
+      "category": "安全PLC",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 3,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "读码器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 3
+      },
+      "total": 3
+    },
+    {
+      "category": "防护板材",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 3,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "联轴器",
+      "counts": {
+        "drive-cn": 3,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "软启动器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 3,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "同步带",
+      "counts": {
+        "drive-cn": 3,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "同步带轮",
+      "counts": {
+        "drive-cn": 3,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 3
+    },
+    {
+      "category": "齿轮齿条",
+      "counts": {
+        "drive-cn": 2,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 2
+    },
+    {
+      "category": "光源控制器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 2
+      },
+      "total": 2
+    },
+    {
+      "category": "急停",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 2,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 2
+    },
+    {
+      "category": "视觉控制器",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 2
+      },
+      "total": 2
+    },
+    {
+      "category": "输送段",
+      "counts": {
+        "drive-cn": 0,
+        "frame-cn": 2,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 2
+    },
+    {
+      "category": "直线模组",
+      "counts": {
+        "drive-cn": 2,
+        "frame-cn": 0,
+        "iec-cn": 0,
+        "pneumatic-cn": 0,
+        "pricebook-cn": 0,
+        "safety-cn": 0,
+        "sensor-cn": 0,
+        "servo-cn": 0,
+        "smc-cn": 0,
+        "vision-cn": 0
+      },
+      "total": 2
+    }
+  ],
+  "priceCoverage": {
+    "library": {
+      "parts": 612,
+      "priced": 44,
+      "rate": 0.0719,
+      "pricebookItems": 64
+    },
+    "commonBom": {
+      "total": 11,
+      "hits": 8,
+      "rate": 0.7273,
+      "models": [
+        {
+          "id": "SV660PS5R5I",
+          "role": "伺服驱动器",
+          "pack": "iec-cn",
+          "model": "SV660P 750 W",
+          "found": true,
+          "priced": true,
+          "list": 1431.43,
+          "priceSource": "pricebook",
+          "priceKey": "SV660PS5R5I"
+        },
+        {
+          "id": "MS1H1-75B30CB",
+          "role": "伺服电机",
+          "pack": "iec-cn",
+          "model": "MS1H1-75B30CB 750 W",
+          "found": true,
+          "priced": false,
+          "list": null,
+          "priceSource": null,
+          "priceKey": null
+        },
+        {
+          "id": "MHZ2-20D",
+          "role": "气爪",
+          "pack": "smc-cn",
+          "model": "MHZ2-20D",
+          "found": true,
+          "priced": true,
+          "list": 856,
+          "priceSource": "inline",
+          "priceKey": "MHZ2-20D"
+        },
+        {
+          "id": "SY5120-5LZD",
+          "role": "电磁阀",
+          "pack": "smc-cn",
+          "model": "SY5120-5LZD",
+          "found": true,
+          "priced": true,
+          "list": 286,
+          "priceSource": "inline",
+          "priceKey": "SY5120-5LZD"
+        },
+        {
+          "id": "D-M9B",
+          "role": "磁性开关",
+          "pack": "smc-cn",
+          "model": "D-M9B",
+          "found": true,
+          "priced": true,
+          "list": 128,
+          "priceSource": "inline",
+          "priceKey": "D-M9B"
+        },
+        {
+          "id": "CP1E-N40DR-A",
+          "role": "PLC",
+          "pack": "iec-cn",
+          "model": "CP1E-N40DR-A",
+          "found": true,
+          "priced": false,
+          "list": null,
+          "priceSource": null,
+          "priceKey": null
+        },
+        {
+          "id": "PNOZ-s3-750103",
+          "role": "安全继电器",
+          "pack": "iec-cn",
+          "model": "PNOZ s3 750103",
+          "found": true,
+          "priced": true,
+          "list": 660,
+          "priceSource": "pricebook",
+          "priceKey": "PNOZ-s3-750103"
+        },
+        {
+          "id": "F3SG-4SRA0640-14",
+          "role": "安全光栅",
+          "pack": "iec-cn",
+          "model": "F3SG-4SRA0640-14",
+          "found": true,
+          "priced": false,
+          "list": null,
+          "priceSource": null,
+          "priceKey": null
+        },
+        {
+          "id": "LRS-350-24",
+          "role": "24 V 开关电源",
+          "pack": "iec-cn",
+          "model": "LRS-350-24",
+          "found": true,
+          "priced": true,
+          "list": 152.86,
+          "priceSource": "pricebook",
+          "priceKey": "LRS-350-24"
+        },
+        {
+          "id": "iC65N-C6-1P",
+          "role": "伺服断路器",
+          "pack": "iec-cn",
+          "model": "iC65N 1P C6",
+          "found": true,
+          "priced": true,
+          "list": 36.9,
+          "priceSource": "pricebook",
+          "priceKey": "iC65N-C6-1P"
+        },
+        {
+          "id": "5SY63-C16",
+          "role": "主断路器",
+          "pack": "iec-cn",
+          "model": "5SY63 3P C16",
+          "found": true,
+          "priced": true,
+          "list": 108.79,
+          "priceSource": "pricebook",
+          "priceKey": "5SY63-C16"
+        }
+      ]
+    }
+  }
+}

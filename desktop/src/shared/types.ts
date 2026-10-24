@@ -18,8 +18,16 @@ export interface CadImportResult {
   };
 }
 
+export interface PackRequirement {
+  /** 依赖的数据包 id。 */
+  pack: string;
+  /** semver 范围：支持精确版本、^、~、>=、<=、>、<、= 与 ||。 */
+  version: string;
+}
+
 export interface PackManifest {
-  schemaVersion: 1;
+  /** manifest 结构版本；1 为兼容旧包，2 为当前推荐。 */
+  schemaVersion: 1 | 2;
   id: string;
   name: string;
   vendor: string;
@@ -32,6 +40,10 @@ export interface PackManifest {
   partsCount: number;
   /** 可选检索关键词（系列、品牌别名），只在 manifest 索引中匹配。 */
   keywords?: string[];
+  /** parts.json 原始字节的 SHA-256；加载时校验，不匹配拒绝加载。 */
+  partsSha256?: string;
+  /** 可选包依赖；缺失或版本不满足时校验失败。 */
+  requires?: PackRequirement[];
 }
 
 export interface ComponentPart {

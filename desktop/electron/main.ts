@@ -12,6 +12,7 @@ import {
   disposeIpcRuntime
 } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
+import { validatePackCatalog } from '../src/packs/validate';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
 import { executePlan, plan } from '../src/agent/planner';
@@ -166,7 +167,7 @@ async function runDiagnoseMode(): Promise<void> {
       builtinDir: builtinPacksDir(),
       auditPath: join(userDataPath, 'agent-audit.jsonl')
     });
-    console.log(`DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+    console.log(`DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,packStats,kb,audit,recentErrors errors=${report.recentErrors.length}`);
     console.log(JSON.stringify(report, null, 2));
     app.exit(0);
   } catch (error) {
@@ -3254,6 +3255,23 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      let packValidation;
+      try {
+        packValidation = validatePackCatalog({ packsDir: builtinPacksDir() });
+      } catch (error) {
+        console.error('SMOKE_FAIL packs_validate_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      if (!packValidation.ok || packValidation.stats.packs !== 10) {
+        console.error('SMOKE_FAIL packs_validate', JSON.stringify({
+          packs: packValidation.stats.packs,
+          errors: packValidation.errors.slice(0, 5)
+        }));
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      console.log(`SMOKE_PACKS_VALIDATE_OK packs=${packValidation.stats.packs} errors=${packValidation.stats.errors}`);
       try {
         const userDataPath = app.getPath('userData');
         const metrics = packRegistry?.metrics();
@@ -3268,6 +3286,16 @@ function createWindow(): BrowserWindow {
           dataPackVersion: readDiagnosticPackVersion(),
           packCount: readBuiltinPackVersionsFromDir(),
           ...(metrics ? { packMetrics: metrics } : {}),
+          packStats: {
+            packs: packValidation.stats.packs,
+            parts: packValidation.stats.parts,
+            activeParts: packValidation.stats.activeParts,
+            aliases: packValidation.stats.aliases,
+            uniqueModels: packValidation.stats.uniqueModels,
+            categories: packValidation.stats.categories,
+            errors: packValidation.stats.errors,
+            warnings: packValidation.stats.warnings
+          },
           kbDocs: KB_STATS.docs,
           kbChunks: KB_STATS.chunks,
           kbBytes: KB_STATS.bytes,
@@ -3289,7 +3317,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log(`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+        console.log(`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,packStats,kb,audit,recentErrors errors=${report.recentErrors.length}`);
       } catch (error) {
         console.error('SMOKE_FAIL diagnose_exception', error);
         setTimeout(() => app.exit(1), 100);

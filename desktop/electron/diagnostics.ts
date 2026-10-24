@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { KB_STATS } from '../src/agent/kb/search.ts';
 import { PackRegistry } from '../src/packs/registry.ts';
+import { validatePackCatalog } from '../src/packs/validate.ts';
 import {
   buildDiagnosisReport,
   recentDiagnosticErrors,
@@ -112,6 +113,7 @@ export async function collectDiagnosis(options: {
   await registry.scan();
   registry.listParts({ category: '伺服' });
   const packMetrics = registry.metrics();
+  const validation = validatePackCatalog({ packsDir: options.builtinDir });
   const webgl = options.webgl ?? await probeWebGL();
   return buildDiagnosisReport({
     ...(options.generatedAt ? { generatedAt: options.generatedAt } : {}),
@@ -126,6 +128,16 @@ export async function collectDiagnosis(options: {
     dataPackVersion: packs.version,
     packCount: packs.count,
     packMetrics,
+    packStats: {
+      packs: validation.stats.packs,
+      parts: validation.stats.parts,
+      activeParts: validation.stats.activeParts,
+      aliases: validation.stats.aliases,
+      uniqueModels: validation.stats.uniqueModels,
+      categories: validation.stats.categories,
+      errors: validation.stats.errors,
+      warnings: validation.stats.warnings
+    },
     kbDocs: KB_STATS.docs,
     kbChunks: KB_STATS.chunks,
     kbBytes: KB_STATS.bytes,

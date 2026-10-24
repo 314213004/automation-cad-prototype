@@ -10,7 +10,7 @@
 | Electron 主进程 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md) | 窗口、菜单、IPC、Agent 启动、打包路径 |
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染、运动学标注层与自动识别建议（名称/型号 + 层级 + 几何，需逐条确认） |
 | 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
-| 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | manifest-only 索引、`loadPack/unloadPack` 懒加载、跨包去重、partId 全局索引、检索与面板 |
+| 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | manifest-only 索引、`loadPack/unloadPack` 懒加载、跨包去重、partId 全局索引、检索与面板；`validatePack` 全包校验、`partsSha256` 完整性、schema 迁移、依赖与统计报表 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | 10 个包：iec-cn 377 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44 / vision-cn 32 / drive-cn 33 / safety-cn 33（28+5 alias）/ frame-cn 33 + pricebook-cn |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
 | 公共健壮性 / 诊断 / 性能 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md)、[PERF.md](PERF.md) | 输入上限、显式资源计数、错误摘要与脱敏、崩溃落盘、性能基线 |
@@ -74,9 +74,9 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 ## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 1624 个单测 + 完整 smoke 断言全绿（含 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`）
+- ✅ 1655 个单测 + 完整 smoke 断言全绿（含 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`）
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
-- ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`
+- ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；`npm run packs:stats` 产出 `PACK-STATS.md` / `pack-stats.json`（617 条 / 612 实型号 / 612 唯一型号 / 55 分类，尺寸 55.9%、价格 7.2%）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
 - ✅ 电气校验面板（9 卡 + 问题表 + A3 PDF）与成本估算面板（9 卡 + 明细 + 缺价 + A4 PDF/CSV）
 - ✅ 成本 Agent 工具 `run_cost_report`（只读，与面板共用同一份 `CostReport`，明细/缺价窄输出）

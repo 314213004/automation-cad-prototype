@@ -6,9 +6,10 @@
 
 ```
 <pack-id>/
-├── manifest.json     # 必填：schemaVersion=1, id, name, vendor, version
-│                     # 选填：license, description
-├── parts.json        # ComponentPart[]
+├── manifest.json     # 必填：schemaVersion(1|2), id, name, version, categories, partsCount
+│                     # 元器件包必填：partsSha256（parts.json 原始字节 SHA-256）
+│                     # 选填：vendor, license, description, keywords, requires[]
+├── parts.json        # ComponentPart[] 或 { schemaVersion, parts: [] }
 └── assets/           # 可选：STEP/GLB 模型、缩略图（parts[].asset 相对路径）
 ```
 
@@ -33,7 +34,16 @@ interface PackInfo {
 - `loadPack(id)` 首次读 `parts.json` 并缓存；`unloadPack(id)` 释放；重复搜索命中缓存；
 - 跨包同 id 去重，内置包优先；`getPartById()` 首次调用懒建全局 partId 索引；
 - `metrics()` 返回 `packLoadMs / loadedPacks / partsLoaded / searchMs / packCount / indexedParts`，diagnose 的 `packMetrics` 与 smoke 的 `SMOKE_PACKS_LAZY_OK` 复用同一口径；
-- `readTextFile` 注入仅用于测试，可断言 manifest / parts 的实际读取次数。
+- `readTextFile` 注入仅用于测试，可断言 manifest / parts 的实际读取次数；
+- `loadEntry` 读取 `parts.json` 后先校验 `manifest.partsSha256`，不匹配抛 `PACK_INTEGRITY_FAILED`，不会把坏数据放进缓存。
+
+## 生命周期校验与统计（2026-10-24）
+
+- `validate.ts`：`validatePack(dir)` 返回 `{ ok, errors, warnings, stats }`；`validatePackCatalog({ packsDir })` 一次校验全部包并汇总条数/唯一型号/分类。
+- 规则：manifest 必填与 semver、`partsCount` 一致、id 包内/跨包唯一、category 白名单、model 非空、数值有限、`partsSha256` 完整性、`requires` 依赖与版本范围。
+- 迁移：显式 `parts.schemaVersion: 1` 自动补 `specs: {}` 与条目 `schemaVersion: 2`，记 `PACK_SCHEMA_MIGRATED` 警告；`schemaVersion: 2` 原样使用。
+- 命令：`npm run packs:validate`、`npm run packs:stats`（写 `docs/desktop/PACK-STATS.md` + `pack-stats.json`）、`npm run packs:add -- <dir>`（生成骨架）。
+- smoke 新增 `SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；diagnose 增加 `packStats` 摘要与「包统计」文本行。
 
 ## 目录与持久化
 
@@ -45,7 +55,7 @@ interface PackInfo {
 
 ## 校验规则（`validateManifest` / `importZip`）
 
-- `schemaVersion` 必须 `=== 1`
+- `schemaVersion` 必须为 `1` 或 `2`
 - `id` 必须匹配 `/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/`，且与目录名一致
 - 必填字段缺失 → 该包 `error`，其余包照常可用
 - ZIP 解压前逐条检查 entry 路径，拒绝 `../`、绝对路径、盘符（`adm-zip` entryName 归一化后判断）
@@ -67,11 +77,12 @@ interface PackInfo {
 - ✅ 扫描 / 校验 / ZIP 导入 / 启停 / 删除 / 搜索
 - ✅ 面板：列表、开关、导入、删除、搜索并插入（写入 localStorage 覆盖层）
 - ✅ 单测 6 条（合法、缺 id、id 不符、zip 穿越、禁用生效、合法导入）
-- ⏳ 在线包仓库与签名校验（`license` 字段已预留）
-- ⏳ 型号去重与版本升级（同 id 新版本覆盖策略未定）
+- ✅ 生命周期：`validatePack` / 依赖 / 迁移 / 校验和 / 统计报表 / `packs:add` 骨架 / 31 条单测
+- ⏳ 在线包仓库与签名校验（`partsSha256` 已覆盖内容完整性，尚未做厂商签名）
+- ⏳ 同 id 新版本覆盖策略（当前版本升级由 manifest.version 表达，用户包覆盖未自动迁移）
 
 ## 待办
 
 1. 包内资产（STEP/GLB）在「插入」时真实加载到 CAD 查看器，而不是只写库记录。
 2. 包索引落 SQLite（`userData/packs.db`），支持万级条目与规格区间筛选。
-3. manifest 增加 `signature` / `minAppVersion`，导入时校验。
+3. manifest 增加 `signature` / `minAppVersion`，导入时校验；把 `partsSha256` 升级为可签名清单。
