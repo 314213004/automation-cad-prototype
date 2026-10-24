@@ -4,6 +4,12 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+**本迭代：元件库补录安全光栅 + 缺尺寸（feat/lib-safety-dims，2026-10-24）**（为不改动标题结构、不重建 `kb.json`，本节不加标题，集成时再归档）
+
+- 安全光栅：`iec-cn` 新增 8 条 Type 4 安全光栅（欧姆龙 F3SG-SR 14/25 mm、西克 deTec4 Core 14/30 mm 发送器/接收器、邦纳 EZ-SCREEN SLS 14/30 mm），每条 `specs.数据来源` 记官方样本/数据表 URL，`dims.source` 记外形图出处；无官方价，未填价格。另给已有 F3SG-4SRA0400-14 与 C4C 450 mm 一对补响应时间与官方尺寸。manifest 1.2.0（379 条/36 家）。
+- 六工位案例（P10-4）：`bom-map` 安全光栅初选 `F3SG-4SRA0640-14`（14 mm / 640 mm / PL e，OSSD 接 PNOZ s3），BOM 12 行全部为真实型号；新增 `notices` 提示按 ISO 13855 核算安全距离；元件包缺该型号时仍退回「待选型」并写原因。`machine-case.json` 已按脚本重生成；4 张机型截图沙箱无 xvfb 未重拍（文档已注明），`screenshots:machine` 校验改为要求 BOM 含该型号且无「待选型」。
+- 验证：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1250/1250**（+2）、`build:ext`、smoke `SMOKE_OK`；不 push、不打包。
+
 ## 知识库容量治理 + Agent 工具 `suggest_kinematics`（integ/3d-all，2026-10-24，本轮）
 
 - 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1248/1248**（+10：工具 9 + KB 余量守卫 1；+1：STEP 旧分块清理与近似件透出）、`build:ext`、smoke 全绿（新增 `SMOKE_AGENT_KINEMATICS_OK high=4 low=1 written=0`）、`npm run eval:agent` 75/75；未打包、未触发 CI、未发版。
@@ -189,7 +195,7 @@
 9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
 10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
 11. **两条成本导出单测依赖本地时区**：`test/cost-export.test.ts` 的文件名断言按 Asia/Shanghai 本地时间（`…-20261023-1200`）；在 UTC 环境（如本轮沙箱）直接 `npm test` 会 1130/1132，需 `TZ=Asia/Shanghai npm test`。35-orbit-view 未改这两条断言，只记录。
-12. **安全光栅型号缺失（待补录）**：`smc-cn` / `iec-cn` 均无安全光栅型号，六工位案例的 BOM 只能标「待选型」；需补录真实安全光栅型号、分辨率/保护高度/安全等级与安全继电器匹配参数，完成后再更新 `machine-case.json` 与 MACHINE-DESIGN-DEMO.md。
+12. **安全光栅型号（已补录，2026-10-24）**：`iec-cn` 已补 8 条官方来源的 Type 4 安全光栅，六工位案例 BOM 初选 `F3SG-4SRA0640-14`，`machine-case.json` 与 MACHINE-DESIGN-DEMO.md 已更新；仍待：安全距离按 ISO 13855 现场核算、机型截图在有显示环境时重拍。
 
 ## 夜间执行约束
 

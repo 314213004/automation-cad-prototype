@@ -220,7 +220,7 @@ export async function captureMachineScreenshots(
       throw new Error(`方案卡缺少节拍瓶颈警告：${JSON.stringify(cardState.warnings)}`);
     }
     if (!(cardState.warnings ?? []).some((text) => text.includes('安全光栅'))) {
-      throw new Error(`方案卡缺少安全光栅待选型警告：${JSON.stringify(cardState.warnings)}`);
+      throw new Error(`方案卡缺少安全光栅选型/安全距离提示：${JSON.stringify(cardState.warnings)}`);
     }
     shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡'));
 
@@ -327,13 +327,14 @@ export async function captureMachineScreenshots(
           hasGripper: text.includes('MHZ2-20D'),
           hasSensor: text.includes('D-M9B'),
           hasValve: text.includes('SY5120-5LZD'),
+          hasCurtain: text.includes('F3SG-4SRA0640-14'),
           hasPending: text.includes('待选型'),
           paneOpen: !document.getElementById('cadBomPane')?.hidden
         };
       })()`
     ) as Record<string, unknown>;
     if (bomState.rows !== 12 || !bomState.hasSvt || !bomState.hasGripper || !bomState.hasSensor ||
-        !bomState.hasValve || !bomState.hasPending || !bomState.paneOpen) {
+        !bomState.hasValve || !bomState.hasCurtain || bomState.hasPending || !bomState.paneOpen) {
       throw new Error(`BOM 面板内容不完整：${JSON.stringify(bomState)}`);
     }
     shots.push(await capture(window, options.outputDir, '17-machine-bom.png', 'BOM 真实型号'));
