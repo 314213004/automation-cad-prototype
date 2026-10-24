@@ -1659,6 +1659,34 @@ function createWindow(): BrowserWindow {
         }
         console.log(`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=${readonlyUi.rows} summary=ok scene=${readonlyUi.after}`);
 
+        // 迭代：审计轮转——审计面板经 agent:audit:read 同时读到轮转文件 agent-audit.1.jsonl
+        appendFileSync(
+          join(app.getPath('userData'), 'agent-audit.1.jsonl'),
+          `${formatAuditLine({ tool: 'get_bom', ok: true, source: 'offline' }, new Date(Date.now() - 60_000))}\n{坏行\n`,
+          'utf8'
+        );
+        const rotatedUi = await window.webContents.executeJavaScript(
+          `(async () => {
+            const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            document.getElementById('agentAuditRefresh')?.click();
+            let rows = 0;
+            let summary = '';
+            for (let attempt = 0; attempt < 40; attempt += 1) {
+              await wait(100);
+              rows = document.querySelectorAll('#agentAuditList .acp-audit-row').length;
+              summary = document.getElementById('agentAuditSummary')?.textContent || '';
+              if (summary.includes('共 3 条')) break;
+            }
+            return { rows, summary };
+          })()`
+        ) as { rows: number; summary: string };
+        if (rotatedUi.rows < 3 || !rotatedUi.summary.includes('共 3 条')) {
+          console.error('SMOKE_FAIL agent_audit_rotated', JSON.stringify(rotatedUi));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_AGENT_AUDIT_ROTATED_OK rows=${rotatedUi.rows} files=2`);
+
         // P7-C：多步计划卡片 + 顺序执行 + 写步骤一次确认
         const planUi = await window.webContents.executeJavaScript(
           `(async () => {

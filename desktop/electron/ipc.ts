@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, shell, type OpenDialogOptions } from 'electron';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { PackRegistry } from '../src/packs/registry';
 import { FactoryManager } from '../src/factory/manager.ts';
@@ -28,7 +28,8 @@ import { collectAgentContext } from '../src/agent/context.ts';
 import type { AgentPlan, PlanStep } from '../src/agent/planner.ts';
 import { AgentThread, runPlan } from '../src/agent/thread.ts';
 import { runRecipe, type RecipeContext, type RecipeProgressEvent } from '../src/agent/recipes.ts';
-import { createAuditLog, parseAuditLines, summarizeAudit } from '../src/agent/audit.ts';
+import { createAuditLog, summarizeAudit } from '../src/agent/audit.ts';
+import { createAuditFileWriter, loadAuditRetention, readAuditEntries } from '../src/agent/audit-store.ts';
 import { DEFAULT_PRICING } from '../src/agent/pricing.ts';
 import { AUDIT_DISPLAY_LIMIT, limitAuditEntries } from '../src/agent/audit-view.ts';
 import type { AgentProgressEvent } from '../src/agent/feedback.ts';
@@ -714,6 +715,16 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   let activePlan: AbortController | null = null;
   let activeRecipe: AbortController | null = null;
 
+  // 审计写入：超过 maxBytes 轮转为 agent-audit.N.jsonl，并按保留期清理；
+  // 参数来自 userData/agent-audit-retention.json（可选，缺省 5 MB × 5 份 × 90 天）。
+  const agentAuditWriter = (): ((line: string) => void) => createAuditFileWriter(
+    join(context.userDataDir, 'agent-audit.jsonl'),
+    {
+      retention: loadAuditRetention(context.userDataDir),
+      onError: (error) => console.warn('[agent-audit] 轮转/清理失败', error instanceof Error ? error.message : error)
+    }
+  );
+
   const clearSession = (): void => {
     session = null;
     thread.clear();
@@ -732,12 +743,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       model: config.model,
       tools: tools.summaries()
     });
-    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
-    const audit = createAuditLog({
-      write: (line) => {
-        appendFileSync(auditFile, `${line}\n`, 'utf8');
-      }
-    });
+    const audit = createAuditLog({ write: agentAuditWriter() });
     // 智能体工具层包含只读的 design_machine / search_* 等纯工具，它们不在
     // CommandBus 中注册。对话执行先走命令总线，未知命令再回退到工具层。
     const agentExecutor = {
@@ -870,12 +876,13 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   ipcMain.handle('agent:audit:read', () => {
     const file = join(context.userDataDir, 'agent-audit.jsonl');
     try {
-      if (!existsSync(file)) {
-        return { ok: true, entries: [], total: 0, dropped: 0, summary: summarizeAudit([]) };
+      // 当前文件 + 轮转份数（agent-audit.N.jsonl）一起读；面板仍只显示最近 200 条，total/summary 覆盖全部保留份数。
+      const { entries: all, files } = readAuditEntries(file, loadAuditRetention(context.userDataDir));
+      if (files.length === 0) {
+        return { ok: true, entries: [], total: 0, dropped: 0, files: 0, summary: summarizeAudit([]) };
       }
-      const all = parseAuditLines(readFileSync(file, 'utf8'));
       const limited = limitAuditEntries(all, AUDIT_DISPLAY_LIMIT);
-      return { ok: true, ...limited, summary: summarizeAudit(all) };
+      return { ok: true, ...limited, files: files.length, summary: summarizeAudit(all) };
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
@@ -976,8 +983,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       };
     }
 
-    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
-    const audit = createAuditLog({ write: (line) => appendFileSync(auditFile, `${line}\n`, 'utf8') });
+    const audit = createAuditLog({ write: agentAuditWriter() });
     let confirmCount = 0;
     const controller = new AbortController();
     activePlan = controller;
@@ -1125,9 +1131,7 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       }
     }
 
-    const auditFile = join(context.userDataDir, 'agent-audit.jsonl');
-    const audit = createAuditLog({ write: (line) => appendFileSync(auditFile, `${line}
-`, 'utf8') });
+    const audit = createAuditLog({ write: agentAuditWriter() });
     let confirmCount = 0;
     const controller = new AbortController();
     activeRecipe = controller;
