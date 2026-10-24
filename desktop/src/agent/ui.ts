@@ -507,7 +507,19 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
     : typeof card.cycle?.secondsPerPiece === 'number'
       ? card.cycle.secondsPerPiece
       : null;
+  const throughput = typeof card.cycle?.throughputPerMin === 'number' ? card.cycle.throughputPerMin : null;
+  const mode = card.cycle?.mode === 'parallel'
+    ? '同工序并行'
+    : card.cycle?.mode === 'line'
+      ? '流水线分工序'
+      : null;
   const targetSeconds = typeof card.cycle?.secondsPerPiece === 'number' ? card.cycle.secondsPerPiece : null;
+  const estimate = throughput ?? seconds;
+  const estimateUnit = throughput === null ? '估算秒/件' : '估算件/分钟';
+  const estimateTitle = [
+    mode,
+    targetSeconds === null ? null : `目标 ${targetSeconds.toFixed(2)} 秒/件`
+  ].filter(Boolean).join('；');
   const va = typeof card.power?.va === 'number' ? card.power.va : null;
   const warnings = card.warnings.length > 0
     ? card.warnings.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
@@ -522,7 +534,7 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
         <span><b>${actuators}</b> 执行机构</span>
         <span><b>${sensors}</b> 传感器</span>
         <span><b>${perMin === null ? '—' : perMin}</b> 件/分钟</span>
-        <span title="${targetSeconds === null ? '' : `目标 ${targetSeconds.toFixed(2)} 秒/件`}"><b>${seconds === null ? '—' : seconds.toFixed(2)}</b> 估算秒/件</span>
+        <span title="${escapeHtml(estimateTitle)}"><b>${estimate === null ? '—' : estimate.toFixed(2)}</b> ${estimateUnit}</span>
         <span><b>${va === null ? '—' : Math.round(va)}</b> VA</span>
       </div>
       <div class="acp-machine-warnings">${warnings}</div>
