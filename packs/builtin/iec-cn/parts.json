@@ -2893,7 +2893,14 @@
       "额定电压": "800 V",
       "连接方式": "螺钉",
       "安装": "35 mm 导轨"
-    }
+    },
+    "dims": {
+      "w": 8.2,
+      "h": 42.5,
+      "d": 47,
+      "source": "菲尼克斯 UK 6 N（3004524）产品数据 官方（Width 8.2 / Height 42.5 / Depth on NS 35/7,5 47）：https://www.phoenixcontact.com/en-us/products/feed-through-terminal-block-uk-6-n-3004524"
+    },
+    "railMount": true
   },
   {
     "id": "ST-2.5",
@@ -3326,7 +3333,14 @@
       "输出电流": "10 A",
       "输入": "85–264 V AC",
       "安装": "35 mm 导轨"
-    }
+    },
+    "dims": {
+      "w": 144,
+      "h": 121,
+      "d": 118.6,
+      "source": "台达 DRP048V480W1BA 数据表 官方（H121×W144×D118.6）：https://psu.deltaww.com/en/products/download/Datasheet/DRP048V480W1BA"
+    },
+    "railMount": true
   },
   {
     "id": "PYF08A-E",
@@ -3579,6 +3593,12 @@
       "额定功率": "7.5 kW（AC-23，400 V）",
       "操作": "旋钮 前面安装",
       "类型": "主开关/隔离开关"
+    },
+    "dims": {
+      "w": 67,
+      "h": 84,
+      "d": 92.5,
+      "source": "西门子 3LD2003-0TK51 数据表 官方（width 67 / height 84 / depth 92.5）：https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=3LD2003-0TK51"
     }
   },
   {
@@ -5011,6 +5031,12 @@
       "编码器": "绝对值（1FL6 电机，分辨率视电机型号）",
       "控制": "位置/速度/转矩",
       "数据来源": "厂商官网/数据表"
+    },
+    "dims": {
+      "w": 55,
+      "h": 170,
+      "d": 170,
+      "source": "西门子 SINAMICS V90 6SL3210-5FB10-4UF1 数据表 官方（FSB，W55×H170×D170）：https://mall.industry.siemens.com/spice/docuservice/rest/document.spring?articleNumber=6SL32105FB104UF1&language=en&region=ww&documentGroup=TED&documentId=DCS_DATASHEET_PMD_CLEANED"
     }
   },
   {
@@ -5470,6 +5496,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "M12 4 芯接插件"
+    },
+    "dims": {
+      "w": 30,
+      "h": 71,
+      "d": 30,
+      "source": "西克 IME30-10BPSZC0S 数据表 官方（Ø30，Housing length 71）：https://www.sick.com/media/pdf/5/15/615/dataSheet_IME30-10BPSZC0S_1040998_en.pdf"
     }
   },
   {
@@ -5525,6 +5557,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 30,
+      "h": 64,
+      "d": 30,
+      "source": "图尔克 BI10-M30-AP6X 数据表 ID 46170 官方（M30×1.5，Dimensions 64 mm）：https://www.turck.us/datasheet/_us/edb_46170_eng_us.pdf"
     }
   },
   {
@@ -5540,6 +5578,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 12,
+      "h": 53,
+      "d": 12,
+      "source": "倍加福 NBB2-12GM50-E2 产品页 官方（Length 53 / Diameter 12）：https://www.pepperl-fuchs.com/en/products-gp25581/98931"
     }
   },
   {
@@ -5555,6 +5599,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 18,
+      "h": 56,
+      "d": 18,
+      "source": "倍加福 NBB5-18GM50-E2 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99190"
     }
   },
   {
@@ -5570,6 +5620,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 18,
+      "h": 56,
+      "d": 18,
+      "source": "倍加福 NBB5-18GM50-E0 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99191"
     }
   },
   {
@@ -5585,6 +5641,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 30,
+      "h": 60,
+      "d": 30,
+      "source": "倍加福 NBB10-30GM50-E2 产品页 官方（Length 60 / Diameter 30）：https://www.pepperl-fuchs.com/en/products-gp25581/99278"
     }
   },
   {
@@ -6016,6 +6078,12 @@
       "电源": "10–30 V DC",
       "外形": "M18×1",
       "连接": "M12 接插件"
+    },
+    "dims": {
+      "w": 18,
+      "h": 85,
+      "d": 18,
+      "source": "倍加福 UB500-18GM75-E5-V15 数据表 133053 官方（Length 85 / Diameter 18）：https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/133053_eng.pdf"
     }
   },
   {
