@@ -12,6 +12,51 @@ let server;
 let url;
 let token;
 
+async function startWriteRpc(confirmWrite) {
+  const calls = [];
+  const confirmations = [];
+  const summary = {
+    name: 'insert_component',
+    description: 'test write tool',
+    inputSchema: { type: 'object', properties: {} }
+  };
+  const tools = {
+    list: () => [summary],
+    summaries: () => [summary],
+    has: (name) => name === summary.name,
+    async call(name, args) {
+      calls.push({ name, args });
+      return { ok: true, name, args };
+    }
+  };
+  const rpcToken = createAgentToken();
+  const rpc = new AgentRpcServer({
+    tools,
+    token: rpcToken,
+    version: '0.1.0-auth-test',
+    host: '127.0.0.1',
+    port: 0,
+    confirmWrite: async (name, args) => {
+      confirmations.push({ name, args });
+      return await confirmWrite(name, args);
+    }
+  });
+  const info = await rpc.start();
+  return { rpc, url: info.url, token: rpcToken, calls, confirmations };
+}
+
+async function postRpc(target, authToken, payload) {
+  const response = await fetch(`${target}/rpc`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${authToken}`,
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+  return await response.json();
+}
+
 before(async () => {
   sandbox = mkdtempSync(join(tmpdir(), 'cad-rpc-test-'));
   const builtin = join(sandbox, 'builtin', 'smc-cn');
@@ -119,6 +164,63 @@ test('有 token 能调用 list_components', async () => {
   const body = await response.json();
   assert.equal(body.result.structuredContent.count, 1);
   assert.equal(body.result.isError, false);
+});
+
+test('JSON-RPC 写工具缺少桌面确认回调时默认拒绝', async () => {
+  const body = await postRpc(url, token, {
+    jsonrpc: '2.0',
+    id: 5,
+    method: 'tools/call',
+    params: { name: 'insert_component', arguments: { partId: 'MXQ20-50' } }
+  });
+  assert.equal(body.result.isError, true);
+  assert.equal(body.result.structuredContent.code, 'WRITE_CONFIRMATION_REQUIRED');
+});
+
+test('JSON-RPC tools/call 与直接工具方法共用授权回调，拒绝不执行、明确批准才执行', async () => {
+  const denied = await startWriteRpc(async () => false);
+  try {
+    const standard = await postRpc(denied.url, denied.token, {
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: { name: 'insert_component', arguments: { partId: 'MXQ20-50' } }
+    });
+    const direct = await postRpc(denied.url, denied.token, {
+      jsonrpc: '2.0',
+      id: 7,
+      method: 'insert_component',
+      params: { partId: 'MXQ20-50' }
+    });
+    assert.equal(standard.result.structuredContent.code, 'USER_DENIED');
+    assert.equal(direct.result.code, 'USER_DENIED');
+    assert.equal(denied.confirmations.length, 2);
+    assert.equal(denied.calls.length, 0);
+  } finally {
+    await denied.rpc.stop();
+  }
+
+  const allowed = await startWriteRpc(async () => true);
+  try {
+    const standard = await postRpc(allowed.url, allowed.token, {
+      jsonrpc: '2.0',
+      id: 8,
+      method: 'tools/call',
+      params: { name: 'insert_component', arguments: { partId: 'MXQ20-50' } }
+    });
+    const direct = await postRpc(allowed.url, allowed.token, {
+      jsonrpc: '2.0',
+      id: 9,
+      method: 'insert_component',
+      params: { partId: 'LC1D09' }
+    });
+    assert.equal(standard.result.structuredContent.ok, true);
+    assert.equal(direct.result.ok, true);
+    assert.deepEqual(allowed.calls.map(({ args }) => args.partId), ['MXQ20-50', 'LC1D09']);
+    assert.equal(allowed.confirmations.length, 2);
+  } finally {
+    await allowed.rpc.stop();
+  }
 });
 
 test('Agent token 文件权限为 600（仅 POSIX；Windows 无 POSIX 位）', { skip: process.platform === 'win32' }, () => {

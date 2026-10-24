@@ -107,6 +107,28 @@ test('MCP 代理把写工具原样转发到桌面 RPC 并返回结构化结果',
   }
 });
 
+test('MCP 代理拒绝向非回环 HTTP 主机发送本地 token', async () => {
+  let fetchCalls = 0;
+  const proxy = new DesktopRpcProxy({
+    userDataDir: sandbox,
+    host: 'mcp.example.com',
+    port: desktopPort,
+    fetchImpl: async () => {
+      fetchCalls += 1;
+      throw new Error('不应发起请求');
+    }
+  });
+  await assert.rejects(
+    () => proxy.callTool('get_bom', {}),
+    (error) => {
+      assert.ok(error instanceof DesktopRpcUnavailableError);
+      assert.doesNotMatch(error.message, new RegExp(token));
+      return true;
+    }
+  );
+  assert.equal(fetchCalls, 0);
+});
+
 test('桌面不可达时只读工具回退本地 registry', async () => {
   const emptyUserData = join(sandbox, 'not-running');
   mkdirSync(emptyUserData, { recursive: true });
