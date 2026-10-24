@@ -1,21 +1,21 @@
 # Agent 能力报告
 
-> 生成时间：2026-10-24T02:32:33.175Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
+> 生成时间：2026-10-24T02:42:50.185Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
 > 口径：单轮 = 真实模型 36 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
 
 ## 总览
 
 | 指标 | 数值 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 工具数 | 21 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-24T02:15:02.558Z |
-| 测试数 | 1,270 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-24T02:32:00.603Z |
+| 工具数 | 21 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-24T02:42:02.366Z |
+| 测试数 | 1,297 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-24T02:42:19.334Z |
 | 单轮准确率 | 100.0%（36/36） | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 单轮 p50 / p95 | 7,930 ms / 31,291 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 多轮准确率 | 100.0%（6/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮轮次 | 15/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮 p50 / p95 | 7,028 ms / 15,528 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
-| 离线意图准确率 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
+| 离线意图准确率 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
 | 审计条目 | 缺失：/home/sandbox/.config/AutomationCAD/agent-audit.jsonl | 缺失：/home/sandbox/.config/AutomationCAD/agent-audit.jsonl | 缺失 |
 
 ## 分组表现（真实模型单轮）
@@ -32,11 +32,11 @@
 
 | 指标 | 结果 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 意图 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
-| 工具 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
-| 参数 | 100.0%（53/53） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
-| 超纲拒绝 | 100.0%（7/7） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
-| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-24T02:15:02.558Z |
+| 意图 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
+| 工具 | 100.0%（102/102） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
+| 参数 | 100.0%（53/53） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
+| 超纲拒绝 | 100.0%（7/7） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
+| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-24T02:42:02.366Z |
 
 ## 多轮场景
 
@@ -90,11 +90,11 @@
 
 ## 已知缺口（从 BACKLOG 自动摘取）
 
-- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:74`，生成时间：2026-10-24T02:31:53.240Z）
-- **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决；STEP 不含运动学，任意装配体仍需标注层。36-auto-kinematics 起可按名称/型号/层级/几何自动给出标注**建议**（需逐条确认），但识别是启发式：命名不规范或几何不典型的机构仍需人工标注，斜向运动只能取最近主轴，夹爪对侧手指、缩回位与无型号行程仍需人工确认。 迭代 34 起机型方案的 3D 改为参数化整机几何，但仍是标准件外形，不是结构设计。（来源：`docs/desktop/BACKLOG.md:188`，生成时间：2026-10-24T02:31:53.240Z）
-- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:195`，生成时间：2026-10-24T02:31:53.240Z）
-- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。 **2026-10-24 更新（feat/agent-audit-router）**：① 审计已按大小轮转 + 保留期清理（默认 5 MB × 5 份 × 90 天，可配置），面板/报告读全部保留份数；被保留期删除的份数不可恢复，CSV 仍只导出面板当前列表（≤200 条）。② 路由已系统补同义/口语词并加非工程话题拦截（评估集 102 条）；仍是关键词规则：未收录的说法照旧判超纲，「撞」「会动」「规划」等单字/泛词可能把边缘句子拉进工程意图，非工程话题表是有限枚举。回执 token 用量问题未变。（来源：`docs/desktop/BACKLOG.md:196`，生成时间：2026-10-24T02:31:53.240Z）
-- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（Fri 2026-10-23 8:28 PM CST (UTC+08:00)）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。 **2026-10-24 更新**：上述描述已过时——仓库内 `agent-multiturn.json` 已是修复后的真实模型结果（`cn:deepseek-v4.1-flash`，生成于 Fri 2026-10-23 10:08 PM CST (UTC+08:00)，6/6 场景、15/15 轮，MT04 通过），Agent 报告按此展示。本轮补了 `test/agent/multiturn-mt04.test.mjs` 会话层确定性回归（fake LLM 回放 MT04：原样重试与 `partId` 写法重试都被短路、不弹确认）。本机无 `AGENT_LIVE_BASE_URL/API_KEY/MODEL`，**真实模型重跑待有 key 时执行**（换模型/换措辞仍需重跑，单模型单次结果不是通用结论）。遗留边界：拒绝记忆按「工具 + 目标」匹配，模型若在「继续」后改用别的写工具动同一目标（如 `remove_component QF1`）仍会走确认框，真实评测会算违规。（来源：`docs/desktop/BACKLOG.md:197`，生成时间：2026-10-24T02:31:53.240Z）
+- BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框（来源：`docs/desktop/BACKLOG.md:77`，生成时间：2026-10-24T02:42:18.968Z）
+- **3D 联动原为写死 5 零件**：已由 P3 通用化改造解决；STEP 不含运动学，任意装配体仍需标注层。36-auto-kinematics 起可按名称/型号/层级/几何自动给出标注**建议**（需逐条确认），但识别是启发式：命名不规范或几何不典型的机构仍需人工标注，斜向运动只能取最近主轴，夹爪对侧手指、缩回位与无型号行程仍需人工确认。 迭代 34 起机型方案的 3D 改为参数化整机几何，但仍是标准件外形，不是结构设计。（来源：`docs/desktop/BACKLOG.md:191`，生成时间：2026-10-24T02:42:18.968Z）
+- **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。（来源：`docs/desktop/BACKLOG.md:198`，生成时间：2026-10-24T02:42:18.968Z）
+- **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。 **2026-10-24 更新（feat/agent-audit-router）**：① 审计已按大小轮转 + 保留期清理（默认 5 MB × 5 份 × 90 天，可配置），面板/报告读全部保留份数；被保留期删除的份数不可恢复，CSV 仍只导出面板当前列表（≤200 条）。② 路由已系统补同义/口语词并加非工程话题拦截（评估集 102 条）；仍是关键词规则：未收录的说法照旧判超纲，「撞」「会动」「规划」等单字/泛词可能把边缘句子拉进工程意图，非工程话题表是有限枚举。回执 token 用量问题未变。（来源：`docs/desktop/BACKLOG.md:199`，生成时间：2026-10-24T02:42:18.968Z）
+- **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（Fri 2026-10-23 8:28 PM CST (UTC+08:00)）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。 **2026-10-24 更新**：上述描述已过时——仓库内 `agent-multiturn.json` 已是修复后的真实模型结果（`cn:deepseek-v4.1-flash`，生成于 Fri 2026-10-23 10:08 PM CST (UTC+08:00)，6/6 场景、15/15 轮，MT04 通过），Agent 报告按此展示。本轮补了 `test/agent/multiturn-mt04.test.mjs` 会话层确定性回归（fake LLM 回放 MT04：原样重试与 `partId` 写法重试都被短路、不弹确认）。本机无 `AGENT_LIVE_BASE_URL/API_KEY/MODEL`，**真实模型重跑待有 key 时执行**（换模型/换措辞仍需重跑，单模型单次结果不是通用结论）。遗留边界：拒绝记忆按「工具 + 目标」匹配，模型若在「继续」后改用别的写工具动同一目标（如 `remove_component QF1`）仍会走确认框，真实评测会算违规。（来源：`docs/desktop/BACKLOG.md:200`，生成时间：2026-10-24T02:42:18.968Z）
 
 ## 缺失数据源
 

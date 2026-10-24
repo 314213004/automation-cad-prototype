@@ -4,14 +4,16 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-**本迭代 · Agent 打磨：审计轮转 + 路由同义词 + MT04 离线回归（feat/agent-audit-router，2026-10-24）**（为不改 `kb.json` 标题 hash 暂不加二级标题，集成重建 KB 时可升为 `##` 节）
+## 并行三条：Agent 打磨 / 主视口 3D 收尾 / 元件库补录（integ/next，2026-10-24，本轮）
 
-- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` 全绿（+22：路由同义词 7、审计轮转 11、MT04 4）、`build:ext`、smoke `SMOKE_OK`（新增 `SMOKE_AGENT_AUDIT_ROTATED_OK rows=3 files=2`）、`npm run eval:agent` **102/102**（+27 条 `sy01`–`sy27`，各指标 1.00）、`npm run agent:report` 已更新；未打包、未触发 CI、未发版、未 push。
+### Agent 打磨：审计轮转 + 路由同义词 + MT04 离线回归（feat/agent-audit-router，2026-10-24）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` 全绿（集成后 **1297/1297**；本条 +22：路由同义词 7、审计轮转 11、MT04 4）、`build:ext`、smoke `SMOKE_OK`（新增 `SMOKE_AGENT_AUDIT_ROTATED_OK rows=3 files=2`）、`npm run eval:agent` **102/102**（+27 条 `sy01`–`sy27`，各指标 1.00）、`npm run agent:report` 已更新；未打包、未触发 CI、未发版、未 push。
 - 审计（已知问题 9）：新增 `src/agent/audit-store.ts`，按大小轮转 `agent-audit.N.jsonl` + 保留期整份清理，默认 5 MB × 5 份 × 90 天，`userData/agent-audit-retention.json` 可调；面板/`agent:audit:read` 与 Agent 报告读取全部保留份数，脱敏与坏行跳过不变；轮转失败只回调、继续写入。
 - 路由（已知问题 9）：查询/计算/修改/生成与各工具触发补同义/口语词（意图关键词与工具正则同步），新增非工程话题拦截 `isOffDomainTopic`；轮转后的审计文件名与新增同义写动词同样触发审计篡改/危险路径拒绝。
 - MT04（已知问题 10）：本机无 `AGENT_LIVE_*` 环境变量、无 userData 模型配置，**未跑真实模型、未改 `agent-multiturn.json`**（现有 JSON 已是修复后 6/6，问题 10 原描述已过时并已标注）；只补会话层确定性单测证明拒绝记忆生效。
 
-**主视口 3D 收尾：编辑撤销/重做 + 工程持久化 + WebGL 框选（feat/orbit-undo，2026-10-24，最新一轮；为不改标题 hash 暂不设 `##` 标题，集成重建 kb.json 时升为二级标题）**
+### 主视口 3D 收尾：编辑撤销/重做 + 工程持久化 + WebGL 框选（feat/orbit-undo，2026-10-24）
 
 - 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1273/1273**（+25：合成时间线 14、存储 6、框选投影 4、多选选择集 1）、`build:ext`、smoke 全绿（新增 `SMOKE_ORBIT_UNDO_OK` / `SMOKE_ORBIT_MULTI_OK` / `SMOKE_ORBIT_PERSIST_OK`）；手动 `check:orbit-webgl` 新增 `ORBIT_WEBGL_MARQUEE_OK`（无 xvfb 可用 `--ozone-platform=headless` 跑）；原型文件零改动，未打包、未触发 CI、未发版、不 push。
 - 撤销：原型 `pushHistory` 不导出，3D 编辑自建栈（覆盖表前后快照），与原型栈按发生顺序合成一条令牌时间线；Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z 与状态栏按钮先过扩展，栈顶是 3D 就自己撤，是原型动作就放行。从状态栏「撤销 N / 重做 M」+ 按钮提示对账，Agent `undo_last` / `ProtoApi.undo()` 直接撤原型也能跟上。同字段 800 ms 合并、上限 50，与原型一致；任一侧新动作作废全部重做。
@@ -19,26 +21,12 @@
 - 框选：WebGL 模式 Shift+左键拖拽 / 工具条「框选」粘滞模式；命中规则同原型（屏幕矩形相交），经合成拖拽写回原型 `state.multi`，高亮、「已选中 N 个对象」、点选替换、Esc 全部沿用原型；降级模式行为不变。
 - 边界：见 `desktop/src/orbit/MODULE.md`「坑点」4–5 与「待办」。
 
-**本迭代：元件库补录安全光栅 + 缺尺寸（feat/lib-safety-dims，2026-10-24）**（为不改动标题结构、不重建 `kb.json`，本节不加标题，集成时再归档）
+### 元件库补录安全光栅 + 缺尺寸（feat/lib-safety-dims，2026-10-24）
 
 - 安全光栅：`iec-cn` 新增 8 条 Type 4 安全光栅（欧姆龙 F3SG-SR 14/25 mm、西克 deTec4 Core 14/30 mm 发送器/接收器、邦纳 EZ-SCREEN SLS 14/30 mm），每条 `specs.数据来源` 记官方样本/数据表 URL，`dims.source` 记外形图出处；无官方价，未填价格。另给已有 F3SG-4SRA0400-14 与 C4C 450 mm 一对补响应时间与官方尺寸。manifest 1.2.0（379 条/36 家）。
 - 六工位案例（P10-4）：`bom-map` 安全光栅初选 `F3SG-4SRA0640-14`（14 mm / 640 mm / PL e，OSSD 接 PNOZ s3），BOM 12 行全部为真实型号；新增 `notices` 提示按 ISO 13855 核算安全距离；元件包缺该型号时仍退回「待选型」并写原因。`machine-case.json` 已按脚本重生成；4 张机型截图沙箱无 xvfb 未重拍（文档已注明），`screenshots:machine` 校验改为要求 BOM 含该型号且无「待选型」。
 - 缺尺寸：第二批 22 条全部取厂商官方逐型号尺寸（无推定）：安全光栅 11 条（新增 8 + 既有 3）+ `backfill-dims.mjs` 的 `FILL_BATCH2` 11 条（倍加福/西克/图尔克/西门子/台达/菲尼克斯，`dims.source` 含 URL）。覆盖 244/371 → **266/379（70.2%）**，剩余 113 条；DIMS-GAPS.md 统计与清单已更新（标题未改以免触发 kb 重建）。
 - 验证：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1250/1250**（+2）、`build:ext`、smoke `SMOKE_OK`；不 push、不打包。
-
-## 知识库容量治理 + Agent 工具 `suggest_kinematics`（integ/3d-all，2026-10-24，本轮）
-
-- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1248/1248**（+10：工具 9 + KB 余量守卫 1；+1：STEP 旧分块清理与近似件透出）、`build:ext`、smoke 全绿（新增 `SMOKE_AGENT_KINEMATICS_OK high=4 low=1 written=0`）、`npm run eval:agent` 75/75；未打包、未触发 CI、未发版。
-- KB：根因是 BACKLOG 迭代记录持续增长、整份进索引。改为本文件只留最近一轮，早于本轮的 20 节原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不在 `KB_DOC_FILES`）；`kb.json` 从约 408 KB 降到约 363 KB，未截断、上限不变。`kb.test.mjs` 新增守卫：归档不入索引、索引须留 ≥5% 余量（约 20 KB），超了提示继续归档。
-- 工具：只读 `suggest_kinematics`（命令 `suggest_kinematics` → 渲染桥 `suggestKinematics` → 标注抽屉 `suggest()`），参数 `includeLow? / limit?(1–30)`，返回压缩后的高/低置信度建议（轴向 ±X/Y/Z、行程或角度、行程来源、型号、工位、点位、置信度、中文理由），`applied=false`；**从不写入标注**，采纳仍由用户在抽屉逐条确认并保存。已接入路由（「识别/找出…运动件」）、MCP/RPC（21 个工具）、评估集 `kin01`、Agent 报告。
-- 边界：未导入模型时返回提示先 `import_cad`；建议本身的识别边界同迭代 36。
-- 合并前复查修正（`192983e`）：① `solids/` 里上一次遗留的 `part-N.step` 现在先入撤销快照再清掉，避免旧分块混进本次整机（撤销可恢复）；② STEP 实体化把水平圆柱按等截面方棒近似时，写中文 warning 点名零件并在 `geometry.approximatedIds` 透出 id 列表，不再只给数量；③ `apply-machine-geometry.test.mjs` 新增 1 条覆盖这两条。
-
-## 集成：34/35/36 三条 3D 分支合并 + 同步 main（P10-4 六工位案例）（integ/3d-all，2026-10-24）
-
-- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1237/1237**、`build:ext`、`smoke` 全绿（含 `SMOKE_MACHINE_GEOMETRY_OK` / `SMOKE_ORBIT_VIEW_OK` / `SMOKE_KINEMATICS_AUTO_OK`，各分支冒烟块全部保留）；不 push。
-- 互不干扰：主视口 3D 只挂原型 `#stageAssembly/#scene3d`、`#stageCheck/#sceneCheck` 与 `window.AutomationCadOrbit`；联调 3D 在联调抽屉内自建 `commission-3d-canvas`，入口 `__Commission3D`；运动学建议走 `AutomationCadKinematics`。
-- KB：合并后超 400 KB 上限；先精简本文件冗余记录过渡，本轮已改为历史归档根治。
 
 ## 待办（按优先级）
 
