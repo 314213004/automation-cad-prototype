@@ -11,6 +11,7 @@ import {
   renderCostReportPdf,
   disposeIpcRuntime
 } from './ipc';
+import { isTrustedUiUrl } from './security.ts';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
 import { planReadOnly, planTool, routeIntent } from '../src/agent/router';
@@ -365,6 +366,8 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
 }
 
 function createWindow(): BrowserWindow {
+  const trustedUiPath = indexHtmlPath();
+  const isTrustedNavigation = (url: string): boolean => isTrustedUiUrl(url, trustedUiPath);
   const window = new BrowserWindow({
     width: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1600 : 1440,
     height: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1000 : 900,
@@ -384,7 +387,7 @@ function createWindow(): BrowserWindow {
   });
 
   window.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file:')) event.preventDefault();
+    if (!isTrustedNavigation(url)) event.preventDefault();
   });
   window.webContents.on('render-process-gone', (_event, details) => {
     const error = new Error(`渲染进程退出：${details.reason} (exitCode=${details.exitCode})`);
@@ -403,6 +406,13 @@ function createWindow(): BrowserWindow {
       console.error('[crash] 渲染进程崩溃报告写入失败', writeError instanceof Error ? writeError.message : String(writeError));
     }
   });
+  window.webContents.on('will-frame-navigate', (event) => {
+    if (!event.isMainFrame || !isTrustedNavigation(event.url)) event.preventDefault();
+  });
+  window.webContents.on('will-redirect', (event, url) => {
+    if (!isTrustedNavigation(url)) event.preventDefault();
+  });
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
   window.webContents.on('did-finish-load', async () => {
     try {
@@ -3213,7 +3223,7 @@ function createWindow(): BrowserWindow {
     }
   });
 
-  void window.loadFile(indexHtmlPath());
+  void window.loadFile(trustedUiPath);
   buildMenu(window);
   return window;
 }
@@ -3305,7 +3315,24 @@ async function startAgent(
     token,
     version: app.getVersion(),
     host: '127.0.0.1',
-    port: HEADLESS ? 0 : 7420
+    port: HEADLESS ? 0 : 7420,
+    confirmWrite: async (name, args) => {
+      const window = mainWindow;
+      if (!window || window.isDestroyed()) return false;
+      const serialized = JSON.stringify(args);
+      const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
+      const response = await dialog.showMessageBox(window, {
+        type: 'question',
+        title: '外部写操作确认',
+        message: `MCP/JSON-RPC 客户端请求执行 ${name}，参数：${summary}，是否允许？`,
+        detail: '该操作可能修改当前工程、导入模型或写入文件；允许仅对本次工具调用生效。',
+        buttons: ['允许本次调用', '拒绝'],
+        defaultId: 1,
+        cancelId: 1,
+        noLink: true
+      });
+      return response.response === 0;
+    }
   });
   try {
     const info = await agentServer.start(tokenFile);
@@ -3342,6 +3369,8 @@ async function bootstrap(): Promise<void> {
     plcConfigFile: join(app.getPath('userData'), 'plc.json'),
     syncConfigFile: join(app.getPath('userData'), 'sync.json'),
     version: app.getVersion(),
+    trustedUiPath: indexHtmlPath(),
+    getWindow: () => mainWindow,
     getAgentInfo: publicAgentInfo,
     getParametric: () => parametric
   });
@@ -3372,7 +3401,8 @@ async function bootstrap(): Promise<void> {
     userDataDir: app.getPath('userData'),
     getTools: () => agentTools,
     getBus: () => commandBus,
-    getWindow: () => mainWindow
+    getWindow: () => mainWindow,
+    trustedUiPath: indexHtmlPath()
   });
 
   app.on('activate', () => {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { assertSafeApiKeyUrl } from '../shared/api-key-transport.ts';
 
 export interface DesktopRpcProxyOptions {
   userDataDir?: string;
@@ -124,7 +125,10 @@ export class DesktopRpcProxy {
         }, this.timeoutMs);
       });
       const operation = (async (): Promise<DesktopToolResult> => {
-        const response = await this.fetchImpl(`http://${this.host}:${this.port}/rpc`, {
+        const host = this.host.includes(':') && !this.host.startsWith('[') ? `[${this.host}]` : this.host;
+        const url = new URL(`http://${host}:${this.port}/rpc`);
+        assertSafeApiKeyUrl(url, 'desktop RPC host');
+        const response = await this.fetchImpl(url.href, {
           method: 'POST',
           headers: {
             authorization: `Bearer ${token}`,
