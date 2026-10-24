@@ -71,7 +71,7 @@
 | `SMOKE_MACHINE_TEMPLATES_OK` | `templates=5 clarify=1 multi=1`，五类工艺模板与追问上限 |
 | `SMOKE_MACHINE_GEOMETRY_OK` | `layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`，参数化整机几何 |
 | `SMOKE_MACHINE_APPLY_OK` | `machine=design-screw-3st stations=3 bom=5 undo=1`，方案落盘、3D/BOM/PLC 联动与撤销 |
-| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=344 query=D2 hits=1`，离线知识索引可检索 |
+| `SMOKE_AGENT_KB_OK` | `docs=13 chunks=354 query=D2 hits=1`，离线知识索引可检索 |
 | `SMOKE_AGENT_BRIDGE_OK` | `scene=1 bom=1`，渲染桥读取 |
 | `SMOKE_ORBIT_VIEW_OK` | `mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`，主视口 3D 降级路径 |
 | `SMOKE_AGENT_CHAT_UI_OK` | `fields=6 log=1` |

@@ -11,7 +11,7 @@
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染、运动学标注层与自动识别建议（名称/型号 + 层级 + 几何，需逐条确认） |
 | 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | manifest-only 索引、`loadPack/unloadPack` 懒加载、跨包去重、partId 全局索引、检索与面板 |
-| 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | 8 个包：iec-cn 377 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44 / vision-cn 32 / drive-cn 33 + pricebook-cn |
+| 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | 10 个包：iec-cn 377 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44 / vision-cn 32 / drive-cn 33 / safety-cn 33（28+5 alias）/ frame-cn 33 + pricebook-cn |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
 | 公共健壮性 / 诊断 / 性能 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md)、[PERF.md](PERF.md) | 输入上限、显式资源计数、错误摘要与脱敏、崩溃落盘、性能基线 |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
@@ -74,9 +74,9 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 ## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 1582 个单测 + 完整 smoke 断言全绿（含 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`）
+- ✅ 1624 个单测 + 完整 smoke 断言全绿（含 `SMOKE_KINEMATICS_AUTO_OK high=4 low=1 accepted=1 autoApplied=0`）
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
-- ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；新增 servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs≈5.3`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33`
+- ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
 - ✅ 电气校验面板（9 卡 + 问题表 + A3 PDF）与成本估算面板（9 卡 + 明细 + 缺价 + A4 PDF/CSV）
 - ✅ 成本 Agent 工具 `run_cost_report`（只读，与面板共用同一份 `CostReport`，明细/缺价窄输出）
@@ -86,7 +86,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
 - ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
-- ✅ 数据包懒加载：`scan()` 只读 manifest；`listParts` 按分类/包名预过滤后 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局索引；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs`，`diagnose` 输出 `packMetrics`。目标实测：冷启动 ≈5 ms、8 包全量搜索 ≤25 ms、单包最大 160 KB。
+- ✅ 数据包懒加载：`scan()` 只读 manifest；`listParts` 按分类/包名预过滤后 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局索引并解析 `aliasOf`；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs`，`diagnose` 输出 `packMetrics`。目标实测：冷启动 ≈5 ms、10 包全量搜索 ≤25 ms、单包最大 159.1 KB。
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
 - ✅ P7-D Agent 工具扩展 v1：注册表 12 → 17；新增 `get_project_context`（只读、缺失返回 null）、`update_component` / `remove_component`（可撤销）、`run_plc_generate`（预检失败不落盘）、`export_files`（pdf/dxf/glb/bom 共用净化与冲突规则）；MCP/RPC/UI 共用同一注册表，新增 30 条单测
@@ -99,7 +99,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 多轮与续跑（P7-L）：`src/agent/thread.ts` 维护 turn/意图/目标/已完成步骤/未确认操作；工程指纹（机型+BOM 行数+底板放置数+CAD）变化时提示「工程已变化，不要沿用旧结论」；`runPlan({resumeFrom})` 跳过已完成步骤，指纹变化拒绝续跑并列出差异；确认超时/取消进 `pendingConfirm`，用户拒绝不自动重试；`SMOKE_AGENT_THREAD_OK turns=3 resume=1 stale=1`
 - ✅ 执行效率（P7-N）：`dedupe.ts` 同轮 `(tool, canonicalArgs)` 合并、写工具永不合并、单轮 12 次上限返回 `TOO_MANY_TOOL_CALLS`；`parallel.ts` 无依赖只读默认 3 路并发、写工具屏障、参数依赖降级串行、失败不吞且结果按原顺序；`cache.ts` 对 `get_bom` / `get_project_context` / `list_components` 按工程指纹缓存 30 秒，写后清空，命中审计 `cacheHit:true` 且 UI 显示「已复用」；新增 33 条单测，`SMOKE_AGENT_EFFICIENCY_OK dedupe=2 parallel=2 cache=1`
 - ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
-- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录；BACKLOG 只留最近一轮，历史移入不入索引的 BACKLOG-HISTORY.md，单测守 5% 余量）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 21（只读 11 + 写 10，含运动件识别 `suggest_kinematics`），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=344 query=D2 hits=1`
+- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录；BACKLOG 只留最近一轮，历史移入不入索引的 BACKLOG-HISTORY.md，单测守 5% 余量）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 21（只读 11 + 写 10，含运动件识别 `suggest_kinematics`），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1`
 - ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
 - ✅ 整机形态库：`forms.ts` 定义 `dial-6` / `dial-8` / `linear-4` / `linear-8` / `gantry-2` / `dual-lane` / `gantry-4` / `hybrid-dial-linear` / `cell-4` / `linear-12` / `dial-12` 十一种形态，`pickForm` 先把需求夹紧到形态能力再预演，按「覆盖且达标 → 仅覆盖 → 仅达标（确无覆盖时）→ 全量按工位距离」四档选型，返回两条备选与产能缺口 warning；`synthMachine` 用形态 layout/分度/转移/lanes 参数建 FlowModel，按夹紧后的工位数生成配置，几何按 `form.geometry` 生成 dial/linear/gantry/dual/hybrid/cell，落盘写 `form.id`；`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`
 - ✅ 迭代 34 机型参数化几何：纯函数 `generateMachineGeometry` 由 `MachineConfig` / `MachineDesign` 生成带 mm 尺寸的整机（分度转盘 / 直线输送 / 龙门 / 双轨 / 单工位），运动件带轴向/行程/点位元数据；3D 联调改为渲染该几何并按 `MachineMotion` 驱动；`apply_machine_design` 默认落盘 geometry.json / model.stl / model.gltf / sidecar-assembly.json，`withSolids` 在 build123d 内核就绪时实体化为 STEP、否则回退 TS 网格；`SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`

@@ -8,7 +8,7 @@ import { PackRegistry } from '../../src/packs/registry.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const builtinDir = resolve(here, '../../../packs/builtin');
-const PACK_IDS = ['iec-cn', 'smc-cn', 'servo-cn', 'sensor-cn', 'pneumatic-cn', 'vision-cn', 'drive-cn'];
+const PACK_IDS = ['iec-cn', 'smc-cn', 'servo-cn', 'sensor-cn', 'pneumatic-cn', 'vision-cn', 'drive-cn', 'safety-cn', 'frame-cn'];
 const VISION_TYPES = new Set(['camera', 'lens', 'light', 'reader', 'controller']);
 const DRIVE_TYPES = new Set(['ballscrew', 'rail', 'reducer', 'coupling', 'belt', 'rack', 'module']);
 const VISION_REQUIRED = {
@@ -136,7 +136,7 @@ test('两个新包不录入价格', () => {
   }
 });
 
-test('8 个包 id 全局唯一', () => {
+test('9 个元器件包 id 全局唯一', () => {
   const seen = new Map();
   for (const id of PACK_IDS) {
     for (const part of readPack(id)) {
@@ -144,18 +144,19 @@ test('8 个包 id 全局唯一', () => {
       seen.set(part.id, id);
     }
   }
-  assert.equal(seen.size, 551);
+  assert.equal(seen.size, 617);
 });
 
-test('8 个包型号全局唯一', () => {
+test('9 个元器件包非 alias 型号全局唯一', () => {
   const seen = new Map();
   for (const id of PACK_IDS) {
     for (const part of readPack(id)) {
+      if (part.aliasOf) continue;
       assert.equal(seen.has(part.model), false, `${part.model} 型号重复：${seen.get(part.model)} / ${id}`);
       seen.set(part.model, id);
     }
   }
-  assert.equal(seen.size, 551);
+  assert.equal(seen.size, 612);
 });
 
 test('vision-cn 单包体积不超过 400 KB', () => {
@@ -168,7 +169,7 @@ test('drive-cn 单包体积不超过 400 KB', () => {
   assert.ok(bytes <= 400 * 1024, `drive-cn 超过 400 KB：${bytes}`);
 });
 
-test('scan 只读 8 个 manifest，不读取新包 parts.json', async () => {
+test('scan 只读 10 个 manifest，不读取新包 parts.json', async () => {
   const reads = [];
   const instance = registry({
     readTextFile: (path) => {
@@ -177,9 +178,9 @@ test('scan 只读 8 个 manifest，不读取新包 parts.json', async () => {
     }
   });
   const packs = await instance.scan();
-  assert.equal(packs.length, 8);
+  assert.equal(packs.length, 10);
   assert.deepEqual(new Set(packs.map((pack) => pack.id)), new Set([...PACK_IDS, 'pricebook-cn']));
-  assert.equal(reads.filter((path) => path.endsWith('manifest.json')).length, 8);
+  assert.equal(reads.filter((path) => path.endsWith('manifest.json')).length, 10);
   assert.equal(reads.filter((path) => path.endsWith('parts.json')).length, 0);
 });
 
@@ -218,17 +219,17 @@ test('分类聚合正确：工业相机与减速机', () => {
   assert.equal(reducers.every((part) => part.specs.type === 'reducer'), true);
 });
 
-test('全库聚合包含 8 个新分类与 551 个唯一型号', () => {
+test('全库聚合包含 612 个唯一型号与全部新增分类', () => {
   const instance = registry();
   const all = instance.listParts();
-  assert.equal(all.length, 551);
-  assert.equal(new Set(all.map((part) => part.id)).size, 551);
+  assert.equal(all.length, 612);
+  assert.equal(new Set(all.map((part) => part.id)).size, 612);
   const categories = new Set(all.map((part) => part.category));
-  for (const category of ['工业相机', '镜头', '光源', '光源控制器', '读码器', '视觉控制器', '滚珠丝杠', '直线导轨', '减速机', '联轴器', '同步带', '同步带轮', '齿轮齿条', '直线模组']) {
+  for (const category of ['工业相机', '镜头', '光源', '光源控制器', '读码器', '视觉控制器', '滚珠丝杠', '直线导轨', '减速机', '联轴器', '同步带', '同步带轮', '齿轮齿条', '直线模组', '安全光栅', '安全继电器', '安全门锁', '急停', '安全PLC', '工业铝型材', '连接件', '防护板材', '脚轮与地脚', '门与把手', '输送段']) {
     assert.ok(categories.has(category), `缺少分类 ${category}`);
   }
-  assert.equal(instance.metrics().loadedPacks, 7);
-  assert.equal(instance.metrics().packCount, 8);
+  assert.equal(instance.metrics().loadedPacks, 9);
+  assert.equal(instance.metrics().packCount, 10);
 });
 
 test('vision-cn 相机/镜头关键参数语义正确', () => {
@@ -266,12 +267,12 @@ test('drive-cn 丝杠/减速机/联轴器/同步带参数语义正确', () => {
   }
 });
 
-test('smoke 计数口径：vision=32 drive=33 packs=8', () => {
+test('smoke 计数口径：vision=32 drive=33 packs=10', () => {
   const instance = registry();
   const counts = {
     vision: instance.listParts({ packId: 'vision-cn' }).length,
     drive: instance.listParts({ packId: 'drive-cn' }).length
   };
   assert.deepEqual(counts, { vision: 32, drive: 33 });
-  assert.equal(instance.metrics().packCount, 8);
+  assert.equal(instance.metrics().packCount, 10);
 });

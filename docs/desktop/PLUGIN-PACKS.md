@@ -67,6 +67,7 @@
 | `model` | ✅ | 展示型号，**不是文件名** |
 | `category` | ✅ | 归入既有分类（伺服/步进/传感器/气缸/气爪/电磁阀/气源处理/气动接头等） |
 | `vendor` | ⬜ | 厂商 |
+| `aliasOf` | ⬜ | 指向已登记型号的 id；alias 条目不参与 `listParts` 计数，`getPartById` 会解析到目标 |
 | `symbol` | ⬜ | 原理图符号键；缺省表示暂无符号 |
 | `specs` | ⬜ | 键值参数，值只能是字符串或数字；新包必须带 `数据来源` |
 | `dims` | ⬜ | 本体外形 `{w,h,d}`，单位 mm；三项必须为有限正数 |
@@ -78,7 +79,7 @@
 
 尺寸只允许两种来源：厂商样本/PDS 的明确数值，或**同系列同壳架**的官方尺寸推定。推定必须在 `dims.source` 写参照型号并设 `dims.estimated: true`；不得跨厂商借尺寸。
 
-## 2. 内置包清单（8 个）
+## 2. 内置包清单（10 个）
 
 | 包 | 条目 | 分类 | 体积 | 加载方式 | 内容 |
 |----|------|------|------|----------|------|
@@ -89,9 +90,11 @@
 | `pneumatic-cn` | 44 | 5 | 24.0 KB | manifest 索引；命中后 `loadPack` 懒加载 | SMC CDQ2/MXQ/MGP/CQ2、MHZ2/MHL2、SY/VQ、AW/AC、KQ2 |
 | `vision-cn` | 32 | 6 | 17.0 KB | manifest 索引；命中后 `loadPack` 懒加载 | 海康/大恒/Basler 相机、Computar/海康镜头、环形/条形/背光、光源控制器、读码器、视觉控制器 |
 | `drive-cn` | 33 | 8 | 14.5 KB | manifest 索引；命中后 `loadPack` 懒加载 | HIWIN/TBI 丝杠、HIWIN 导轨、Neugart/APEX/绿的谐波减速机、KTR/R+W 联轴器、GT2/HTD 5M 带与带轮、齿条、HIWIN KK 模组 |
+| `safety-cn` | 33（28 实型号 + 5 alias） | 5 | 18.4 KB | manifest 索引；命中后 `loadPack` 懒加载 | 欧姆龙/西克/邦纳安全光幕与激光扫描仪、皮尔兹/施耐德/西门子安全继电器、施迈赛/皮尔兹/欧姆龙门锁联锁、施耐德急停、皮尔兹/西门子安全 PLC |
+| `frame-cn` | 33 | 6 | 19.6 KB | manifest 索引；命中后 `loadPack` 懒加载 | APAS 欧标槽 8/10 铝型材（40×40/40×80/45×45/45×90/80×80）、角件/内置连接/T 型螺母/端盖、网框/亚克力/铝塑板、福马轮/调节脚（100/300/600 kg）、Blickle 水平调节脚轮、安全门铰链/门框/门锁、皮带线与倍速链段 |
 | `pricebook-cn` | 0 | 1 | 26.0 KB | 价格簿按需读取（`pricebook.json`） | 人民币价格簿（不进入元器件检索） |
 
-元器件包合计 551 条、551 个唯一 id。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`（BOM 演示引用），`SR-1000` 保留在 `vision-cn`。
+元器件包合计 **612 条可检索型号 / 612 个唯一 id**（原始记录 617 条，含 `safety-cn` 的 5 条 `aliasOf` 重定向）。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`（BOM 演示引用），`SR-1000` 保留在 `vision-cn`；`safety-cn` 中与 `iec-cn` 重复的 PNOZ s3/s4、XPSAC、3SK1111、NP2-BS542 只登记 alias，不再复制参数。
 
 ## 3. 懒加载机制
 
@@ -99,7 +102,7 @@
 2. **列表/搜索**：`listParts({ q, category, packId })` 先按 `packId`、`manifest.categories`、包名/厂商/描述/关键词过滤；只有候选包才调用 `loadPack(id)`。
 3. **单包加载**：`loadPack(id)` 首次读取并校验 `parts.json`，缓存到内存；重复搜索直接命中缓存。
 4. **释放**：`unloadPack(id)` 删除该包缓存，manifest 索引保留；下次访问按需重读。
-5. **去重**：候选包按内置 → 用户顺序遍历，同一 part id 只返回一次；全局索引同样内置优先。
+5. **去重与 alias**：候选包按内置 → 用户顺序遍历，同一 part id 只返回一次；全局索引同样内置优先；`aliasOf` 条目不进入列表/计数，`getPartById(aliasId)` 会沿 alias 链解析到已登记的目标型号，自指或环返回 `undefined`。
 6. **全局索引**：`getPartById(id)` 首次调用时懒建 `Map<partId, ComponentPart>`（加载所有启用的元器件包）；`loadPack/unloadPack` 会使索引失效并在下次查询重建。
 7. **查询兜底**：`q` 命中 manifest 元数据时只加载命中包；完全没命中 manifest 时回退到全量型号/规格文本扫描，保证按型号检索不失效。
 8. **价格簿**：没有 `parts.json` 的包不出现在 `listParts` 结果中，但仍计入 manifest 数量与数据包面板。
@@ -120,10 +123,10 @@
 暴露位置：
 
 - `npm run diagnose` 的 `packMetrics` 字段与「包加载」文本行；
-- `npm run smoke`：`SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=… coldMs=… parts=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=…`；
+- `npm run smoke`：`SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=… coldMs=… parts=…` 与 `SMOKE_PACKS_COUNT servo=… sensor=… pneumatic=… vision=… drive=… safety=… frame=…`；
 - 单测直接断言 `metrics()`。
 
-当前实测目标：冷启动到可搜索 ≤ 120 ms；单包 `parts.json` ≤ 400 KB；8 包全量命中搜索 ≤ 25 ms。2026-10-24 本机 smoke 与单测直接断言 `metrics()`；新增 `vision-cn` / `drive-cn` 后由 `TZ=Asia/Shanghai npm test` 与 `npm run smoke` 复核。
+当前实测目标：冷启动到可搜索 ≤ 120 ms；单包 `parts.json` ≤ 400 KB；10 包全量命中搜索 ≤ 25 ms。2026-10-24 新增 `safety-cn` / `frame-cn` 后由 `TZ=Asia/Shanghai npm test` 与 `npm run smoke` 复核；最大单包仍为 `iec-cn` 159.1 KB。
 
 ## 5. 导入与安全
 

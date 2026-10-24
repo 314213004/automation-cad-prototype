@@ -39,6 +39,8 @@ export interface ComponentPart {
   model: string;
   category: string;
   vendor?: string;
+  /** 指向已登记型号的 id；别名条目不参与列表/计数，仅用于解析到目标型号。 */
+  aliasOf?: string;
   /** 原理图符号键（如 qf1/km1/a1），缺省表示暂无符号 */
   symbol?: string;
   /** 器件本体外形尺寸（宽×高×深，mm）；source 记录官方文档或同系列参照 */

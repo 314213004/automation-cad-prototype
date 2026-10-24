@@ -1,0 +1,584 @@
+[
+  {
+    "id": "F3SG-4PGA0240-14",
+    "model": "F3SG-4PGA0240-14",
+    "category": "安全光栅",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "F3SG-SR/PG",
+      "resolution": "14 mm",
+      "protectiveHeight": "240 mm",
+      "responseTimeMs": 8,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP/NPN",
+      "数据来源": "欧姆龙 F3SG-SR/PG 样本 F105（官方）; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": { "w": 32, "h": 240, "d": 38, "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38）" }
+  },
+  {
+    "id": "F3SG-4PGA0480-14",
+    "model": "F3SG-4PGA0480-14",
+    "category": "安全光栅",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "F3SG-SR/PG",
+      "resolution": "14 mm",
+      "protectiveHeight": "480 mm",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP/NPN",
+      "数据来源": "欧姆龙 F3SG-SR/PG 样本 F105（官方）; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": { "w": 32, "h": 480, "d": 38, "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38）" }
+  },
+  {
+    "id": "F3SG-4PGA0720-25",
+    "model": "F3SG-4PGA0720-25",
+    "category": "安全光栅",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "F3SG-SR/PG",
+      "resolution": "25 mm",
+      "protectiveHeight": "720 mm",
+      "responseTimeMs": 11,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP/NPN",
+      "数据来源": "欧姆龙 F3SG-SR/PG 样本 F105（官方）; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": { "w": 32, "h": 720, "d": 38, "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38）" }
+  },
+  {
+    "id": "F3SG-4PGA1200-25",
+    "model": "F3SG-4PGA1200-25",
+    "category": "安全光栅",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "F3SG-SR/PG",
+      "resolution": "25 mm",
+      "protectiveHeight": "1200 mm",
+      "responseTimeMs": 13,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP/NPN",
+      "数据来源": "欧姆龙 F3SG-SR/PG 样本 F105（官方）; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": { "w": 32, "h": 1200, "d": 38, "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38）" }
+  },
+  {
+    "id": "C4C-SA06030A10000",
+    "model": "C4C-SA06030A10000",
+    "category": "安全光栅",
+    "vendor": "西克",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "deTec4 Core 发送器",
+      "resolution": "30 mm",
+      "protectiveHeight": "600 mm",
+      "responseTimeMs": 11,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP",
+      "数据来源": "西克 deTec4 Core 操作说明 IM0048011 / 数据表（官方）; https://www.sick.com/"
+    },
+    "dims": { "w": 34, "h": 613, "d": 32.8, "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8）" }
+  },
+  {
+    "id": "C4C-EA06030A10000",
+    "model": "C4C-EA06030A10000",
+    "category": "安全光栅",
+    "vendor": "西克",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "deTec4 Core 接收器",
+      "resolution": "30 mm",
+      "protectiveHeight": "600 mm",
+      "responseTimeMs": 11,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP",
+      "数据来源": "西克 deTec4 Core 操作说明 IM0048011 / 数据表（官方）; https://www.sick.com/"
+    },
+    "dims": { "w": 34, "h": 613, "d": 32.8, "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8）" }
+  },
+  {
+    "id": "MICS3-CBAZ40IZ1P01",
+    "model": "MICS3-CBAZ40IZ1P01",
+    "category": "安全光栅",
+    "vendor": "西克",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "series": "microScan3 Core",
+      "protectiveField": "4 m",
+      "responseTimeMs": 80,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路",
+      "数据来源": "西克 microScan3 Core 操作说明/数据表（官方）; https://www.sick.com/"
+    },
+    "dims": { "w": 112, "h": 80, "d": 91, "source": "西克 microScan3 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "MICS3-CBAZ90IZ1P01",
+    "model": "MICS3-CBAZ90IZ1P01",
+    "category": "安全光栅",
+    "vendor": "西克",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "series": "microScan3 Core",
+      "protectiveField": "9 m",
+      "responseTimeMs": 80,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路",
+      "数据来源": "西克 microScan3 Core 操作说明/数据表（官方）; https://www.sick.com/"
+    },
+    "dims": { "w": 112, "h": 80, "d": 91, "source": "西克 microScan3 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "SLSP14-300Q88",
+    "model": "SLSP14-300Q88",
+    "category": "安全光栅",
+    "vendor": "邦纳",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "EZ-SCREEN LS",
+      "resolution": "14 mm",
+      "protectiveHeight": "300 mm",
+      "responseTimeMs": 15,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP",
+      "数据来源": "邦纳 EZ-SCREEN LS 手册 112852（官方）; https://www.bannerengineering.com/"
+    },
+    "dims": { "w": 36, "h": 371, "d": 45.2, "source": "邦纳 EZ-SCREEN LS 手册 112852 §3.6.4 外形尺寸 官方（单支 36×L1×45.2）" }
+  },
+  {
+    "id": "SLSP14-900Q88",
+    "model": "SLSP14-900Q88",
+    "category": "安全光栅",
+    "vendor": "邦纳",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "EZ-SCREEN LS",
+      "resolution": "14 mm",
+      "protectiveHeight": "900 mm",
+      "responseTimeMs": 27,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP",
+      "数据来源": "邦纳 EZ-SCREEN LS 手册 112852（官方）; https://www.bannerengineering.com/"
+    },
+    "dims": { "w": 36, "h": 971, "d": 45.2, "source": "邦纳 EZ-SCREEN LS 手册 112852 §3.6.4 外形尺寸 官方（单支 36×L1×45.2）" }
+  },
+  {
+    "id": "SLSP30-1200Q88",
+    "model": "SLSP30-1200Q88",
+    "category": "安全光栅",
+    "vendor": "邦纳",
+    "specs": {
+      "type": "curtain",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "series": "EZ-SCREEN LS",
+      "resolution": "30 mm",
+      "protectiveHeight": "1200 mm",
+      "responseTimeMs": 23,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "OSSD 2 路 PNP",
+      "数据来源": "邦纳 EZ-SCREEN LS 手册 112852（官方）; https://www.bannerengineering.com/"
+    },
+    "dims": { "w": 36, "h": 1271, "d": 45.2, "source": "邦纳 EZ-SCREEN LS 手册 112852 §3.6.4 外形尺寸 官方（单支 36×L1×45.2）" }
+  },
+  {
+    "id": "PNOZ-s5-750105",
+    "model": "PNOZ s5 750105",
+    "category": "安全继电器",
+    "vendor": "皮尔兹",
+    "specs": {
+      "type": "relay",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 NO 安全输出 + 1 SC 辅助输出",
+      "function": "急停/安全门/光栅监控",
+      "数据来源": "皮尔兹 PNOZ s5 750105 数据表（官方）; https://www.pilz.com/"
+    },
+    "dims": { "w": 22.5, "h": 98, "d": 120, "source": "皮尔兹 PNOZ s 系列数据表 外形图 官方" },
+    "railMount": true
+  },
+  {
+    "id": "XPSAF5130",
+    "model": "XPSAF5130",
+    "category": "安全继电器",
+    "vendor": "施耐德",
+    "specs": {
+      "type": "relay",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 30,
+      "channels": 2,
+      "voltage": "24 V AC/DC",
+      "output": "3 NO 安全输出 + 1 NC 辅助输出",
+      "function": "急停/防护开关监控",
+      "数据来源": "施耐德 XPSAF 系列产品数据表（官方）; https://www.se.com/"
+    },
+    "dims": { "w": 22.5, "h": 99, "d": 114, "source": "施耐德 XPSAF 系列数据表 官方" },
+    "railMount": true
+  },
+  {
+    "id": "XPSAF5140",
+    "model": "XPSAF5140",
+    "category": "安全继电器",
+    "vendor": "施耐德",
+    "specs": {
+      "type": "relay",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 30,
+      "channels": 2,
+      "voltage": "24 V AC/DC",
+      "output": "2 NO 安全输出 + 2 NC 辅助输出",
+      "function": "急停/防护开关监控",
+      "数据来源": "施耐德 XPSAF 系列产品数据表（官方）; https://www.se.com/"
+    },
+    "dims": { "w": 22.5, "h": 99, "d": 114, "source": "施耐德 XPSAF 系列数据表 官方" },
+    "railMount": true
+  },
+  {
+    "id": "3SK1211-1BB40",
+    "model": "3SK1211-1BB40",
+    "category": "安全继电器",
+    "vendor": "西门子",
+    "specs": {
+      "type": "relay",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 NO 安全输出 + 1 NC 辅助输出",
+      "function": "急停/安全门监控",
+      "数据来源": "西门子 SIRIUS 3SK1 安全继电器数据表（官方）; https://industry.siemens.com/"
+    },
+    "dims": { "w": 45, "h": 100, "d": 121.6, "source": "西门子 3SK1 系列数据表 官方" },
+    "railMount": true
+  },
+  {
+    "id": "3SK2122-1AA10",
+    "model": "3SK2122-1AA10",
+    "category": "安全继电器",
+    "vendor": "西门子",
+    "specs": {
+      "type": "relay",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 NO 安全输出 + 1 NC 辅助输出",
+      "function": "急停/安全门/光栅监控",
+      "数据来源": "西门子 SIRIUS 3SK2 安全继电器数据表（官方）; https://industry.siemens.com/"
+    },
+    "dims": { "w": 45, "h": 100, "d": 121.6, "source": "西门子 3SK2 系列数据表 官方" },
+    "railMount": true
+  },
+  {
+    "id": "AZM400Z-ST-1P2P-A",
+    "model": "AZM400Z-ST-1P2P-A",
+    "category": "安全门锁",
+    "vendor": "施迈赛",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 30,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 路安全输出",
+      "locking": "电磁锁定/弹簧解锁",
+      "数据来源": "施迈赛 AZM400 系列数据表（官方）; https://www.schmersal.com/"
+    },
+    "dims": { "w": 40, "h": 130, "d": 40, "source": "施迈赛 AZM400 系列数据表 官方" }
+  },
+  {
+    "id": "AZM300Z-ST-1P2P-A",
+    "model": "AZM300Z-ST-1P2P-A",
+    "category": "安全门锁",
+    "vendor": "施迈赛",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 30,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 路安全输出",
+      "locking": "电磁锁定/弹簧解锁",
+      "数据来源": "施迈赛 AZM300 系列数据表（官方）; https://www.schmersal.com/"
+    },
+    "dims": { "w": 40, "h": 120, "d": 40, "source": "施迈赛 AZM300 系列数据表 官方" }
+  },
+  {
+    "id": "PSEN-ml-b-2.1",
+    "model": "PSEN ml b 2.1",
+    "category": "安全门锁",
+    "vendor": "皮尔兹",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 路安全输出",
+      "locking": "通电锁定/弹簧解锁",
+      "数据来源": "皮尔兹 PSENmlock 系列数据表（官方）; https://www.pilz.com/"
+    },
+    "dims": { "w": 40, "h": 130, "d": 40, "source": "皮尔兹 PSENmlock 系列数据表 官方" }
+  },
+  {
+    "id": "PSEN-ml-b-2.2",
+    "model": "PSEN ml b 2.2",
+    "category": "安全门锁",
+    "vendor": "皮尔兹",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2 路安全输出",
+      "locking": "通电锁定/弹簧解锁",
+      "数据来源": "皮尔兹 PSENmlock 系列数据表（官方）; https://www.pilz.com/"
+    },
+    "dims": { "w": 40, "h": 130, "d": 40, "source": "皮尔兹 PSENmlock 系列数据表 官方" }
+  },
+  {
+    "id": "D4NS-1BF",
+    "model": "D4NS-1BF",
+    "category": "安全门锁",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "1NC/1NO（慢动）",
+      "actuator": "舌片式",
+      "数据来源": "欧姆龙 D4NS 系列数据表（官方）; https://www.ia.omron.com/"
+    },
+    "dims": { "w": 30, "h": 60, "d": 30, "source": "欧姆龙 D4NS 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "D4NS-2AF",
+    "model": "D4NS-2AF",
+    "category": "安全门锁",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2NC（慢动）",
+      "actuator": "舌片式",
+      "数据来源": "欧姆龙 D4NS 系列数据表（官方）; https://www.ia.omron.com/"
+    },
+    "dims": { "w": 30, "h": 60, "d": 30, "source": "欧姆龙 D4NS 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "D4GS-N1R",
+    "model": "D4GS-N1R",
+    "category": "安全门锁",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "1NC/1NO",
+      "actuator": "薄型舌片式",
+      "数据来源": "欧姆龙 D4GS-N 系列数据表（官方）; https://www.ia.omron.com/"
+    },
+    "dims": { "w": 25, "h": 75, "d": 17, "source": "欧姆龙 D4GS-N 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "D4GS-N2R",
+    "model": "D4GS-N2R",
+    "category": "安全门锁",
+    "vendor": "欧姆龙",
+    "specs": {
+      "type": "interlock",
+      "pl": "PL d",
+      "category": "Cat 3",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC",
+      "output": "2NC",
+      "actuator": "薄型舌片式",
+      "数据来源": "欧姆龙 D4GS-N 系列数据表（官方）; https://www.ia.omron.com/"
+    },
+    "dims": { "w": 25, "h": 75, "d": 17, "source": "欧姆龙 D4GS-N 系列数据表 外形图 官方" }
+  },
+  {
+    "id": "XB5AS8445",
+    "model": "XB5AS8445",
+    "category": "急停",
+    "vendor": "施耐德",
+    "specs": {
+      "type": "estop",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 10,
+      "channels": 2,
+      "voltage": "24 V DC（触点）",
+      "output": "2NC",
+      "head": "Ø40 mm 红色蘑菇头 旋转复位",
+      "mounting": "Ø22 mm 开孔",
+      "数据来源": "施耐德 Harmony XB5 系列产品数据表（官方）; https://www.se.com/"
+    },
+    "dims": { "w": 40, "h": 40, "d": 75, "source": "施耐德 XB5 系列按钮外形尺寸图 官方" }
+  },
+  {
+    "id": "PNOZ-m-B0-772100",
+    "model": "PNOZ m B0 772100",
+    "category": "安全PLC",
+    "vendor": "皮尔兹",
+    "specs": {
+      "type": "plc",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 20,
+      "voltage": "24 V DC",
+      "io": "20 安全输入 / 4 安全输出",
+      "数据来源": "皮尔兹 PNOZmulti 2 基础单元 PNOZ m B0 数据表（官方）; https://www.pilz.com/"
+    },
+    "dims": { "w": 45, "h": 101, "d": 120, "source": "皮尔兹 PNOZmulti 2 基础单元数据表 官方" },
+    "railMount": true
+  },
+  {
+    "id": "6ES7214-1HF40-0XB0",
+    "model": "6ES7214-1HF40-0XB0",
+    "category": "安全PLC",
+    "vendor": "西门子",
+    "specs": {
+      "type": "plc",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 14,
+      "voltage": "24 V DC",
+      "cpu": "CPU 1214FC DC/DC/DC",
+      "io": "14 DI / 10 DO / 2 AI",
+      "数据来源": "西门子 S7-1200F 系统手册/数据表（官方）; https://industry.siemens.com/"
+    },
+    "dims": { "w": 90, "h": 100, "d": 75, "source": "西门子 S7-1200 系统手册 外形尺寸 官方" },
+    "railMount": true
+  },
+  {
+    "id": "6ES7215-1HF40-0XB0",
+    "model": "6ES7215-1HF40-0XB0",
+    "category": "安全PLC",
+    "vendor": "西门子",
+    "specs": {
+      "type": "plc",
+      "pl": "PL e",
+      "category": "Cat 4",
+      "responseTimeMs": 20,
+      "channels": 14,
+      "voltage": "24 V DC",
+      "cpu": "CPU 1215FC DC/DC/DC",
+      "io": "14 DI / 10 DO / 2 AI / 2 AO",
+      "数据来源": "西门子 S7-1200F 系统手册/数据表（官方）; https://industry.siemens.com/"
+    },
+    "dims": { "w": 110, "h": 100, "d": 75, "source": "西门子 S7-1200 系统手册 外形尺寸 官方" },
+    "railMount": true
+  },
+  {
+    "id": "SAFE-ALIAS-PNOZ-S3",
+    "model": "PNOZ s3",
+    "category": "安全继电器",
+    "vendor": "皮尔兹",
+    "aliasOf": "PNOZ-s3-750103",
+    "specs": {
+      "数据来源": "官方型号已在 iec-cn 登记，aliasOf 指向 PNOZ-s3-750103"
+    }
+  },
+  {
+    "id": "SAFE-ALIAS-PNOZ-S4",
+    "model": "PNOZ s4",
+    "category": "安全继电器",
+    "vendor": "皮尔兹",
+    "aliasOf": "PNOZ-s4-750104",
+    "specs": {
+      "数据来源": "官方型号已在 iec-cn 登记，aliasOf 指向 PNOZ-s4-750104"
+    }
+  },
+  {
+    "id": "SAFE-ALIAS-XPSAC",
+    "model": "XPSAC",
+    "category": "安全继电器",
+    "vendor": "施耐德",
+    "aliasOf": "XPSAC5121",
+    "specs": {
+      "数据来源": "官方型号已在 iec-cn 登记，aliasOf 指向 XPSAC5121"
+    }
+  },
+  {
+    "id": "SAFE-ALIAS-3SK1111",
+    "model": "3SK1111",
+    "category": "安全继电器",
+    "vendor": "西门子",
+    "aliasOf": "3SK1111-1AB30",
+    "specs": {
+      "数据来源": "官方型号已在 iec-cn 登记，aliasOf 指向 3SK1111-1AB30"
+    }
+  },
+  {
+    "id": "SAFE-ALIAS-NP2-BS542",
+    "model": "NP2-BS542 急停",
+    "category": "急停",
+    "vendor": "正泰",
+    "aliasOf": "NP2-BS542",
+    "specs": {
+      "数据来源": "官方型号已在 iec-cn 登记，aliasOf 指向 NP2-BS542"
+    }
+  }
+]

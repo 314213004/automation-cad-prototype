@@ -333,7 +333,7 @@ test('dims.source 与 estimated 透传到条目', () => {
 });
 
 test('单个内置包 parts.json 不超过 400 KB', () => {
-  for (const id of ['iec-cn', 'smc-cn', 'servo-cn', 'sensor-cn', 'pneumatic-cn']) {
+  for (const id of ['iec-cn', 'smc-cn', 'servo-cn', 'sensor-cn', 'pneumatic-cn', 'vision-cn', 'drive-cn', 'safety-cn', 'frame-cn']) {
     const bytes = statSync(join(actualBuiltin, id, 'parts.json')).size;
     assert.ok(bytes <= 400 * 1024, `${id} 超过 400 KB：${bytes}`);
   }
@@ -418,12 +418,12 @@ test('冷启动到可搜索不超过 120 ms', async () => {
   assert.ok(coldMs <= 120, `冷启动 ${coldMs.toFixed(1)} ms > 120 ms`);
 });
 
-test('8 个包全量命中搜索不超过 25 ms', () => {
+test('10 个包全量命中搜索不超过 25 ms', () => {
   const registry = realRegistry();
   registry.listParts();
   const startedAt = performance.now();
   const parts = registry.listParts();
   const searchMs = performance.now() - startedAt;
-  assert.ok(parts.length >= 550);
+  assert.ok(parts.length >= 600);
   assert.ok(searchMs <= 25, `全量搜索 ${searchMs.toFixed(1)} ms > 25 ms`);
 });

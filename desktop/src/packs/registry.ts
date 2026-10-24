@@ -160,6 +160,12 @@ function validateParts(value: unknown, packId: string, packName: string): Compon
       packId,
       packName
     };
+    if (item.aliasOf !== undefined) {
+      if (typeof item.aliasOf !== 'string' || item.aliasOf.trim() === '') {
+        throw new Error(`parts[${index}].aliasOf 必须是非空字符串`);
+      }
+      part.aliasOf = item.aliasOf.trim();
+    }
     if (typeof item.vendor === 'string') part.vendor = item.vendor;
     if (item.symbol !== undefined) {
       if (typeof item.symbol !== 'string' || (item.symbol !== '' && !SYMBOL_PATTERN.test(item.symbol))) {
@@ -271,9 +277,18 @@ export class PackRegistry {
     return Array.from(this.loadedPacks.keys()).sort();
   }
 
-  /** 按 partId 懒建全局索引；内置包优先，重复 id 只保留首个。 */
+  /** 按 partId 懒建全局索引；内置包优先，重复 id 只保留首个。别名会解析到目标型号。 */
   getPartById(id: string): ComponentPart | undefined {
-    return this.ensurePartIndex().get(id);
+    const index = this.ensurePartIndex();
+    let part = index.get(id);
+    const seen = new Set<string>([id]);
+    while (part?.aliasOf) {
+      if (seen.has(part.aliasOf)) return undefined;
+      seen.add(part.aliasOf);
+      part = index.get(part.aliasOf);
+      if (!part) return undefined;
+    }
+    return part;
   }
 
   getPartIndexSize(): number {
@@ -317,6 +332,7 @@ export class PackRegistry {
         continue;
       }
       for (const part of parts) {
+        if (part.aliasOf) continue;
         if (seen.has(part.id)) continue;
         seen.add(part.id);
         if (category && lower(part.category) !== category) continue;

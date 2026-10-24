@@ -13,6 +13,8 @@ packs/builtin/
 ├── pneumatic-cn/  # 44 条，SMC 气缸/气爪/阀/气源/接头
 ├── vision-cn/     # 32 条，工业相机/镜头/光源/读码器/视觉控制器
 ├── drive-cn/      # 33 条，丝杠/导轨/减速机/联轴器/带传动/齿条/模组
+├── safety-cn/     # 33 条（28 实型号 + 5 alias），安全光栅/继电器/门锁/急停/安全PLC
+├── frame-cn/      # 33 条，铝型材/连接件/防护板材/脚轮地脚/门/输送段
 └── pricebook-cn/  # pricebook.json，价格簿（无 parts.json）
 ```
 
@@ -48,7 +50,7 @@ packs/builtin/
 }
 ```
 
-当前 8 个内置包（manifest 8 个）：`iec-cn` 377、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`vision-cn` 32、`drive-cn` 33、`pricebook-cn` 0（价格簿）。元器件包合计 551 条 / 551 个唯一 id。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`，`SR-1000` 保留在 `vision-cn`。
+当前 10 个内置包（manifest 10 个）：`iec-cn` 377、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`vision-cn` 32、`drive-cn` 33、`safety-cn` 33（28 实型号 + 5 alias）、`frame-cn` 33、`pricebook-cn` 0（价格簿）。元器件包合计 612 条可检索型号 / 612 个唯一 id（原始 617 条，含 5 条 alias）。2026-10-24 起按「同一型号不跨包重复」清理历史重复：`D-M9B` 保留在 `smc-cn`，`SR-1000` 保留在 `vision-cn`；安全件重复型号只在 `safety-cn` 保留 `aliasOf` 指向 `iec-cn`。
 
 ## 坑点
 
@@ -59,7 +61,9 @@ packs/builtin/
 5. **型号与厂商参数仅供演示**，`license` 已声明「以厂商样本为准」，不要当成选型依据。
 6. **内置包不可删除**：`registry.remove()` 对 `builtin: true` 直接拒绝。
 7. **启动只读 manifest**：`categories/partsCount/keywords` 是索引字段，新增包必须写；`parts.json` 只在命中包被 `loadPack` 时读取，改完数据要同步 `partsCount`，否则面板在首次加载前显示旧值。
-8. **单包 ≤ 400 KB**：当前最大 `iec-cn` 160 KB；接近上限时按厂商/系列拆包。
+8. **单包 ≤ 400 KB**：当前最大 `iec-cn` 159.1 KB；接近上限时按厂商/系列拆包。
+
+9. **alias 不复制参数**：同一型号已存在于其他包时，新包只写 `aliasOf` 重定向；alias 条目不进入 `listParts`，也不参与容量/型号唯一性统计，避免同一型号双份维护。
 
 ## 进度
 

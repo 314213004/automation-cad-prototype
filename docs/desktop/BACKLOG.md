@@ -4,16 +4,15 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## 视觉与传动扩包（2026-10-24，本轮）
+## 安全件 + 机架结构件扩包（2026-10-24，本轮）
 
-- 状态：✅ 完成；新增 `vision-cn`（32 条 / 6 分类）与 `drive-cn`（33 条 / 8 分类），内置 manifest 增至 8 个；元器件合计 551 条 / 551 个唯一 id。未 push、未提交。
-- 视觉覆盖：海康 MV-CS/CE 500/1200 万（GigE/USB3）、大恒 MER2、Basler ace 2；Computar/海康 8/12/16/25 mm 定焦 + Computar 远心；海康/奥普特环形/条形/背光与 2 条光源控制器；海康 ID3000/ID5000 与基恩士 SR-1000；海康 VisionMaster MV-VC3000 与基恩士 CV-X100。
-- 传动覆盖：HIWIN R16/R20/R25 C7 与 TBI SFU 1605/2005/2505/2510/3205；HIWIN HGH15/20/25/30CA；Neugart PLE、APEX AB、绿的谐波 LCS；KTR ROTEX 与 R+W BK2；Gates GT2/HTD 5M 带与米思米带轮；KHK 齿条；HIWIN KK60/KK86 模组。
-- 数据口径：每条 `specs.数据来源` 记录官方样本/数据表与页码/链接；尺寸只录官方，查不到留空；Basler 3 条相机带官方 `dims` + `dims.source`；新包不录价格。
-- 去重：跨 8 包按 id 与型号双重扫描均唯一。历史重复 `D-M9B` 保留在 `smc-cn`（BOM 演示引用），删除 `iec-cn` 副本；`SR-1000` 保留在 `vision-cn`，删除 `iec-cn` 旧副本。`iec-cn` 调整为 377 条。
-- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1604/1604**（+22）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=5.079 coldMs=5.7 parts=402`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33`、`SMOKE_UI_OK ... packs=8 ...`、`SMOKE_ELEC_LIB_OK parts=377 categories=26 symbols=219`；`npm run diagnose` 的 `dataPack.count=8` 且列表含 8 个包；`npm run eval:agent` 1.00。
-- 性能/体积：`vision-cn/parts.json` 17,386 B、`drive-cn/parts.json` 14,876 B，均 ≤400 KB；最大单包 `iec-cn` 162,897 B；8 包全量搜索由单测与 smoke 断言 ≤25 ms。
-- 新增测试：`desktop/test/packs/vision-drive.test.mjs` 22 条（容量、类型字段、来源/尺寸、无价格、8 包 id/型号唯一、体积、manifest 版本与 partsCount、懒加载未命中不读 parts、packId 过滤、型号搜索、分类聚合、smoke 计数口径）。
+- 状态：✅ 完成；`safety-cn` 33 条、`frame-cn` 33 条；10 个 manifest，可检索 612 条 / 612 唯一 id。
+- 安全件：F3SG-SR/PG 4 档高度、西克 deTec4/microScan3、邦纳 LS 3 档；PNOZ s5、XPSAF、3SK1/2；AZM300/400、PSEN ml、D4NS/D4GS、XB5AS8445；PNOZmulti 2、S7-1200F 两条。字段齐全 `type/pl/category/responseTimeMs/channels/voltage/dims`。
+- alias：PNOZ s3/s4、XPSAC5121、3SK1111-1AB30、NP2-BS542 已存在，`safety-cn` 仅 5 条 `aliasOf`；`listParts` 不显示 alias，`getPartById` 链式解析并防环。
+- 结构件：APAS 槽 8/10 型材 40×40/40×80/45×45/45×90/80×80；角件/内置连接/T 螺母/端盖；网框/亚克力/铝塑板；福马轮/调节脚（100–1600 kg）；安全门铰链/门框/门锁；皮带/倍速链段。
+- 数据：米重 `kg/m`、惯性矩 `cm⁴`、承载 `kg`；型材参数取自 APAS info-53/41/64/56/32，连接/脚轮取自 APAS/item24；缺失参数留空并标「未核实」，不录价格。
+- 测试：`desktop/test/packs/safety-frame.test.mjs` 20 条，覆盖容量、字段/单位、10 包 id 与型号唯一、alias 解析/防环、无价格、体积、懒加载与分类聚合。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1624/1624**（+20）；smoke `SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=5.635 coldMs=6.2 parts=402`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`；diagnose `dataPack.count=10`；`eval:agent` 1.00。
 
 ## 待办（按优先级）
 

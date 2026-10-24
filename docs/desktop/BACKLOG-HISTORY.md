@@ -2,6 +2,17 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 上一轮：视觉与传动扩包（2026-10-24）
+
+- 状态：✅ 完成；新增 `vision-cn`（32 条 / 6 分类）与 `drive-cn`（33 条 / 8 分类），内置 manifest 增至 8 个；元器件合计 551 条 / 551 个唯一 id。未 push、未提交。
+- 视觉覆盖：海康 MV-CS/CE 500/1200 万（GigE/USB3）、大恒 MER2、Basler ace 2；Computar/海康 8/12/16/25 mm 定焦 + Computar 远心；海康/奥普特环形/条形/背光与 2 条光源控制器；海康 ID3000/ID5000 与基恩士 SR-1000；海康 VisionMaster MV-VC3000 与基恩士 CV-X100。
+- 传动覆盖：HIWIN R16/R20/R25 C7 与 TBI SFU 1605/2005/2505/2510/3205；HIWIN HGH15/20/25/30CA；Neugart PLE、APEX AB、绿的谐波 LCS；KTR ROTEX 与 R+W BK2；Gates GT2/HTD 5M 带与米思米带轮；KHK 齿条；HIWIN KK60/KK86 模组。
+- 数据口径：每条 `specs.数据来源` 记录官方样本/数据表与页码/链接；尺寸只录官方，查不到留空；Basler 3 条相机带官方 `dims` + `dims.source`；新包不录价格。
+- 去重：跨 8 包按 id 与型号双重扫描均唯一。历史重复 `D-M9B` 保留在 `smc-cn`（BOM 演示引用），删除 `iec-cn` 副本；`SR-1000` 保留在 `vision-cn`，删除 `iec-cn` 旧副本。`iec-cn` 调整为 377 条。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1604/1604**（+22）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=8 loaded=2 searchMs=5.079 coldMs=5.7 parts=402`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33`、`SMOKE_UI_OK ... packs=8 ...`、`SMOKE_ELEC_LIB_OK parts=377 categories=26 symbols=219`；`npm run diagnose` 的 `dataPack.count=8` 且列表含 8 个包；`npm run eval:agent` 1.00。
+- 性能/体积：`vision-cn/parts.json` 17,386 B、`drive-cn/parts.json` 14,876 B，均 ≤400 KB；最大单包 `iec-cn` 162,897 B；8 包全量搜索由单测与 smoke 断言 ≤25 ms。
+- 新增测试：`desktop/test/packs/vision-drive.test.mjs` 22 条（容量、类型字段、来源/尺寸、无价格、8 包 id/型号唯一、体积、manifest 版本与 partsCount、懒加载未命中不读 parts、packId 过滤、型号搜索、分类聚合、smoke 计数口径）。
+
 ## 上一轮：元器件库扩展与模块化按需加载（2026-10-24）
 
 - 状态：✅ 完成；新增 `servo-cn`（25 条）、`sensor-cn`（32 条）、`pneumatic-cn`（44 条），内置元器件包增至 5 个 + `pricebook-cn` 价格簿（manifest 6 个）。未 push、未提交。

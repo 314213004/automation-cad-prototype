@@ -1,0 +1,600 @@
+[
+  {
+    "id": "APAS-P8-4040",
+    "model": "P8-4040",
+    "category": "工业铝型材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "profile",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": 1.95,
+      "inertia": "Ix 10.44 / Iy 10.44 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "material": "Al 6063-T5",
+      "数据来源": "APAS P8-4040 产品技术页（官方）https://www.apas.com.cn/product/info-53.html"
+    },
+    "dims": { "w": 40, "h": 40, "d": 6000, "source": "APAS P8-4040 产品技术页 官方（40×40 mm，定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-P8-4080",
+    "model": "P8-4080",
+    "category": "工业铝型材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "profile",
+      "section": "40×80",
+      "slot": 8,
+      "weightPerMeter": 3.5,
+      "inertia": "Ix 20.12 / Iy 77.56 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "material": "Al 6063-T5",
+      "数据来源": "APAS P8-4080 产品技术页（官方）https://www.apas.com.cn/product/info-41.html"
+    },
+    "dims": { "w": 40, "h": 80, "d": 6000, "source": "APAS P8-4080 产品技术页 官方（40×80 mm，定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-P10-4545",
+    "model": "P10-4545",
+    "category": "工业铝型材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "profile",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": 2.5,
+      "inertia": "Ix 16.02 / Iy 16.02 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "material": "Al 6063-T5",
+      "数据来源": "APAS P10-4545 产品技术页（官方）https://www.apas.com.cn/product/info-64.html"
+    },
+    "dims": { "w": 45, "h": 45, "d": 6000, "source": "APAS P10-4545 产品技术页 官方（45×45 mm，定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-P10-4590",
+    "model": "P10-4590",
+    "category": "工业铝型材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "profile",
+      "section": "45×90",
+      "slot": 10,
+      "weightPerMeter": 4.5,
+      "inertia": "Ix 28.24 / Iy 114.05 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "material": "Al 6063-T5",
+      "数据来源": "APAS P10-4590 产品技术页（官方）https://www.apas.com.cn/product/info-56.html"
+    },
+    "dims": { "w": 45, "h": 90, "d": 6000, "source": "APAS P10-4590 产品技术页 官方（45×90 mm，定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-P8-8080",
+    "model": "P8-8080",
+    "category": "工业铝型材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "profile",
+      "section": "80×80",
+      "slot": 8,
+      "weightPerMeter": 5.8,
+      "inertia": "Ix 135.28 / Iy 135.28 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "material": "Al 6063-T5",
+      "数据来源": "APAS P8-8080 产品技术页（官方）https://www.apas.com.cn/product/info-32.html"
+    },
+    "dims": { "w": 80, "h": 80, "d": 6000, "source": "APAS P8-8080 产品技术页 官方（80×80 mm，定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-CE-SB4040-8",
+    "model": "CE-SB4040-8",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "铸铝",
+      "数据来源": "APAS 角件 40 系列产品技术页（官方）https://www.apas.com.cn/product/info-82.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 40, "h": 40, "d": 35, "source": "APAS 角件 40 系列产品尺寸表 官方（L35×H40）" }
+  },
+  {
+    "id": "APAS-CE-SB8080-8",
+    "model": "CE-SB8080-8",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "80×80",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "铸铝",
+      "数据来源": "APAS 大角件 40 系列产品技术页（官方）https://www.apas.com.cn/product/info-80.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 78, "h": 78, "d": 78, "source": "APAS 大角件 40 系列产品尺寸表 官方（78×78×78）" }
+  },
+  {
+    "id": "APAS-CE-SB4545-10",
+    "model": "CE-SB4545-10",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "铸铝",
+      "数据来源": "APAS 角件 45 系列产品技术页（官方）https://www.apas.com.cn/product/info-79.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 42, "h": 42, "d": 42, "source": "APAS 角件 45 系列产品尺寸表 官方（长高 42 mm）" }
+  },
+  {
+    "id": "APAS-CE-SB4590-10",
+    "model": "CE-SB4590-10",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "45×90",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "铸铝",
+      "数据来源": "APAS 强力角件 45 系列产品技术页（官方）https://www.apas.com.cn/product/info-78.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 88, "h": 42, "d": 42, "source": "APAS 强力角件 45 系列产品尺寸表 官方（L88×W42）" }
+  },
+  {
+    "id": "APAS-CE-BJ20-8-40",
+    "model": "CE-BJ20-8-40",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "thread": "M8",
+      "数据来源": "APAS 内置连接件 40 系列产品技术页（官方）https://www.apas.com.cn/product/info-73.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 20, "h": 17, "d": 20, "source": "APAS 内置连接件 40 系列产品尺寸表 官方（Ø20 孔深 17）" }
+  },
+  {
+    "id": "APAS-CE-BJ20-10-45",
+    "model": "CE-BJ20-10-45",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "thread": "M8",
+      "数据来源": "APAS 内置连接件 45 系列产品技术页（官方）https://www.apas.com.cn/product/info-72.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 20, "h": 17, "d": 20, "source": "APAS 内置连接件 45 系列产品尺寸表 官方（Ø20 孔深 17）" }
+  },
+  {
+    "id": "APAS-CE-TN6-8-40",
+    "model": "CE-TN6-8-40",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "thread": "M6",
+      "数据来源": "APAS T 型螺母 40 系列产品技术页（官方）https://www.apas.com.cn/product/info-135.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 8, "h": 6, "d": 16, "source": "APAS T 型螺母 40 系列产品页 官方" }
+  },
+  {
+    "id": "APAS-CE-TN8-10-45",
+    "model": "CE-TN8-10-45",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "thread": "M8",
+      "数据来源": "APAS T 型螺母 45 系列产品技术页（官方）https://www.apas.com.cn/product/info-134.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 10, "h": 6, "d": 18, "source": "APAS T 型螺母 45 系列产品页 官方" }
+  },
+  {
+    "id": "APAS-EC-4040-8",
+    "model": "EC-4040-8",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "尼龙",
+      "数据来源": "APAS 端面盖板产品页（官方）https://www.apas.com.cn/product/info-128.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 40, "h": 40, "d": 6, "source": "APAS 端面盖板产品页 官方" }
+  },
+  {
+    "id": "APAS-EC-4545-10",
+    "model": "EC-4545-10",
+    "category": "连接件",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "bracket",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "material": "尼龙",
+      "数据来源": "APAS 端面盖板产品页（官方）https://www.apas.com.cn/product/info-128.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 45, "h": 45, "d": 6, "source": "APAS 端面盖板产品页 官方" }
+  },
+  {
+    "id": "APAS-GUARD-MESH-40",
+    "model": "GUARD-MESH-40",
+    "category": "防护板材",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "panel",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": 1800,
+      "mesh": "50×50 mm 钢丝网",
+      "数据来源": "APAS 围栏与防护系统产品页（官方）https://www.apas.com.cn/product/list-47.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 1000, "h": 1800, "d": 40, "source": "APAS 围栏与防护系统产品页 官方（1000×1800 网框）" }
+  },
+  {
+    "id": "PMMA-CL-5-1000-2000",
+    "model": "PMMA-CL-5-1000-2000",
+    "category": "防护板材",
+    "vendor": "通用板材",
+    "specs": {
+      "type": "panel",
+      "section": "5 mm",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": 2000,
+      "material": "透明亚克力 PMMA",
+      "数据来源": "未核实（通用板材规格，未锁定厂商技术手册）"
+    },
+    "dims": { "w": 1000, "h": 2000, "d": 5, "source": "未核实（通用板材规格）" }
+  },
+  {
+    "id": "ACP-3-1220-2440",
+    "model": "ACP-3-1220-2440",
+    "category": "防护板材",
+    "vendor": "通用板材",
+    "specs": {
+      "type": "panel",
+      "section": "3 mm",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": 2440,
+      "material": "铝塑复合板",
+      "数据来源": "未核实（通用板材规格，未锁定厂商技术手册）"
+    },
+    "dims": { "w": 1220, "h": 2440, "d": 3, "source": "未核实（通用板材规格）" }
+  },
+  {
+    "id": "APAS-CE-FW40D",
+    "model": "CE-FW40D",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "caster",
+      "section": "40D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 100,
+      "length": "",
+      "wheelDiameter": "40 mm",
+      "数据来源": "APAS 福马轮产品技术页（官方）https://www.apas.com.cn/product/info-154.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 63, "h": 70, "d": 40, "source": "APAS 福马轮产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-FW50D",
+    "model": "CE-FW50D",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "caster",
+      "section": "50D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 140,
+      "length": "",
+      "wheelDiameter": "50 mm",
+      "数据来源": "APAS 福马轮产品技术页（官方）https://www.apas.com.cn/product/info-154.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 75, "h": 84, "d": 50, "source": "APAS 福马轮产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-FW60D",
+    "model": "CE-FW60D",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "caster",
+      "section": "60D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 200,
+      "length": "",
+      "wheelDiameter": "60 mm",
+      "数据来源": "APAS 福马轮产品技术页（官方）https://www.apas.com.cn/product/info-154.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 90, "h": 105, "d": 60, "source": "APAS 福马轮产品尺寸表 官方" }
+  },
+  {
+    "id": "ITEM-670-18",
+    "model": "0.0.670.18",
+    "category": "脚轮与地脚",
+    "vendor": "item24",
+    "specs": {
+      "type": "caster",
+      "section": "D125",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 550,
+      "length": "",
+      "wheelDiameter": "125 mm",
+      "数据来源": "item24 Castor D125 swivel heavy-duty 产品技术页（官方）https://www.item24.com/en-de/castor-d125-swivel-heavy-duty-48838/（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 140, "h": 155, "d": 110, "source": "item24 Castor D125 heavy-duty 产品技术页 官方（连接板 140×110）" }
+  },
+  {
+    "id": "BLICKLE-HRLK-SPO-75G",
+    "model": "HRLK-SPO 75G",
+    "category": "脚轮与地脚",
+    "vendor": "Blickle",
+    "specs": {
+      "type": "caster",
+      "section": "75×32",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 300,
+      "length": "",
+      "wheelDiameter": "75 mm",
+      "mountingPlate": "100×85 mm",
+      "totalHeight": "118 mm",
+      "数据来源": "Blickle HRLK-SPO 75G 水平调节脚轮产品技术页（官方）https://www.blickle.com/product/hrlk-spo-75g-853835（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 100, "h": 118, "d": 85, "source": "Blickle HRLK-SPO 75G 产品技术页 官方（安装板 100×85，总高 118）" }
+  },
+  {
+    "id": "APAS-CE-FT8-50-50",
+    "model": "CE-FT8*50-50",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "foot",
+      "section": "50D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 500,
+      "length": "",
+      "thread": "M8",
+      "数据来源": "APAS 可调蹄脚产品技术页（官方）https://www.apas.com.cn/product/info-151.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 50, "h": 83.5, "d": 50, "source": "APAS 可调蹄脚产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-FT10-50-50",
+    "model": "CE-FT10*50-50",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "foot",
+      "section": "50D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 600,
+      "length": "",
+      "thread": "M10",
+      "数据来源": "APAS 可调蹄脚产品技术页（官方）https://www.apas.com.cn/product/info-151.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 50, "h": 83.5, "d": 50, "source": "APAS 可调蹄脚产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-FT12-100-80",
+    "model": "CE-FT12*100-80",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "foot",
+      "section": "80D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 1200,
+      "length": "",
+      "thread": "M12",
+      "数据来源": "APAS 可调蹄脚产品技术页（官方）https://www.apas.com.cn/product/info-151.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 80, "h": 131, "d": 80, "source": "APAS 可调蹄脚产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-FT16-140-100",
+    "model": "CE-FT16*140-100",
+    "category": "脚轮与地脚",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "foot",
+      "section": "100D",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": 1600,
+      "length": "",
+      "thread": "M16",
+      "数据来源": "APAS 可调蹄脚产品技术页（官方）https://www.apas.com.cn/product/info-151.html（米重/惯性矩未核实）"
+    },
+    "dims": { "w": 100, "h": 190, "d": 100, "source": "APAS 可调蹄脚产品尺寸表 官方" }
+  },
+  {
+    "id": "APAS-CE-H4040-8",
+    "model": "CE-H4040-8",
+    "category": "门与把手",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "door",
+      "section": "40×40",
+      "slot": 8,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "component": "安全门铰链",
+      "数据来源": "APAS 尼龙合页产品技术页（官方）https://www.apas.com.cn/product/info-197.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 61, "h": 49, "d": 11, "source": "APAS 尼龙合页产品尺寸表 官方（4040）" }
+  },
+  {
+    "id": "APAS-CE-H4545-10",
+    "model": "CE-H4545-10",
+    "category": "门与把手",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "door",
+      "section": "45×45",
+      "slot": 10,
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "component": "安全门铰链",
+      "数据来源": "APAS 尼龙合页产品技术页（官方）https://www.apas.com.cn/product/info-197.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 70, "h": 50, "d": 10, "source": "APAS 尼龙合页产品尺寸表 官方（4545）" }
+  },
+  {
+    "id": "APAS-P8-DL6290",
+    "model": "P8-DL6290",
+    "category": "门与把手",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "door",
+      "section": "62×90",
+      "slot": 8,
+      "weightPerMeter": 1.84,
+      "inertia": "Ix 31.5 / Iy 85.56 cm⁴",
+      "loadRating": "",
+      "length": 6000,
+      "component": "铝型材门框/滑门型材",
+      "数据来源": "APAS 滑门型材 P8-DL6290 产品技术页（官方）https://www.apas.com.cn/product/info-180.html（承载未核实）"
+    },
+    "dims": { "w": 62, "h": 90, "d": 6000, "source": "APAS 滑门型材 P8-DL6290 产品技术页 官方（定尺 6000 mm）" }
+  },
+  {
+    "id": "APAS-CE-MS2634",
+    "model": "CE-MS2634",
+    "category": "门与把手",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "door",
+      "section": "门边",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": "",
+      "component": "直角回转门锁",
+      "material": "铸锌、镀铬",
+      "数据来源": "APAS 直角回转锁产品技术页（官方）https://www.apas.com.cn/product/info-192.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 40, "h": 60, "d": 20, "source": "未核实（门锁外形按系列安装图，具体安装尺寸未核实）" }
+  },
+  {
+    "id": "APAS-BC210-1000",
+    "model": "BC210-1000",
+    "category": "输送段",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "conveyor",
+      "section": "BC210",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": 1000,
+      "conveyorType": "皮带输送段",
+      "beltWidth": "200 mm",
+      "数据来源": "APAS BC210 皮带线产品页（官方）https://www.apas.com.cn/product/list-87.html（米重/惯性矩/承载未核实）"
+    },
+    "dims": { "w": 1000, "h": 200, "d": 500, "source": "APAS BC210 皮带线产品页 官方（1000 mm 输送段）" }
+  },
+  {
+    "id": "APAS-FLEX-CHAIN-1000",
+    "model": "FLEX-CHAIN-1000",
+    "category": "输送段",
+    "vendor": "APAS 艾普斯",
+    "specs": {
+      "type": "conveyor",
+      "section": "柔性链板",
+      "slot": "",
+      "weightPerMeter": "",
+      "inertia": "",
+      "loadRating": "",
+      "length": 1000,
+      "conveyorType": "倍速链/柔性链板段",
+      "数据来源": "未核实（APAS 柔性链板线产品页未提供可核实的米重/惯性矩/承载）"
+    },
+    "dims": { "w": 1000, "h": 150, "d": 400, "source": "未核实（通用 1000 mm 倍速链段外形）" }
+  }
+]
