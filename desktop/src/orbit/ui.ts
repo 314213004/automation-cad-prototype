@@ -37,7 +37,10 @@ import {
   STROKE_TOLERANCE,
   strokeFromRodPath
 } from './proto-sync.ts';
-import { insertedIdsFromTree, nodeForPart, resolveSelection, type ProtoTreeNode } from './selection.ts';
+import { findTreeNode, insertedIdsFromTree, nodeForPart, resolveSelection, type ProtoTreeNode } from './selection.ts';
+import { cloneOverrides, parseProtoCounts, UnifiedHistory, type HistorySnapshot, type OrbitEdit } from './history.ts';
+import { loadOrbit, ORBIT_STORE_KEY, saveOrbit, type StorageLike } from './persist.ts';
+import type { ScreenRect } from './marquee.ts';
 import type { HighlightState } from './three-scene.ts';
 import { OrbitView, type OrbitViewState, type Projection } from './view.ts';
 
@@ -68,7 +71,11 @@ export interface OrbitPublicState {
   interference: Array<{ a: string; b: string; severity: string }>;
   views: Partial<Record<StageKind, OrbitViewState | null>>;
   rebuilds: number;
+  history: HistorySnapshot;
+  store: { key: string; restored: boolean; reason: string | null; saves: number };
 }
+
+export type HistoryStepResult = { ok: true; by: 'orbit' | 'proto'; label: string } | { ok: false; message: string };
 
 export interface OrbitHandle {
   state(): OrbitPublicState;
@@ -79,6 +86,14 @@ export interface OrbitHandle {
   setParam(partId: string, key: string, value: unknown): EditResult;
   resetPart(partId: string): void;
   sync(): void;
+  /** 走与 Ctrl+Z / Ctrl+Y 相同的合成时间线：栈顶是 3D 编辑就撤 3D，否则交给原型 */
+  undo(): HistoryStepResult;
+  redo(): HistoryStepResult;
+  /** 多选（与原型框选同一条路径：写原型 state.multi，属性面板显示「N 个对象」） */
+  selectMany(partIds: string[], stage?: StageKind): string[];
+  /** WebGL 框选：rect 为舞台内归一化坐标 0..1；降级模式返回 null */
+  marquee(rect: { x0: number; y0: number; x1: number; y1: number }, stage?: StageKind): string[] | null;
+  setMarqueeMode(on: boolean, stage?: StageKind): boolean;
 }
 
 declare global {
@@ -112,7 +127,11 @@ let rebuilds = 0;
 let rebuildQueued = false;
 let highlightQueued = false;
 let editTimer = 0;
+let pendingEdit: HTMLInputElement | null = null;
 let handle: OrbitHandle | null = null;
+const history = new UnifiedHistory();
+let protoCountsSeen = false;
+let store = { key: ORBIT_STORE_KEY, restored: false, reason: null as string | null, saves: 0 };
 
 function protoApi(): ProtoApiLike | undefined {
   return (window as unknown as { ProtoApi?: ProtoApiLike }).ProtoApi;
@@ -327,6 +346,7 @@ function updateHuds(): void {
     slot.bar?.querySelectorAll<HTMLElement>('[data-orbit-proj]').forEach((button) => {
       button.classList.toggle('is-active', button.dataset.orbitProj === state.projection);
     });
+    slot.bar?.querySelector<HTMLElement>('[data-orbit-marquee]')?.classList.toggle('is-active', state.marqueeMode);
     const chip = slot.bar?.querySelector<HTMLElement>('[data-orbit-hits]');
     if (chip) {
       chip.hidden = slot.kind !== 'check';
@@ -388,6 +408,7 @@ function buildBar(slot: StageSlot): HTMLElement {
     '<button type="button" class="orbit-btn" data-orbit-proj="orthographic" title="正交投影">正交</button>' +
     '<span class="orbit-sep"></span>' +
     '<button type="button" class="orbit-btn" data-orbit-fit title="全部可见 (F)">适合</button>' +
+    '<button type="button" class="orbit-btn" data-orbit-marquee title="框选：左键拖拽矩形多选（不开时 Shift+拖拽临时框选）">框选</button>' +
     '<span class="orbit-chip" data-orbit-hits hidden></span>';
   bar.addEventListener('click', (event) => {
     const target = (event.target as HTMLElement).closest<HTMLElement>('button');
@@ -398,6 +419,7 @@ function buildBar(slot: StageSlot): HTMLElement {
     else if (target.dataset.orbitProj === 'perspective' || target.dataset.orbitProj === 'orthographic') {
       slot.view.setProjection(target.dataset.orbitProj);
     } else if (target.dataset.orbitFit !== undefined) slot.view.fitAll();
+    else if (target.dataset.orbitMarquee !== undefined) slot.view.setMarqueeMode(!slot.view.state().marqueeMode);
     updateHuds();
   });
   ['pointerdown', 'pointerup'].forEach((type) => bar.addEventListener(type, (event) => event.stopPropagation()));
@@ -476,38 +498,345 @@ function injectGeometryGroup(): void {
   body.appendChild(section);
 }
 
-function refreshGeometryReadouts(): void {
+function refreshGeometryReadouts(force = false): void {
   document.querySelectorAll<HTMLElement>('[data-orbit-bbox]').forEach((el) => {
     el.innerHTML = `${bboxText(el.dataset.orbitBbox ?? '')} <i class="ro-unit">mm</i>`;
   });
   document.querySelectorAll<HTMLInputElement>('input[data-orbit-part]').forEach((input) => {
-    if (document.activeElement === input) return;
+    if (!force && document.activeElement === input) return;
     const value = effectiveParams(input.dataset.orbitPart ?? '', inputs())[input.dataset.orbitKey ?? ''];
     if (value !== undefined && Number(input.value) !== value) input.value = fmt(value);
   });
 }
 
-function commitEdit(partId: string, key: string, value: unknown): EditResult {
+function partLabel(partId: string): string {
+  const node = findTreeNode(tree, nodeForPart(tree, partId) ?? partId);
+  return node?.label ?? partId;
+}
+
+function commitEdit(partId: string, key: string, value: unknown, merge = false): EditResult {
   tree = readTree();
   readInserted();
+  const before = cloneOverrides(overrides);
+  const prev = effectiveParams(partId, inputs())[key];
   const result = applyParamEdit(inputs(), partId, key, value);
   if (result.ok) {
     overrides = result.overrides;
+    const def = paramSchema(partId, inputs()).find((item) => item.key === key);
+    const edit: OrbitEdit = {
+      label: `3D ${partLabel(partId)}${def?.label ?? key} ${prev === undefined ? '—' : fmt(prev)}→${fmt(result.value)}`,
+      before,
+      after: cloneOverrides(overrides),
+      at: Date.now(),
+      ...(merge ? { mergeKey: `${partId}::${key}` } : {})
+    };
+    syncProtoCounts();
+    history.recordOrbit(edit);
+    persist();
     rebuild();
+    syncHistoryUi();
   }
   return result;
 }
 
+function resetPart(partId: string): void {
+  tree = readTree();
+  readInserted();
+  const before = cloneOverrides(overrides);
+  overrides = resetPartOverrides(overrides, partId);
+  syncProtoCounts();
+  history.recordOrbit({ label: `3D ${partLabel(partId)}恢复默认`, before, after: cloneOverrides(overrides), at: Date.now() });
+  persist();
+  rebuild();
+  syncHistoryUi();
+}
+
+/* ------------------------------------------------------------- 撤销 / 重做（与原型合成一条时间线） */
+
+function storage(): StorageLike | null {
+  try {
+    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+function persist(): void {
+  if (saveOrbit(storage(), overrides)) store.saves += 1;
+}
+
+function restoreFromStore(): void {
+  const loaded = loadOrbit(storage());
+  store = { ...store, restored: loaded.ok && Object.keys(loaded.overrides).length > 0, reason: loaded.ok ? null : loaded.reason };
+  if (loaded.ok) overrides = loaded.overrides;
+  else console.warn('[orbit] 3D 几何未从工程存储恢复：', loaded.reason);
+}
+
+/**
+ * 按钮提示里原型自己写的那份（3D 栈顶时提示被换成 3D 文案，原型的原文暂存在 data-proto-title；
+ * 原型刷新时会重写 title，与上次 3D 写入的不同即视为原型的新原文）。
+ */
+function protoTitle(btn: HTMLElement | null): string | null {
+  if (!btn) return null;
+  const mine = btn.dataset.orbitTitle;
+  if (mine !== undefined && btn.title === mine) return btn.dataset.protoTitle ?? '';
+  btn.dataset.protoTitle = btn.title;
+  return btn.title;
+}
+
+function readProtoCounts(): ReturnType<typeof parseProtoCounts> {
+  return parseProtoCounts(
+    document.getElementById('stUndoText')?.textContent,
+    document.getElementById('stRedoText')?.textContent,
+    protoTitle(document.getElementById('stUndo')),
+    protoTitle(document.getElementById('stRedo'))
+  );
+}
+
+function syncProtoCounts(): void {
+  const counts = readProtoCounts();
+  if (!counts) return;
+  if (!protoCountsSeen) {
+    protoCountsSeen = true;
+    history.resetProto(counts);
+  } else {
+    history.observeProto(counts);
+  }
+}
+
+let msgTimer = 0;
+let toastTimer = 0;
+/** 与原型 statusMsg / toast 同一处显示（原型函数不导出，直接写同一组元素）。 */
+function notify(text: string, tone: '' | 'warn' = ''): void {
+  const msg = document.getElementById('stMsg');
+  if (msg) {
+    msg.textContent = text;
+    msg.hidden = false;
+    window.clearTimeout(msgTimer);
+    msgTimer = window.setTimeout(() => { msg.hidden = true; }, 3200);
+  }
+  const toast = document.getElementById('toast');
+  if (toast) {
+    toast.dataset.tone = tone;
+    toast.innerHTML = `<svg viewBox="0 0 16 16" class="ico"><path d="M3.5 8.5l3 3 6-7"/></svg><span></span>`;
+    const span = toast.querySelector('span');
+    if (span) span.textContent = text;
+    toast.classList.add('is-on');
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toast.classList.remove('is-on'), 2200);
+  }
+}
+
+function flushPendingEdit(): void {
+  if (!pendingEdit) return;
+  window.clearTimeout(editTimer);
+  const input = pendingEdit;
+  pendingEdit = null;
+  runGeometryInput(input);
+}
+
+function applyHistoryOverrides(next: ParamOverrides): void {
+  overrides = cloneOverrides(next);
+  persist();
+  rebuild();
+  refreshGeometryReadouts(true);
+  document.querySelectorAll<HTMLInputElement>('[data-orbit-geom] input.is-invalid').forEach((input) => {
+    input.classList.remove('is-invalid');
+    input.title = '';
+  });
+  document.querySelectorAll<HTMLElement>('[data-orbit-geom] [data-orbit-msg]').forEach((msg) => { msg.textContent = ''; });
+}
+
+function orbitUndo(): HistoryStepResult {
+  const edit = history.takeOrbitUndo();
+  if (!edit) return { ok: false, message: '没有可撤销的 3D 编辑' };
+  applyHistoryOverrides(edit.before);
+  notify(`已撤销：${edit.label}`);
+  syncHistoryUi();
+  return { ok: true, by: 'orbit', label: edit.label };
+}
+
+function orbitRedo(): HistoryStepResult {
+  const edit = history.takeOrbitRedo();
+  if (!edit) return { ok: false, message: '没有可重做的 3D 编辑' };
+  applyHistoryOverrides(edit.after);
+  notify(`已重做：${edit.label}`);
+  syncHistoryUi();
+  return { ok: true, by: 'orbit', label: edit.label };
+}
+
+function protoStep(kind: 'undo' | 'redo'): HistoryStepResult {
+  const api = (window as unknown as { ProtoApi?: { undo?: () => unknown; redo?: () => unknown } }).ProtoApi;
+  const fn = kind === 'undo' ? api?.undo : api?.redo;
+  if (typeof fn !== 'function') return { ok: false, message: '原型撤销接口不可用' };
+  const result = fn() as { ok?: boolean; label?: string; message?: string } | undefined;
+  syncProtoCounts();
+  syncHistoryUi();
+  return result?.ok ? { ok: true, by: 'proto', label: result.label ?? '' } : { ok: false, message: result?.message ?? '原型撤销失败' };
+}
+
+function undoStep(): HistoryStepResult {
+  syncProtoCounts();
+  flushPendingEdit();
+  const next = history.nextUndo();
+  if (next === 'orbit') return orbitUndo();
+  if (next === 'proto') return protoStep('undo');
+  return { ok: false, message: '没有可撤销的操作' };
+}
+
+function redoStep(): HistoryStepResult {
+  syncProtoCounts();
+  flushPendingEdit();
+  const next = history.nextRedo();
+  if (next === 'orbit') return orbitRedo();
+  if (next === 'proto') return protoStep('redo');
+  return { ok: false, message: '没有可重做的操作' };
+}
+
+/**
+ * 状态栏撤销/重做按钮：原型按自己的计数禁用按钮；3D 有可撤销项时保持可点，
+ * 提示文案换成栈顶真实动作，并在按钮里追加「3D n」徽标（原型的「撤销 N」文本不动，用于计数对账）。
+ */
+function syncHistoryUi(): void {
+  const undoBtn = document.getElementById('stUndo') as HTMLButtonElement | null;
+  const redoBtn = document.getElementById('stRedo') as HTMLButtonElement | null;
+  const counts = history.orbitCounts();
+  const apply = (btn: HTMLButtonElement | null, enabled: boolean, title: string | null, badge: number): void => {
+    if (!btn) return;
+    if (btn.disabled !== !enabled) btn.disabled = !enabled;
+    if (title !== null) {
+      protoTitle(btn);
+      if (btn.title !== title) btn.title = title;
+      btn.dataset.orbitTitle = title;
+    } else if (btn.dataset.orbitTitle !== undefined) {
+      // 栈顶回到原型动作：换回暂存的原型原文。
+      if (btn.title === btn.dataset.orbitTitle) btn.title = btn.dataset.protoTitle ?? '';
+      delete btn.dataset.orbitTitle;
+    }
+    let chip = btn.querySelector<HTMLElement>('.orbit-hist');
+    if (badge > 0) {
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'orbit-hist';
+        btn.appendChild(chip);
+      }
+      const text = `3D ${badge}`;
+      if (chip.textContent !== text) chip.textContent = text;
+    } else {
+      chip?.remove();
+    }
+  };
+  const nextUndo = history.nextUndo();
+  const nextRedo = history.nextRedo();
+  const undoEdit = history.peekOrbitUndo();
+  const redoEdit = history.peekOrbitRedo();
+  apply(undoBtn, nextUndo !== null, undoEdit ? `撤销：${undoEdit.label}（Ctrl+Z）` : null, counts.undo);
+  apply(redoBtn, nextRedo !== null,
+    redoEdit ? `重做：${redoEdit.label}（Ctrl+Y / Ctrl+Shift+Z）` : (nextRedo === null ? '没有可重做的操作' : null), counts.redo);
+}
+
+function bindHistory(): void {
+  syncProtoCounts();
+  window.addEventListener('keydown', (event) => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    const key = event.key.toLowerCase();
+    const isUndo = key === 'z' && !event.shiftKey;
+    const isRedo = (key === 'z' && event.shiftKey) || key === 'y';
+    if (!isUndo && !isRedo) return;
+    syncProtoCounts();
+    flushPendingEdit();
+    const next = isUndo ? history.nextUndo() : history.nextRedo();
+    // 'proto'：放行给原型自己的快捷键处理（保留原型的提示与合并逻辑），计数变化后再对账。
+    if (next === 'proto') return;
+    if (next === null && (isUndo || !history.protoRedoBlocked())) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (next === 'orbit') {
+      if (isUndo) orbitUndo();
+      else orbitRedo();
+    } else {
+      notify('没有可重做的操作', 'warn');
+    }
+  }, true);
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest<HTMLElement>('#stUndo, #stRedo');
+    if (!button) return;
+    syncProtoCounts();
+    flushPendingEdit();
+    const isUndo = button.id === 'stUndo';
+    const next = isUndo ? history.nextUndo() : history.nextRedo();
+    if (next === 'proto') return;
+    if (next === null && (isUndo || !history.protoRedoBlocked())) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (next === 'orbit') {
+      if (isUndo) orbitUndo();
+      else orbitRedo();
+    } else {
+      notify('没有可重做的操作', 'warn');
+    }
+  }, true);
+  const observeTarget = document.querySelector('.statusbar') ?? document.getElementById('stUndo')?.parentElement ?? null;
+  if (observeTarget) {
+    new MutationObserver(() => {
+      syncProtoCounts();
+      syncHistoryUi();
+    }).observe(observeTarget, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['title', 'disabled'] });
+  }
+  syncHistoryUi();
+}
+
+/* ------------------------------------------------------------- 框选 / 多选 */
+
+/**
+ * 把多选写回原型：原型 `state.multi` 只能由它自己的框选设置。做法是临时隐藏（display:none）
+ * 隐形 SVG 里不在命中集里的 `g.part`（其包围矩形变成 0），再在舞台上派发一次覆盖整个舞台的
+ * 合成拖拽，原型框选只会命中剩下的零件 → `state.multi`、高亮、「N 个对象」、状态栏提示、
+ * Esc 清除全部沿用原型逻辑。派发是同步的，结束后立即恢复样式。
+ */
+function protoMarquee(slot: StageSlot, ids: readonly string[]): string[] {
+  const r = slot.stage.getBoundingClientRect();
+  if (!r.width || !r.height) return [];
+  const parts = Array.from(slot.svg.querySelectorAll<SVGGElement>('g.part'));
+  const saved = parts.map((g) => [g, g.style.display] as const);
+  parts.forEach((g) => { if (!ids.includes(g.dataset.part ?? '')) g.style.display = 'none'; });
+  try {
+    const at = (x: number, y: number): PointerEventInit => ({
+      bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: 1, pointerId: 9173, view: window
+    });
+    slot.stage.dispatchEvent(new PointerEvent('pointerdown', at(r.left + 1, r.top + 1)));
+    slot.stage.dispatchEvent(new PointerEvent('pointermove', at(r.right - 1, r.bottom - 1)));
+    slot.stage.dispatchEvent(new PointerEvent('pointerup', at(r.right - 1, r.bottom - 1)));
+  } finally {
+    saved.forEach(([g, display]) => { g.style.display = display; });
+  }
+  syncHighlight();
+  return svgIds(slot.svg, 'sel');
+}
+
+function onMarquee(slot: StageSlot, rect: ScreenRect): string[] {
+  const ids = slot.view ? slot.view.partsInClientRect(rect) : [];
+  protoMarquee(slot, ids);
+  return ids;
+}
+
+function runGeometryInput(input: HTMLInputElement): void {
+  const partId = input.dataset.orbitPart ?? '';
+  const key = input.dataset.orbitKey ?? '';
+  const result = commitEdit(partId, key, input.value, true);
+  const msg = input.closest('[data-orbit-geom]')?.querySelector<HTMLElement>('[data-orbit-msg]');
+  input.classList.toggle('is-invalid', !result.ok);
+  input.title = result.ok ? '' : result.message;
+  if (msg) msg.textContent = result.ok ? '' : result.message;
+}
+
 function handleGeometryInput(input: HTMLInputElement): void {
   window.clearTimeout(editTimer);
+  pendingEdit = input;
   editTimer = window.setTimeout(() => {
-    const partId = input.dataset.orbitPart ?? '';
-    const key = input.dataset.orbitKey ?? '';
-    const result = commitEdit(partId, key, input.value);
-    const msg = input.closest('[data-orbit-geom]')?.querySelector<HTMLElement>('[data-orbit-msg]');
-    input.classList.toggle('is-invalid', !result.ok);
-    input.title = result.ok ? '' : result.message;
-    if (msg) msg.textContent = result.ok ? '' : result.message;
+    pendingEdit = null;
+    runGeometryInput(input);
   }, 180);
 }
 
@@ -523,7 +852,9 @@ function mountSlot(kind: StageKind, stage: HTMLElement, svg: SVGSVGElement, reas
       drawAxes(slot);
       positionCallout(slot);
       updateHuds();
-    }
+    },
+    onMarquee: (rect) => { onMarquee(slot, rect); },
+    marqueeBox: stage.querySelector<HTMLElement>('.marquee')
   });
   if (!created.ok) {
     slot.fallbackReason = created.reason;
@@ -631,8 +962,10 @@ export function initOrbitView(): OrbitHandle {
       .observe(callout, { attributes: true, attributeFilter: ['style', 'hidden'] });
   }
   bindDocument();
+  restoreFromStore();
   rebuild();
   injectGeometryGroup();
+  bindHistory();
 
   const mode = (): OrbitPublicState['mode'] => {
     const live = slots.filter((slot) => slot.view).length;
@@ -656,7 +989,9 @@ export function initOrbitView(): OrbitHandle {
       overrides: JSON.parse(JSON.stringify(overrides)) as ParamOverrides,
       interference: hits.map((hit) => ({ a: hit.a, b: hit.b, severity: hit.severity })),
       views: Object.fromEntries(slots.map((slot) => [slot.kind, slot.view ? slot.view.state() : null])),
-      rebuilds
+      rebuilds,
+      history: history.snapshot(),
+      store: { ...store }
     }),
     setView: (view, stage) => {
       const slot = activeSlot(stage);
@@ -683,11 +1018,30 @@ export function initOrbitView(): OrbitHandle {
       return slot ? dispatchToProto(slot, partId, 'click') : false;
     },
     setParam: (partId, key, value) => commitEdit(partId, key, value),
-    resetPart: (partId) => {
-      overrides = resetPartOverrides(overrides, partId);
-      rebuild();
+    resetPart: (partId) => resetPart(partId),
+    sync: () => rebuild(),
+    undo: () => undoStep(),
+    redo: () => redoStep(),
+    selectMany: (partIds, stage = 'assembly') => {
+      const slot = slots.find((item) => item.kind === stage);
+      return slot ? protoMarquee(slot, partIds) : [];
     },
-    sync: () => rebuild()
+    marquee: (rect, stage = 'assembly') => {
+      const slot = slots.find((item) => item.kind === stage);
+      if (!slot?.view) return null;
+      const r = slot.view.canvas.getBoundingClientRect();
+      const px = (fx: number, fy: number): [number, number] => [r.left + fx * r.width, r.top + fy * r.height];
+      const [x0, y0] = px(rect.x0, rect.y0);
+      const [x1, y1] = px(rect.x1, rect.y1);
+      return onMarquee(slot, { left: Math.min(x0, x1), top: Math.min(y0, y1), right: Math.max(x0, x1), bottom: Math.max(y0, y1) });
+    },
+    setMarqueeMode: (on, stage = 'assembly') => {
+      const slot = slots.find((item) => item.kind === stage);
+      if (!slot?.view) return false;
+      slot.view.setMarqueeMode(on);
+      updateHuds();
+      return true;
+    }
   };
   Object.defineProperty(window, 'AutomationCadOrbit', {
     value: Object.freeze(handle),
