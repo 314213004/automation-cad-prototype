@@ -4,7 +4,15 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## 修复形态选型「越界预览」（2026-10-24，本轮）
+## 价格数据回填与成本覆盖率（2026-10-24，本轮）
+
+- 状态：✅ 完成；价格簿升级到 `schemaVersion: 2`，保留 v1 兼容；真实条目从 0 条提升到 **64 条**（另有 4 条 `EXAMPLE-*`，不参与统计/计价）。未 push、未提交。
+- 来源：西域 EHSY 公开商品页 63 条 + 供应商网 1 条；每条均记录可点击 `source`、`sourceType=distributor`、`checkedAt=2026-10-24`、`model`、`category`。西域条目标注含税（页面同时列 13% 未税价）；PNOZ s3 页面未标注税额，`taxIncluded=null` 并在 `note` 说明。
+- 案例覆盖：六工位 BOM 12 行中已计价 **9 行（75%）**，缺价从 9 行降到 **3 行**：`MS1H1-75B30CB`、`F3SG-4SRA0640-14`、`CP1E-N40DR-A`。`machine-case.json` 更新为材料 6654 / 电气 12283.91 / 人工 15552 / 合计 34489.91。
+- 成本模型：新增 `priceMeta { coveragePct, pricedCount, totalCount, missing, stale, unknownSource }`；`checkedAt` 严格超过 180 天才标过期，v1 缺 `sourceType/checkedAt` 的条目照常计价但标「来源不明」。方案卡显示「已计价 N/M 行（覆盖率 X%）、缺价 K 项、过期 L 项」。
+- 验收：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1550/1550**、`npm run smoke` 输出 `SMOKE_PRICEBOOK_OK items=64 caseCoverage=9/12`、`demo-doc.test.mjs` 4/4；15/16 号机型截图已重拍，方案卡显示 9/12 与 ¥34,489.91。新增 v1/v2 兼容、URL/来源类型/日期/税额校验、示例隔离、180 天边界、tiers、来源不明、覆盖率与案例 9/12 等断言；详见 [`PRICING.md`](PRICING.md)。
+
+## 修复形态选型「越界预览」（2026-10-24，上一轮）
 
 - 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1529/1529**（较上轮 +20）、`npm run smoke` 更新为 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`；未 push、未打包。
 - 缺陷：41 轮新增 8–12 工位形态后，`pickForm` 仍用**需求工位数**给所有候选算产能。`gantry-4`（4–4）被按 12 工位预演出 `109.09` 件/分钟，进入 `meeting` 池；`dial-12` 按真实 12 工位只有 `22.64` 件/分钟，最终按工位距离回退到越界的 `gantry-4`。

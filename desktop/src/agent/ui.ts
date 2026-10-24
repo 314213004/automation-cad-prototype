@@ -568,12 +568,33 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
   const labor = money(cost?.labor);
   const total = money(cost?.total);
   const missingCount = typeof cost?.missingCount === 'number' ? cost.missingCount : null;
+  const rawPriceMeta = typeof cost?.priceMeta === 'object' && cost.priceMeta !== null
+    && !Array.isArray(cost.priceMeta)
+    ? cost.priceMeta as Record<string, unknown>
+    : null;
+  const pricedCount = typeof rawPriceMeta?.pricedCount === 'number' ? rawPriceMeta.pricedCount : null;
+  const totalCount = typeof rawPriceMeta?.totalCount === 'number' ? rawPriceMeta.totalCount : null;
+  const coveragePct = typeof rawPriceMeta?.coveragePct === 'number' ? rawPriceMeta.coveragePct : null;
+  const staleCount = Array.isArray(rawPriceMeta?.stale) ? rawPriceMeta.stale.length : 0;
+  const unknownSourceCount = Array.isArray(rawPriceMeta?.unknownSource)
+    ? rawPriceMeta.unknownSource.length
+    : 0;
+  const coverage = coveragePct === null
+    ? '—'
+    : Number.isInteger(coveragePct)
+      ? String(coveragePct)
+      : coveragePct.toFixed(1);
+  const priceMetaText = pricedCount !== null && totalCount !== null && coveragePct !== null
+    ? `已计价 ${pricedCount}/${totalCount} 行（覆盖率 ${coverage}%）、缺价 ${missingCount ?? 0} 项、过期 ${staleCount} 项` +
+      `${unknownSourceCount > 0 ? `、来源不明 ${unknownSourceCount} 项` : ''}`
+    : null;
   const costLine = total
     ? `<div class="acp-machine-cost"><span>成本粗估（非报价）</span>` +
       `<span>材料 ${escapeHtml(material ?? '—')}</span>` +
       `<span>电气 ${escapeHtml(electrical ?? '—')}</span>` +
       `<span>人工 ${escapeHtml(labor ?? '—')}</span>` +
       `<span>合计 <b>${escapeHtml(total)}</b></span>` +
+      `${priceMetaText ? `<span class="acp-machine-cost-meta">${escapeHtml(priceMetaText)}</span>` : ''}` +
       `${missingCount !== null && missingCount > 0
         ? `<span class="acp-machine-cost-missing">${missingCount} 项缺价，合计为不完全统计</span>`
         : ''}</div>`

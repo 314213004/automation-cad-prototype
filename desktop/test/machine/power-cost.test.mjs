@@ -73,6 +73,42 @@ function design(overrides = {}) {
   };
 }
 
+function onePartDesign(partId, qty = 1) {
+  return {
+    config: { stations: [] },
+    form: { id: 'test', name: '测试', layout: 'single' },
+    bomDraft: {
+      items: [{ kind: 'electrical', name: '测试断路器', qty, partId, packId: 'iec-cn', role: 'other' }]
+    }
+  };
+}
+
+function costBook(items) {
+  return {
+    schemaVersion: 2,
+    currency: 'CNY',
+    updatedAt: '2026-10-24T00:00:00+08:00',
+    source: '测试价格簿',
+    items,
+    labor: { panelWiringPerPoint: 12, terminalPerWire: 1.5, assemblyHourly: 120 },
+    accessories: { dinRail35PerMeter: 18, wireDuctPerMeter: 22, wirePerMeter: { '2.5': 4.8 } }
+  };
+}
+
+function pricedItem(overrides = {}) {
+  return {
+    model: 'QF-TEST',
+    category: '断路器',
+    list: 100,
+    source: 'https://example.com/qf-test',
+    sourceType: 'distributor',
+    checkedAt: '2026-10-24',
+    taxIncluded: true,
+    note: '测试来源',
+    ...overrides
+  };
+}
+
 test('功率：220V 单相电流按 I=P/(U×cosφ)', () => {
   const result = power([{ role: 'other', qty: 1, ratedW: 1000 }], { voltage: '220VAC' });
   assert.ok(Math.abs(result.totalKw - 1) < 1e-9);
@@ -234,6 +270,139 @@ test('成本：缺价行不计入合计并计入 missingCount', () => {
   assert.equal(result.missingCount, 4);
   assert.ok(result.warnings.some((line) => /缺价/.test(line)));
   assert.equal(result.lines.find((line) => line.name === '定制夹具')?.subtotal, 0);
+});
+
+test('成本：priceMeta 统计覆盖行数与缺价名称/partId', () => {
+  const source = {
+    config: { stations: [] },
+    form: { id: 'test', name: '测试', layout: 'single' },
+    bomDraft: {
+      items: [
+        { kind: 'actuator', name: '气爪', qty: 2, partId: 'MHZ2-20D', packId: 'smc-cn', role: 'gripper' },
+        { kind: 'electrical', name: '伺服驱动器', qty: 1, partId: 'SV660PS5R5I', packId: 'iec-cn', role: 'servo' },
+        { kind: 'electrical', name: '伺服电机', qty: 1, partId: 'MS1H1-75B30CB', packId: 'iec-cn', role: 'servo' }
+      ]
+    }
+  };
+  const book = costBook({
+    'MHZ2-20D': pricedItem({ model: 'MHZ2-20D', category: '气爪' })
+  });
+  const result = estimateCost(source, { pricebook: book, pricing: DEFAULT_MACHINE_PRICING, now: '2026-10-24' });
+  assert.equal(result.priceMeta.totalCount, 3);
+  assert.equal(result.priceMeta.pricedCount, 1);
+  assert.equal(result.priceMeta.coveragePct, 33.3);
+  assert.deepEqual(result.priceMeta.missing, [
+    { partId: 'SV660PS5R5I', name: '伺服驱动器' },
+    { partId: 'MS1H1-75B30CB', name: '伺服电机' }
+  ]);
+});
+
+test('成本：checkedAt 恰好 180 天不标过期，超过 1 秒即标过期', () => {
+  const book = costBook({
+    'PART-QF': pricedItem({ checkedAt: '2026-04-27' })
+  });
+  const boundary = estimateCost(onePartDesign('PART-QF'), {
+    pricebook: book,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24T00:00:00+08:00'
+  });
+  assert.equal(boundary.priceMeta.stale.length, 0);
+  const stale = estimateCost(onePartDesign('PART-QF'), {
+    pricebook: book,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24T00:00:01+08:00'
+  });
+  assert.deepEqual(stale.priceMeta.stale, [
+    { partId: 'PART-QF', name: '测试断路器', checkedAt: '2026-04-27' }
+  ]);
+  assert.ok(stale.warnings.some((line) => /超过 180 天/.test(line)));
+});
+
+test('成本：v1 价格簿旧条目计价但标记来源不明', () => {
+  const book = {
+    schemaVersion: 1,
+    currency: 'CNY',
+    updatedAt: '2026-10-24T00:00:00+08:00',
+    source: '旧版价格簿',
+    items: { 'PART-QF': { list: 88, source: '旧目录价', updatedAt: '2026-09-01T00:00:00+08:00' } },
+    labor: { panelWiringPerPoint: 12, terminalPerWire: 1.5, assemblyHourly: 120 },
+    accessories: { dinRail35PerMeter: 18, wireDuctPerMeter: 22, wirePerMeter: { '2.5': 4.8 } }
+  };
+  const result = estimateCost(onePartDesign('PART-QF'), {
+    pricebook: book,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24'
+  });
+  assert.equal(result.priceMeta.pricedCount, 1);
+  assert.deepEqual(result.priceMeta.unknownSource, [{ partId: 'PART-QF', name: '测试断路器' }]);
+  assert.equal(result.priceMeta.stale.length, 0);
+  assert.ok(result.warnings.some((line) => /来源不明/.test(line)));
+});
+
+test('成本：v2 新条目有完整来源时不标来源不明', () => {
+  const book = costBook({ 'PART-QF': pricedItem() });
+  const result = estimateCost(onePartDesign('PART-QF'), {
+    pricebook: book,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24'
+  });
+  assert.equal(result.priceMeta.unknownSource.length, 0);
+  assert.equal(result.priceMeta.stale.length, 0);
+});
+
+test('成本：taxIncluded=null 的条目照常计价并保留说明', () => {
+  const book = costBook({
+    'PART-QF': pricedItem({ taxIncluded: null, note: '页面未标注税额' })
+  });
+  const result = estimateCost(onePartDesign('PART-QF'), {
+    pricebook: book,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24'
+  });
+  assert.equal(result.electrical, 100);
+  assert.equal(book.items['PART-QF'].taxIncluded, null);
+  assert.match(book.items['PART-QF'].note, /未标注/);
+});
+
+test('成本：tiers 按数量取满足条件的最高档', () => {
+  const book = costBook({
+    'PART-QF': pricedItem({
+      list: 100,
+      tiers: [{ minQty: 1, price: 100 }, { minQty: 5, price: 90 }, { minQty: 10, price: 80 }]
+    })
+  });
+  for (const [qty, unit] of [[1, 100], [4, 100], [5, 90], [9, 90], [10, 80], [20, 80]]) {
+    const result = estimateCost(onePartDesign('PART-QF', qty), {
+      pricebook: book,
+      pricing: DEFAULT_MACHINE_PRICING,
+      now: '2026-10-24'
+    });
+    assert.equal(result.lines[0]?.unit, unit, `qty=${qty}`);
+  }
+});
+
+test('成本：六工位案例真实价格簿覆盖 ≥ 8/12 行', () => {
+  const machineCase = JSON.parse(readFileSync(join(repoRoot, 'docs', 'desktop', 'eval', 'machine-case.json'), 'utf8'));
+  const builtin = JSON.parse(readFileSync(join(builtinDir, 'pricebook-cn', 'pricebook.json'), 'utf8'));
+  const result = estimateCost(machineCase.design, {
+    parts,
+    builtinPricebook: builtin,
+    pricing: DEFAULT_MACHINE_PRICING,
+    now: '2026-10-24T23:59:59+08:00'
+  });
+  assert.equal(result.priceMeta.totalCount, 12);
+  assert.ok(result.priceMeta.pricedCount >= 8, `实际覆盖 ${result.priceMeta.pricedCount}/12`);
+  assert.equal(result.priceMeta.missing.length, result.missingCount);
+  assert.deepEqual(
+    result.priceMeta.missing.map((entry) => entry.partId).sort(),
+    ['CP1E-N40DR-A', 'F3SG-4SRA0640-14', 'MS1H1-75B30CB']
+  );
+});
+
+test('成本：方案卡显示覆盖率、缺价、过期与来源不明', () => {
+  const ui = readFileSync(join(repoRoot, 'desktop', 'src', 'agent', 'ui.ts'), 'utf8');
+  assert.match(ui, /已计价 \$\{pricedCount\}\/\$\{totalCount\} 行（覆盖率 \$\{coverage\}%）、缺价 \$\{missingCount \?\? 0\} 项、过期 \$\{staleCount\} 项/);
+  assert.match(ui, /来源不明 \$\{unknownSourceCount\} 项/);
 });
 
 test('成本：人工随工位数线性变化', () => {

@@ -16,16 +16,21 @@
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "currency": "CNY",
   "updatedAt": "2026-10-23T00:00:00+08:00",
-  "source": "2026 年公开渠道价，含税，未含项目折扣",
+  "source": "公开商品页核价；示例条目不计价",
   "items": {
-    "iC65N-C16-1P": {
-      "list": 78.0,
-      "tiers": [{ "minQty": 1, "price": 78.0 }, { "minQty": 10, "price": 68.0 }],
-      "source": "施耐德 2026 价格表",
-      "updatedAt": "2026-09-01T00:00:00+08:00"
+    "iC65N-C6-1P": {
+      "model": "A91NC106 (iC65N 1P C6)",
+      "category": "断路器",
+      "list": 36.9,
+      "tiers": [{ "minQty": 1, "price": 36.9 }],
+      "source": "https://www.ehsy.com/product-VZS320",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价，含税；页面另列 13% 未税价"
     }
   },
   "labor": {
@@ -42,9 +47,12 @@
 ```
 
 规则：
-- 价格查找顺序：项目覆盖 > 用户价格簿 > 内置价格簿 > 未命中（待询价）
+- 取价优先级：项目手工覆盖 > 用户价格簿 > 内置价格簿 > 元件库参考价 > 未命中（待询价）。方案成本模型使用后四级，正式报价引擎使用前三档并允许项目覆盖。
 - 阶梯价按 BOM 行数量取满足条件的最高 `minQty`
-- 价格簿校验：`schemaVersion=1`、金额非负、`updatedAt` 带时区、`tiers` 的 `minQty` 递增
+- `schemaVersion=2` 的每条真实价格必须有 `model`、`category`、可点击的 `source`、`sourceType`、`checkedAt`（`YYYY-MM-DD`）与 `taxIncluded`；税额不确定写 `null` 并在 `note` 说明。
+- `schemaVersion=1` 继续可读：缺 `sourceType/checkedAt` 的旧条目照常计价，但方案成本报告标记「来源不明」。
+- 示例条目（`example: true` 或 `source=示例，需替换`）保留展示但不参与可用条数、覆盖率和计价。
+- 金额非负、`updatedAt` 带时区、`tiers` 的 `minQty` 严格递增；`checkedAt` 超过 180 天在成本报告标「过期」。
 
 ## 3. 计算引擎 `desktop/src/cost/engine.ts`（纯函数）
 
@@ -140,9 +148,11 @@ interface CostReport {
 
 ## 6. 数据获取策略
 
-- 首批价格：只填**可公开核实**的目录价（施耐德/西门子/正泰/明纬官方价目表或授权渠道公开报价），来源写进 `source`
-- 不批量抓电商价（价格波动、含促销、不可追溯）
-- 用户可在价格簿 UI 里批量导入 CSV：`partId,price,currency,source,updatedAt`
+- 只填**可公开打开核实**的商品页/指导价页；需要登录、只有图片、或型号无法精确对应的一律不录
+- 允许的来源类型：`official-list`（官方指导价）、`distributor`（分销参考价）、`quote`（询价单）
+- 不用同系列、不同后缀、不同容量或不同线圈电压推算价格；案例缺价清单与当前覆盖率见 [`PRICING.md`](PRICING.md)
+- 价格条目统一记录 `checkedAt`；超过 180 天的条目仍可展示，但成本报告必须标「价格可能过期」
+- 用户可在价格簿 UI 里批量导入 CSV：`partId,price,currency,source,updatedAt`；导入 JSON 时支持 v1/v2
 
 ## 7. 验收（P6-3 实测）
 

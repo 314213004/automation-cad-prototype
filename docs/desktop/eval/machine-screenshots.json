@@ -13,16 +13,16 @@
       "name": "15-machine-design-card.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 501034,
-      "uniqueColors": 7423
+      "bytes": 506033,
+      "uniqueColors": 7496
     },
     {
       "label": "6 工位 3D 联调",
       "name": "16-machine-3d.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 442022,
-      "uniqueColors": 7936
+      "bytes": 442019,
+      "uniqueColors": 7943
     },
     {
       "label": "BOM 真实型号",

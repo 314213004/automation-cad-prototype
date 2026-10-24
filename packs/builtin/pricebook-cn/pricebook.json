@@ -1,16 +1,676 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "currency": "CNY",
-  "updatedAt": "2026-10-23T00:00:00+08:00",
-  "source": "items 中的 4 条均为示例，需替换为可公开核实的目录价；labor 与 accessories 为工程默认值，非官方报价。",
+  "updatedAt": "2026-10-24T00:00:00+08:00",
+  "source": "真实条目来自西域 EHSY 与供应商网公开商品页，逐条可打开核实；示例条目保留但不参与统计/计价。labor 与 accessories 为工程默认值，非官方报价。",
   "items": {
+    "MHZ2-20D": {
+      "model": "MHZ2-20D",
+      "category": "气爪",
+      "list": 1109.0,
+      "source": "https://www.ehsy.com/product-MUY224",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。SMC 气爪；页面明确列出西域价与未税价。"
+    },
+    "D-M9B": {
+      "model": "D-M9B",
+      "category": "传感器",
+      "list": 133.23,
+      "source": "https://www.ehsy.com/product-MVF861",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。SMC 磁性开关。"
+    },
+    "SY5120-5LZD-01": {
+      "model": "SY5120-5LZD-01",
+      "category": "电磁阀",
+      "list": 355.16,
+      "source": "https://www.ehsy.com/product-MAF676",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。SMC 两位五通电磁阀完整订购码；包内 SY5120-5LZD 为简写，未直接套用。"
+    },
+    "SV660PS5R5I": {
+      "model": "SV660PS5R5I",
+      "category": "伺服",
+      "list": 1431.43,
+      "source": "https://www.ehsy.com/product-NSF931",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。汇川 SV660P 750 W 伺服驱动器。"
+    },
+    "LRS-350-24": {
+      "model": "LRS-350-24",
+      "category": "开关电源",
+      "list": 152.86,
+      "source": "https://www.ehsy.com/product-GZA065",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬 350 W / 24 V 开关电源。"
+    },
+    "iC65N-C6-1P": {
+      "model": "A91NC106 (iC65N 1P C6)",
+      "category": "断路器",
+      "list": 36.9,
+      "source": "https://www.ehsy.com/product-VZS320",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。页面订购码 A91NC106，标题标注 Pro iC65N 1P C6A、可替换 A9F18106；按 1P C6 录入。"
+    },
+    "5SY63-C16": {
+      "model": "5SY6 3P C16 (5SY63167CC)",
+      "category": "断路器",
+      "list": 108.79,
+      "source": "https://www.ehsy.com/product-MBA389",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 3P C16；页面型号 5SY6 3P C16 / 订购码 5SY63167CC。"
+    },
+    "iC65N-C16-1P": {
+      "model": "A91NC116 (iC65N 1P C16)",
+      "category": "断路器",
+      "list": 25.49,
+      "source": "https://www.ehsy.com/product-XCU709",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。页面订购码 A91NC116，标题标注 Pro iC65N 1P C16A、可替换 A9F18116。"
+    },
+    "iC65N-C16-2P": {
+      "model": "A91NC216 (iC65N 2P C16)",
+      "category": "断路器",
+      "list": 66.01,
+      "source": "https://www.ehsy.com/product-XDH937",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。页面订购码 A91NC216，标题标注 Pro iC65N 2P C16A、可替换 A9F18216。"
+    },
+    "iC65N-C25-3P": {
+      "model": "A91NC325 (iC65N 3P C25)",
+      "category": "断路器",
+      "list": 113.7,
+      "source": "https://www.ehsy.com/product-WES976",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。页面订购码 A91NC325，标题标注 Pro iC65N 3P C25A、可替换 A9F18325。"
+    },
+    "NXB-63-C16-1P": {
+      "model": "NXB-63 1P C16",
+      "category": "断路器",
+      "list": 7.76,
+      "source": "https://www.ehsy.com/product-AZP308",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 1P C16。"
+    },
+    "NXB-63-C32-3P": {
+      "model": "NXB-63 3P C32",
+      "category": "断路器",
+      "list": 23.3,
+      "source": "https://www.ehsy.com/product-EDJ141",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 3P C32。"
+    },
+    "NXB-63-C20-2P": {
+      "model": "NXB-63 2P C20",
+      "category": "断路器",
+      "list": 15.82,
+      "source": "https://www.ehsy.com/product-AZP540",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 2P C20。"
+    },
+    "5SY6116-7": {
+      "model": "5SY6 1P C16 (5SY61167CC)",
+      "category": "断路器",
+      "list": 27.89,
+      "source": "https://www.ehsy.com/product-MBA299",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 1P C16；页面订购码 5SY61167CC。"
+    },
+    "NDB1-63-C16-1P": {
+      "model": "NDB1-63 C16/1 (30030125)",
+      "category": "断路器",
+      "list": 23.48,
+      "source": "https://www.ehsy.com/product-DUY439",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。良信 NDB1-63 C16/1；页面型号 30030125。"
+    },
+    "LC1D09M7C": {
+      "model": "LC1D09M7C",
+      "category": "接触器",
+      "list": 93.97,
+      "source": "https://www.ehsy.com/product-MAU390",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 TeSys D，220 V AC 线圈。"
+    },
+    "LC1D12M7C": {
+      "model": "LC1D12M7C",
+      "category": "接触器",
+      "list": 101.93,
+      "source": "https://www.ehsy.com/product-MAU409",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 TeSys D，220 V AC 线圈。"
+    },
+    "LC1D18M7C": {
+      "model": "LC1D18M7C",
+      "category": "接触器",
+      "list": 128.97,
+      "source": "https://www.ehsy.com/product-MAU428",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 TeSys D，220 V AC 线圈。"
+    },
+    "LC1D25M7C": {
+      "model": "LC1D25M7C",
+      "category": "接触器",
+      "list": 151.94,
+      "source": "https://www.ehsy.com/product-MAU445",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 TeSys D，220 V AC 线圈。"
+    },
+    "LC1D50AM7C": {
+      "model": "LC1D50AM7C",
+      "category": "接触器",
+      "list": 367.3,
+      "source": "https://www.ehsy.com/product-RQA305",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 TeSys D，50 A、220 V 线圈。"
+    },
+    "CJX2-1210": {
+      "model": "CJX2-1210 220V",
+      "category": "接触器",
+      "list": 57.33,
+      "source": "https://www.ehsy.com/product-MAS607",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 CJX2-1210，220 V AC 线圈。"
+    },
+    "CJX2-2510": {
+      "model": "CJX2-2510 220V",
+      "category": "接触器",
+      "list": 89.17,
+      "source": "https://www.ehsy.com/product-MAS615",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 CJX2-2510，220 V AC 线圈。"
+    },
+    "CJX2-3210": {
+      "model": "CJX2-3210 220V",
+      "category": "接触器",
+      "list": 146.42,
+      "source": "https://www.ehsy.com/product-MAS619",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 CJX2-3210，220 V AC 线圈。"
+    },
+    "CJX2-6511": {
+      "model": "CJX2-6511 220V",
+      "category": "接触器",
+      "list": 366.53,
+      "source": "https://www.ehsy.com/product-MAS625",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 CJX2-6511，220 V AC 线圈。"
+    },
+    "NDR-120-24": {
+      "model": "NDR-120-24",
+      "category": "开关电源",
+      "list": 150.0,
+      "source": "https://www.ehsy.com/product-ART909",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬轨道式 120 W / 24 V 开关电源。"
+    },
+    "LRS-600-24": {
+      "model": "LRS-600-24",
+      "category": "开关电源",
+      "list": 281.33,
+      "source": "https://www.ehsy.com/product-JGQ618",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬 600 W / 24 V 开关电源。"
+    },
+    "LRS-100-24": {
+      "model": "LRS-100-24",
+      "category": "开关电源",
+      "list": 72.86,
+      "source": "https://www.ehsy.com/product-ACD254",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬 100 W / 24 V 开关电源。"
+    },
+    "LRS-150-24": {
+      "model": "LRS-150-24",
+      "category": "开关电源",
+      "list": 90.0,
+      "source": "https://www.ehsy.com/product-ECW363",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬 150 W / 24 V 开关电源。"
+    },
+    "NDR-240-24": {
+      "model": "NDR-240-24",
+      "category": "开关电源",
+      "list": 277.14,
+      "source": "https://www.ehsy.com/product-AAK246",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。明纬轨道式 240 W / 24 V 开关电源。"
+    },
+    "NKY1-12-24": {
+      "model": "NKY1-12-24",
+      "category": "开关电源",
+      "list": 47.78,
+      "source": "https://www.ehsy.com/product-AZA418",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 NKY1 系列 12 W / 24 V 开关电源。"
+    },
+    "SV630PT5R4I": {
+      "model": "SV630PT5R4I",
+      "category": "伺服",
+      "list": 1599.0,
+      "source": "https://www.ehsy.com/product-JZW789",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。汇川 SV630P 750 W 伺服驱动器。"
+    },
+    "SV660NS2R8I": {
+      "model": "SV660NS2R8I",
+      "category": "伺服",
+      "list": 1099.0,
+      "source": "https://www.ehsy.com/product-JKQ183",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。汇川 SV660N 400 W 伺服驱动器。"
+    },
+    "ASD-B2-0121-B": {
+      "model": "ASD-B2-0121-B",
+      "category": "伺服",
+      "list": 1499.0,
+      "source": "https://www.ehsy.com/product-RHF955",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。台达 ASDA-B2 100 W 伺服驱动器。"
+    },
+    "ECMA-C20604RS": {
+      "model": "ECMA-C20604RS",
+      "category": "伺服",
+      "list": 1094.89,
+      "source": "https://www.ehsy.com/product-GZH402",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。台达 400 W 伺服电机。"
+    },
+    "ECMA-C10807RS": {
+      "model": "ECMA-C10807RS",
+      "category": "伺服",
+      "list": 1299.0,
+      "source": "https://www.ehsy.com/product-AVG154",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。台达 750 W 伺服电机。"
+    },
+    "ECMA-J10807RS": {
+      "model": "ECMA-J10807RS",
+      "category": "伺服",
+      "list": 1299.0,
+      "source": "https://www.ehsy.com/product-JCG285",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。台达 750 W 伺服电机。"
+    },
+    "FX5U-32MT-ES": {
+      "model": "FX5U-32MT/ES",
+      "category": "PLC",
+      "list": 2699.0,
+      "source": "https://www.ehsy.com/product-ARK471",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。三菱 FX5U-32MT/ES。"
+    },
+    "CP2E-N40DT-D-ECM": {
+      "model": "CP2E-N40DT-D-ECM",
+      "category": "PLC",
+      "list": 2799.0,
+      "source": "https://www.ehsy.com/product-JPW138",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙 CP2E-N40DT-D-ECM；与包内 CP2E-N40DT-D 不同后缀，未套用。"
+    },
+    "6ES7214-1HG40-0XB0": {
+      "model": "6ES7214-1HG40-0XB0",
+      "category": "PLC",
+      "list": 2999.0,
+      "source": "https://www.ehsy.com/product-APK691",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 S7-1200 CPU 1214C。"
+    },
+    "6ES7214-1BG40-0XB0": {
+      "model": "6ES7214-1BG40-0XB0",
+      "category": "PLC",
+      "list": 2899.0,
+      "source": "https://www.ehsy.com/product-APK689",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 S7-1200 CPU 1214C。"
+    },
+    "6ES7214-1AF40-0XB0": {
+      "model": "6ES7214-1AF40-0XB0",
+      "category": "PLC",
+      "list": 4999.0,
+      "source": "https://www.ehsy.com/product-DJM643",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 S7-1200 CPU 1214C。"
+    },
+    "6ES7217-1AG40-0XB0": {
+      "model": "6ES7217-1AG40-0XB0",
+      "category": "PLC",
+      "list": 6199.0,
+      "source": "https://www.ehsy.com/product-DTP205",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子 S7-1200 CPU 1217C。"
+    },
+    "F3SG-4RA0320-14": {
+      "model": "F3SG-4RA0320-14",
+      "category": "安全件",
+      "list": 13900.0,
+      "source": "https://www.ehsy.com/product-JMX225",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，14 mm 分辨率。"
+    },
+    "F3SG-4RA0430-30": {
+      "model": "F3SG-4RA0430-30",
+      "category": "安全件",
+      "list": 8134.31,
+      "source": "https://www.ehsy.com/product-JPM926",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "F3SG-4RA0510-30": {
+      "model": "F3SG-4RA0510-30",
+      "category": "安全件",
+      "list": 7299.27,
+      "source": "https://www.ehsy.com/product-JQH844",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "F3SG-4RA0670-30": {
+      "model": "F3SG-4RA0670-30",
+      "category": "安全件",
+      "list": 8664.23,
+      "source": "https://www.ehsy.com/product-JQH845",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "F3SG-4RA0750-30": {
+      "model": "F3SG-4RA0750-30",
+      "category": "安全件",
+      "list": 8899.0,
+      "source": "https://www.ehsy.com/product-JMX224",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "F3SG-4RA0910-30": {
+      "model": "F3SG-4RA0910-30",
+      "category": "安全件",
+      "list": 10766.42,
+      "source": "https://www.ehsy.com/product-JQH846",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "F3SG-4RA0990-30": {
+      "model": "F3SG-4RA0990-30",
+      "category": "安全件",
+      "list": 11386.86,
+      "source": "https://www.ehsy.com/product-JQH847",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全光栅，30 mm 分辨率。"
+    },
+    "C4C-SA03010A10000": {
+      "model": "C4C-SA03010A10000",
+      "category": "安全件",
+      "list": 2699.0,
+      "source": "https://www.ehsy.com/product-KCG793",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西克安全光栅发射端。"
+    },
+    "C4C-SC03010A10000": {
+      "model": "C4C-SC03010A10000, 1113196",
+      "category": "安全件",
+      "list": 1899.0,
+      "source": "https://www.ehsy.com/product-KBF909",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西克安全光栅发射端；页面附订货号 1113196。"
+    },
+    "C4C-EA03010A10000": {
+      "model": "C4C-EA03010A10000",
+      "category": "安全件",
+      "list": 4299.0,
+      "source": "https://www.ehsy.com/product-KCG817",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西克安全光栅接收端。"
+    },
+    "C4C-EC03010A10000": {
+      "model": "C4C-EC03010A10000, 1113205",
+      "category": "安全件",
+      "list": 2699.0,
+      "source": "https://www.ehsy.com/product-KBF907",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西克安全光栅接收端；页面附订货号 1113205。"
+    },
+    "PNOZ-s4-750104": {
+      "model": "750104 PNOZ s4 24VDC 3 n/o 1 n/c",
+      "category": "安全继电器",
+      "list": 1201.54,
+      "source": "https://www.ehsy.com/product-RXE377",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。皮尔兹 PNOZ s4。"
+    },
+    "PNOZ-S3-C-751103": {
+      "model": "751103 PNOZ S3 C 24VDC 2 n/o",
+      "category": "安全继电器",
+      "list": 1101.43,
+      "source": "https://www.ehsy.com/product-JSR420",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。皮尔兹 PNOZ S3 C；与案例 750103 为不同订货号，未套用。"
+    },
+    "G9SB-3012-C-24": {
+      "model": "G9SB-3012-C AC/DC24",
+      "category": "安全继电器",
+      "list": 1428.57,
+      "source": "https://www.ehsy.com/product-DQK070",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。欧姆龙安全控制器。"
+    },
+    "3SK1111-1AB30": {
+      "model": "3SK1111-1AB30",
+      "category": "安全继电器",
+      "list": 1420.44,
+      "source": "https://www.ehsy.com/product-GQZ870",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。西门子安全模块。"
+    },
+    "XB2-BS542C": {
+      "model": "XB2BS542C",
+      "category": "按钮与开关",
+      "list": 38.99,
+      "source": "https://www.ehsy.com/product-MAU723",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德急停按钮；页面无连字符写法。"
+    },
+    "XB2-BD21": {
+      "model": "XB2BD21C",
+      "category": "按钮与开关",
+      "list": 27.73,
+      "source": "https://www.ehsy.com/product-RFZ811",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德选择开关；页面型号带 C 后缀。"
+    },
+    "XB2-BVM3LC": {
+      "model": "XB2BVM3LC",
+      "category": "指示与信号",
+      "list": 15.37,
+      "source": "https://www.ehsy.com/product-AEC581",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 220 V AC 绿色指示灯。"
+    },
+    "XB2-BVM4LC": {
+      "model": "XB2BVM4LC",
+      "category": "指示与信号",
+      "list": 15.37,
+      "source": "https://www.ehsy.com/product-SBY006",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 220 V AC 红色指示灯。"
+    },
+    "XB2-BVB4LC": {
+      "model": "XB2BVB4LC",
+      "category": "指示与信号",
+      "list": 15.37,
+      "source": "https://www.ehsy.com/product-SEA351",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。施耐德 24 V DC 红色指示灯。"
+    },
+    "ND16-22DS-4": {
+      "model": "ND16-22DS/4 220V 绿",
+      "category": "指示与信号",
+      "list": 4.54,
+      "source": "https://www.ehsy.com/product-AYM294",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": true,
+      "note": "西域价（含税）；页面另列未税价（13%）。正泰 22 mm 绿色信号灯，220 V。"
+    },
+    "PNOZ-s3-750103": {
+      "model": "750103 PNOZ s3 24VDC 2 n/o",
+      "category": "安全继电器",
+      "list": 660.0,
+      "tiers": [
+        {
+          "minQty": 1,
+          "price": 660.0
+        },
+        {
+          "minQty": 10,
+          "price": 650.0
+        },
+        {
+          "minQty": 30,
+          "price": 620.0
+        }
+      ],
+      "source": "https://www.gys.cn/jidianqi/4886965656.html",
+      "sourceType": "distributor",
+      "checkedAt": "2026-10-24",
+      "taxIncluded": null,
+      "note": "分销商参考价；页面未标注含税状态。阶梯：1–9 个 ¥660、10–29 个 ¥650、≥30 个 ¥620。"
+    },
     "EXAMPLE-QF-16A": {
       "model": "示例断路器 16A",
       "category": "断路器",
       "list": 78,
       "tiers": [
-        { "minQty": 1, "price": 78 },
-        { "minQty": 10, "price": 68 }
+        {
+          "minQty": 1,
+          "price": 78
+        },
+        {
+          "minQty": 10,
+          "price": 68
+        }
       ],
       "source": "示例，需替换",
       "updatedAt": "2026-09-01T00:00:00+08:00",
@@ -21,8 +681,14 @@
       "category": "接触器",
       "list": 120,
       "tiers": [
-        { "minQty": 1, "price": 120 },
-        { "minQty": 5, "price": 110 }
+        {
+          "minQty": 1,
+          "price": 120
+        },
+        {
+          "minQty": 5,
+          "price": 110
+        }
       ],
       "source": "示例，需替换",
       "updatedAt": "2026-09-01T00:00:00+08:00",

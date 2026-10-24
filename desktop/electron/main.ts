@@ -41,7 +41,9 @@ import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/a
 import { buildDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
 import { computeCost, type CostInput } from '../src/cost/engine';
-import { validatePricebook } from '../src/cost/pricebook';
+import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook';
+import { DEFAULT_MACHINE_PRICING, estimateCost } from '../src/machine/cost-model';
+import type { ComponentPart } from '../src/shared/types';
 import { planExportName } from '../src/cost/export';
 import { demoMachineConfig, type ActuatorConfig, type SensorConfig } from '../src/commission/machine-config';
 import { parseMachineBrief } from '../src/machine/spec';
@@ -2970,6 +2972,41 @@ function createWindow(): BrowserWindow {
         );
       } catch (error) {
         console.error('SMOKE_FAIL cost_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const pricebook = validatePricebook(readBuiltinPricebookRaw());
+        const items = Object.values(pricebook.items).filter(isUsablePricebookItem).length;
+        const casePath = resolve(desktopRoot(), '..', 'docs', 'desktop', 'eval', 'machine-case.json');
+        const machineCase = JSON.parse(readFileSync(casePath, 'utf8')) as {
+          design: Parameters<typeof estimateCost>[0];
+        };
+        const parts = ['iec-cn', 'smc-cn'].flatMap((pack) => {
+          const path = join(builtinPacksDir(), pack, 'parts.json');
+          const rows = JSON.parse(readFileSync(path, 'utf8')) as ComponentPart[];
+          return rows.map((row) => ({ ...row, packId: pack }));
+        });
+        const cost = estimateCost(machineCase.design, {
+          parts,
+          pricing: DEFAULT_MACHINE_PRICING,
+          builtinPricebook: pricebook,
+          now: '2026-10-24T23:59:59+08:00'
+        });
+        if (items < 60 || cost.priceMeta.pricedCount < 8 || cost.priceMeta.totalCount !== 12) {
+          console.error('SMOKE_FAIL pricebook', JSON.stringify({
+            items,
+            coverage: `${cost.priceMeta.pricedCount}/${cost.priceMeta.totalCount}`,
+            missing: cost.priceMeta.missing.length
+          }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(
+          `SMOKE_PRICEBOOK_OK items=${items} caseCoverage=${cost.priceMeta.pricedCount}/${cost.priceMeta.totalCount}`
+        );
+      } catch (error) {
+        console.error('SMOKE_FAIL pricebook_exception', error);
         setTimeout(() => app.exit(1), 100);
         return;
       }

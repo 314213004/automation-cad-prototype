@@ -372,23 +372,44 @@
       }
     },
     "cost": {
-      "material": 5136,
-      "electrical": 2484,
+      "material": 6654,
+      "electrical": 12283.91,
       "labor": 15552,
-      "total": 23172,
-      "missingCount": 9,
+      "total": 34489.91,
+      "missingCount": 3,
+      "priceMeta": {
+        "coveragePct": 75,
+        "pricedCount": 9,
+        "totalCount": 12,
+        "missing": [
+          {
+            "partId": "MS1H1-75B30CB",
+            "name": "伺服电机"
+          },
+          {
+            "partId": "F3SG-4SRA0640-14",
+            "name": "安全光栅"
+          },
+          {
+            "partId": "CP1E-N40DR-A",
+            "name": "PLC"
+          }
+        ],
+        "stale": [],
+        "unknownSource": []
+      },
       "byCategory": [
         {
           "category": "机械件",
-          "subtotal": 5136,
+          "subtotal": 6654,
           "count": 1,
           "missing": 0
         },
         {
           "category": "电气件",
-          "subtotal": 2484,
+          "subtotal": 12283.91,
           "count": 11,
-          "missing": 9
+          "missing": 3
         }
       ],
       "assumptions": [
@@ -400,7 +421,7 @@
         "machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。"
       ],
       "warnings": [
-        "有 9 行缺价，未计入合计：伺服驱动器（SV660P 750 W） × 6；伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1；安全继电器（PNOZ s3 750103） × 1；24 V 开关电源（LRS-350-24） × 1；伺服支路断路器（iC65N 1P C6） × 6；总进线断路器（5SY63 3P C16） × 1；开关电源支路断路器（iC65N 1P C6） × 1"
+        "有 3 行缺价，未计入合计：伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1"
       ],
       "lines": [
         {
@@ -409,9 +430,9 @@
           "partId": "SV660PS5R5I",
           "category": "电气件",
           "qty": 6,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 1431.43,
+          "subtotal": 8588.58,
+          "priceSource": "价格簿"
         },
         {
           "name": "伺服电机",
@@ -429,9 +450,9 @@
           "partId": "MHZ2-20D",
           "category": "机械件",
           "qty": 6,
-          "unit": 856,
-          "subtotal": 5136,
-          "priceSource": "元件库参考价"
+          "unit": 1109,
+          "subtotal": 6654,
+          "priceSource": "价格簿"
         },
         {
           "name": "电磁阀",
@@ -449,9 +470,9 @@
           "partId": "D-M9B",
           "category": "电气件",
           "qty": 6,
-          "unit": 128,
-          "subtotal": 768,
-          "priceSource": "元件库参考价"
+          "unit": 133.23,
+          "subtotal": 799.38,
+          "priceSource": "价格簿"
         },
         {
           "name": "安全光栅",
@@ -479,9 +500,9 @@
           "partId": "PNOZ-s3-750103",
           "category": "电气件",
           "qty": 1,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 660,
+          "subtotal": 660,
+          "priceSource": "价格簿"
         },
         {
           "name": "24 V 开关电源",
@@ -489,9 +510,9 @@
           "partId": "LRS-350-24",
           "category": "电气件",
           "qty": 1,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 152.86,
+          "subtotal": 152.86,
+          "priceSource": "价格簿"
         },
         {
           "name": "伺服支路断路器",
@@ -499,9 +520,9 @@
           "partId": "iC65N-C6-1P",
           "category": "电气件",
           "qty": 6,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 36.9,
+          "subtotal": 221.4,
+          "priceSource": "价格簿"
         },
         {
           "name": "总进线断路器",
@@ -509,9 +530,9 @@
           "partId": "5SY63-C16",
           "category": "电气件",
           "qty": 1,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 108.79,
+          "subtotal": 108.79,
+          "priceSource": "价格簿"
         },
         {
           "name": "开关电源支路断路器",
@@ -519,9 +540,9 @@
           "partId": "iC65N-C6-1P",
           "category": "电气件",
           "qty": 1,
-          "unit": 0,
-          "subtotal": 0,
-          "priceSource": "缺失"
+          "unit": 36.9,
+          "subtotal": 36.9,
+          "priceSource": "价格簿"
         }
       ],
       "laborDetail": {
@@ -1141,23 +1162,44 @@
     ]
   },
   "cost": {
-    "material": 5136,
-    "electrical": 2484,
+    "material": 6654,
+    "electrical": 12283.91,
     "labor": 15552,
-    "total": 23172,
-    "missingCount": 9,
+    "total": 34489.91,
+    "missingCount": 3,
+    "priceMeta": {
+      "coveragePct": 75,
+      "pricedCount": 9,
+      "totalCount": 12,
+      "missing": [
+        {
+          "partId": "MS1H1-75B30CB",
+          "name": "伺服电机"
+        },
+        {
+          "partId": "F3SG-4SRA0640-14",
+          "name": "安全光栅"
+        },
+        {
+          "partId": "CP1E-N40DR-A",
+          "name": "PLC"
+        }
+      ],
+      "stale": [],
+      "unknownSource": []
+    },
     "byCategory": [
       {
         "category": "机械件",
-        "subtotal": 5136,
+        "subtotal": 6654,
         "count": 1,
         "missing": 0
       },
       {
         "category": "电气件",
-        "subtotal": 2484,
+        "subtotal": 12283.91,
         "count": 11,
-        "missing": 9
+        "missing": 3
       }
     ],
     "assumptions": [
@@ -1169,7 +1211,7 @@
       "machine-case.json 未读取 userData/machine-pricing.json，使用工程默认系数与工时单价。"
     ],
     "warnings": [
-      "有 9 行缺价，未计入合计：伺服驱动器（SV660P 750 W） × 6；伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1；安全继电器（PNOZ s3 750103） × 1；24 V 开关电源（LRS-350-24） × 1；伺服支路断路器（iC65N 1P C6） × 6；总进线断路器（5SY63 3P C16） × 1；开关电源支路断路器（iC65N 1P C6） × 1"
+      "有 3 行缺价，未计入合计：伺服电机（MS1H1-75B30CB 750 W） × 6；安全光栅（F3SG-4SRA0640-14） × 1；PLC（CP1E-N40DR-A） × 1"
     ],
     "lines": [
       {
@@ -1178,9 +1220,9 @@
         "partId": "SV660PS5R5I",
         "category": "电气件",
         "qty": 6,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 1431.43,
+        "subtotal": 8588.58,
+        "priceSource": "价格簿"
       },
       {
         "name": "伺服电机",
@@ -1198,9 +1240,9 @@
         "partId": "MHZ2-20D",
         "category": "机械件",
         "qty": 6,
-        "unit": 856,
-        "subtotal": 5136,
-        "priceSource": "元件库参考价"
+        "unit": 1109,
+        "subtotal": 6654,
+        "priceSource": "价格簿"
       },
       {
         "name": "电磁阀",
@@ -1218,9 +1260,9 @@
         "partId": "D-M9B",
         "category": "电气件",
         "qty": 6,
-        "unit": 128,
-        "subtotal": 768,
-        "priceSource": "元件库参考价"
+        "unit": 133.23,
+        "subtotal": 799.38,
+        "priceSource": "价格簿"
       },
       {
         "name": "安全光栅",
@@ -1248,9 +1290,9 @@
         "partId": "PNOZ-s3-750103",
         "category": "电气件",
         "qty": 1,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 660,
+        "subtotal": 660,
+        "priceSource": "价格簿"
       },
       {
         "name": "24 V 开关电源",
@@ -1258,9 +1300,9 @@
         "partId": "LRS-350-24",
         "category": "电气件",
         "qty": 1,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 152.86,
+        "subtotal": 152.86,
+        "priceSource": "价格簿"
       },
       {
         "name": "伺服支路断路器",
@@ -1268,9 +1310,9 @@
         "partId": "iC65N-C6-1P",
         "category": "电气件",
         "qty": 6,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 36.9,
+        "subtotal": 221.4,
+        "priceSource": "价格簿"
       },
       {
         "name": "总进线断路器",
@@ -1278,9 +1320,9 @@
         "partId": "5SY63-C16",
         "category": "电气件",
         "qty": 1,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 108.79,
+        "subtotal": 108.79,
+        "priceSource": "价格簿"
       },
       {
         "name": "开关电源支路断路器",
@@ -1288,9 +1330,9 @@
         "partId": "iC65N-C6-1P",
         "category": "电气件",
         "qty": 1,
-        "unit": 0,
-        "subtotal": 0,
-        "priceSource": "缺失"
+        "unit": 36.9,
+        "subtotal": 36.9,
+        "priceSource": "价格簿"
       }
     ],
     "laborDetail": {
@@ -1513,16 +1555,16 @@
         "name": "15-machine-design-card.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 501034,
-        "uniqueColors": 7423
+        "bytes": 506033,
+        "uniqueColors": 7496
       },
       {
         "label": "6 工位 3D 联调",
         "name": "16-machine-3d.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 442022,
-        "uniqueColors": 7936
+        "bytes": 442019,
+        "uniqueColors": 7943
       },
       {
         "label": "BOM 真实型号",

@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import type { ComponentPart } from '../shared/types.ts';
 import {
   isUsablePricebookItem,
+  isStalePricebookItem,
   type Pricebook,
   type PricebookItem
 } from '../cost/pricebook.ts';
@@ -216,6 +217,8 @@ export interface CostEstimateOptions {
   pricingAssumptions?: readonly string[];
   /** 强制覆盖工位数（缺省取 config.stations.length）。 */
   stationCount?: number;
+  /** 价格过期判定基准；缺省当前时间。 */
+  now?: Date | string | number;
 }
 
 export interface CostEstimateLine {
@@ -229,12 +232,31 @@ export interface CostEstimateLine {
   priceSource: '价格簿' | '元件库参考价' | '缺失' | '伺服配套补齐';
 }
 
+export interface CostPriceMetaItem {
+  partId?: string;
+  name: string;
+}
+
+export interface CostPriceMetaStale extends CostPriceMetaItem {
+  checkedAt: string;
+}
+
+export interface CostPriceMeta {
+  coveragePct: number;
+  pricedCount: number;
+  totalCount: number;
+  missing: CostPriceMetaItem[];
+  stale: CostPriceMetaStale[];
+  unknownSource: CostPriceMetaItem[];
+}
+
 export interface MachineCostEstimate {
   material: number;
   electrical: number;
   labor: number;
   total: number;
   missingCount: number;
+  priceMeta: CostPriceMeta;
   byCategory: Array<{ category: '机械件' | '电气件'; subtotal: number; count: number; missing: number }>;
   assumptions: string[];
   warnings: string[];
@@ -284,11 +306,15 @@ function pickTier(item: PricebookItem, qty: number): number {
   return best ? best.price : item.list;
 }
 
-function priceFromBook(book: Pricebook | undefined, partId: string | undefined, qty: number): number | null {
+function priceFromBook(
+  book: Pricebook | undefined,
+  partId: string | undefined,
+  qty: number
+): { unit: number; item: PricebookItem } | null {
   if (!book || !partId) return null;
   const item = book.items[partId];
   if (!item || !isUsablePricebookItem(item)) return null;
-  return pickTier(item, qty);
+  return { unit: pickTier(item, qty), item };
 }
 
 function priceFor(
@@ -296,11 +322,11 @@ function priceFor(
   parts: readonly ComponentPart[] | undefined,
   pricebook: Pricebook | undefined,
   builtinPricebook: Pricebook | undefined
-): { unit: number | null; source: CostEstimateLine['priceSource'] } {
+): { unit: number | null; source: CostEstimateLine['priceSource']; item?: PricebookItem } {
   const fromUser = priceFromBook(pricebook, item.partId, item.qty);
-  if (fromUser !== null) return { unit: fromUser, source: '价格簿' };
+  if (fromUser !== null) return { unit: fromUser.unit, source: '价格簿', item: fromUser.item };
   const fromBuiltin = priceFromBook(builtinPricebook, item.partId, item.qty);
-  if (fromBuiltin !== null) return { unit: fromBuiltin, source: '价格簿' };
+  if (fromBuiltin !== null) return { unit: fromBuiltin.unit, source: '价格簿', item: fromBuiltin.item };
   const part = findPart(parts, item.partId, item.packId);
   if (part && typeof part.price === 'number' && Number.isFinite(part.price) && part.price >= 0) {
     return { unit: part.price, source: '元件库参考价' };
@@ -347,9 +373,13 @@ export function estimateCost(
   options: CostEstimateOptions = {}
 ): MachineCostEstimate {
   const pricing = options.pricing ?? DEFAULT_MACHINE_PRICING;
+  const now = options.now ?? new Date();
   const items = servoPairItems(design.bomDraft?.items ?? []);
   const lines: CostEstimateLine[] = [];
   const missingNames: string[] = [];
+  const missingMeta: CostPriceMeta['missing'] = [];
+  const staleMeta: CostPriceMeta['stale'] = [];
+  const unknownSourceMeta: CostPriceMeta['unknownSource'] = [];
   const byCategory = new Map<'机械件' | '电气件', { subtotal: number; count: number; missing: number }>();
 
   for (const item of items) {
@@ -360,6 +390,10 @@ export function estimateCost(
     if (price.unit === null) {
       bucket.missing += 1;
       missingNames.push(`${item.name}${item.model ? `（${item.model}）` : ''} × ${item.qty}`);
+      missingMeta.push({
+        ...(item.partId ? { partId: item.partId } : {}),
+        name: item.name
+      });
       lines.push({
         name: item.name,
         ...(item.model ? { model: item.model } : {}),
@@ -373,6 +407,17 @@ export function estimateCost(
     } else {
       const subtotal = roundMoney(price.unit * item.qty);
       bucket.subtotal = roundMoney(bucket.subtotal + subtotal);
+      if (price.item) {
+        const meta = {
+          ...(item.partId ? { partId: item.partId } : {}),
+          name: item.name
+        };
+        if (!price.item.sourceType || !price.item.checkedAt) {
+          unknownSourceMeta.push(meta);
+        } else if (isStalePricebookItem(price.item, now)) {
+          staleMeta.push({ ...meta, checkedAt: price.item.checkedAt });
+        }
+      }
       lines.push({
         name: item.name,
         ...(item.model ? { model: item.model } : {}),
@@ -400,6 +445,16 @@ export function estimateCost(
   const hours = stations * hoursPerStation * formFactor;
   const labor = roundMoney(hours * pricing.labor.ratePerHour);
   const missingCount = lines.filter((line) => line.priceSource === '缺失').length;
+  const totalCount = lines.length;
+  const pricedCount = totalCount - missingCount;
+  const priceMeta: CostPriceMeta = {
+    coveragePct: totalCount === 0 ? 0 : Math.round((pricedCount / totalCount) * 1000) / 10,
+    pricedCount,
+    totalCount,
+    missing: missingMeta,
+    stale: staleMeta,
+    unknownSource: unknownSourceMeta
+  };
   const total = roundMoney(material + electrical + labor);
   const assumptions = [
     '方案阶段粗估：用于方案比较与预算区间，不替代正式报价。',
@@ -415,6 +470,16 @@ export function estimateCost(
   if (missingCount > 0) {
     warnings.push(`有 ${missingCount} 行缺价，未计入合计：${missingNames.join('；')}`);
   }
+  if (staleMeta.length > 0) {
+    warnings.push(`有 ${staleMeta.length} 行价格超过 180 天，可能已过期：${staleMeta
+      .map((entry) => `${entry.name}（${entry.checkedAt}）`)
+      .join('；')}`);
+  }
+  if (unknownSourceMeta.length > 0) {
+    warnings.push(`有 ${unknownSourceMeta.length} 行价格来源不明（旧版价格簿缺少 sourceType/checkedAt）：${unknownSourceMeta
+      .map((entry) => entry.name)
+      .join('；')}`);
+  }
   if (options.pricebook === undefined && options.builtinPricebook === undefined) {
     warnings.push('未提供价格簿，本次仅使用元件库参考价，其余行均计为缺价。');
   }
@@ -426,6 +491,7 @@ export function estimateCost(
     labor,
     total,
     missingCount,
+    priceMeta,
     byCategory: (['机械件', '电气件'] as const).map((category) => ({
       category,
       subtotal: byCategory.get(category)?.subtotal ?? 0,
