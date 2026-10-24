@@ -45,7 +45,7 @@ test('apply 默认生成参数化几何：geometry.json / model.stl / model.gltf
   const paths = machineGeometryPaths(root, 'design-screw-3st');
   assert.equal(geometry.jsonPath, paths.json);
   for (const path of [paths.json, paths.stl, paths.gltf, paths.sidecar]) assert.ok(existsSync(path), path);
-  assert.equal(geometry.layout, 'dial');
+  assert.equal(geometry.layout, 'gantry');
   assert.equal(geometry.stations, 3);
   assert.equal(geometry.movingAxes, 6);
   const stored = JSON.parse(readFileSync(paths.json, 'utf8'));
@@ -127,7 +127,7 @@ test('工具层：schema 含 withGeometry/withSolids 且拒绝非布尔；design
   assert.equal(rejected.code, 'INVALID_ARGUMENT');
   const designed = await tools.call('design_machine', { brief: BRIEF });
   assert.equal(designed.ok, true);
-  assert.equal(designed.geometry.layout, 'dial');
+  assert.equal(designed.geometry.layout, 'gantry');
   assert.equal(designed.geometry.stations, 3);
   assert.equal(designed.geometry.movingAxes, 6);
   assert.equal(designed.geometry.envelopeMm.length, 3);

@@ -19,6 +19,7 @@ export interface FlowModel {
   layout: MachineLayout;
   stations: number;           // 工位总数
   copies?: number;            // 同工序并行副本数（layout='parallel' 时 = stations）
+  lanes?: number;             // 并行轨道数（layout='cell' 时生效，默认 1）
   ops: FlowOp[];
   transferSeconds?: number;   // 直线/单元：件在工位间转移时间（默认 0）
   indexSeconds?: number;      // 转盘分度时间（layout='dial'，默认 0.6）
@@ -70,6 +71,9 @@ function assertModel(model: FlowModel): void {
   }
   if (model.copies !== undefined && (!Number.isInteger(model.copies) || model.copies <= 0)) {
     throw new Error('并行副本数必须是大于 0 的整数');
+  }
+  if (model.lanes !== undefined && (!Number.isInteger(model.lanes) || model.lanes <= 0)) {
+    throw new Error('并行轨道数必须是大于 0 的整数');
   }
   if (model.transferSeconds !== undefined) assertNonNegative(model.transferSeconds, '转移时间');
   if (model.indexSeconds !== undefined) assertNonNegative(model.indexSeconds, '分度时间');
@@ -173,7 +177,9 @@ export function evaluateFlow(model: FlowModel): FlowEvaluation {
     case 'cell': {
       stationSeconds = [...sums];
       const index = maxIndex(stationSeconds);
-      cycleSeconds = (stationSeconds[index] ?? 0) + transfer;
+      const lanes = model.lanes ?? 1;
+      cycleSeconds = ((stationSeconds[index] ?? 0) + transfer) / lanes;
+      if (lanes > 1) notes.push(`单元布局按 ${lanes} 条轨道并行，单轨节拍再除以轨道数。`);
       bottleneck = { station: index, seconds: stationSeconds[index] ?? 0, op: opNamesAt(model.ops, index) };
       break;
     }
@@ -217,8 +223,9 @@ export function evaluateFlow(model: FlowModel): FlowEvaluation {
         break;
       }
       case 'cell': {
-        const copies = copiesFor(stationSecondsMax, transfer);
-        requiredStations = copies * model.stations;
+        const lanes = model.lanes ?? 1;
+        const groups = Math.max(1, Math.ceil((stationSecondsMax + transfer) / (targetCycle * lanes) - EPS));
+        requiredStations = groups * model.stations;
         break;
       }
     }

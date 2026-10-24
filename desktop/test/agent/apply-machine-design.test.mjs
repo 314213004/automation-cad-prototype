@@ -221,7 +221,7 @@ test('成功后调用渲染桥 applyMachineConfig，返回统计与 warnings', a
   assert.equal(result.ok, true);
   assert.equal(result.data.sceneRefreshed, true);
   assert.ok(Array.isArray(result.data.warnings));
-  assert.ok(result.data.warnings.some((warning) => /节拍瓶颈/.test(warning)));
+  assert.ok(result.data.warnings.some((warning) => /形态选型.*非标设计/.test(warning)));
   const refresh = calls.find((call) => call.method === 'applyMachineConfig');
   assert.ok(refresh);
   assert.equal(refresh.args.config.stations.length, 3);

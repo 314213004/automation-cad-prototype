@@ -133,7 +133,15 @@ interface FlowOp {
 
 ### 3.2 整机形态库 `desktop/src/machine/forms.ts`
 
-同一工艺可以落在不同机架上。`pickForm(brief, templates, options?)` **把工位数当作硬约束**：先只在 `stationRange` 覆盖需求工位数的形态里筛，再按「工艺适配 → 节拍达标 → 占地系数最小 → 与需求工位数最接近」排序；布局意图只在已覆盖工位的候选内做偏好，不能反过来放宽工位约束。没有形态覆盖时，取区间最接近的形态并写 `warning`（实际支持范围、需求工位数、生成本依据与产能缺口），**不把未达标硬标成达标，也不允许双工位形态承接六工位需求**。
+同一工艺可以落在不同机架上。`pickForm(brief, templates, options?)` 使用固定的硬约束顺序：
+
+1. **工位覆盖**：`stationRange` 必须覆盖需求工位数；不覆盖的形态不能作为正常候选。
+2. **产能达标**：`evaluateFlow(...).meetsTarget === true` 优先于一切软偏好；只要存在覆盖且达标的形态，就绝不会选中不达标形态。
+3. **工艺适配**：`suits` 包含需求工艺。
+4. **布局偏好**：只做 tie-breaker，不参与候选过滤；需求倾向 `parallel` 时，同分优先 `parallel`。
+5. **占地与推荐工位**：`footprintScale` 小者优先，再按 `|defaultStations - 需求工位|` 小者。
+
+若没有任何形态同时覆盖工位且达标，先取「达标且工位最近」的形态；仍不达标则取「工位最近」的形态。此时 `warning` 必须写清「需要 X 件/分钟，最佳形态 Y 只能给 Z 件/分钟，差 W」，并另写非标工位回退说明。**不把未达标硬标成达标，也不允许有达标形态时选不达标形态。**
 
 ```ts
 pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
@@ -157,7 +165,7 @@ pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
 
 - 形态声明 `minStations / defaultStations / maxStations`，`stationRange` 由最小工位与 `maxStations` 推导，避免区间、推荐值与上限三处各写一份。
 - 加载期执行 `assertMachineFormsConsistent()`：任一形态违反 `stationRange[0] <= defaultStations <= stationRange[1]`、`maxStations === stationRange[1]`（或区间倒置）时直接抛错；`validateMachineForms()` 仍负责收集全部可读错误（id 唯一、布局对齐、工艺/几何兼容等）。
-- 形态参数进入产能模型：转盘 `indexSeconds`（dial-6 0.6 s、dial-8 0.45 s）、直线/双轨 `transferSeconds`（linear-8 0.8 s、dual-lane 0.6 s）。
+- 形态参数进入产能模型：转盘 `indexSeconds`（dial-6 0.6 s、dial-8 0.45 s）、直线/双轨 `transferSeconds`（linear-8 0.8 s、dual-lane 0.6 s）；双轨 `cell` 的 `geometry.lanes=2` 同时进入 `FlowModel.lanes`，节拍 = `(最慢工位 + transferSeconds) / lanes`。
 - 几何层优先使用 `form.geometry.kind`：`dial` / `linear` / `gantry` / `dual` 分别生成转盘、直线输送、龙门机架、双轨两排工位；1 工位仍回退单工位几何。
 - 落盘 `machine/<id>.json` 同时写 `form.id`、`form.geometry` 与两条备选，之后可复现同一形态。
 
@@ -183,7 +191,7 @@ pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
 
 `summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。`needs` / `question` 来自 `buildClarify(brief)`，供会话层决定是否先追问；完整需求返回空数组与 `null`。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。
 
-示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟、约 `2304` VA。工位数过滤后落到 `dial-6`，按 `dial` 模型估算：单工位 `3.18` 秒/件 + `0.60` 秒分度 → `15.87` 件/分钟，`meetsTarget=false`，并给出节拍瓶颈与形态选型 warning。BOM 草案 5 行（旋转轴、夹爪、接近开关、伺服驱动器、电气控制）。
+示例（标准输入）输出 `3` 工位、`6` 执行机构、`3` 传感器、目标 `20` 件/分钟、约 `2304` VA。覆盖 3 工位的形态均不达标时，按 fallback 取达标且工位最近的 `gantry-2`（支持 1–2 工位），按 `parallel` 模型估算 3 工位并发生能为 `56.60` 件/分钟，`meetsTarget=true`，同时输出「该形态支持 1–2 工位，需求 3 工位」的非标 warning。BOM 草案 5 行（旋转轴、夹爪、接近开关、伺服驱动器、电气控制）。
 
 ### 4.1 工艺模板 `desktop/src/machine/templates.ts`
 
@@ -287,11 +295,11 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 
 ## 7. 验证
 
-- 几何（迭代 34）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退。冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`。
-- 产能引擎：`test/machine/flow.test.mjs`（23 条）覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs`（6 条）覆盖六工位锁螺丝 dial、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs`（5 条）覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dial-6`、`mode=dial`、`stationSeconds=3.18`、`throughputPerMin=15.87`、`meetsTarget=false`（20 件/分钟目标下需扩工位/非标设计）。
+- 几何（迭代 34）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退。当前冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`。
+- 产能引擎：`test/machine/flow.test.mjs` 覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs` 覆盖六工位同工序并行、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs` 覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dual-lane`、`mode=cell`、`stationSeconds=3.18`、`lanes=2`、`throughputPerMin=31.75`、`meetsTarget=true`（20 件/分钟目标下余量 1.59 倍）。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
 - 全量测试：`TZ=Asia/Shanghai npm test` **1316/1316**（基线 1297，新增 19）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=dial-6`、`SMOKE_MACHINE_CYCLE_OK mode=dial throughput=16 meets=0`、`SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
 ### 7.1 真实模型评测（2026-10-24）

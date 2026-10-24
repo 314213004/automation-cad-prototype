@@ -405,7 +405,13 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   } else if (layout.mode === 'dial') {
     assumptions.push(`布局按转盘分度估算（dial）：各工位同时作业，节拍 = 最慢工位时间 + 分度时间；indexSeconds 采用形态默认 ${selectedForm.indexSeconds ?? 0.6} 秒/次。`);
   } else if (layout.mode === 'cell') {
-    assumptions.push('布局按单元式估算（cell）：组内工位串行、组间并行，节拍 = 最慢组时间 + 转移时间。');
+    const lanes = selectedForm.geometry.lanes ?? 1;
+    assumptions.push(
+      '布局按单元式估算（cell）：组内工位串行、组间并行，' +
+      (lanes > 1
+        ? `${lanes} 条轨道并行，节拍 = (最慢工位时间 + 转移时间) / ${lanes}。`
+        : '节拍 = 最慢组时间 + 转移时间。')
+    );
   } else if (layout.mode === 'single') {
     assumptions.push('布局按单工位估算（single）：一个工位完成全部工序，节拍 = 各工序时间之和。');
   } else if (brief.notes.includes(DEFAULT_NOTE_LAYOUT) || layout.fallback) {
@@ -566,6 +572,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     ops: flowOps,
     targetPerMin: cyclePerMin,
     ...(copies === undefined ? {} : { copies }),
+    ...(selectedForm.geometry.lanes === undefined ? {} : { lanes: selectedForm.geometry.lanes }),
     ...(selectedForm.indexSeconds === undefined ? {} : { indexSeconds: selectedForm.indexSeconds }),
     ...(selectedForm.transferSeconds === undefined ? {} : { transferSeconds: selectedForm.transferSeconds })
   };
@@ -622,7 +629,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     const extra = layout.mode === 'dial'
       ? `，含分度 ${indexSeconds.toFixed(2)} 秒`
       : layout.mode === 'cell'
-        ? '，组间并行'
+        ? `，${flowModel.lanes ?? 1} 轨并行`
         : '';
     bottleneck =
       `${modeLabel[layout.mode]}：最慢工位${bottleneckStation} 单件 ${stationSeconds.toFixed(2)} 秒${extra} → ` +

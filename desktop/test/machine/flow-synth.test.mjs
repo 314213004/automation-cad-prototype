@@ -3,26 +3,26 @@ import { test } from 'node:test';
 import { parseMachineBrief } from '../../src/machine/spec.ts';
 import { chooseLayout, synthMachine } from '../../src/machine/synth.ts';
 
-test('synth 接入：六工位锁螺丝由 flow 得到 dial / 15.87 件/分钟', () => {
+test('synth 接入：六工位锁螺丝由 flow 得到 dual-lane / 31.75 件/分钟', () => {
   const design = synthMachine(parseMachineBrief(
     '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅'
   ));
-  assert.equal(design.form.id, 'dial-6');
-  assert.equal(design.cycle.mode, 'dial');
+  assert.equal(design.form.id, 'dual-lane');
+  assert.equal(design.cycle.mode, 'cell');
   assert.equal(design.cycle.stationSeconds, 3.18);
-  assert.equal(design.cycle.throughputPerMin, 15.87);
-  assert.equal(design.cycle.meetsTarget, false);
-  assert.equal(design.cycle.requiredTotalStations, 12);
+  assert.equal(design.cycle.throughputPerMin, 31.75);
+  assert.equal(design.cycle.meetsTarget, true);
+  assert.equal(design.cycle.requiredTotalStations, 6);
   assert.ok(design.assumptions.some((line) => /evaluateFlow/.test(line)));
 });
 
 test('synth 接入：转盘关键词解析为 dial，分度默认 0.6 秒写入 assumptions', () => {
-  const brief = parseMachineBrief('三工位转盘点胶机，20 件/分钟');
+  const brief = parseMachineBrief('三工位转盘点胶机，10 件/分钟');
   assert.equal(brief.layout, 'dial');
   const design = synthMachine(brief);
   assert.equal(design.cycle.mode, 'dial');
-  assert.equal(design.cycle.meetsTarget, false);
-  assert.equal(design.cycle.requiredTotalStations, 6);
+  assert.equal(design.cycle.meetsTarget, true);
+  assert.equal(design.cycle.requiredTotalStations, 3);
   assert.ok(design.assumptions.some((line) => /indexSeconds.*默认 0\.6/.test(line)));
 });
 
@@ -34,7 +34,7 @@ test('synth 接入：cell 只在显式指定时使用', () => {
 });
 
 test('synth 接入：layout=auto 的推断结果写入 assumptions', () => {
-  const brief = { ...parseMachineBrief('三工位锁螺丝机，20 件/分钟'), layout: 'auto' };
+  const brief = { ...parseMachineBrief('三工位锁螺丝机，10 件/分钟'), layout: 'auto' };
   const design = synthMachine(brief);
   assert.equal(design.form.id, 'dial-6');
   assert.equal(design.cycle.mode, 'dial');

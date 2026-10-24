@@ -125,12 +125,13 @@ test('六工位单元式检测线 → dual-lane', () => {
   assert.equal(result.form.layout, 'cell');
 });
 
-test('工位超范围回退到最近形态并 warning', () => {
+test('工位超范围但有达标形态时优先取达标且工位最近的形态', () => {
   const result = pick('十二工位锁螺丝流水线，20 件/分钟');
-  assert.equal(result.form.id, 'linear-8');
+  assert.equal(result.form.id, 'dual-lane');
+  assert.equal(result.evaluation.meetsTarget, true);
   assert.ok(result.warning);
   assert.match(result.warning, /12 工位/);
-  assert.match(result.warning, /5–8 工位/);
+  assert.match(result.warning, /4–6 工位/);
 });
 
 test('节拍不达标时不硬凑达标，warning 给出产能缺口', () => {
@@ -139,7 +140,7 @@ test('节拍不达标时不硬凑达标，warning 给出产能缺口', () => {
   assert.equal(result.evaluation.meetsTarget, false);
   assert.ok(result.warning);
   assert.match(result.warning, /缺口 \d+\.\d+ 件\/分钟/);
-  assert.match(result.warning, /低于目标 120 件\/分钟/);
+  assert.match(result.warning, /需要 120 件\/分钟，最佳形态 .* 只能给 \d+\.\d{2} 件\/分钟，差 \d+\.\d{2} 件\/分钟/);
 });
 
 test('达标候选存在时优先达标形态并写入 evaluation', () => {

@@ -73,23 +73,23 @@ test('方案合成：6 工位、12 执行机构、7 传感器，点位 19 个且
   assert.equal(design.power.va, 4628);
 });
 
-test('节拍按 dial-6：3.18 秒/件 + 0.6 秒分度 → 15.87 件/分钟，提示 20 件/分钟缺口', () => {
+test('节拍按 dual-lane：单轨 3.18 秒/件 + 0.6 秒转移，2 轨并行 → 31.75 件/分钟', () => {
   const design = caseDesign();
-  assert.equal(design.form.id, 'dial-6');
-  assert.equal(design.cycle.mode, 'dial');
+  assert.equal(design.form.id, 'dual-lane');
+  assert.equal(design.cycle.mode, 'cell');
   assert.equal(design.cycle.perMin, 20);
   assert.equal(design.cycle.secondsPerPiece, 3);
   assert.equal(design.cycle.stationSeconds, 3.18);
-  assert.equal(design.cycle.throughputPerMin, 15.87);
+  assert.equal(design.cycle.throughputPerMin, 31.75);
   assert.equal(design.cycle.estimatedSecondsPerPiece, 3.18);
-  assert.equal(design.cycle.meetsTarget, false);
-  assert.equal(design.cycle.requiredParallelStations, 2);
-  assert.equal(design.cycle.requiredTotalStations, 12);
+  assert.equal(design.cycle.meetsTarget, true);
+  assert.equal(design.cycle.requiredParallelStations, 1);
+  assert.equal(design.cycle.requiredTotalStations, 6);
   assert.match(design.cycle.bottleneck, /3\.18/);
-  assert.match(design.cycle.bottleneck, /0\.60/);
-  assert.match(design.cycle.bottleneck, /15\.87 件\/分钟/);
-  assert.ok(design.assumptions.some((line) => /布局按转盘分度/.test(line)));
-  assert.ok(design.warnings.some((warning) => /节拍瓶颈/.test(warning)));
+  assert.match(design.cycle.bottleneck, /2 轨并行/);
+  assert.match(design.cycle.bottleneck, /31\.75 件\/分钟/);
+  assert.ok(design.assumptions.some((line) => /布局按单元式/.test(line)));
+  assert.equal(design.warnings.some((warning) => /节拍瓶颈/.test(warning)), false);
 });
 
 test('BOM 型号存在性：每个 partId 都在声明的 builtin 包中，型号完全匹配', () => {
@@ -200,12 +200,12 @@ test('machine-case.json 与实时计算结果一致，且截图校验齐全', ()
   assert.equal(stored.design.config.sensors.length, design.config.sensors.length);
   assert.equal(stored.cycleAnalysis.estimatedSecondsPerPiece, design.cycle.estimatedSecondsPerPiece);
   assert.equal(stored.cycleAnalysis.requiredTotalStations, design.cycle.requiredTotalStations);
-  assert.equal(stored.design.form.id, 'dial-6');
-  assert.deepEqual(stored.design.form.stationRange, [2, 6]);
-  assert.equal(stored.cycleAnalysis.mode, 'dial');
+  assert.equal(stored.design.form.id, 'dual-lane');
+  assert.deepEqual(stored.design.form.stationRange, [4, 6]);
+  assert.equal(stored.cycleAnalysis.mode, 'cell');
   assert.equal(stored.cycleAnalysis.stationSeconds, 3.18);
-  assert.equal(stored.cycleAnalysis.throughputPerMin, 15.87);
-  assert.equal(stored.cycleAnalysis.meetsTarget, false);
+  assert.equal(stored.cycleAnalysis.throughputPerMin, 31.75);
+  assert.equal(stored.cycleAnalysis.meetsTarget, true);
   assert.equal(stored.ioMap.rowCount, 19);
   assert.equal(stored.bom.items.length, 12);
   assert.equal(stored.bom.pendingCount, 0);
@@ -225,8 +225,8 @@ test('machine-case.json 与实时计算结果一致，且截图校验齐全', ()
 test('machine-case.json 的 form 非 null，且工位范围覆盖 6', () => {
   const stored = JSON.parse(readFileSync(caseFile, 'utf8'));
   assert.ok(stored.design.form);
-  assert.equal(stored.design.form.id, 'dial-6');
-  assert.deepEqual(stored.design.form.stationRange, [2, 6]);
+  assert.equal(stored.design.form.id, 'dual-lane');
+  assert.deepEqual(stored.design.form.stationRange, [4, 6]);
   assert.ok(stored.design.form.stationRange[0] <= 6);
   assert.ok(stored.design.form.stationRange[1] >= 6);
 });

@@ -1,6 +1,6 @@
 # 六工位锁螺丝机 · 完整设计案例
 
-本文是一个从中文需求到 3D / BOM / PLC IO 的完整案例。**本案例选中 `dial-6`（六工位转盘机）**：工位数先作为硬约束筛掉只支持 1–2 工位的 `gantry-2`，再在覆盖 6 工位的形态中按工艺、节拍、占地与推荐工位数排序。其余 `single / linear / dial / parallel / cell` 由同一 `evaluateFlow` 入口求值。案例数字不是手写的：`desktop/scripts/build-machine-case.mjs` 调用 `parseMachineBrief`、`synthMachine`、`mapMachineBom` 与 `buildMachineIoMap` 生成 [`eval/machine-case.json`](eval/machine-case.json)，再由该 JSON 生成方案表和截图校验结果。
+本文是一个从中文需求到 3D / BOM / PLC IO 的完整案例。**本案例选中 `dual-lane`（双轨并行线，`cell` 布局）**：工位数先作为硬约束筛掉只支持 1–2 工位的 `gantry-2`，再按「工位覆盖 → 产能达标 → 工艺适配 → 布局偏好 → 占地系数 → 推荐工位距离」排序。`dial-6` 虽然占地更小，但单轨节拍未达标，因此不能压过达标的 `dual-lane`。其余 `single / linear / dial / parallel / cell` 由同一 `evaluateFlow` 入口求值。案例数字不是手写的：`desktop/scripts/build-machine-case.mjs` 调用 `parseMachineBrief`、`synthMachine`、`mapMachineBom` 与 `buildMachineIoMap` 生成 [`eval/machine-case.json`](eval/machine-case.json)，再由该 JSON 生成方案表和截图校验结果。
 
 ```bash
 cd desktop
@@ -33,10 +33,10 @@ npm run screenshots:machine               # 真实 Electron 截图，并重新�
 `synthMachine` 先调用 `pickForm`，本案例的选型过程如下：
 
 1. 需求工位数是 `6`，硬约束先保留 `dial-6`（2–6）、`dial-8`（6–8）、`linear-8`（5–8）、`dual-lane`（4–6）；`gantry-2` 的区间是 1–2，**不能承接 6 工位需求**，即使它的占地系数更小也不会进入候选。
-2. 四个候选都适配锁螺丝工艺；按目标 `20` 件/分钟预演时，六工位转盘的 `3.18 + 0.60 = 3.78` 秒/件 → `15.87` 件/分钟，四个候选均未达标。
-3. 未达标时继续按占地系数与推荐工位数排序，`dial-6` 的 `footprintScale=0.78` 最小、推荐工位数正好是 6，因此选中 `dial-6`，保留两条备选并由 `warning` 明确写出节拍缺口，**不把未达标硬标为达标**。
+2. 产能达标优先于工艺、布局与占地软偏好。`dial-6` 的单轨节拍为 `3.18 + 0.60 = 3.78` 秒/件，超过目标 `3.00` 秒/件，未达标；`dual-lane` 同样是单轨 `3.78` 秒/件，但两条轨道并行，等效能节拍为 `1.89` 秒/件，达到 `31.75` 件/分钟，因此进入优先候选。
+3. 需求未显式指定布局，解析器倾向 `parallel`；但本形态库里没有覆盖 6 工位的 `parallel` 形态，布局偏好只做 tie-breaker，不能放宽工位覆盖，也不能压过达标结论。最终选中 `dual-lane`，两条备选为 `dial-6` 与 `dial-8`；`dial-6` 占地更小但未达标，不能反超。
 
-落盘结果同时保存 `form.id=dial-6`、`form.stationRange=[2,6]` 与 `form.defaultStations=6`；`design_machine` 返回同名字段，重载后可按这些字段复现同一形态。
+落盘结果同时保存 `form.id=dual-lane`、`form.layout=cell`、`form.stationRange=[4,6]`、`form.defaultStations=6` 与 `form.geometry.lanes=2`；`design_machine` 返回同名字段，重载后可按这些字段复现同一形态。
 
 ## 方案表
 
@@ -62,33 +62,36 @@ npm run screenshots:machine               # 真实 Electron 截图，并重新�
 
 ## 节拍计算
 
-目标节拍由 `60 / 20` 得到 `3.00` 秒/件。解析器把「六工位锁螺丝机」识别为单一锁螺丝工艺；选型器在覆盖 6 工位的形态中选中 `dial-6`，因此产能按转盘模型计算：各工位同时作业，节拍还要加上转盘分度时间。单工位时间由工艺固定余量加该工位动作得到：
+目标节拍由 `60 / 20` 得到 `3.00` 秒/件。解析器把「六工位锁螺丝机」识别为单一锁螺丝工艺；选型器按产能优先选中 `dual-lane`，因此产能按双轨 `cell` 模型计算：每条轨道的工位串行作业，轨道之间并行。单工位时间由工艺固定余量加该工位动作得到：
 
 ```text
 stationSeconds = 工艺固定 2.20 s + 旋转轴 0.70 s + 气爪 0.28 s
                = 3.18 s/件
 
-cycleSeconds = stationSeconds + indexSeconds
-             = 3.18 + 0.60 = 3.78 s/件
+singleLaneCycleSeconds = stationSeconds + transferSeconds
+                       = 3.18 + 0.60 = 3.78 s/件
+
+cycleSeconds = singleLaneCycleSeconds / lanes
+             = 3.78 / 2 = 1.89 s/件
 
 throughputPerMin = 60 / cycleSeconds
-                 = 60 / 3.78
-                 = 15.8730… ≈ 15.87 件/分钟
+                 = 60 / 1.89
+                 = 31.7460… ≈ 31.75 件/分钟
 
-meetsTarget = throughputPerMin ≥ 20 → false
-requiredParallelStations = ceil(3.18 / (3.00 - 0.60)) = 2
-requiredTotalStations = 2 × 6 = 12
-缺口 = 20 - 15.87 = 4.13 件/分钟（约 20.6%）
+meetsTarget = throughputPerMin ≥ 20 → true
+margin = 31.75 / 20 = 1.59 倍
+requiredParallelStations = 1
+requiredTotalStations = 6
 ```
 
-- 布局：`mode=dial`（由 `form.layout` 决定）；单工位时间 `stationSeconds=3.18` 秒/件，瓶颈动作 `0.98` 秒/件，分度 `0.60` 秒/次。
-- 估算产能：`throughputPerMin=15.87` 件/分钟；目标 `20` 件/分钟（`3.00` 秒/件），`meetsTarget=false`。
-- 瓶颈文案：`转盘分度：最慢工位1 单件 3.18 秒，含分度 0.60 秒 → 15.87 件/分钟`。
-- `requiredTotalStations=12` 是「按当前转盘节拍达到 20 件/分钟所需的最少总工位数」，不是当前工位数；当前 `6` 个工位不足，需扩工位/复制瓶颈或改非标方案。
+- 布局：`mode=cell`（由 `form.layout` 决定）；单工位时间 `stationSeconds=3.18` 秒/件，瓶颈动作 `0.98` 秒/件，轨道转移 `0.60` 秒/次，`lanes=2`。
+- 估算产能：`throughputPerMin=31.75` 件/分钟；目标 `20` 件/分钟（`3.00` 秒/件），`meetsTarget=true`，余量 `1.59` 倍。
+- 瓶颈文案：`单元布局：最慢工位1 单件 3.18 秒，2 轨并行 → 31.75 件/分钟`。
+- `requiredTotalStations=6` 是「按当前双轨节拍达到 20 件/分钟所需的最少总工位数」；当前 6 工位已满足。
 
-**结论：`dial-6` 方案估算 ≈ 15.87 件/分钟，未满足 20 件/分钟；案例保留真实缺口 warning，并建议至少 12 工位或非标扩产。**
+**结论：`dual-lane` 方案估算 31.75 件/分钟，满足 20 件/分钟，余量 1.59 倍；没有保留旧的未达标缺口。**
 
-边界：该结论按 `dial-6` 的静态转盘模型估算，仍未计入上下料、通讯、人工干预、调试损失与真实加减速。若实际工艺是「上料 → 锁螺丝 → 检测 → 下料」串行流水线，应在需求中写「流水线 / 线体 / 产线」，或显式指定 `layout=linear`（兼容 `line`）；此时产能按 `60 / 最慢工位` 计算，不能拿 6 工位做线性放大。若要达到 20 件/分钟，需要增加并行副本/工位或改用覆盖该产能的非标形态。
+边界：该结论按 `dual-lane` 的静态双轨 `cell` 模型估算，仍未计入上下料、通讯、人工干预、调试损失与真实加减速。若实际工艺是「上料 → 锁螺丝 → 检测 → 下料」串行流水线，应在需求中写「流水线 / 线体 / 产线」，或显式指定 `layout=linear`（兼容 `line`）；此时产能按 `60 / 最慢工位` 计算，不能拿 6 工位做线性放大。
 
 ## 同一需求的两种形态对比
 
@@ -103,9 +106,9 @@ requiredTotalStations = 2 × 6 = 12
 | 换型 | 换治具 + 凸轮/分度程序，转盘中心不动 | 换工位治具与输送节拍，线体可逐站扩 |
 | 适用 | 中小件、节拍中等、占地紧 | 工序链长、换型少、需要连续流 |
 
-同样六工位，转盘占地更方、直线线体更长；两者都达标时，选型器先保证工位覆盖，再按布局意图与排序规则选择，并给出 `alternatives`。转盘方案会列出八工位转盘与双轨并行线；直线方案会列出 `dial-6` 与 `dial-8`。这些差异百分比来自 `footprintScale` 粗估，不是 CAD 占地校核。
+同样六工位，转盘占地更方、直线线体更长；两者都达标时，选型器先保证工位覆盖与产能达标，再把布局意图作为 tie-breaker，并给出 `alternatives`。转盘方案会列出八工位转盘与双轨并行线；直线方案会列出 `dial-6` 与 `dial-8`。这些差异百分比来自 `footprintScale` 粗估，不是 CAD 占地校核。
 
-若需求写「六工位单元式锁螺丝机」，则落到 `dual-lane`（`cell`，两轨并行）；不写显式布局时「六工位锁螺丝机」落到 `dial-6`。`gantry-2` 的区间已收敛为 1–2 工位，**不会再被选给六工位需求**；真需要六工位龙门结构，只能在形态库新增覆盖该范围的新形态。三种说法的工艺相同，但 `form.id`、几何布局与节拍模型不同，落盘后可按 `form.id` 复现。
+若需求写「六工位单元式锁螺丝机」，会落到 `dual-lane`（`cell`，两轨并行）；不写显式布局时，「六工位锁螺丝机」在 10 件/分钟下仍由 `dial-6` 以更小占地胜出，而本案例的 20 件/分钟按产能优先落到 `dual-lane`。`gantry-2` 的区间已收敛为 1–2 工位，**有覆盖且达标的形态时不会再被选给六工位需求**；只有无覆盖达标形态时才按 fallback 取达标且工位最近的形态，并写非标 warning。三种说法的工艺相同，但 `form.id`、几何布局与节拍模型不同，落盘后可按 `form.id` 复现。
 
 ## 功率与电气估算
 
@@ -204,7 +207,7 @@ CP1E-N40DR-A 提供 24 DI / 16 DO，当前使用 `19` 个点位：`7` 个输入�
 
 ![机型方案卡：6 工位、12 执行机构、7 传感器与警告（截图为旧版数值）](screenshots/15-machine-design-card.png)
 
-方案卡展示 6 工位、12 个执行机构、7 个传感器、估算产能、`4628` VA 功率与警告，并提供「应用到工程」按钮。截图生成于形态选型修复前，仍显示旧的 `parallel / 113.21` 文案；当前数字以 `eval/machine-case.json`（`dial-6 / 15.87`）与本文章节为准。
+方案卡展示 6 工位、12 个执行机构、7 个传感器、估算产能、`4628` VA 功率与警告，并提供「应用到工程」按钮。截图生成于形态选型修复前，仍显示旧版 `parallel` 文案；当前数字以 `eval/machine-case.json`（`dual-lane / 31.75`）与本文章节为准。
 
 ### 6 工位 3D 联调视图
 
@@ -239,7 +242,7 @@ IO 面板显示 19 行点位，输出行逐条对应夹爪/旋转轴机构，输
 
 ## 已知风险
 
-1. **节拍依赖形态假设**：本案例选中 `dial-6`，6 工位 `3.18` 秒/件 + `0.60` 秒分度 → `15.87` 件/分钟，不满足 20 件/分钟；warning 已明确缺口。若实际为上料→锁螺丝→检测→下料，需显式指定 `linear` 模型（`60 / 最慢工位`）重算；若要达标，需增加并行副本/工位或走非标设计，且未计上下料、通讯与调试损失。
+1. **节拍依赖形态假设**：本案例选中 `dual-lane`，单轨 `3.18` 秒/件 + `0.60` 秒转移，两轨并行后 `31.75` 件/分钟，满足 20 件/分钟，余量 `1.59` 倍；若实际为上料→锁螺丝→检测→下料，需显式指定 `linear` 模型（`60 / 最慢工位`）重算，且未计上下料、通讯与调试损失。
 2. **安全光栅仅为初选**：BOM 第 6 行已选 `F3SG-4SRA0640-14`（14 mm / 640 mm / Type 4 PL e），但安全距离（ISO 13855）、实际开口高度与安全回路尚未做实物校核。
 3. **安全回路不能只靠标准 PLC**：安全光栅输入 `ST1-SAFE-S2` 目前映射到 CP1E 标准输入，实际安全功能必须经安全继电器/安全回路硬接线实现，PLC 只能读取状态，不能替代安全等级设计。
 4. **功率与电流是工程估算**：`cosφ=0.85`、效率 `η=0.9`、伺服控制负载与预留均为假设；定型前需用伺服驱动器、电机、电源和断路器的最新样本复核。
@@ -254,7 +257,7 @@ IO 面板显示 19 行点位，输出行逐条对应夹爪/旋转轴机构，输
 | 需求原文 | `.brief` |
 | 6 工位、6 伺服轴、6 气爪、6 到位检测、1 安全光栅 | `.parsed.stations`、`.parsed.actuators`、`.parsed.sensors` |
 | 12 个执行机构、7 个传感器、19 个点位 | `.design.config.actuators`、`.design.config.sensors`、`.design.points`、`.ioMap.rowCount` |
-| 20 / 3.00 / 3.18 / 0.60 / 15.87 / 12 | `form`、`.cycleAnalysis` |
+| 20 / 3.00 / 3.18 / 0.60 / 31.75 / 6 / 1.59 | `form`、`.cycleAnalysis` |
 | 4628 / 4500 / 90 / 18 / 20 VA | `.design.power` |
 | 4650 W、150 W 与四项电流/余量 | `.electrical` |
 | 12 行 BOM、12 行真实型号、0 行待选型 | `.bom.items`、`.bom.realPartCount`、`.bom.pendingCount` |

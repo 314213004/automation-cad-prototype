@@ -50,7 +50,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 | `12-parametric.png` | 参数化抽屉：4 特征树、孔位参数表单、`就绪 · 面 19 · 体积 71.5 cm³`（1600×1000，假 sidecar） |
 | `13-cost.png` | 成本估算：9 张统计卡、6 行明细、缺价 1 项、合计 ¥1,398.64（1600×1000） |
 | `14-enclosure.png` | 底板布置：3 个真实尺寸元件、1 处重叠红框/角标、利用率与冲突计数（1600×1000） |
-| `15-machine-design-card.png` | 机型方案卡：6 工位、12 执行机构、7 传感器、113.21 件/分钟、4628 VA、警告与「应用到工程」（1600×1000） |
+| `15-machine-design-card.png` | 机型方案卡：6 工位、12 执行机构、7 传感器、当前案例 31.75 件/分钟、4628 VA、警告与「应用到工程」（1600×1000；截图为旧版数值） |
 | `16-machine-3d.png` | 6 工位 3D 联调：12 个执行机构、7 个传感器，运行若干 tick（1600×1000，SwiftShader WebGL） |
 | `17-machine-bom.png` | BOM 面板：12 行，含 SV660P 750 W / MHZ2-20D / D-M9B / SY5120-5LZD 与安全光栅行（1600×1000；截图为补录前版本，仍显示待选型，待有 GUI 时重拍） |
 | `18-machine-iomap.png` | PLC IO 面板：19 行（7 输入 + 12 输出），点位与夹爪/旋转轴/传感器对应（1600×1000） |
@@ -84,7 +84,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=20 audit=3 ctx=595`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0`、`SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
+- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
 - ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
@@ -100,10 +100,10 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 上下文预算与成本（P7-M）：`src/agent/budget.ts` 纯函数估算中英文字符（1.6 / 4）、按六档装包，默认 12k tokens，超限先保留长列表首尾各 5 条 + total、再丢最旧 history，system 永不裁剪；`session.ts` 记录端点 usage 或回落估算，累计本轮/本会话 tokens；`pricing.json` 提供元/千 tokens 单价，未知模型显示 `—`；审计新增 `promptTokens/completionTokens/estimated/docsSources`；侧栏底部显示本轮/本会话 tokens 与费用；`SMOKE_AGENT_BUDGET_OK used=371 dropped=7 tokens=128`
 - ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录；BACKLOG 只留最近一轮，历史移入不入索引的 BACKLOG-HISTORY.md，单测守 5% 余量）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 21（只读 11 + 写 10，含运动件识别 `suggest_kinematics`），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=344 query=D2 hits=1`
 - ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
-- ✅ 整机形态库：`forms.ts` 定义 `dial-6` / `dial-8` / `linear-4` / `linear-8` / `gantry-2` / `dual-lane` 六种形态，`pickForm` 按布局意图、工艺适配、工位范围与 `evaluateFlow` 预演选型，返回两条备选与产能缺口 warning；`synthMachine` 用形态 layout/分度/转移参数建 FlowModel，几何按 `form.geometry` 生成 dial/linear/gantry/dual，落盘写 `form.id`；单测 28 条，`SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`
+- ✅ 整机形态库：`forms.ts` 定义 `dial-6` / `dial-8` / `linear-4` / `linear-8` / `gantry-2` / `dual-lane` 六种形态，`pickForm` 按「工位覆盖 → 产能达标 → 工艺适配 → 布局 tie-breaker → 占地/推荐工位」选型，返回两条备选与产能缺口 warning；`synthMachine` 用形态 layout/分度/转移/lanes 参数建 FlowModel，几何按 `form.geometry` 生成 dial/linear/gantry/dual，落盘写 `form.id`；`SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`
 - ✅ 迭代 34 机型参数化几何：纯函数 `generateMachineGeometry` 由 `MachineConfig` / `MachineDesign` 生成带 mm 尺寸的整机（分度转盘 / 直线输送 / 龙门 / 双轨 / 单工位），运动件带轴向/行程/点位元数据；3D 联调改为渲染该几何并按 `MachineMotion` 驱动；`apply_machine_design` 默认落盘 geometry.json / model.stl / model.gltf / sidecar-assembly.json，`withSolids` 在 build123d 内核就绪时实体化为 STEP、否则回退 TS 网格；`SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57`
 - ✅ 主视口可旋转 3D（35-orbit-view）：`src/orbit/` 注入扩展替换原型装配/干涉视口的固定等轴测（原型零改动）；轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F）、树↔3D 选择同步、属性编辑（原型缸径/行程 + 桌面版尺寸/位置）沿叠放链改几何、干涉视图问题件高亮 + 剖切裁剪 + 包围盒初筛叠加；WebGL 不可用保留原型 SVG。38 条单测；`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径 `npm run check:orbit-webgl` → `ORBIT_WEBGL_OK`
-- ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；按 `parallel` 同工序并行模型，单工位 3.18 秒/件 × 6 工位 ≈ 113.21 件/分钟，满足 20 件/分钟（余量 5.66 倍）；BOM 映射 12 行真实型号（安全光栅初选 F3SG-4SRA0640-14），电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
+- ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；按 `dual-lane` 双轨 `cell` 模型，单轨 3.18 秒/件 + 0.60 秒转移、两轨并行后 31.75 件/分钟，满足 20 件/分钟（余量 1.59 倍）；BOM 映射 12 行真实型号（安全光栅初选 F3SG-4SRA0640-14），电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

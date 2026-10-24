@@ -1470,10 +1470,10 @@ function createWindow(): BrowserWindow {
           machineDesign.design?.cycle?.perMin !== 20 ||
           machineDesign.design?.cycle?.secondsPerPiece !== 3 ||
           !(Number(machineDesign.design?.power?.va) > 0) ||
-          machineDesign.design?.warnings?.length !== 2 ||
+          machineDesign.design?.warnings?.length !== 1 ||
           !machineDesign.design?.warnings?.some((warning: string) => /形态选型/.test(warning)) ||
-          machineDesign.design?.form?.id !== 'dial-6' ||
-          !machineDesign.design?.form?.stationRange?.includes(6) ||
+          machineDesign.design?.form?.id !== 'gantry-2' ||
+          !machineDesign.design?.form?.stationRange?.includes(2) ||
           !Array.isArray(machineDesign.design?.assumptions) ||
           typeof machineDesign.summary !== 'string' ||
           machineDesign.summary.length > 600
@@ -1482,7 +1482,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=dial-6');
+        console.log('SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=1 form=gantry-2');
 
         const cycleDesign = await activeTools.call('design_machine', {
           brief: '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅'
@@ -1500,10 +1500,10 @@ function createWindow(): BrowserWindow {
         const cycle = cycleDesign.design?.cycle;
         if (
           !cycleDesign.ok ||
-          cycle?.mode !== 'dial' ||
+          cycle?.mode !== 'cell' ||
           cycle?.stationSeconds !== 3.18 ||
-          Math.round(Number(cycle?.throughputPerMin)) !== 16 ||
-          cycle?.meetsTarget !== false
+          Math.round(Number(cycle?.throughputPerMin)) !== 32 ||
+          cycle?.meetsTarget !== true
         ) {
           console.error('SMOKE_FAIL machine_cycle', JSON.stringify(cycleDesign));
           setTimeout(() => app.exit(1), 100);
@@ -1594,21 +1594,22 @@ function createWindow(): BrowserWindow {
         }
         console.log('SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1');
 
-        const formBrief = parseMachineBrief('六工位锁螺丝机，10 件/分钟');
+        const formBrief = parseMachineBrief('六工位锁螺丝机，20 件/分钟');
         const formPick = pickForm(formBrief, TEMPLATES);
         const formErrors = validateMachineForms();
         if (
           MACHINE_FORMS.length !== 6 ||
           formErrors.length > 0 ||
-          formPick.form.id !== 'dial-6' ||
+          formPick.form.id !== 'dual-lane' ||
           formPick.form.stationRange[0] > 6 ||
-          formPick.form.stationRange[1] < 6
+          formPick.form.stationRange[1] < 6 ||
+          formPick.evaluation.meetsTarget !== true
         ) {
           console.error('SMOKE_FAIL machine_forms', JSON.stringify({ forms: MACHINE_FORMS.length, formErrors, picked: formPick.form.id }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6');
+        console.log('SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1');
 
         const applied = await activeTools.call('apply_machine_design', {
           brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
@@ -1660,7 +1661,7 @@ function createWindow(): BrowserWindow {
         const machineGeometry = applied.geometry;
         if (
           !machineGeometry ||
-          machineGeometry.layout !== 'dial' ||
+          machineGeometry.layout !== 'gantry' ||
           !(Number(machineGeometry.parts) > 0) ||
           machineGeometry.movingAxes !== 6 ||
           !machineGeometry.stlPath || !existsSync(machineGeometry.stlPath) ||
@@ -1668,7 +1669,7 @@ function createWindow(): BrowserWindow {
           !machineGeometry.jsonPath || !existsSync(machineGeometry.jsonPath) ||
           !machineGeometry.sidecarPath || !existsSync(machineGeometry.sidecarPath) ||
           appliedGeometry?.parts !== machineGeometry.parts ||
-          appliedGeometry?.layout !== 'dial'
+          appliedGeometry?.layout !== 'gantry'
         ) {
           console.error('SMOKE_FAIL machine_geometry', JSON.stringify({ geometry: machineGeometry, appliedGeometry }));
           setTimeout(() => app.exit(1), 100);

@@ -4,6 +4,18 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+## 选型优先级修正：产能优先 + 案例数字一致性（2026-10-24，本轮）
+
+- 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1452/1452**、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dual-lane meets=1`、`npm run eval:agent` **1.00**；未 push、未打包、未触发 CI。
+- 缺陷：`pickForm` 先把候选按布局意图（单一工艺默认 `parallel`）过滤，导致覆盖 6 工位且可双轨达标的 `dual-lane`（`cell`）被排除，最后回退到不达标的 `dial-6`。复现命令（在 `desktop/` 下）：
+  ```bash
+  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const y=await import('./src/machine/synth.ts');const d=y.synthMachine(s.parseMachineBrief('六工位锁螺丝机，节拍 20 件/分钟'));console.log(d.form.id, d.form.layout, d.cycle.throughputPerMin, d.cycle.meetsTarget)})"
+  ```
+  修复前：`dial-6 dial 14.29 false`（显式 12 执行机构案例为 `dial-6 dial 15.87 false`）；修复后：`dual-lane cell 28.57 true`（案例 JSON 为 `31.75 true`）。
+- 修复：`forms.ts` 候选排序改为硬约束顺序「工位覆盖 → 产能达标 → 工艺适配 → 布局偏好（仅 tie-breaker）→ 占地系数 → 推荐工位距离」；无覆盖达标形态时先取达标且工位最近，仍不达标才取工位最近，并输出「需要 X 件/分钟，最佳形态 Y 只能给 Z 件/分钟，差 W」。`flow.ts` 的 `cell` 增加 `lanes`，双轨节拍按 `(最慢工位 + transferSeconds) / lanes` 计算；`synth.ts` 把 `form.geometry.lanes` 传入 FlowModel。
+- 案例与文档：`npm run build:machine-case` 重算为 `dual-lane / cell / 3.18 s / 2 轨 / 31.75 件/分钟 / meetsTarget=true / 余量 1.59× / 需 6 工位`；`MACHINE-DESIGN-DEMO.md` 的「整机形态选型」「节拍计算」「已知风险」「数字来源索引」全部改为 JSON 实际值，删除旧 `dial-6 / 15.87 / 113.21` 数字。
+- 防漂移：新增 `test/machine/demo-doc.test.mjs`，校验文档中的形态 id/name、两位小数产能、`meetsTarget`、BOM 行数与 `machine-case.json` 一致；人为改错产能或删 BOM 行会失败并提示「先重跑 build:machine-case 再更新文档」。新增 `test/machine/form-priority.test.mjs` 覆盖 4/6/8 工位 × 10/20/40 件/分钟、布局 tie-breaker、工艺优先、fallback 顺序、双轨 cell 与无达标 warning。
+
 ## 整机形态选型一致性修复（2026-10-24，本轮）
 
 - 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1426/1426**（较上轮 +18）、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`npm run eval:agent` **1.00**；未 push。

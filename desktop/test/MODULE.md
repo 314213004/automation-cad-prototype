@@ -58,9 +58,9 @@ SMOKE_DIAGNOSE_OK codes=1
 SMOKE_AGENT_TOOLS_OK tools=20 implemented=20
 SMOKE_AGENT_TOOLS_V2 tools=20
 SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0
-SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1
+SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1
 SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=6 undo=1
-SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58
+SMOKE_MACHINE_GEOMETRY_OK layout=gantry parts=57 axes=6 envelope=1610x420x1625 chunks=2 scene=57
 SMOKE_AGENT_KB_OK docs=13 chunks=364 query=D2 hits=1
 SMOKE_AGENT_BRIDGE_OK scene=1 bom=1
 SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1

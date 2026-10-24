@@ -391,6 +391,7 @@ function previewModel(
     ops,
     targetPerMin: cyclePerMin,
     ...(copies === undefined ? {} : { copies }),
+    ...(form.geometry.lanes === undefined ? {} : { lanes: form.geometry.lanes }),
     ...(form.indexSeconds === undefined ? {} : { indexSeconds: form.indexSeconds }),
     ...(form.transferSeconds === undefined ? {} : { transferSeconds: form.transferSeconds })
   };
@@ -431,11 +432,10 @@ function scoreCandidate(
   return (layoutFit ? 5 : 0) + processScore + stationScore + throughputScore + footprintScore + closenessScore;
 }
 
-function compareCovering(left: Candidate, right: Candidate): number {
+/** 覆盖且达标的候选：工艺适配 → 布局偏好 → 占地系数 → 推荐工位距离。 */
+function comparePreference(left: Candidate, right: Candidate): number {
   if (left.processFit !== right.processFit) return left.processFit ? -1 : 1;
-  const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
-  const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
-  if (leftMeets !== rightMeets) return rightMeets - leftMeets;
+  if (left.layoutFit !== right.layoutFit) return left.layoutFit ? -1 : 1;
   if (Math.abs(left.form.footprintScale - right.form.footprintScale) > 1e-9) {
     return left.form.footprintScale - right.form.footprintScale;
   }
@@ -444,18 +444,10 @@ function compareCovering(left: Candidate, right: Candidate): number {
   return left.form.stationRange[0] - right.form.stationRange[0];
 }
 
-function compareFallback(left: Candidate, right: Candidate): number {
+/** 无覆盖且达标形态时：先取工位距离最近的，再按软偏好排序。 */
+function compareByStationDistance(left: Candidate, right: Candidate): number {
   if (left.stationDistance !== right.stationDistance) return left.stationDistance - right.stationDistance;
-  if (left.layoutFit !== right.layoutFit) return left.layoutFit ? -1 : 1;
-  if (left.processFit !== right.processFit) return left.processFit ? -1 : 1;
-  const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
-  const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
-  if (leftMeets !== rightMeets) return rightMeets - leftMeets;
-  if (Math.abs(left.form.footprintScale - right.form.footprintScale) > 1e-9) {
-    return left.form.footprintScale - right.form.footprintScale;
-  }
-  if (left.defaultDistance !== right.defaultDistance) return left.defaultDistance - right.defaultDistance;
-  return right.score - left.score;
+  return comparePreference(left, right);
 }
 
 function footprintPercent(chosen: MachineForm, other: MachineForm): string {
@@ -487,11 +479,9 @@ function differenceText(chosen: MachineForm, other: MachineForm): string {
 }
 
 /**
- * 形态选型：工位数是硬约束。
- * 1. 先筛 stationRange 覆盖需求工位数的形态；
- * 2. 再按工艺适配 → 节拍达标 → 占地系数最小 → 与需求工位数最接近排序；
- * 3. 无覆盖时取区间最接近的形态，并给出非标设计 warning。
- * 布局意图只在工位数已覆盖的候选内做偏好，不能反过来放宽工位约束。
+ * 形态选型（硬约束顺序）：工位覆盖 → 产能达标 → 工艺适配 → 布局偏好 →
+ * 占地系数 → 推荐工位距离。布局偏好只做 tie-breaker，不参与候选过滤。
+ * 若无形态同时覆盖且达标：先取达标且工位最近的；仍不达标则取工位最近的。
  */
 export function pickForm(
   brief: MachineBrief,
@@ -525,18 +515,12 @@ export function pickForm(
   });
 
   const covering = allCandidates.filter((candidate) => candidate.inRange);
-  let pool = covering;
-  if (covering.length > 0) {
-    // 工艺适配优先于布局偏好：只有「布局匹配且工艺适配」的候选存在时才收窄。
-    const layoutMatched = covering.filter((candidate) => candidate.layoutFit && candidate.processFit);
-    if (layoutMatched.length > 0) pool = layoutMatched;
-  }
-
-  const ranked = (pool.length > 0 ? pool : allCandidates)
-    .slice()
-    .sort(pool.length > 0 ? compareCovering : compareFallback);
+  const coveringMeeting = covering.filter((candidate) => candidate.evaluation.meetsTarget === true);
+  const meeting = allCandidates.filter((candidate) => candidate.evaluation.meetsTarget === true);
+  const pool = coveringMeeting.length > 0 ? coveringMeeting : meeting.length > 0 ? meeting : allCandidates;
+  const ranked = pool.slice().sort(coveringMeeting.length > 0 ? comparePreference : compareByStationDistance);
   const chosen = ranked[0] as Candidate;
-  const noCoverage = covering.length === 0;
+  const noCoverage = !chosen.inRange;
 
   const missingCapacity = chosen.evaluation.meetsTarget === false
     ? Math.max(0, cyclePerMin - chosen.evaluation.throughputPerMin)
@@ -550,9 +534,15 @@ export function pickForm(
     );
   }
   if (missingCapacity > 1e-9) {
+    const bestCapacity = allCandidates.reduce((best, candidate) =>
+      candidate.evaluation.throughputPerMin > best.evaluation.throughputPerMin ? candidate : best
+    );
+    const bestGap = Math.max(0, cyclePerMin - bestCapacity.evaluation.throughputPerMin);
     const missingPct = (missingCapacity / cyclePerMin) * 100;
     warnings.push(
-      `${chosen.form.name} 预估 ${chosen.evaluation.throughputPerMin.toFixed(2)} 件/分钟，低于目标 ${cyclePerMin} 件/分钟，` +
+      `需要 ${cyclePerMin} 件/分钟，最佳形态 ${bestCapacity.form.name} 只能给 ` +
+      `${bestCapacity.evaluation.throughputPerMin.toFixed(2)} 件/分钟，差 ${bestGap.toFixed(2)} 件/分钟；` +
+      `已选 ${chosen.form.name} 预估 ${chosen.evaluation.throughputPerMin.toFixed(2)} 件/分钟，` +
       `缺口 ${missingCapacity.toFixed(2)} 件/分钟（约 ${missingPct.toFixed(1)}%）；` +
       `需增加工位/复制瓶颈或改用更高节拍形态。`
     );
@@ -562,7 +552,10 @@ export function pickForm(
     .filter((candidate) => candidate.form.id !== chosen.form.id)
     .sort((left, right) => {
       if (left.inRange !== right.inRange) return left.inRange ? -1 : 1;
-      return left.inRange ? compareCovering(left, right) : compareFallback(left, right);
+      const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
+      const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
+      if (leftMeets !== rightMeets) return rightMeets - leftMeets;
+      return left.inRange ? comparePreference(left, right) : compareByStationDistance(left, right);
     })
     .slice(0, 2)
     .map((candidate) => ({
