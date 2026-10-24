@@ -293,6 +293,17 @@ test('checksum：assertPartsIntegrity 对合法值放行、对篡改值报错', 
   assert.throws(() => assertPartsIntegrity(raw, 'f'.repeat(64), 'demo-pack'), /PACK_INTEGRITY_FAILED/);
 });
 
+test('checksum：Windows 的 CRLF 检出不应误判为篡改', () => {
+  // 仓库里按 LF 计算 partsSha256；Windows（core.autocrlf=true）检出后是 CRLF。
+  const lfText = '{\n  "schemaVersion": 2,\n  "parts": []\n}\n';
+  const expected = sha256Hex(lfText);
+  const crlfText = lfText.replace(/\n/g, '\r\n');
+  assert.doesNotThrow(() => assertPartsIntegrity(crlfText, expected, 'demo-pack'));
+  assert.doesNotThrow(() => assertPartsIntegrity(Buffer.from(crlfText, 'utf8'), expected, 'demo-pack'));
+  const tampered = crlfText.replace('[]', '["x"]');
+  assert.throws(() => assertPartsIntegrity(tampered, expected, 'demo-pack'), /PACK_INTEGRITY_FAILED/);
+});
+
 test('统计：每包条数与体积与源数据一致', () => {
   const stats = buildPackStats({ packsDir: BUILTIN_DIR, pricebookPath: PRICEBOOK, generatedAt: '2026-10-24T00:00:00.000Z' });
   for (const pack of stats.packs) {

@@ -1,0 +1,14 @@
+# 统一文本文件行尾为 LF：Windows 检出（core.autocrlf=true）会变成 CRLF，
+# 导致按内容计算的 SHA-256（如 packs/builtin/*/manifest.json 的 partsSha256）
+# 与知识库标题哈希在 Windows CI 上误判为不一致。
+*.json text eol=lf
+*.jsonc text eol=lf
+*.md text eol=lf
+*.ts text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf

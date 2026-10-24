@@ -13,13 +13,16 @@
 
 | 命令 | 结果 |
 |------|------|
-| `TZ=UTC npm test` | 1800 pass / 0 fail / 0 skipped |
+| `TZ=Asia/Shanghai npm test` | 1810 pass / 0 fail / 0 skipped |
+| `npx tsc --noEmit` | 0 错误 |
 | `npm run build:ext` | 通过（`tsc --noEmit`、Vite 扩展、Electron main/preload、MCP） |
-| `AUTOMATIONCAD_PARAMETRIC_CMD="node $PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` | 通过；新增模块 gate/checkpoint/CAD/sync/包校验断言，最终 `SMOKE_OK`；退出码 0 |
+| `AUTOMATIONCAD_PARAMETRIC_CMD="node $PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` | 通过；最终 `SMOKE_OK`、`SMOKE_AGENT_TOOLS_OK tools=21`；退出码 0 |
+| `npm run eval:agent` | `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
 | `git diff --check` | 通过（提交前复核） |
-| `npm run screenshots:machine` / `npm run eval:agent` | 本轮未重跑；不作为本轮验收声明 |
 
-Smoke 日志在 fake sidecar 退出收尾时记录一次非致命 `ECONNREFUSED 127.0.0.1:7440` health retry；所有断言通过且命令以 `SMOKE_OK` / 退出码 0 结束。
+**跨平台行尾修复（2026-10-24）**：Windows 的 `core.autocrlf=true` 把 `packs/builtin/*/parts.json` 检出为 CRLF，`partsSha256` 按 LF 算 → `PACK_INTEGRITY_FAILED`，内置包全挂（CI 18 红）。修复：`assertPartsIntegrity`、`scripts/pack-stats.mjs` 统一 `CRLF→LF` 后取 SHA-256，加 `.gitattributes` 强制 `eol=lf`；回归用例见 `test/packs/lifecycle.test.mjs`。
+
+Smoke 在 fake sidecar 退出时记录一次非致命 `ECONNREFUSED 127.0.0.1:7440` 重试；断言全过、退出码 0。
 
 ## Smoke 断言清单
 

@@ -125,13 +125,21 @@ export function sha256Hex(value: string | Buffer): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+/**
+ * 统一行尾后取哈希：Windows 检出（core.autocrlf=true）会把 JSON 变成 CRLF，
+ * 而 manifest.partsSha256 是按仓库里的 LF 内容算的，直接哈希原始字节会跨平台误判。
+ */
+function normalizeLineEndings(value: string | Buffer): string {
+  return (typeof value === 'string' ? value : value.toString('utf8')).replace(/\r\n/g, '\n');
+}
+
 /** 校验 parts.json 原始字节的 SHA-256；manifest 未声明时视为通过。 */
 export function assertPartsIntegrity(raw: string | Buffer, expected: string | undefined, packId: string): void {
   if (!expected) return;
   if (!SHA256_PATTERN.test(expected)) {
     throw new Error(`${PACK_INTEGRITY_FAILED} pack=${packId} manifest.partsSha256 不是合法的 SHA-256`);
   }
-  const actual = sha256Hex(raw);
+  const actual = sha256Hex(normalizeLineEndings(raw));
   if (actual !== expected.toLowerCase()) {
     throw new Error(`${PACK_INTEGRITY_FAILED} pack=${packId} expected=${expected.toLowerCase()} actual=${actual}`);
   }

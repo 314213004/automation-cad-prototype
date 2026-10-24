@@ -206,7 +206,7 @@ export function buildPackStats(options = {}) {
     const withDims = active.filter(hasValidDims).length;
     const withPrice = active.filter((entry) => priceFor(entry, pricebook) !== null).length;
     const expectedSha = nonEmpty(pack.manifest.partsSha256) ? pack.manifest.partsSha256.toLowerCase() : null;
-    const actualSha = pack.partsRaw !== null ? sha256(pack.partsRaw) : null;
+    const actualSha = pack.partsRaw !== null ? sha256(pack.partsRaw.replace(/\r\n/g, '\n')) : null;
     const integrity = expectedSha === null
       ? (pack.partsRaw === null ? 'n/a' : 'missing')
       : actualSha === expectedSha ? 'ok' : 'failed';

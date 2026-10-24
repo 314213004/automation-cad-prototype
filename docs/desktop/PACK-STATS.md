@@ -1,6 +1,6 @@
 # 数据包统计（PACK-STATS）
 
-> 生成时间：2026-10-24T11:19:34.212Z ｜ 数据源：`/root/workspace/automation-cad-prototype/packs/builtin` ｜ 价格簿：`/root/workspace/automation-cad-prototype/packs/builtin/pricebook-cn/pricebook.json` ｜ 币种：CNY
+> 生成时间：2026-10-24T23:45:38.366Z ｜ 数据源：`/root/workspace/automation-cad-prototype/packs/builtin` ｜ 价格簿：`/root/workspace/automation-cad-prototype/packs/builtin/pricebook-cn/pricebook.json` ｜ 币种：CNY
 > 本文件由 `npm run packs:stats` 生成，请勿手工编辑；JSON 版本见 `docs/desktop/pack-stats.json`。
 
 ## 总计
