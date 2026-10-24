@@ -22,12 +22,21 @@ export interface DiagnosisReportInput {
   webgl: { available: boolean; version?: string | null; renderer?: string | null };
   dataPackVersion: string;
   packCount?: number;
+  packMetrics?: PackLoadMetrics;
   kbDocs: number;
   kbChunks: number;
   kbBytes?: number;
   auditPath?: string;
   auditBytes: number;
   errors?: readonly DiagnosticErrorRecord[];
+}
+
+export interface PackLoadMetrics {
+  packLoadMs: number;
+  loadedPacks: number;
+  partsLoaded: number;
+  searchMs: number;
+  packCount?: number;
 }
 
 export interface DiagnosisReport {
@@ -45,6 +54,7 @@ export interface DiagnosisReport {
   userDataPath: string;
   webgl: { available: boolean; version?: string; renderer?: string };
   dataPack: { version: string; count: number };
+  packMetrics: PackLoadMetrics;
   kb: { docs: number; chunks: number; bytes?: number };
   audit: { path?: string; bytes: number };
   recentErrors: DiagnosticErrorRecord[];
@@ -210,6 +220,13 @@ export function buildDiagnosisReport(input: DiagnosisReportInput): DiagnosisRepo
       version: redactSensitiveText(input.dataPackVersion || 'unknown'),
       count: Math.max(0, Math.trunc(input.packCount ?? 0))
     },
+    packMetrics: {
+      packLoadMs: Math.max(0, Number(input.packMetrics?.packLoadMs ?? 0)),
+      loadedPacks: Math.max(0, Math.trunc(input.packMetrics?.loadedPacks ?? 0)),
+      partsLoaded: Math.max(0, Math.trunc(input.packMetrics?.partsLoaded ?? 0)),
+      searchMs: Math.max(0, Number(input.packMetrics?.searchMs ?? 0)),
+      packCount: Math.max(0, Math.trunc(input.packMetrics?.packCount ?? input.packCount ?? 0))
+    },
     kb: {
       docs: Math.max(0, Math.trunc(input.kbDocs)),
       chunks: Math.max(0, Math.trunc(input.kbChunks)),
@@ -240,6 +257,7 @@ export function formatDiagnosisReport(report: DiagnosisReport): string {
     `userData：${report.userDataPath}`,
     `WebGL：${webgl}`,
     `数据包：${report.dataPack.version}（${report.dataPack.count} 个）`,
+    `包加载：已加载 ${report.packMetrics.loadedPacks}/${report.packMetrics.packCount} · 零件 ${report.packMetrics.partsLoaded} · 加载 ${report.packMetrics.packLoadMs} ms · 搜索 ${report.packMetrics.searchMs} ms`,
     `知识库：${report.kb.docs} 份文档 / ${report.kb.chunks} 段`,
     `审计文件：${report.audit.path ?? '(未配置)'} · ${report.audit.bytes} 字节`,
     `最近错误：${report.recentErrors.length} 条`

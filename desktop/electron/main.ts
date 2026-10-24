@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -111,6 +111,7 @@ if (DIAGNOSE) {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let packRegistry: PackRegistry | null = null;
 let agentServer: AgentRpcServer | null = null;
 let agentTools: AgentTools | null = null;
 let commandBus: CommandBus | null = null;
@@ -165,7 +166,7 @@ async function runDiagnoseMode(): Promise<void> {
       builtinDir: builtinPacksDir(),
       auditPath: join(userDataPath, 'agent-audit.jsonl')
     });
-    console.log(`DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+    console.log(`DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=${report.recentErrors.length}`);
     console.log(JSON.stringify(report, null, 2));
     app.exit(0);
   } catch (error) {
@@ -208,7 +209,11 @@ function readDiagnosticPackVersion(): string {
   const directory = builtinPacksDir();
   if (!existsSync(directory)) return 'missing';
   const versions: string[] = [];
-  for (const name of ['iec-cn', 'smc-cn', 'pricebook-cn']) {
+  const names = readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+    .map((entry) => entry.name)
+    .sort();
+  for (const name of names) {
     const file = join(directory, name, 'manifest.json');
     if (!existsSync(file)) continue;
     try {
@@ -219,6 +224,14 @@ function readDiagnosticPackVersion(): string {
     }
   }
   return versions.length > 0 ? versions.join(', ') : 'none';
+}
+
+function readBuiltinPackVersionsFromDir(): number {
+  const directory = builtinPacksDir();
+  if (!existsSync(directory)) return 0;
+  return readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(directory, entry.name, 'manifest.json')))
+    .length;
 }
 
 function builtinPacksDir(): string {
@@ -3207,7 +3220,38 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        const smokeRegistry = new PackRegistry({
+          builtinDir: builtinPacksDir(),
+          userDir: userPacksDir(),
+          stateFile: join(app.getPath('userData'), 'packs-state.json')
+        });
+        const coldStartedAt = performance.now();
+        await smokeRegistry.scan();
+        smokeRegistry.listParts({ q: '伺服' });
+        const coldMs = performance.now() - coldStartedAt;
+        const lazyMetrics = smokeRegistry.metrics();
+        const counts = {
+          servo: smokeRegistry.listParts({ packId: 'servo-cn' }).length,
+          sensor: smokeRegistry.listParts({ packId: 'sensor-cn' }).length,
+          pneumatic: smokeRegistry.listParts({ packId: 'pneumatic-cn' }).length
+        };
+        if (lazyMetrics.packCount !== 6 || lazyMetrics.loadedPacks !== 2 ||
+            lazyMetrics.searchMs > 25 || coldMs > 120 ||
+            counts.servo < 24 || counts.sensor < 30 || counts.pneumatic < 24) {
+          console.error('SMOKE_FAIL packs_lazy', JSON.stringify({ coldMs, lazyMetrics, counts }));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PACKS_LAZY_OK packs=${lazyMetrics.packCount} loaded=${lazyMetrics.loadedPacks} searchMs=${lazyMetrics.searchMs} coldMs=${coldMs.toFixed(1)} parts=${lazyMetrics.partsLoaded}`);
+        console.log(`SMOKE_PACKS_COUNT servo=${counts.servo} sensor=${counts.sensor} pneumatic=${counts.pneumatic}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL packs_lazy_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const userDataPath = app.getPath('userData');
+        const metrics = packRegistry?.metrics();
         const report = buildDiagnosisReport({
           appVersion: app.getVersion(),
           electronVersion: process.versions.electron ?? 'unknown',
@@ -3217,7 +3261,8 @@ function createWindow(): BrowserWindow {
           userDataPath,
           webgl: { available: false, renderer: 'headless-smoke disables WebGL' },
           dataPackVersion: readDiagnosticPackVersion(),
-          packCount: 3,
+          packCount: readBuiltinPackVersionsFromDir(),
+          ...(metrics ? { packMetrics: metrics } : {}),
           kbDocs: KB_STATS.docs,
           kbChunks: KB_STATS.chunks,
           kbBytes: KB_STATS.bytes,
@@ -3239,7 +3284,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log(`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+        console.log(`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,packMetrics,kb,audit,recentErrors errors=${report.recentErrors.length}`);
       } catch (error) {
         console.error('SMOKE_FAIL diagnose_exception', error);
         setTimeout(() => app.exit(1), 100);
@@ -3383,6 +3428,7 @@ async function bootstrap(): Promise<void> {
     getParametric: () => parametric
   });
 
+  packRegistry = registry;
   mainWindow = createWindow();
   mainWindow.on('closed', () => { mainWindow = null; });
 

@@ -11,9 +11,12 @@ interface DesktopPackInfo {
   name: string;
   vendor: string;
   version: string;
+  description?: string;
+  license?: string;
   enabled: boolean;
   builtin: boolean;
   partCount: number;
+  categories: string[];
   error?: string;
 }
 

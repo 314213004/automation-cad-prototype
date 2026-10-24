@@ -38,7 +38,9 @@ before(() => {
     id: 'smc-cn',
     name: 'SMC',
     vendor: 'SMC',
-    version: '1.0.0'
+    version: '1.0.0',
+    categories: ['气缸', '气爪', '断路器', '传感器'],
+    partsCount: 1
   }));
   writeFileSync(join(builtin, 'parts.json'), JSON.stringify([
     { id: 'MXQ20-50', model: 'MXQ20-50.stp', category: '气缸', specs: {} }

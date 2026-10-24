@@ -26,6 +26,12 @@ export interface PackManifest {
   version: string;
   license?: string;
   description?: string;
+  /** manifest 索引里的分类，用于搜索/列表在加载 parts.json 前预过滤。 */
+  categories: string[];
+  /** parts.json 中的条目数；加载后以实际条目数为准。 */
+  partsCount: number;
+  /** 可选检索关键词（系列、品牌别名），只在 manifest 索引中匹配。 */
+  keywords?: string[];
 }
 
 export interface ComponentPart {
@@ -60,5 +66,7 @@ export interface PackInfo {
   builtin: boolean;
   path: string;
   partCount: number;
+  categories: string[];
+  keywords?: string[];
   error?: string;
 }

@@ -6,10 +6,12 @@
 
 ```
 packs/builtin/
-└── smc-cn/
-    ├── manifest.json      # schemaVersion=1, id=smc-cn, vendor=SMC, version=1.0.0
-    ├── parts.json         # 8 个型号
-    └── assets/            # 预留：<id>.stp / <id>.glb 与缩略图（当前为空）
+├── iec-cn/        # 379 条，电气元件
+├── smc-cn/        # 8 条，SMC 常用气动
+├── servo-cn/      # 25 条，汇川/台达/雷赛伺服与步进
+├── sensor-cn/     # 32 条，接近/光电/磁性/压力/光纤
+├── pneumatic-cn/  # 44 条，SMC 气缸/气爪/阀/气源/接头
+└── pricebook-cn/  # pricebook.json，价格簿（无 parts.json）
 ```
 
 ## 数据结构
@@ -24,7 +26,10 @@ packs/builtin/
   "vendor": "SMC",
   "version": "1.0.0",
   "license": "数据仅用于选型演示，型号与参数以厂商样本为准",
-  "description": "非标自动化常用 SMC 气缸、电磁阀、磁性开关、接头与气源处理元件。"
+  "description": "非标自动化常用 SMC 气缸、电磁阀、磁性开关、接头与气源处理元件。",
+  "categories": ["气缸", "气爪", "电磁阀", "传感器", "气动接头", "气源处理"],
+  "partsCount": 8,
+  "keywords": ["SMC", "MXQ", "MGP", "CDQ2", "MHZ2", "SY"]
 }
 ```
 
@@ -41,7 +46,7 @@ packs/builtin/
 }
 ```
 
-当前 8 个型号：`MXQ20-50`、`MGP32-200`、`CDQ2B32-50DZ`、`MHZ2-20D`、`SY5120-5LZD`、`D-M9B`、`KQ2H06-01AS`、`AW30-03`，覆盖气缸 / 气爪 / 电磁阀 / 传感器 / 气动接头 / 气源处理 6 类。
+当前 6 个内置包（manifest 6 个）：`iec-cn` 379、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44、`pricebook-cn` 0（价格簿）。元器件包合计 488 条 / 487 个唯一 id；`D-M9B` 在 `iec-cn` 与 `smc-cn` 历史数据重复，搜索结果按内置优先只返回一次。
 
 ## 坑点
 
@@ -51,6 +56,8 @@ packs/builtin/
 4. **`asset` 路径必须相对包目录**，且不能越界（`../`）；加载前由 registry 校验。
 5. **型号与厂商参数仅供演示**，`license` 已声明「以厂商样本为准」，不要当成选型依据。
 6. **内置包不可删除**：`registry.remove()` 对 `builtin: true` 直接拒绝。
+7. **启动只读 manifest**：`categories/partsCount/keywords` 是索引字段，新增包必须写；`parts.json` 只在命中包被 `loadPack` 时读取，改完数据要同步 `partsCount`，否则面板在首次加载前显示旧值。
+8. **单包 ≤ 400 KB**：当前最大 `iec-cn` 160 KB；接近上限时按厂商/系列拆包。
 
 ## 进度
 

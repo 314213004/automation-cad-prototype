@@ -131,7 +131,9 @@ before(() => {
     id: 'smc-cn',
     name: 'SMC',
     vendor: 'SMC',
-    version: '1.0.0'
+    version: '1.0.0',
+    categories: ['气缸', '气爪', '断路器', '传感器'],
+    partsCount: 1
   }));
   writeFileSync(join(builtin, 'parts.json'), JSON.stringify([
     { id: 'P1', model: 'P1', category: '断路器', dims: { w: 18, h: 60, d: 70 }, specs: {} },

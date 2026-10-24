@@ -23,7 +23,9 @@ function manifest(id = 'demo-pack') {
     name: '演示包',
     vendor: '测试厂商',
     version: '1.0.0',
-    description: '单元测试数据包'
+    description: '单元测试数据包',
+    categories: ['气缸', '传感器'],
+    partsCount: 2
   };
 }
 
@@ -152,10 +154,12 @@ test('非法 symbol 会让数据包进入 error 且不加载条目', async () =>
     writePack(dir, manifest('bad-symbol'), [
       { id: 'BAD-1', model: 'BAD-1', category: '接触器', symbol, specs: {} }
     ]);
-    const packs = await registry().scan();
+    const actual = registry();
+    assert.throws(() => actual.loadPack('bad-symbol'), /symbol/, `symbol=${String(symbol)} 应被拒绝`);
+    const packs = await actual.scan();
     assert.equal(packs[0].error !== undefined, true, `symbol=${String(symbol)} 应被拒绝`);
     assert.match(packs[0].error, /symbol/);
-    assert.equal(registry().listParts().length, 0);
+    assert.equal(actual.listParts().length, 0);
     rmSync(dir, { recursive: true, force: true });
   }
 });

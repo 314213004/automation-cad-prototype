@@ -4,6 +4,14 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+## 元器件库扩展与模块化按需加载（2026-10-24，本轮）
+
+- 状态：✅ 完成；新增 `servo-cn`（25 条）、`sensor-cn`（32 条）、`pneumatic-cn`（44 条），内置元器件包增至 5 个 + `pricebook-cn` 价格簿（manifest 6 个）。未 push、未提交。
+- 数据口径：型号/参数取自厂商公开样本/数据表；每条 `specs.数据来源`、有官方依据的 `dims.source` 记录出处。汇川 MS1H1/MS1H3 尺寸取自 SV660P 硬件手册尺寸表；雷赛 57CM 尺寸/转矩取自官方产品页；查不到官方尺寸的条目不写 `dims`。
+- 懒加载：`scan()` 只读 manifest；`listParts` 按 `manifest.categories` / 包名/关键词预过滤，命中包才 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局 partId 索引；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs/packCount/indexedParts`。
+- 验收：`tsc` 干净；`TZ=Asia/Shanghai npm test` **1582/1582**（+32）；`npm run smoke` 输出 `SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=5.267 coldMs=5.9 parts=404`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44`；`npm run eval:agent` 1.00；`npm run diagnose` 含 `packMetrics`（loadedPacks=2 / partsLoaded=404 / packLoadMs≈4.6 / searchMs≈6.2）。
+- 性能/体积：冷启动到可搜索 ≈5.3 ms（目标 ≤120 ms）；6 包全量命中搜索 ≈3.2–4.8 ms（目标 ≤25 ms）；最大单包 `iec-cn/parts.json` 160 KB（目标 ≤400 KB）。
+
 ## 价格数据回填与成本覆盖率（2026-10-24，本轮）
 
 - 状态：✅ 完成；价格簿升级到 `schemaVersion: 2`，保留 v1 兼容；真实条目从 0 条提升到 **64 条**（另有 4 条 `EXAMPLE-*`，不参与统计/计价）。未 push、未提交。
@@ -11,32 +19,6 @@
 - 案例覆盖：六工位 BOM 12 行中已计价 **9 行（75%）**，缺价从 9 行降到 **3 行**：`MS1H1-75B30CB`、`F3SG-4SRA0640-14`、`CP1E-N40DR-A`。`machine-case.json` 更新为材料 6654 / 电气 12283.91 / 人工 15552 / 合计 34489.91。
 - 成本模型：新增 `priceMeta { coveragePct, pricedCount, totalCount, missing, stale, unknownSource }`；`checkedAt` 严格超过 180 天才标过期，v1 缺 `sourceType/checkedAt` 的条目照常计价但标「来源不明」。方案卡显示「已计价 N/M 行（覆盖率 X%）、缺价 K 项、过期 L 项」。
 - 验收：`tsc` 干净、`TZ=Asia/Shanghai npm test` **1550/1550**、`npm run smoke` 输出 `SMOKE_PRICEBOOK_OK items=64 caseCoverage=9/12`、`demo-doc.test.mjs` 4/4；15/16 号机型截图已重拍，方案卡显示 9/12 与 ¥34,489.91。新增 v1/v2 兼容、URL/来源类型/日期/税额校验、示例隔离、180 天边界、tiers、来源不明、覆盖率与案例 9/12 等断言；详见 [`PRICING.md`](PRICING.md)。
-
-## 修复形态选型「越界预览」（2026-10-24，上一轮）
-
-- 状态：✅ 修复完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1529/1529**（较上轮 +20）、`npm run smoke` 更新为 `SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`；未 push、未打包。
-- 缺陷：41 轮新增 8–12 工位形态后，`pickForm` 仍用**需求工位数**给所有候选算产能。`gantry-4`（4–4）被按 12 工位预演出 `109.09` 件/分钟，进入 `meeting` 池；`dial-12` 按真实 12 工位只有 `22.64` 件/分钟，最终按工位距离回退到越界的 `gantry-4`。
-- 复现（修复前输出 `gantry-4` + 非标回退 warning）：
-
-  ```bash
-  cd desktop
-  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const f=await import('./src/machine/forms.ts');const b=s.parseMachineBrief('十二工位转盘检测机，节拍 60 件/分钟');const p=f.pickForm(b,{},{stationCount:b.stations,cyclePerMin:b.cyclePerMin});console.log(p.form.id,p.warning)})"
-  ```
-
-- 根因与修复：`Candidate` 新增 `clamped` / `previewStations`；`previewModel` 统一使用 `clamp(需求, stationRange)`；选型改为四档优先级「覆盖且达标 → 仅覆盖 → 仅达标（确无覆盖时）→ 全量按工位距离」。覆盖仍按需求工位数判定，warning 同时写支持范围、需求值与实际生成工位数；`synthMachine` 用 `formPick.stations` 生成配置，被夹紧时写入 `assumptions`。
-- 回归：新增 `test/machine/form-clamp.test.mjs` 20 条，覆盖 12 工位检测/长线装配、14 工位超上限、6/8/10 工位矩阵、`config.stations.length <= form.maxStations`、夹紧后产能结论、缺价文案等。
-- 功率/成本核对：`power.totalKw=2.176`、`cost.total=23172`、`missingCount=9` 与 `machine-case.json` 一致；9 个缺价件的 `partId` 与名称已列在 `MACHINE-DESIGN-DEMO.md`。内置价格簿只有 4 条示例价，真实型号均无价格，确认不是匹配 bug；方案卡缺价文案改为「9 项缺价，合计为不完全统计」。
-
-## 功率与成本接入统一模型（2026-10-24，上一轮）
-
-- 状态：✅ 完成；`tsc` 干净、`TZ=Asia/Shanghai npm test` **1509/1509**（较上轮 +30）、`npm run smoke` 新增 `SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` 与 `SMOKE_MACHINE_COST_OK total=10614 missing=8`；未 commit、未 push、未打包。
-- 功率：新增 `desktop/src/machine/power.ts` 纯函数，删除 `synth.ts` 中写死的 `POWER_VA` 表。优先读取元件库 `ratedW`（伺服/电源/安全光栅等），缺失时按类别默认值估算并逐条写 warning 与 assumption；支持 `Ks=0.7 / Kf=0.6 / η=0.9 / cosφ=0.9`、单相/三相/24V 电流、断路器取档（6–63 A）、24V 电源余量（>70% 告警）与已选总进线断路器交叉校验（超流/余量 >60% 可降档）。
-- 成本：新增 `desktop/src/machine/cost-model.ts`，按机械件/电气件/人工分项；价格优先级为「企业价格簿 → 元件库参考价」，缺价行标 `missing` 且不计入合计；伺服按「驱动器 + 电机」成对补齐；人工按工位数 × 默认 18 h/工位 × 形态系数 × 120 元/h 估算。边界明确为方案阶段粗估，不替代 `cost/engine.ts` 正式报价。
-- 参数：`<userData>/machine-pricing.json` 支持同时系数、负载率、效率、`cosφ`、工时单价与每工位工时；文件缺失/字段非法逐项回落默认值并写入 assumptions。
-- 接入：`synthMachine` 返回 `power/cost`；`design_machine` 在 BOM 映射后复算功率与成本；方案卡显示 kW/A/断路器建议/24V 余量与材料/电气/人工/合计/缺价数，并合并展示设计、功率、成本 warnings；`apply_machine_design` 落盘同时校验新字段。
-- 案例：`npm run build:machine-case` 重算六工位双轨案例为 `2.176 kW / 2417.79 VA / 3.673 A / 6 A 3P / 24V 余量 79.2%`；成本 `材料 5136 / 电气 2484 / 人工 15552 / 合计 23172 / 缺价 9`。人工明细 6 工位 × 18 h × 1.2 × 120 = 15552 元（129.6 h）。
-- 测试：新增 `desktop/test/machine/power-cost.test.mjs`（29 条），覆盖单/三相电流公式、系数与效率影响、`cosφ`、断路器取档、24V 余量、缺额定功率、成本分项/缺价/伺服成对/工时随工位变化、参数文件缺失与非法回落、方案卡字段、两类交叉校验 warning，以及 `design_machine` 结果超过通用 10 KB 时仍完整保留给方案卡；`demo-doc.test.mjs` 增加功率/成本数字与案例 JSON 的一致性断言。
-- 文档：`MACHINE-DESIGN.md` 新增「功率与成本模型」公式、默认系数、参数文件与适用范围/不适用场景；`MACHINE-DESIGN-DEMO.md` 功率/成本两节按新数字重写；根 `README.md`、`desktop/README.md` 同步测试数与 smoke 证据。
 
 ## 待办（按优先级）
 

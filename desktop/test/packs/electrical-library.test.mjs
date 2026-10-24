@@ -46,7 +46,7 @@ test('gen-reference 输出包含 LC1D18M7C 与接触器表', () => {
   try {
     const outFile = join(sandbox, 'electrical-components.md');
     const result = generateReference({ builtinDir: BUILTIN_DIR, outFile });
-    assert.equal(result.packCount, 2);
+    assert.equal(result.packCount, 5);
     assert.ok(result.partCount >= 350, `参考表条目过少：${result.partCount}`);
     assert.equal(existsSync(outFile), true);
     assert.match(readFileSync(outFile, 'utf8'), /LC1D18M7C/);

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "servo-cn",
+  "name": "伺服与运动控制（汇川/台达/雷赛）",
+  "vendor": "汇川、台达、雷赛",
+  "version": "1.0.0",
+  "license": "型号与参数取自厂商公开样本/数据表（specs.数据来源、dims.source 记录出处）；未录入官方价格。定型前请以厂商最新样本/铭牌为准。",
+  "description": "伺服驱动器与配套电机、步进电机：汇川 SV660P/SV660N + MS1H1/MS1H3、台达 ASDA-B3/A3 + ECMA、雷赛 57CM 步进电机（25 条）。",
+  "categories": [
+    "伺服",
+    "步进"
+  ],
+  "partsCount": 25,
+  "keywords": [
+    "伺服",
+    "步进",
+    "汇川",
+    "INOVANCE",
+    "SV660P",
+    "SV660N",
+    "MS1H1",
+    "MS1H3",
+    "台达",
+    "Delta",
+    "ASDA-B3",
+    "ASDA-A3",
+    "ECMA",
+    "雷赛",
+    "Leadshine",
+    "57CM",
+    "DM556"
+  ]
+}

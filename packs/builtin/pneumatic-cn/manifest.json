@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "pneumatic-cn",
+  "name": "气动元件（SMC 常用系列）",
+  "vendor": "SMC",
+  "version": "1.0.0",
+  "license": "型号与参数取自 SMC 公开样本/数据表（specs.数据来源 记录出处）；未录入官方价格。定型前请以厂商最新样本为准。",
+  "description": "SMC 气缸（CDQ2/MXQ/MGP/CQ2）、气爪（MHZ2/MHL2）、电磁阀（SY/VQ）、气源处理（AW/AC）与快插接头（KQ2）（44 条）。",
+  "categories": [
+    "气缸",
+    "气爪",
+    "电磁阀",
+    "气源处理",
+    "气动接头"
+  ],
+  "partsCount": 44,
+  "keywords": [
+    "气动",
+    "SMC",
+    "气缸",
+    "气爪",
+    "电磁阀",
+    "气源处理",
+    "接头",
+    "CDQ2",
+    "MXQ",
+    "MGP",
+    "CQ2",
+    "MHZ2",
+    "MHL2",
+    "SY",
+    "VQ",
+    "AW",
+    "AC",
+    "KQ2"
+  ]
+}

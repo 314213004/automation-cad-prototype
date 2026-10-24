@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { KB_STATS } from '../src/agent/kb/search.ts';
+import { PackRegistry } from '../src/packs/registry.ts';
 import {
   buildDiagnosisReport,
   recentDiagnosticErrors,
@@ -103,6 +104,14 @@ export async function collectDiagnosis(options: {
   generatedAt?: string;
 }): Promise<DiagnosisReport> {
   const packs = readBuiltinPackVersions(options.builtinDir);
+  const registry = new PackRegistry({
+    builtinDir: options.builtinDir,
+    userDir: join(options.userDataPath, 'packs'),
+    stateFile: join(options.userDataPath, 'packs-state.json')
+  });
+  await registry.scan();
+  registry.listParts({ category: '伺服' });
+  const packMetrics = registry.metrics();
   const webgl = options.webgl ?? await probeWebGL();
   return buildDiagnosisReport({
     ...(options.generatedAt ? { generatedAt: options.generatedAt } : {}),
@@ -116,6 +125,7 @@ export async function collectDiagnosis(options: {
     webgl,
     dataPackVersion: packs.version,
     packCount: packs.count,
+    packMetrics,
     kbDocs: KB_STATS.docs,
     kbChunks: KB_STATS.chunks,
     kbBytes: KB_STATS.bytes,

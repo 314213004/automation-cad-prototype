@@ -1,4 +1,5 @@
 import AdmZip from 'adm-zip';
+import fs from 'node:fs';
 import {
   existsSync,
   mkdirSync,
@@ -9,26 +10,50 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { ComponentPart, PackInfo, PackManifest } from '../shared/types';
 
 export interface PackRegistryOptions {
   builtinDir: string;
   userDir: string;
   stateFile: string;
+  /** 测试可注入读取函数，用来断言 manifest / parts.json 的实际读取次数。 */
+  readTextFile?: (path: string) => string;
 }
 
-interface LoadedPack {
+export interface PackMetrics {
+  /** 累计读取并校验 parts.json 的耗时（毫秒）。 */
+  packLoadMs: number;
+  /** 当前缓存在内存中的元器件包数量。 */
+  loadedPacks: number;
+  /** 当前缓存中的元器件条目总数。 */
+  partsLoaded: number;
+  /** 最近一次搜索/列表耗时（毫秒）。 */
+  searchMs: number;
+  /** 扫描到的 manifest 数量（含价格簿）。 */
+  packCount: number;
+  /** 已构建的 partId 全局索引条目数；未构建时为 0。 */
+  indexedParts: number;
+}
+
+interface CachedPack {
+  parts: ComponentPart[];
+  loadMs: number;
+}
+
+interface PackIndexEntry {
   info: PackInfo;
   manifest?: PackManifest;
-  parts: ComponentPart[];
+  dir: string;
+  builtin: boolean;
+  hasParts: boolean;
 }
 
 interface PackState {
   disabled: string[];
 }
 
-const MANIFEST_REQUIRED = ['schemaVersion', 'id', 'name', 'vendor', 'version'] as const;
+const MANIFEST_REQUIRED = ['schemaVersion', 'id', 'name', 'vendor', 'version', 'categories', 'partsCount'] as const;
 const PACK_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/;
 const SYMBOL_PATTERN = /^[a-z][a-z0-9]{0,7}$/;
 
@@ -38,15 +63,6 @@ function isPositiveNumber(value: unknown): value is number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, 'utf8')) as unknown;
-}
-
-/** 价格簿是独立数据包，不进入元器件包的扫描与列表。 */
-function isPricebookOnlyPack(dir: string): boolean {
-  return existsSync(join(dir, 'pricebook.json')) && !existsSync(join(dir, 'parts.json'));
 }
 
 function validateManifest(value: unknown): PackManifest {
@@ -66,15 +82,41 @@ function validateManifest(value: unknown): PackManifest {
       throw new Error(`manifest.${key} 必须是字符串`);
     }
   }
+  if (!Array.isArray(value.categories) || value.categories.length === 0) {
+    throw new Error('manifest.categories 必须是非空字符串数组');
+  }
+  const categories: string[] = [];
+  for (const category of value.categories) {
+    if (typeof category !== 'string' || category.trim() === '') {
+      throw new Error('manifest.categories 必须是非空字符串数组');
+    }
+    if (!categories.includes(category.trim())) categories.push(category.trim());
+  }
+  if (!Number.isInteger(value.partsCount) || (value.partsCount as number) < 0) {
+    throw new Error('manifest.partsCount 必须是非负整数');
+  }
+  const keywords: string[] = [];
+  if (value.keywords !== undefined) {
+    if (!Array.isArray(value.keywords)) throw new Error('manifest.keywords 必须是字符串数组');
+    for (const keyword of value.keywords) {
+      if (typeof keyword !== 'string' || keyword.trim() === '') {
+        throw new Error('manifest.keywords 必须是字符串数组');
+      }
+      if (!keywords.includes(keyword.trim())) keywords.push(keyword.trim());
+    }
+  }
   const manifest: PackManifest = {
     schemaVersion: 1,
     id: value.id,
     name: value.name as string,
     vendor: value.vendor as string,
-    version: value.version as string
+    version: value.version as string,
+    categories,
+    partsCount: value.partsCount as number
   };
   if (typeof value.license === 'string') manifest.license = value.license;
   if (typeof value.description === 'string') manifest.description = value.description;
+  if (keywords.length > 0) manifest.keywords = keywords;
   return manifest;
 }
 
@@ -129,7 +171,15 @@ function validateParts(value: unknown, packId: string, packName: string): Compon
       if (!isRecord(item.dims) || !isPositiveNumber(item.dims.w) || !isPositiveNumber(item.dims.h) || !isPositiveNumber(item.dims.d)) {
         throw new Error(`parts[${index}].dims 必须是 {w,h,d} 正数`);
       }
+      if (item.dims.source !== undefined && typeof item.dims.source !== 'string') {
+        throw new Error(`parts[${index}].dims.source 必须是字符串`);
+      }
+      if (item.dims.estimated !== undefined && typeof item.dims.estimated !== 'boolean') {
+        throw new Error(`parts[${index}].dims.estimated 必须是布尔值`);
+      }
       part.dims = { w: item.dims.w, h: item.dims.h, d: item.dims.d };
+      if (typeof item.dims.source === 'string') part.dims.source = item.dims.source;
+      if (item.dims.estimated === true) part.dims.estimated = true;
     }
     if (item.railMount !== undefined) {
       if (typeof item.railMount !== 'boolean') throw new Error(`parts[${index}].railMount 必须是布尔值`);
@@ -162,73 +212,130 @@ function safeZipEntryName(name: string): string {
   return normalized;
 }
 
+function lower(value: string): string {
+  return value.toLocaleLowerCase('zh-CN');
+}
+
 export class PackRegistry {
   private readonly builtinDir: string;
   private readonly userDir: string;
   private readonly stateFile: string;
+  private readonly readTextFile: (path: string) => string;
+  private index: PackIndexEntry[] | null = null;
+  private readonly loadedPacks = new Map<string, CachedPack>();
+  private partIndex: Map<string, ComponentPart> | null = null;
+  private totalPackLoadMs = 0;
+  private lastSearchMs = 0;
 
   constructor(options: PackRegistryOptions) {
     this.builtinDir = resolve(options.builtinDir);
     this.userDir = resolve(options.userDir);
     this.stateFile = resolve(options.stateFile);
+    // 默认走 fs 对象的运行时属性，便于测试在构造前用 spy 替换 readFileSync。
+    this.readTextFile = options.readTextFile ?? ((path) => fs.readFileSync(path, 'utf8'));
   }
 
   async scan(): Promise<PackInfo[]> {
     return this.scanSync();
   }
 
+  /** 只读 manifest 的包索引；首次访问时建立，之后复用。 */
   private scanSync(): PackInfo[] {
-    const disabled = new Set(this.readState().disabled);
-    const byId = new Map<string, LoadedPack>();
-    for (const [root, builtin] of [
-      [this.builtinDir, true],
-      [this.userDir, false]
-    ] as const) {
-      if (!existsSync(root)) continue;
-      for (const entry of readdirSync(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-        if (isPricebookOnlyPack(join(root, entry.name))) continue;
-        const loaded = this.loadPackDirectory(join(root, entry.name), entry.name, builtin, disabled);
-        if (!byId.has(loaded.info.id)) byId.set(loaded.info.id, loaded);
-      }
-    }
-    return Array.from(byId.values()).map((pack) => pack.info);
+    return this.ensureIndex().map((entry) => this.infoSnapshot(entry));
+  }
+
+  /** 首次访问时读取 parts.json 并缓存。 */
+  loadPack(id: string): PackInfo {
+    const entry = this.requireEntry(id);
+    if (entry.info.error) throw new Error(entry.info.error);
+    if (!entry.hasParts) throw new Error(`数据包不包含 parts.json：${id}`);
+    if (!entry.info.enabled) throw new Error(`数据包已禁用：${id}`);
+    this.loadEntry(entry);
+    return this.infoSnapshot(entry);
+  }
+
+  /** 释放单包 parts.json 内存缓存（不影响 manifest 索引）。 */
+  unloadPack(id: string): boolean {
+    const removed = this.loadedPacks.delete(id);
+    const entry = this.index?.find((candidate) => candidate.info.id === id);
+    if (entry?.manifest) entry.info.partCount = entry.manifest.partsCount;
+    if (removed) this.partIndex = null;
+    return removed;
+  }
+
+  isPackLoaded(id: string): boolean {
+    return this.loadedPacks.has(id);
+  }
+
+  loadedPackIds(): string[] {
+    return Array.from(this.loadedPacks.keys()).sort();
+  }
+
+  /** 按 partId 懒建全局索引；内置包优先，重复 id 只保留首个。 */
+  getPartById(id: string): ComponentPart | undefined {
+    return this.ensurePartIndex().get(id);
+  }
+
+  getPartIndexSize(): number {
+    return this.partIndex?.size ?? 0;
+  }
+
+  metrics(): PackMetrics {
+    let partsLoaded = 0;
+    for (const cached of this.loadedPacks.values()) partsLoaded += cached.parts.length;
+    return {
+      packLoadMs: Math.round(this.totalPackLoadMs * 1000) / 1000,
+      loadedPacks: this.loadedPacks.size,
+      partsLoaded,
+      searchMs: Math.round(this.lastSearchMs * 1000) / 1000,
+      packCount: this.index?.length ?? 0,
+      indexedParts: this.partIndex?.size ?? 0
+    };
   }
 
   listParts(filter: { q?: string; category?: string; packId?: string } = {}): ComponentPart[] {
-    const q = filter.q?.trim().toLocaleLowerCase('zh-CN');
-    const category = filter.category?.trim().toLocaleLowerCase('zh-CN');
+    const startedAt = performance.now();
+    const q = filter.q?.trim() ? lower(filter.q.trim()) : '';
+    const category = filter.category?.trim() ? lower(filter.category.trim()) : '';
+    let entries = this.ensureIndex().filter((entry) => entry.hasParts && entry.info.enabled && !entry.info.error);
+    if (filter.packId) entries = entries.filter((entry) => entry.info.id === filter.packId);
+    if (category) {
+      entries = entries.filter((entry) => {
+        const categories = entry.manifest?.categories ?? [];
+        return categories.length === 0 || categories.some((item) => lower(item) === category);
+      });
+    }
+    if (q) entries = this.narrowByManifest(entries, q);
+
     const result: ComponentPart[] = [];
-    const disabled = new Set(this.readState().disabled);
-    for (const [root, builtin] of [
-      [this.builtinDir, true],
-      [this.userDir, false]
-    ] as const) {
-      if (!existsSync(root)) continue;
-      for (const entry of readdirSync(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-        if (isPricebookOnlyPack(join(root, entry.name))) continue;
-        const loaded = this.loadPackDirectory(join(root, entry.name), entry.name, builtin, disabled);
-        if (!loaded.manifest || loaded.info.error || !loaded.info.enabled) continue;
-        if (filter.packId && loaded.info.id !== filter.packId) continue;
-        for (const part of loaded.parts) {
-          if (category && part.category.toLocaleLowerCase('zh-CN') !== category) continue;
-          if (q) {
-            const haystack = [
-              part.id,
-              part.model,
-              part.category,
-              part.vendor ?? '',
-              part.packId ?? '',
-              part.packName ?? '',
-              ...Object.values(part.specs).map(String)
-            ].join(' ').toLocaleLowerCase('zh-CN');
-            if (!haystack.includes(q)) continue;
-          }
-          result.push(part);
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      let parts: ComponentPart[];
+      try {
+        parts = this.loadEntry(entry);
+      } catch {
+        continue;
+      }
+      for (const part of parts) {
+        if (seen.has(part.id)) continue;
+        seen.add(part.id);
+        if (category && lower(part.category) !== category) continue;
+        if (q) {
+          const haystack = lower([
+            part.id,
+            part.model,
+            part.category,
+            part.vendor ?? '',
+            part.packId ?? '',
+            part.packName ?? '',
+            ...Object.values(part.specs).map(String)
+          ].join(' '));
+          if (!haystack.includes(q)) continue;
         }
+        result.push(part);
       }
     }
+    this.lastSearchMs = performance.now() - startedAt;
     return result;
   }
 
@@ -281,26 +388,27 @@ export class PackRegistry {
       if (!existsSync(join(tempDir, 'manifest.json')) || !existsSync(join(tempDir, 'parts.json'))) {
         throw new Error('ZIP 条目不存在：manifest.json 或 parts.json');
       }
-      const loaded = this.loadPackDirectory(tempDir, manifest.id, false, new Set(), manifest.id);
-      if (loaded.info.error) throw new Error(loaded.info.error);
       renameSync(tempDir, target);
     } catch (error) {
       rmSync(tempDir, { recursive: true, force: true });
       throw error;
     }
-    const loaded = this.loadPackDirectory(target, manifest.id, false, new Set(this.readState().disabled));
-    if (loaded.info.error) throw new Error(loaded.info.error);
-    return loaded.info;
+    this.invalidateIndex(manifest.id);
+    const entry = this.requireEntry(manifest.id);
+    if (entry.info.error) throw new Error(entry.info.error);
+    this.loadEntry(entry);
+    return this.infoSnapshot(entry);
   }
 
   async setEnabled(id: string, on: boolean): Promise<void> {
-    const allIds = new Set(this.scanSync().map((pack) => pack.id));
+    const allIds = new Set(this.ensureIndex().map((entry) => entry.info.id));
     if (!allIds.has(id)) throw new Error(`数据包不存在：${id}`);
     const state = this.readState();
     const disabled = new Set(state.disabled);
     if (on) disabled.delete(id);
     else disabled.add(id);
     this.writeState({ disabled: Array.from(disabled).sort() });
+    this.invalidateIndex(id);
   }
 
   async remove(id: string): Promise<void> {
@@ -310,15 +418,41 @@ export class PackRegistry {
     rmSync(target, { recursive: true, force: true });
     const disabled = this.readState().disabled.filter((packId) => packId !== id);
     this.writeState({ disabled });
+    this.invalidateIndex(id);
   }
 
-  private loadPackDirectory(
+  private invalidateIndex(unloadId?: string): void {
+    if (unloadId) this.loadedPacks.delete(unloadId);
+    this.partIndex = null;
+    this.index = null;
+  }
+
+  private ensureIndex(): PackIndexEntry[] {
+    if (this.index) return this.index;
+    const disabled = new Set(this.readState().disabled);
+    const byId = new Map<string, PackIndexEntry>();
+    for (const [root, builtin] of [
+      [this.builtinDir, true],
+      [this.userDir, false]
+    ] as const) {
+      if (!existsSync(root)) continue;
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        const loaded = this.readManifestDirectory(join(root, entry.name), entry.name, builtin, disabled);
+        if (!byId.has(loaded.info.id)) byId.set(loaded.info.id, loaded);
+      }
+    }
+    this.index = Array.from(byId.values());
+    return this.index;
+  }
+
+  private readManifestDirectory(
     dir: string,
     directoryName: string,
     builtin: boolean,
-    disabled: Set<string>,
-    expectedId = directoryName
-  ): LoadedPack {
+    disabled: Set<string>
+  ): PackIndexEntry {
+    const hasParts = existsSync(join(dir, 'parts.json'));
     const fallback: PackInfo = {
       id: directoryName,
       name: directoryName,
@@ -327,17 +461,19 @@ export class PackRegistry {
       enabled: !disabled.has(directoryName),
       builtin,
       path: dir,
-      partCount: 0
+      partCount: 0,
+      categories: []
     };
     try {
-      const manifest = validateManifest(readJson(join(dir, 'manifest.json')));
-      if (manifest.id !== expectedId) {
+      const manifest = validateManifest(JSON.parse(this.readTextFile(join(dir, 'manifest.json'))) as unknown);
+      if (manifest.id !== directoryName) {
         throw new Error(`manifest.id (${manifest.id}) 与目录名 (${directoryName}) 不一致`);
       }
-      const parts = validateParts(readJson(join(dir, 'parts.json')), manifest.id, manifest.name);
       return {
         manifest,
-        parts,
+        dir,
+        builtin,
+        hasParts,
         info: {
           id: manifest.id,
           name: manifest.name,
@@ -348,12 +484,16 @@ export class PackRegistry {
           enabled: !disabled.has(manifest.id),
           builtin,
           path: dir,
-          partCount: parts.length
+          partCount: manifest.partsCount,
+          categories: [...manifest.categories],
+          ...(manifest.keywords ? { keywords: [...manifest.keywords] } : {})
         }
       };
     } catch (error) {
       return {
-        parts: [],
+        dir,
+        builtin,
+        hasParts,
         info: {
           ...fallback,
           error: error instanceof Error ? error.message : String(error)
@@ -362,9 +502,88 @@ export class PackRegistry {
     }
   }
 
+  private requireEntry(id: string): PackIndexEntry {
+    const entry = this.ensureIndex().find((candidate) => candidate.info.id === id);
+    if (!entry) throw new Error(`数据包不存在：${id}`);
+    return entry;
+  }
+
+  /** 命中 manifest 的包才加载；完全不命中 manifest 时回退全量，保证型号级检索不失效。 */
+  private narrowByManifest(entries: PackIndexEntry[], q: string): PackIndexEntry[] {
+    const matched = entries.filter((entry) => this.matchesManifest(entry, q));
+    return matched.length > 0 ? matched : entries;
+  }
+
+  private matchesManifest(entry: PackIndexEntry, q: string): boolean {
+    const manifest = entry.manifest;
+    if (!manifest) return false;
+    const metadata = lower([
+      manifest.id,
+      manifest.name,
+      manifest.vendor,
+      manifest.description ?? '',
+      ...manifest.categories,
+      ...(manifest.keywords ?? [])
+    ].join(' '));
+    if (metadata.includes(q)) return true;
+    return (manifest.keywords ?? []).some((keyword) => q.includes(lower(keyword)));
+  }
+
+  private loadEntry(entry: PackIndexEntry): ComponentPart[] {
+    const cached = this.loadedPacks.get(entry.info.id);
+    if (cached) return cached.parts;
+    if (!entry.manifest) throw new Error(entry.info.error ?? `数据包 manifest 无效：${entry.info.id}`);
+    const startedAt = performance.now();
+    try {
+      const parts = validateParts(
+        JSON.parse(this.readTextFile(join(entry.dir, 'parts.json'))) as unknown,
+        entry.manifest.id,
+        entry.manifest.name
+      );
+      const loadMs = performance.now() - startedAt;
+      this.loadedPacks.set(entry.info.id, { parts, loadMs });
+      entry.info.partCount = parts.length;
+      this.totalPackLoadMs += loadMs;
+      this.partIndex = null;
+      return parts;
+    } catch (error) {
+      entry.info.error = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+
+  private ensurePartIndex(): Map<string, ComponentPart> {
+    if (this.partIndex) return this.partIndex;
+    const index = new Map<string, ComponentPart>();
+    for (const entry of this.ensureIndex()) {
+      if (!entry.hasParts || !entry.info.enabled || entry.info.error) continue;
+      let parts: ComponentPart[];
+      try {
+        parts = this.loadEntry(entry);
+      } catch {
+        continue;
+      }
+      for (const part of parts) {
+        if (!index.has(part.id)) index.set(part.id, part);
+      }
+    }
+    this.partIndex = index;
+    return index;
+  }
+
+  private infoSnapshot(entry: PackIndexEntry): PackInfo {
+    const cached = this.loadedPacks.get(entry.info.id);
+    return {
+      ...entry.info,
+      partCount: cached ? cached.parts.length : entry.info.partCount,
+      categories: [...entry.info.categories],
+      ...(entry.info.keywords ? { keywords: [...entry.info.keywords] } : {})
+    };
+  }
+
   private readState(): PackState {
     try {
-      const value = readJson(this.stateFile);
+      const value = JSON.parse(this.readTextFile(this.stateFile)) as unknown;
       if (!isRecord(value) || !Array.isArray(value.disabled)) return { disabled: [] };
       return { disabled: value.disabled.filter((item): item is string => typeof item === 'string') };
     } catch (error) {

@@ -1,0 +1,562 @@
+[
+  {
+    "id": "SV660PS7R6I",
+    "model": "SV660PS7R6I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660P",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "Modbus RTU / CANopen / CANlink",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）"
+    }
+  },
+  {
+    "id": "SV660PS012I",
+    "model": "SV660PS012I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660P",
+      "功率": "1500 W",
+      "ratedW": 1500,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "Modbus RTU / CANopen / CANlink",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）"
+    }
+  },
+  {
+    "id": "SV660PT021I",
+    "model": "SV660PT021I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660P",
+      "功率": "2000 W",
+      "ratedW": 2000,
+      "输入电压": "三相 380 V AC",
+      "voltage": "三相 380 V AC",
+      "通讯": "Modbus RTU / CANopen / CANlink",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）"
+    }
+  },
+  {
+    "id": "SV660NS2R8I",
+    "model": "SV660NS2R8I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660N",
+      "功率": "400 W",
+      "ratedW": 400,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660N 系列 EtherCAT 伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "SV660NS5R5I",
+    "model": "SV660NS5R5I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660N",
+      "功率": "750 W",
+      "ratedW": 750,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660N 系列 EtherCAT 伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "SV660NS7R6I",
+    "model": "SV660NS7R6I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660N",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660N 系列 EtherCAT 伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "SV660NS012I",
+    "model": "SV660NS012I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660N",
+      "功率": "1500 W",
+      "ratedW": 1500,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660N 系列 EtherCAT 伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "SV660NT021I",
+    "model": "SV660NT021I",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "SV660N",
+      "功率": "2000 W",
+      "ratedW": 2000,
+      "输入电压": "三相 380 V AC",
+      "voltage": "三相 380 V AC",
+      "通讯": "EtherCAT",
+      "encoder": "23 bit 绝对值（配 MS1 电机）",
+      "编码器": "23 bit 绝对值（配 MS1 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "汇川 SV660N 系列 EtherCAT 伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "MS1H1-40B30CB-A331Z",
+    "model": "MS1H1-40B30CB-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H1",
+      "功率": "400 W",
+      "ratedW": 400,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "3000 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "60 mm",
+      "法兰": "60 mm",
+      "brake": "无（标准型）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）尺寸表",
+      "额定转矩": "1.27 N·m"
+    },
+    "dims": {
+      "w": 60,
+      "h": 60,
+      "d": 91,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H1-40B30CB-A331Z 尺寸表：LA=60 mm、LL=91 mm"
+    }
+  },
+  {
+    "id": "MS1H1-75B30CB-A331Z",
+    "model": "MS1H1-75B30CB-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H1",
+      "功率": "750 W",
+      "ratedW": 750,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "3000 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "80 mm",
+      "法兰": "80 mm",
+      "brake": "无（标准型）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）尺寸表",
+      "额定转矩": "2.39 N·m"
+    },
+    "dims": {
+      "w": 80,
+      "h": 80,
+      "d": 107,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H1-75B30CB-A331Z 尺寸表：LA=80 mm、LL=107 mm"
+    }
+  },
+  {
+    "id": "MS1H1-10C30CB-A331Z",
+    "model": "MS1H1-10C30CB-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H1",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "3000 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "80 mm",
+      "法兰": "80 mm",
+      "brake": "无（标准型）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）尺寸表",
+      "额定转矩": "3.18 N·m"
+    },
+    "dims": {
+      "w": 80,
+      "h": 80,
+      "d": 118.2,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H1-10C30CB-A331Z 尺寸表：LA=80 mm、LL=118.2 mm"
+    }
+  },
+  {
+    "id": "MS1H3-85B15CB-A331Z",
+    "model": "MS1H3-85B15CB-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H3",
+      "功率": "850 W",
+      "ratedW": 850,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "1500 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "145 mm",
+      "法兰": "145 mm",
+      "brake": "无（标准型；-D 为带制动）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3 尺寸表",
+      "额定转矩": "5.41 N·m"
+    },
+    "dims": {
+      "w": 145,
+      "h": 145,
+      "d": 146,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3-85B15CB-A331Z 尺寸表：LA=145 mm、LL=146 mm"
+    }
+  },
+  {
+    "id": "MS1H3-13C15CB-A331Z",
+    "model": "MS1H3-13C15CB-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H3",
+      "功率": "1300 W",
+      "ratedW": 1300,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "1500 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "145 mm",
+      "法兰": "145 mm",
+      "brake": "无（标准型；-D 为带制动）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3 尺寸表",
+      "额定转矩": "8.27 N·m"
+    },
+    "dims": {
+      "w": 145,
+      "h": 145,
+      "d": 163,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3-13C15CB-A331Z 尺寸表：LA=145 mm、LL=163 mm"
+    }
+  },
+  {
+    "id": "MS1H3-18C15CD-A331Z",
+    "model": "MS1H3-18C15CD-A331Z",
+    "category": "伺服",
+    "vendor": "汇川",
+    "specs": {
+      "系列": "MS1H3",
+      "功率": "1800 W",
+      "ratedW": 1800,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "1500 r/min",
+      "encoder": "23 bit 绝对值",
+      "编码器": "23 bit 绝对值",
+      "flange": "145 mm",
+      "法兰": "145 mm",
+      "brake": "无（标准型；-D 为带制动）",
+      "数据来源": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3 尺寸表",
+      "额定转矩": "11.46 N·m"
+    },
+    "dims": {
+      "w": 145,
+      "h": 145,
+      "d": 181,
+      "source": "汇川 SV660P 系列伺服驱动器硬件手册（2023，官方）MS1H3-18C15CD-A331Z 尺寸表：LA=145 mm、LL=181 mm"
+    }
+  },
+  {
+    "id": "ASD-B3-0421-M",
+    "model": "ASD-B3-0421-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-B3",
+      "功率": "400 W",
+      "ratedW": 400,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-B3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ASD-B3-0721-M",
+    "model": "ASD-B3-0721-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-B3",
+      "功率": "750 W",
+      "ratedW": 750,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-B3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ASD-B3-1021-M",
+    "model": "ASD-B3-1021-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-B3",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "输入电压": "三相 220 V AC",
+      "voltage": "三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-B3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ASD-A3-0421-M",
+    "model": "ASD-A3-0421-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-A3",
+      "功率": "400 W",
+      "ratedW": 400,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-A3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ASD-A3-0721-M",
+    "model": "ASD-A3-0721-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-A3",
+      "功率": "750 W",
+      "ratedW": 750,
+      "输入电压": "单相/三相 220 V AC",
+      "voltage": "单相/三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-A3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ASD-A3-1021-M",
+    "model": "ASD-A3-1021-M",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ASDA-A3",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "输入电压": "三相 220 V AC",
+      "voltage": "三相 220 V AC",
+      "通讯": "EtherCAT（-M 机种）",
+      "encoder": "24 bit 绝对值（配 ECMA 电机）",
+      "编码器": "24 bit 绝对值（配 ECMA 电机）",
+      "flange": "不适用（驱动器）",
+      "brake": "不适用",
+      "数据来源": "台达 ASDA-A3 系列伺服驱动器选型手册（官方）"
+    }
+  },
+  {
+    "id": "ECMA-C10807RS",
+    "model": "ECMA-C10807RS",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ECMA-C",
+      "功率": "750 W",
+      "ratedW": 750,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "3000 r/min",
+      "encoder": "增量/绝对值（按驱动器配置）",
+      "编码器": "增量/绝对值（按驱动器配置）",
+      "flange": "80 mm",
+      "法兰": "80 mm",
+      "brake": "无（标准型）",
+      "数据来源": "台达 ECMA-C 系列伺服电机样本（官方）",
+      "额定转矩": "2.39 N·m"
+    }
+  },
+  {
+    "id": "ECMA-C11010RS",
+    "model": "ECMA-C11010RS",
+    "category": "伺服",
+    "vendor": "台达",
+    "specs": {
+      "系列": "ECMA-C",
+      "功率": "1000 W",
+      "ratedW": 1000,
+      "电压": "220 V AC",
+      "voltage": "220 V AC",
+      "额定转速": "3000 r/min",
+      "encoder": "增量/绝对值（按驱动器配置）",
+      "编码器": "增量/绝对值（按驱动器配置）",
+      "flange": "100 mm",
+      "法兰": "100 mm",
+      "brake": "无（标准型）",
+      "数据来源": "台达 ECMA-C 系列伺服电机样本（官方）",
+      "额定转矩": "3.18 N·m"
+    }
+  },
+  {
+    "id": "57CM23",
+    "model": "57CM23",
+    "category": "步进",
+    "vendor": "雷赛",
+    "specs": {
+      "系列": "57CM",
+      "功率": "—（步进电机按转矩/电流选型）",
+      "ratedW": "—（步进电机按转矩/电流选型）",
+      "电压": "24–48 V DC（由步进驱动器供电）",
+      "voltage": "24–48 V DC（由步进驱动器供电）",
+      "额定转速": "1.8°/步",
+      "encoder": "无（开环）",
+      "编码器": "无（开环）",
+      "flange": "56.4 mm（NEMA 23）",
+      "法兰": "56.4 mm（NEMA 23）",
+      "brake": "无",
+      "数据来源": "雷赛智能 57CM 系列步进电机产品页（官方）：https://www.leadshine.com/product-detail/57CM23.html",
+      "额定转矩": "2.3 N·m",
+      "相电流": "5.0 A",
+      "步距角": "1.8°",
+      "防护": "IP40"
+    },
+    "dims": {
+      "w": 56.4,
+      "h": 56.4,
+      "d": 76,
+      "source": "雷赛 57CM23 产品页 官方（NEMA 23，Length 76 mm）"
+    }
+  },
+  {
+    "id": "57CM26",
+    "model": "57CM26",
+    "category": "步进",
+    "vendor": "雷赛",
+    "specs": {
+      "系列": "57CM",
+      "功率": "—（步进电机按转矩/电流选型）",
+      "ratedW": "—（步进电机按转矩/电流选型）",
+      "电压": "24–48 V DC（由步进驱动器供电）",
+      "voltage": "24–48 V DC（由步进驱动器供电）",
+      "额定转速": "1.8°/步",
+      "encoder": "无（开环）",
+      "编码器": "无（开环）",
+      "flange": "56.4 mm（NEMA 23）",
+      "法兰": "56.4 mm（NEMA 23）",
+      "brake": "无",
+      "数据来源": "雷赛智能 57CM 系列步进电机产品页（官方）：https://www.leadshine.com/product-detail/57CM26.html",
+      "额定转矩": "2.6 N·m",
+      "相电流": "5.0 A",
+      "步距角": "1.8°",
+      "防护": "IP40"
+    },
+    "dims": {
+      "w": 56.4,
+      "h": 56.4,
+      "d": 84,
+      "source": "雷赛 57CM26 产品页 官方（NEMA 23，Length 84 mm）"
+    }
+  },
+  {
+    "id": "57CM23-BZ",
+    "model": "57CM23-BZ",
+    "category": "步进",
+    "vendor": "雷赛",
+    "specs": {
+      "系列": "57CM",
+      "功率": "—（步进电机按转矩/电流选型）",
+      "ratedW": "—（步进电机按转矩/电流选型）",
+      "电压": "24–48 V DC（由步进驱动器供电）",
+      "voltage": "24–48 V DC（由步进驱动器供电）",
+      "额定转速": "1.8°/步",
+      "encoder": "无（开环）",
+      "编码器": "无（开环）",
+      "flange": "56.4 mm（NEMA 23）",
+      "法兰": "56.4 mm（NEMA 23）",
+      "brake": "有（失电制动）",
+      "数据来源": "雷赛智能 57CM23-BZ 产品页（官方）：https://www.leadshine.com/product-detail/stepper-motor/stepper/57CM23-BZ.html",
+      "额定转矩": "2.3 N·m",
+      "相电流": "5.0 A",
+      "步距角": "1.8°",
+      "防护": "IP40"
+    },
+    "dims": {
+      "w": 56.4,
+      "h": 56.4,
+      "d": 116,
+      "source": "雷赛 57CM23-BZ 产品页 官方（NEMA 23，带制动，Length 116 mm）"
+    }
+  }
+]

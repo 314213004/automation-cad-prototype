@@ -10,7 +10,7 @@ Windows 11 桌面外壳（Electron）+ 原型渲染层扩展。根目录的 `ind
 cd desktop
 npm ci
 npm run build:ext   # tsc + Vite 扩展 + Electron main/preload + MCP 入口
-npm test            # 1529 个单元/集成测试（node:test）
+npm test            # 1582 个单元/集成测试（node:test）
 npm run smoke       # xvfb + Electron --headless-smoke，强制无 WebGL 路径
 npm run check:orbit-webgl  # 手动：swiftshader 打开 WebGL，验证主视口 3D（需先 build:ext）
 npm start           # 启动桌面应用
@@ -23,7 +23,7 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 无 WebGL 时显示「当前环境不支持 WebGL，无法显示 3D 模型」降级面板，并展示解析统计；
 - 主视口可旋转 3D：冒烟进程关闭 WebGL，验证装配/干涉视口保留原型等轴测 SVG（降级），同时扩展模型与原型逐字一致、3D↔结构树选择映射、原型缸径编辑与撤销驱动几何、桌面版几何参数沿叠放链联动与越界拒绝（`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`）；WebGL 路径另用 `npm run check:orbit-webgl`（swiftshader，手动）验证，输出 `ORBIT_WEBGL_OK`；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
-- 「数据包」面板能列出内置包、搜索元器件并写入 localStorage 覆盖层；
+- 「数据包」面板能列出 6 个内置 manifest、搜索元器件并写入 localStorage 覆盖层；启动只读 manifest，命中包才加载 `parts.json`；smoke 额外输出 `SMOKE_PACKS_LAZY_OK packs=6 loaded=2 searchMs=…` 与 `SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44`；
 - 智能体注册表为 21 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`）：`design_machine` 返回 config / cycle / power / cost / bomDraft，其中功率优先取元件库额定值并按同时系数、负载率、效率与 `cosφ` 折算，成本按材料/电气/人工分项并统计缺价；渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4` / `SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` / `SMOKE_MACHINE_COST_OK total=10938 missing=8` / `SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1` / `SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=350 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
 
 ## MCP（stdio）接入
@@ -121,7 +121,8 @@ curl -s http://127.0.0.1:7420/rpc \
 
 ## 数据包 UI
 
-- 内置包只读；用户包导入 ZIP 后落到 `%APPDATA%/AutomationCAD/packs/<id>/`。
+- 内置包只读：`iec-cn`、`smc-cn`、`servo-cn`、`sensor-cn`、`pneumatic-cn`、`pricebook-cn`；用户包导入 ZIP 后落到 `%APPDATA%/AutomationCAD/packs/<id>/`。
+- 启动只读 manifest；`listParts` 按 `manifest.categories` / 包名预过滤，命中包才读取 `parts.json` 并缓存，`unloadPack(id)` 释放；`metrics()` 暴露 `packLoadMs / loadedPacks / partsLoaded / searchMs`。
 - 导入校验包含 manifest 必填字段、ID 冲突、ZIP 路径穿越；错误原因会原样显示在面板状态区。
 - 启用/禁用即时影响标准件搜索结果。
 - 「插入」写入 `localStorage` 键 `automationcad.parts.overlay.v1`，并派发 `automationcad:parts-overlay-changed` 事件；不修改 `app.js`。

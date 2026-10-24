@@ -26,6 +26,15 @@ interface PackInfo {
 }
 ```
 
+## 按需加载（2026-10-24）
+
+- `scan()` 只读 `manifest.json`，建立 id/目录/分类/条目数/关键词索引，不读 `parts.json`；
+- `listParts()` 先用 `packId`、`manifest.categories`、包名/厂商/描述/关键词预过滤，命中包才 `loadPack`；
+- `loadPack(id)` 首次读 `parts.json` 并缓存；`unloadPack(id)` 释放；重复搜索命中缓存；
+- 跨包同 id 去重，内置包优先；`getPartById()` 首次调用懒建全局 partId 索引；
+- `metrics()` 返回 `packLoadMs / loadedPacks / partsLoaded / searchMs / packCount / indexedParts`，diagnose 的 `packMetrics` 与 smoke 的 `SMOKE_PACKS_LAZY_OK` 复用同一口径；
+- `readTextFile` 注入仅用于测试，可断言 manifest / parts 的实际读取次数。
+
 ## 目录与持久化
 
 | 位置 | 说明 |
@@ -53,7 +62,8 @@ interface PackInfo {
 
 ## 进度
 
-- ✅ 内置 `smc-cn`：8 个真实型号（MXQ20-50、MGP32-200、CDQ2B32-50DZ、MHZ2-20D、SY5120-5LZD、D-M9B、KQ2H06-01AS、AW30-03）
+- ✅ 内置 5 个元器件包 + 价格簿：`iec-cn` 379、`smc-cn` 8、`servo-cn` 25、`sensor-cn` 32、`pneumatic-cn` 44；启动只读 manifest，按需加载/卸载与全局索引已实现
+- ✅ 懒加载单测 32 条：manifest 校验、read spy、缓存命中、unload 重载、分类/包名过滤、跨包去重、全局索引、体积/字段/性能
 - ✅ 扫描 / 校验 / ZIP 导入 / 启停 / 删除 / 搜索
 - ✅ 面板：列表、开关、导入、删除、搜索并插入（写入 localStorage 覆盖层）
 - ✅ 单测 6 条（合法、缺 id、id 不符、zip 穿越、禁用生效、合法导入）

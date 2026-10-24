@@ -60,7 +60,7 @@ before(() => {
   sandbox = mkdtempSync(join(tmpdir(), 'cad-suggest-kin-'));
   const builtin = join(sandbox, 'builtin', 'smc-cn');
   mkdirSync(builtin, { recursive: true });
-  writeFileSync(join(builtin, 'manifest.json'), JSON.stringify({ schemaVersion: 1, id: 'smc-cn', name: 'SMC', vendor: 'SMC', version: '1.0.0' }));
+  writeFileSync(join(builtin, 'manifest.json'), JSON.stringify({ schemaVersion: 1, id: 'smc-cn', name: 'SMC', vendor: 'SMC', version: '1.0.0', categories: ['气缸'], partsCount: 1 }));
   writeFileSync(join(builtin, 'parts.json'), JSON.stringify([]));
   registry = new PackRegistry({ builtinDir: join(sandbox, 'builtin'), userDir: join(sandbox, 'user'), stateFile: join(sandbox, 'packs-state.json') });
 });
