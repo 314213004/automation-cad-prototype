@@ -220,3 +220,14 @@
 - 失败则回滚本次改动（`git checkout -- <改动文件>`），把原因写入本文件
 - 不修改 `index.html` / `app.js` / `styles.css` / `electrical.*`，除非该任务明确要求
 - 不删除既有测试来「变绿」；不放宽断言规避失败
+
+## 仓库双推约定（GitHub + Gitee，2026-10-24 起）
+
+- 主仓库：`origin` = GitHub `owlco001/automation-cad-prototype`；镜像：`gitee` = Gitee 同名仓库（公开）
+- `origin` 配置了两个 push URL（GitHub 在前、Gitee 在后），因此 `git push origin main` 会自动双推；任一远端失败则整体失败，**不允许只推成功一边**
+- 推 tag 必须用 `git bothpush`（等价于 `git push origin main && git push origin --tags`），普通 push 不带 tag
+- 新增 tag 后必须核对：`git ls-remote origin refs/tags/<tag>` 与 `git ls-remote gitee refs/tags/<tag>` 都存在且指向同一提交
+- 发版/合并后复核三方 HEAD 一致：
+  `git rev-parse HEAD`、`git ls-remote origin refs/heads/main`、`git ls-remote gitee refs/heads/main`
+- Gitee 偶发 5xx 或超时：重试一次即可，不要改成只推 GitHub 了事；连续失败要在本文件记录时间与错误码
+- 凭据只存在 `~/.git-credentials`，禁止写进仓库、提交信息或日志
