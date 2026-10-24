@@ -108,7 +108,7 @@ export interface GeomStation {
   sensorPoints: string[];
 }
 
-export type GeomLayout = 'single' | 'linear' | 'dial';
+export type GeomLayout = 'single' | 'linear' | 'dial' | 'gantry' | 'dual';
 
 export interface MachineGeometry {
   schemaVersion: 1;
@@ -809,20 +809,40 @@ function footprintFor(build: StationBuild, placement: Placement): GeomFootprint 
   };
 }
 
-function isMachineDesignLike(value: unknown): value is { config: MachineConfig } {
+type MachineGeometryInput = MachineConfig | {
+  config: MachineConfig;
+  form?: { geometry?: { kind?: unknown }; layout?: unknown };
+};
+
+function isMachineDesignLike(value: unknown): value is { config: MachineConfig; form?: { geometry?: { kind?: unknown }; layout?: unknown } } {
   return typeof value === 'object' && value !== null && 'config' in value && typeof (value as { config: unknown }).config === 'object';
+}
+
+function formGeometryLayout(value: unknown): GeomLayout | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const form = (value as { form?: unknown }).form;
+  if (!form || typeof form !== 'object') return undefined;
+  const geometry = (form as { geometry?: unknown }).geometry;
+  if (!geometry || typeof geometry !== 'object') return undefined;
+  const kind = (geometry as { kind?: unknown }).kind;
+  return kind === 'dial' || kind === 'linear' || kind === 'gantry' || kind === 'dual'
+    ? kind
+    : undefined;
 }
 
 /**
  * 从 MachineConfig / MachineDesign 生成参数化整机几何。纯函数：相同输入产生相同输出。
  */
 export function generateMachineGeometry(
-  input: MachineConfig | { config: MachineConfig },
+  input: MachineGeometryInput,
   options: MachineGeometryOptions = {}
 ): MachineGeometry {
   const config = validateMachineConfig(isMachineDesignLike(input) ? input.config : input);
   const process = options.process ?? inferProcess(config);
-  const layout = options.layout ?? chooseLayout(process, config.stations.length);
+  const layout = options.layout
+    ?? (config.stations.length <= 1 ? 'single' : undefined)
+    ?? formGeometryLayout(input)
+    ?? chooseLayout(process, config.stations.length);
   const usedIds = new Set<string>();
   const warnings: string[] = [];
   const assumptions: string[] = [
@@ -918,8 +938,60 @@ export function generateMachineGeometry(
       });
     }
     assumptions.push(`分度转盘布局：${n} 工位沿 Ø${dialRadius * 2} 转盘均布，工位中心半径约 ${Math.round(radius)} mm；转盘分度运动未接入点位。`);
+  } else if (layout === 'dual') {
+    // 双轨：两排工位各自沿 X 排开，外侧各一条输送线。
+    const laneCount = 2;
+    const perLane = Math.max(1, Math.ceil(builds.length / laneCount));
+    const lanes = [builds.slice(0, perLane), builds.slice(perLane)];
+    const laneDepth = lanes.map((lane) => Math.max(0, ...lane.map((build) => build.local.maxY - build.local.minY)));
+    const pitch = Math.max(...laneDepth) + D.stationGap * 2;
+    const laneY = [-pitch / 2, pitch / 2];
+    let placementIndex = 0;
+    for (const [laneIndex, lane] of lanes.entries()) {
+      let x = 0;
+      const xs: number[] = [];
+      for (const build of lane) {
+        const span = build.local.maxX - build.local.minX;
+        xs.push(x - build.local.minX);
+        x += span + D.stationGap;
+      }
+      const total = x - D.stationGap;
+      const y = laneY[laneIndex] ?? 0;
+      for (const [index] of lane.entries()) {
+        placements[placementIndex] = { origin: [(xs[index] ?? 0) - total / 2, y, stationTopZ], rotationZDeg: 0 };
+        placementIndex += 1;
+      }
+      const frontMax = Math.max(0, ...lane.map((build) => -build.local.minY));
+      const conveyorY = laneIndex === 0
+        ? y - frontMax - D.conveyorClearance - D.conveyorWidth / 2
+        : y + frontMax + D.conveyorClearance + D.conveyorWidth / 2;
+      const length = total + 2 * D.conveyorOverhang;
+      layoutPart({
+        id: `conveyor-frame-l${laneIndex + 1}`,
+        name: `轨道${laneIndex + 1}输送线机架 ${Math.round(length)}×${D.conveyorWidth}`,
+        role: 'transfer',
+        shape: { type: 'box', size: [length, D.conveyorWidth, D.conveyorHeight] },
+        center: [0, conveyorY, D.tableHeight + D.conveyorHeight / 2],
+        rotationZDeg: 0,
+        color: COLORS.conveyor,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+      layoutPart({
+        id: `conveyor-belt-l${laneIndex + 1}`,
+        name: `轨道${laneIndex + 1}输送皮带 宽 ${D.conveyorBeltWidth}`,
+        role: 'transfer',
+        shape: { type: 'box', size: [length - 40, D.conveyorBeltWidth, 6] },
+        center: [0, conveyorY, D.tableHeight + D.conveyorHeight + 3],
+        rotationZDeg: 0,
+        color: COLORS.belt,
+        material: 'PVC',
+        bomGroup: 'structure'
+      });
+    }
+    assumptions.push(`双轨布局：${builds.length} 工位分 ${laneCount} 轨、每轨约 ${perLane} 工位，轨间距 ${Math.round(pitch)} mm；两轨可独立停线/换型。`);
   } else {
-    // single / linear：工位沿 X 排开，输送线在操作侧（-Y）。
+    // single / linear / gantry：工位沿 X 排开。
     const frontMax = Math.max(...builds.map((build) => -build.local.minY));
     let x = 0;
     const xs: number[] = [];
@@ -969,6 +1041,45 @@ export function generateMachineGeometry(
         bomGroup: 'structure'
       });
       assumptions.push(`直线布局：${builds.length} 工位沿 X 排开、间距 ${D.stationGap} mm，操作侧输送线 ${Math.round(length)} mm；输送线驱动未接入点位。`);
+    } else if (layout === 'gantry') {
+      const gantryHeight = 760;
+      const gantryZ = stationTopZ + gantryHeight / 2;
+      for (const [label, sx] of [['left', -1], ['right', 1]] as const) {
+        layoutPart({
+          id: `gantry-upright-${label}`,
+          name: `龙门立柱（${label === 'left' ? '左' : '右'}）`,
+          role: 'frame',
+          shape: { type: 'box', size: [D.uprightSection, D.uprightSection, gantryHeight] },
+          center: [sx * (total / 2 + D.frameMargin), 0, gantryZ],
+          rotationZDeg: 0,
+          color: COLORS.upright,
+          material: 'AL6063-T5 型材',
+          bomGroup: 'structure'
+        });
+      }
+      layoutPart({
+        id: 'gantry-beam',
+        name: `龙门横梁 ${Math.round(total + 2 * D.frameMargin)}×${D.beamSection}`,
+        role: 'frame',
+        shape: { type: 'box', size: [total + 2 * D.frameMargin, D.beamSection, D.beamSection] },
+        center: [0, 0, stationTopZ + gantryHeight - D.beamSection / 2],
+        rotationZDeg: 0,
+        color: COLORS.upright,
+        material: 'AL6063-T5 型材',
+        bomGroup: 'structure'
+      });
+      layoutPart({
+        id: 'gantry-carriage',
+        name: '龙门双轴滑台',
+        role: 'transfer',
+        shape: { type: 'box', size: [180, 120, 90] },
+        center: [0, 0, stationTopZ + gantryHeight - D.beamSection - 45],
+        rotationZDeg: 0,
+        color: COLORS.rotaryBase,
+        material: 'AL6061',
+        bomGroup: 'structure'
+      });
+      assumptions.push(`龙门布局：${builds.length} 工位沿 X 排开，上方 ${gantryHeight} mm 双轴龙门覆盖全部工位；龙门运动未接入点位。`);
     } else {
       assumptions.push('单工位布局：不生成输送线/转盘。');
     }
@@ -1118,6 +1229,9 @@ export function generateMachineGeometry(
   const structureBom = buildStructureBom(allParts, bays + 1, frameLength, frameWidth, legH);
   if (layout === 'dial' && config.stations.length > 6) {
     warnings.push(`分度转盘 ${config.stations.length} 工位，整机直径较大，建议评估改为直线输送布局。`);
+  }
+  if (layout === 'dual' && config.stations.length > 6) {
+    warnings.push(`双轨 ${config.stations.length} 工位超出标准 2×3 配置，几何按两轨均分，需复核节拍与换型。`);
   }
 
   return {

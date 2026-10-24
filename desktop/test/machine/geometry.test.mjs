@@ -42,7 +42,7 @@ function footprintAabb(fp) {
 }
 
 test('几何：三工位锁螺丝机按分度转盘布局，零件 id 全局唯一且只含 [a-z0-9-]', () => {
-  const geometry = generateMachineGeometry(design());
+  const geometry = generateMachineGeometry(design(), { layout: 'dial' });
   assert.equal(geometry.kind, 'machine-geometry');
   assert.equal(geometry.units, 'mm');
   assert.equal(geometry.upAxis, 'z');
@@ -224,7 +224,7 @@ test('几何：执行机构/传感器数量与 bomDraft 一致（BOM/成本联�
 });
 
 test('几何：包络等于 bounds 差值，全部零件落在 bounds 内；结构件 BOM 有机架/底板/门架', () => {
-  const geometry = generateMachineGeometry(design('四工位检测机'));
+  const geometry = generateMachineGeometry(design('四工位检测流水线'));
   assert.equal(geometry.layout, 'linear');
   for (let axis = 0; axis < 3; axis += 1) {
     assert.ok(Math.abs(geometry.envelope[axis] - (geometry.bounds.max[axis] - geometry.bounds.min[axis])) < 1e-6);
@@ -250,7 +250,10 @@ test('几何：包络等于 bounds 差值，全部零件落在 bounds 内；结�
 test('几何：确定性；接受 design 或 config；布局可覆盖；工艺按 id 推断', () => {
   const source = design();
   assert.deepEqual(generateMachineGeometry(source), generateMachineGeometry(source));
-  assert.deepEqual(generateMachineGeometry(source), generateMachineGeometry(source.config));
+  assert.deepEqual(
+    generateMachineGeometry(source),
+    generateMachineGeometry(source.config, { layout: source.form.geometry.kind })
+  );
   assert.equal(generateMachineGeometry(source, { layout: 'linear' }).layout, 'linear');
   assert.equal(inferProcess({ id: 'design-dispense-2st' }), 'dispense');
   assert.equal(inferProcess({ id: 'demo-4x3' }), 'unknown');
@@ -276,7 +279,7 @@ test('几何：内置 4 工位样机（非合成 id、传感器挂工位名）�
 });
 
 test('几何：分度转盘超过 6 工位给出布局 warning；占地重叠判定（旋转矩形 / 贴边）', () => {
-  const geometry = generateMachineGeometry(design('八工位锁螺丝机'));
+  const geometry = generateMachineGeometry(design('八工位转盘锁螺丝机'));
   assert.equal(geometry.layout, 'dial');
   assert.ok(geometry.warnings.some((warning) => /直线输送/.test(warning)));
   const a = { stationId: 'a', center: [0, 0], half: [100, 50], rotationZDeg: 0 };

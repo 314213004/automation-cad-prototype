@@ -390,3 +390,42 @@ test('离线路由识别机型落盘并输出 apply_machine_design', () => {
   assert.deepEqual(plan?.missing, ['design']);
   assert.equal(planTool('把机型方案写入工程并生成 PLC 点位映射')?.args.withPlc, true);
 });
+
+test('落盘时把 form.id 写进 machine json，可复现形态', async () => {
+  const { bus } = setup();
+  const result = await apply(bus, { brief: '六工位转盘锁螺丝机，10 件/分钟' });
+  assert.equal(result.ok, true);
+  const stored = JSON.parse(readFileSync(result.data.designPath, 'utf8'));
+  assert.equal(stored.form.id, 'dial-6');
+  assert.equal(stored.form.geometry.kind, 'dial');
+  assert.equal(stored.form.name, '六工位转盘机');
+  assert.equal(result.data.geometry.layout, 'dial');
+});
+
+test('apply 的 design 入参保留 form 并传给几何', async () => {
+  const { bus } = setup();
+  const design = designFor({ brief: '两工位点胶机，18 件/分钟', id: 'gantry-form' });
+  assert.equal(design.form.id, 'gantry-2');
+  const result = await apply(bus, { design });
+  assert.equal(result.ok, true);
+  const stored = JSON.parse(readFileSync(result.data.designPath, 'utf8'));
+  assert.equal(stored.form.id, 'gantry-2');
+  assert.equal(result.data.geometry.layout, 'gantry');
+});
+
+test('design.form 仅含 id/name/rationale/alternatives 时也能落盘并按 id 推断几何', async () => {
+  const { bus } = setup();
+  const design = designFor({ brief: '六工位转盘锁螺丝机，10 件/分钟', id: 'dial-min-form' });
+  design.form = {
+    id: 'dial-6',
+    name: '六工位转盘机',
+    rationale: '测试用最小 form 记录',
+    alternatives: []
+  };
+  const result = await apply(bus, { design });
+  assert.equal(result.ok, true);
+  const stored = JSON.parse(readFileSync(result.data.designPath, 'utf8'));
+  assert.equal(stored.form.id, 'dial-6');
+  assert.equal(stored.form.geometry.kind, 'dial');
+  assert.equal(result.data.geometry.layout, 'dial');
+});

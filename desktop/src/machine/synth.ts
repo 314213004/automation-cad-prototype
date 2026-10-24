@@ -20,7 +20,14 @@ import {
 } from './spec.ts';
 import { DIAL_MAX_STATIONS, DIAL_PROCESSES } from './geometry.ts';
 import { evaluateFlow, type FlowEvaluation, type FlowModel, type FlowOp, type MachineLayout } from './flow.ts';
-import { templateFor, templateKinds } from './templates.ts';
+import { TEMPLATES, templateFor, templateKinds } from './templates.ts';
+import {
+  ACTUATOR_SECONDS,
+  PROCESS_BASE_SECONDS,
+  pickForm,
+  summarizeForm,
+  type MachineFormSummary
+} from './forms.ts';
 
 export interface MachineCycleEstimate {
   /** 布局模型：single / linear / dial / parallel / cell。 */
@@ -72,6 +79,8 @@ export interface MachineDesign {
   bomDraft: { items: MachineBomItem[] };
   warnings: string[];
   assumptions: string[];
+  /** 选中的整机形态；旧设计对象可能没有该字段。 */
+  form: MachineFormSummary;
 }
 
 export interface SynthOptions {
@@ -110,22 +119,6 @@ const SENSOR_LABEL: Record<MachineSensorKind, string> = {
   photoelectric: '光电传感器',
   safety: '安全光栅',
   pressure: '压力传感器'
-};
-
-/** 工艺固定余量（秒/件）：换刀、定位、上下料衔接等，未建模为真实动作。 */
-const PROCESS_BASE_SECONDS: Record<MachineProcess, number> = {
-  screw: 2.2,
-  dispense: 2.4,
-  assembly: 1.8,
-  inspection: 1.5,
-  packaging: 1.8,
-  unknown: 2
-};
-
-const ACTUATOR_SECONDS: Record<MachineActuatorKind, number> = {
-  cylinder: 0.4,
-  gripper: 0.28,
-  rotary: 0.7
 };
 
 const ACTUATOR_DURATION_MS: Record<MachineActuatorKind, number> = {
@@ -369,6 +362,7 @@ function buildSummary(design: MachineDesign): string {
   const risk = warnings.length > 0 ? warnings.join('；') : '未发现明显参数冲突，仍需人工确认选型与安全。';
   const text = [
     `机型方案：${config.name}`,
+    `整机形态：${design.form.name}（${design.form.id}）`,
     `工位：${config.stations.length} 个；执行机构：${config.actuators.length} 个（${actuatorText || '无'}）；传感器：${config.sensors.length} 个（${sensorText || '无'}）`,
     `节拍：目标 ${cycle.perMin} 件/分钟（${cycle.secondsPerPiece.toFixed(2)} 秒/件）；估算 ${cycle.throughputPerMin.toFixed(2)} 件/分钟（单工位 ${cycle.stationSeconds.toFixed(2)} 秒/件）；瓶颈：${cycle.bottleneck}`,
     `功率：约 ${power.va} VA（固定表估算）`,
@@ -382,13 +376,21 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const stations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
-  const layout = resolveLayout(brief, stations);
+  const resolvedLayout = resolveLayout(brief, stations);
+  const formPick = pickForm(brief, TEMPLATES, { stationCount: stations, cyclePerMin });
+  const selectedForm = formPick.form;
+  const layout = {
+    ...resolvedLayout,
+    mode: resolvedLayout.mode === 'single' ? resolvedLayout.mode : selectedForm.layout
+  };
+  const form = summarizeForm(formPick);
   const template = templateFor(process);
   const templateActuatorKinds = templateKinds(template.actuators);
   const templateSensorKinds = templateKinds(template.sensors);
   const servo = servoDetected(brief);
   const warnings: string[] = [];
   const assumptions: string[] = [
+    `整机形态：${selectedForm.name}（${selectedForm.id}）——${selectedForm.rationale}`,
     '功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。',
     '节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
@@ -401,7 +403,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     const chain = brief.processes?.length ? brief.processes.join(' → ') : '多道工序';
     assumptions.push(`布局按流水线估算（linear）：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
   } else if (layout.mode === 'dial') {
-    assumptions.push('布局按转盘分度估算（dial）：各工位同时作业，节拍 = 最慢工位时间 + 分度时间。');
+    assumptions.push(`布局按转盘分度估算（dial）：各工位同时作业，节拍 = 最慢工位时间 + 分度时间；indexSeconds 采用形态默认 ${selectedForm.indexSeconds ?? 0.6} 秒/次。`);
   } else if (layout.mode === 'cell') {
     assumptions.push('布局按单元式估算（cell）：组内工位串行、组间并行，节拍 = 最慢组时间 + 转移时间。');
   } else if (layout.mode === 'single') {
@@ -563,7 +565,9 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     stations,
     ops: flowOps,
     targetPerMin: cyclePerMin,
-    ...(copies === undefined ? {} : { copies })
+    ...(copies === undefined ? {} : { copies }),
+    ...(selectedForm.indexSeconds === undefined ? {} : { indexSeconds: selectedForm.indexSeconds }),
+    ...(selectedForm.transferSeconds === undefined ? {} : { transferSeconds: selectedForm.transferSeconds })
   };
   const evaluation: FlowEvaluation = evaluateFlow(flowModel);
   for (const note of evaluation.notes) assumptions.push(`产能模型：${note}`);
@@ -634,6 +638,8 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     }
   }
 
+  if (formPick.warning) warnings.push(`形态选型：${formPick.warning}`);
+
   if (servo) {
     assumptions.push('检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。');
   }
@@ -667,7 +673,8 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     power,
     bomDraft,
     warnings,
-    assumptions
+    assumptions,
+    form
   };
   return design;
 }

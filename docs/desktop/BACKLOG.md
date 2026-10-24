@@ -4,6 +4,14 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+## 整机形态库（2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1378/1378**（+28：`forms.test.mjs` 25 + apply 落盘 3）、smoke 新增 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`npm run eval:agent` **1.00**（106 条，新增 4 条同工艺换布局用例）；未 push、未打包、未触发 CI。
+- 数据：新增 `desktop/src/machine/forms.ts`，6 种形态 `dial-6 / dial-8 / linear-4 / linear-8 / gantry-2 / dual-lane`；纯数据字段含 `layout / stationRange / indexSeconds / transferSeconds / footprintScale / suits / rationale / geometry`，`validateMachineForms()` 校验布局与 flow 对齐、工位区间、几何映射与 id 唯一。
+- 选型：`pickForm(brief, templates)` 先按布局意图 + 工艺适配筛候选，再用 `evaluateFlow` 在工位范围内预演；达标者优先、工位范围小者优先；无匹配时回退最近形态并给 warning（工位超出/产能缺口），不硬凑达标；固定返回 2 条备选，差异文案覆盖占地、成本、换型。
+- 接入：`synthMachine` 先选形态，按 `form.layout` 与 `form.indexSeconds/transferSeconds` 构造 FlowModel；`design_machine` 返回 `design.form` 并在方案卡显示形态名/理由/备选；`generateMachineGeometry` 优先用 `form.geometry.kind`（dial/linear/gantry/dual），1 工位回退 single；`apply_machine_design` 把 `form.id` 与几何写进 machine json，3D 刷新同时传 layout。
+- 文档：`MACHINE-DESIGN.md` 新增「整机形态库」表与选型规则；`MACHINE-DESIGN-DEMO.md` 增加「同一需求的两种形态对比」；README / MODULES 已同步 smoke 与测试数。
+
 ## 通用产能引擎（feat/flow-engine，2026-10-24，本轮）
 
 - 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1350/1350**（+34：`flow.test.mjs` 23 + `flow-archetypes.test.mjs` 6 + `flow-synth.test.mjs` 5）、smoke 新增 `SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`npm run eval:agent` 1.00、`build:machine-case` 重算六工位案例（`parallel` / 3.18 s / 113.21 件/分钟 / 需 2 工位）；未打包、未触发 CI、未发版、不 push。

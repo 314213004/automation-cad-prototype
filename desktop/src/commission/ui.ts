@@ -12,12 +12,14 @@ import { runSequence, type SequenceIo, type SequenceResult, type Step, type Step
 import { diagnose, type Diagnosis } from './diagnose.ts';
 import { demoMachineConfig, validateMachineConfig, type MachineConfig } from './machine-config.ts';
 import { createScene3D, type Commission3DStats, type CommissionKinematicsMode, type CommissionScene3D } from './scene3d.ts';
+import type { GeomLayout } from '../machine/geometry.ts';
 import type { KinematicsAnnotation } from '../cad/kinematics-ui.ts';
 import { toStepReport, type CommissionCaseReport, type CommissionReport } from './types.ts';
 import commissionStyles from './commission.css?inline';
 
 const COMMISSION_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5h11M4 13.5V8h2.5v5.5M8 13.5V4.5h2.5v9M11.5 13.5V6.5H14v7"/><path d="M3.5 5.5l2.5-2 2 1.2 3.5-2.5"/></svg>';
 let machineConfig = demoMachineConfig();
+let machineLayout: GeomLayout | null = null;
 
 function machineSummary(): string {
   const base = `机型：${machineConfig.name} · ${machineConfig.stations.length} 工位 · ${machineConfig.actuators.length} 执行机构 · ${machineConfig.sensors.length} 传感器`;
@@ -76,7 +78,7 @@ export interface CommissionPanelHandle {
   getReport(): CommissionReport;
   getMachineConfig(): MachineConfig;
   /** 切换到新的机型配置；传 null 恢复内置 4 工位样机。 */
-  setMachineConfig(config: MachineConfig | null): void;
+  setMachineConfig(config: MachineConfig | null, layout?: GeomLayout | null): void;
   setKinematics(annotation: KinematicsAnnotation | null): void;
   runPowerUp(): Promise<boolean>;
   runCase(id: string): Promise<boolean>;
@@ -923,12 +925,13 @@ function buildPanel(): void {
 export function initCommissionPanel(options: PanelOptions): CommissionPanelHandle {
   optionsRef = options;
   buildPanel();
-  const applyMachineConfig = (config: MachineConfig | null): void => {
+  const applyMachineConfig = (config: MachineConfig | null, layout?: GeomLayout | null): void => {
     machineConfig = config ? validateMachineConfig(config) : demoMachineConfig();
+    machineLayout = config ? (layout ?? null) : null;
     if (!elements) return;
     scene3d?.dispose();
     elements.scene3dHost.innerHTML = '';
-    scene3d = createScene3D(elements.scene3dHost, machineConfig);
+    scene3d = createScene3D(elements.scene3dHost, machineConfig, undefined, machineLayout);
     const summary = elements.drawer.querySelector<HTMLElement>('#commission3dMachine');
     if (summary) summary.textContent = machineSummary();
     scene3d.setEnabled(elements.scene3dToggle.checked);

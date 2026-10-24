@@ -527,6 +527,25 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
     targetSeconds === null ? null : `目标 ${targetSeconds.toFixed(2)} 秒/件`
   ].filter(Boolean).join('；');
   const va = typeof card.power?.va === 'number' ? card.power.va : null;
+  const form = typeof card.design.form === 'object' && card.design.form !== null && !Array.isArray(card.design.form)
+    ? card.design.form as Record<string, unknown>
+    : null;
+  const formName = typeof form?.name === 'string' ? form.name : null;
+  const formId = typeof form?.id === 'string' ? form.id : null;
+  const formRationale = typeof form?.rationale === 'string' ? form.rationale : null;
+  const formAlternatives = Array.isArray(form?.alternatives)
+    ? form.alternatives.filter((entry): entry is Record<string, unknown> =>
+      typeof entry === 'object' && entry !== null && !Array.isArray(entry))
+    : [];
+  const formBlock = formName
+    ? `<div class="acp-machine-form">
+        <div class="acp-machine-form-name">形态：${escapeHtml(formName)}${formId ? ` · ${escapeHtml(formId)}` : ''}</div>
+        ${formRationale ? `<div class="acp-machine-form-why">${escapeHtml(formRationale)}</div>` : ''}
+        ${formAlternatives.length > 0 ? `<div class="acp-machine-form-alts">备选：${formAlternatives.map((entry) =>
+          `${escapeHtml(String(entry.name ?? entry.id ?? ''))}（${escapeHtml(String(entry.difference ?? ''))}）`
+        ).join('；')}</div>` : ''}
+      </div>`
+    : '';
   const warnings = card.warnings.length > 0
     ? card.warnings.map((warning) => `<div class="acp-machine-warning">⚠ ${escapeHtml(warning)}</div>`).join('')
     : '<div class="acp-machine-warning is-ok">无已知警告；选型、强度与安全仍需人工确认。</div>';
@@ -543,6 +562,7 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
         <span title="${escapeHtml(estimateTitle)}"><b>${estimate === null ? '—' : estimate.toFixed(2)}</b> ${estimateUnit}</span>
         <span><b>${va === null ? '—' : Math.round(va)}</b> VA</span>
       </div>
+      ${formBlock}
       <div class="acp-machine-warnings">${warnings}</div>
       <div class="acp-machine-actions">
         <button type="button" class="acp-btn acp-btn-primary" data-apply-machine="${escapeHtml(call.id)}" ${appliedName ? 'disabled' : ''}>

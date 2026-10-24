@@ -1195,6 +1195,7 @@ interface MachineApplyUndoToken {
   plcPath?: string;
   plcText?: string | null;
   previousConfig: StoredMachineDesign['config'] | null;
+  previousLayout: string | null;
   batchId: string;
   withBom: boolean;
   /** 几何产物撤销快照：路径 + 旧内容 base64（null 表示原先不存在）。 */
@@ -1362,7 +1363,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
           }
         };
         try {
-          const geometry = generateMachineGeometry(normalized.config);
+          const geometry = generateMachineGeometry(normalized);
           const bundle = geometryToSidecarAssemblies(geometry, { updatedAt: appliedAt });
           for (const path of [paths.json, paths.stl, paths.gltf, paths.sidecar]) snapshot(path);
           writeText(paths.json, `${JSON.stringify(geometry, null, 2)}\n`);
@@ -1433,7 +1434,8 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
           config: normalized.config,
           machineId,
-          name: stored.name
+          name: stored.name,
+          layout: normalized.form?.geometry?.kind ?? null
         });
         if (refreshed?.ok === false) {
           warnings.push(`3D 联调视图刷新失败：${refreshed.message ?? '渲染层未返回原因'}`);
@@ -1451,6 +1453,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         activeText,
         designText,
         previousConfig: previousDesign?.config ?? null,
+        previousLayout: previousDesign?.form?.geometry?.kind ?? null,
         batchId,
         withBom,
         ...(bomPath !== undefined ? { bomPath } : {}),
@@ -1505,7 +1508,8 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       try {
         await ctx.bridge.call('applyMachineConfig', {
           config: undo.previousConfig,
-          name: undo.previousConfig?.name ?? null
+          name: undo.previousConfig?.name ?? null,
+          layout: undo.previousLayout
         });
       } catch {
         // 3D 刷新失败不回滚已恢复的文件状态。

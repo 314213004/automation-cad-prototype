@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node
 import { dirname, join } from 'node:path';
 import { validateMachineConfig, type MachineConfig } from '../commission/machine-config.ts';
 import type { MachineBomItem, MachineCycleEstimate, MachinePowerEstimate } from './synth.ts';
+import type { MachineFormGeometry, MachineFormSummary } from './forms.ts';
 
 export interface NormalizedMachineDesign {
   config: MachineConfig;
@@ -14,6 +15,7 @@ export interface NormalizedMachineDesign {
   bomDraft?: { items: MachineBomItem[] };
   warnings: string[];
   assumptions: string[];
+  form?: MachineFormSummary;
 }
 
 export interface MachineBomRow {
@@ -84,6 +86,73 @@ export function machineConfigPoints(config: MachineConfig): string[] {
   }
   for (const sensor of config.sensors) points.push(sensor.point);
   return uniqueStrings(points);
+}
+
+function parseMachineForm(value: unknown): MachineFormSummary {
+  if (!isRecord(value)) throw new Error('design.form 必须是对象');
+  const id = typeof value.id === 'string' ? value.id.trim() : '';
+  const name = typeof value.name === 'string' ? value.name.trim() : '';
+  const rationale = typeof value.rationale === 'string' ? value.rationale.trim() : '';
+  if (!id) throw new Error('design.form.id 不能为空');
+  if (!name) throw new Error('design.form.name 不能为空');
+  if (!rationale) throw new Error('design.form.rationale 不能为空');
+  const layouts = new Set(['single', 'linear', 'dial', 'parallel', 'cell']);
+  const layout = layouts.has(String(value.layout))
+    ? value.layout as MachineFormSummary['layout']
+    : 'linear';
+  const geometryRaw = isRecord(value.geometry) ? value.geometry : {};
+  const rawKind = geometryRaw.kind;
+  const inferredKind = String(value.layout) === 'dial' || id.startsWith('dial-')
+    ? 'dial'
+    : String(value.layout) === 'cell' || id.startsWith('dual-')
+      ? 'dual'
+      : String(value.layout) === 'parallel' || id.startsWith('gantry-')
+        ? 'gantry'
+        : 'linear';
+  const kind = rawKind === 'dial' || rawKind === 'linear' || rawKind === 'gantry' || rawKind === 'dual'
+    ? rawKind
+    : geometryRaw.kind === undefined
+      ? inferredKind
+      : null;
+  if (kind === null) {
+    throw new Error('design.form.geometry.kind 必须是 dial/linear/gantry/dual');
+  }
+  const geometry: MachineFormGeometry = { kind };
+  if (typeof geometryRaw.lanes === 'number' && Number.isInteger(geometryRaw.lanes) && geometryRaw.lanes > 0) {
+    geometry.lanes = geometryRaw.lanes;
+  }
+  if (typeof geometryRaw.stationsPerLane === 'number' && Number.isInteger(geometryRaw.stationsPerLane) && geometryRaw.stationsPerLane > 0) {
+    geometry.stationsPerLane = geometryRaw.stationsPerLane;
+  }
+  if (typeof geometryRaw.axes === 'number' && Number.isInteger(geometryRaw.axes) && geometryRaw.axes > 0) {
+    geometry.axes = geometryRaw.axes;
+  }
+  if (geometryRaw.conveyor === 'belt' || geometryRaw.conveyor === 'chain') geometry.conveyor = geometryRaw.conveyor;
+  if (geometryRaw.indexer === 'cam' || geometryRaw.indexer === 'dd') geometry.indexer = geometryRaw.indexer;
+  const alternatives = Array.isArray(value.alternatives)
+    ? value.alternatives.map((entry, index) => {
+      if (!isRecord(entry)) throw new Error(`design.form.alternatives[${index}] 必须是对象`);
+      const altId = typeof entry.id === 'string' ? entry.id.trim() : '';
+      const altName = typeof entry.name === 'string' ? entry.name.trim() : '';
+      const difference = typeof entry.difference === 'string' ? entry.difference.trim() : '';
+      if (!altId || !altName || !difference) {
+        throw new Error(`design.form.alternatives[${index}] 需要 id/name/difference`);
+      }
+      return { id: altId, name: altName, difference };
+    })
+    : [];
+  const score = typeof value.score === 'number' && Number.isFinite(value.score) ? value.score : 0;
+  const warning = typeof value.warning === 'string' && value.warning.trim() ? value.warning.trim() : undefined;
+  return {
+    id,
+    name,
+    rationale,
+    layout,
+    geometry,
+    score,
+    alternatives,
+    ...(warning ? { warning } : {})
+  };
 }
 
 /**
@@ -159,8 +228,9 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
 
   const warnings = stringArray(value.warnings, 'design.warnings');
   const assumptions = stringArray(value.assumptions, 'design.assumptions');
+  const form = value.form === undefined ? undefined : parseMachineForm(value.form);
 
-  const normalized: NormalizedMachineDesign = { config, points, warnings, assumptions };
+  const normalized: NormalizedMachineDesign = { config, points, warnings, assumptions, ...(form ? { form } : {}) };
   if (isRecord(value.cycle)) {
     const perMin = value.cycle.perMin;
     const secondsPerPiece = value.cycle.secondsPerPiece;

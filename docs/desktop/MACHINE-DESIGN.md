@@ -69,7 +69,8 @@ synthMachine(brief: MachineBrief, options?: {
   power: { va, byGroup: { name, va }[] },
   bomDraft: { items: { kind, name, qty, note? }[] },
   warnings: string[],
-  assumptions: string[]
+  assumptions: string[],
+  form: { id, name, rationale, layout, geometry, score, alternatives, warning? }
 }
 ```
 
@@ -79,6 +80,7 @@ synthMachine(brief: MachineBrief, options?: {
 - 未给执行机构/传感器清单时，按 `templates.ts` 的工艺模板补全；assumptions 明确写「按 X 模板补全」。模板是纯数据，测试可直接读取 `TEMPLATES`。
 - 缺工位时按模板默认 2 工位生成；缺节拍时按 10 件/分钟估算。两者都会同时写 warning 与 assumption。
 - 点位按 `ST{工位}-{EXT|RET|GRIP|ROT|PRX|PHT|SAFE|PRS}-{A|S}{序号}` 生成，全部唯一。
+- `synthMachine` 先调用 `pickForm` 选整机形态，再用形态的 `layout` 与 `indexSeconds` / `transferSeconds` 构造 `FlowModel`；`form` 随方案返回并用于几何与落盘。
 - `secondsPerPiece = 60 / perMin`；`stationSeconds` = 工艺固定余量 + 该工位动作时间。所有布局统一由 `evaluateFlow` 求 `cycleSeconds`、`throughputPerMin`、`requiredStations` 与瓶颈；`MachineCycleEstimate.mode` 直接使用 `MachineLayout`（`single / linear / dial / parallel / cell`），旧字段保留。`parallel` 的 warning 以「并行同工序」开头，`linear` 以「流水线节拍瓶颈」开头，其余布局使用各自的 `mode` 标签。
 - 功率按固定表求和；检测到伺服/步进时，旋转轴按 750 VA/轴计入「伺服」组，不重复计 200 VA 旋转轴。
 - BOM 草案按执行机构、传感器、电气分组；型号一律标「待定」，不编造品牌型号。
@@ -129,9 +131,40 @@ interface FlowOp {
 
 边界：这是**静态产能估算**，不包含故障、换型、人工节拍、缓存区、上下料波动与真实加减速曲线；`transferSeconds` / `indexSeconds` 是固定分摊，不是运动仿真。仍不能替代节拍分析或现场测量。
 
+### 3.2 整机形态库 `desktop/src/machine/forms.ts`
+
+同一工艺可以落在不同机架上。`pickForm(brief, templates, options?)` 先按布局意图与工艺适配筛选，再用 `evaluateFlow` 预演节拍；命中工位范围且达标者优先，多个达标时优先工位范围更小的形态。若没有形态同时满足范围/节拍，返回最接近形态并写 `warning`（工位超出多少、产能缺口多少），**不把未达标硬标成达标**。
+
+```ts
+pickForm(brief, templates, { stationCount?, cyclePerMin? }): {
+  form: MachineForm;
+  score: number;
+  alternatives: { form, score, difference }[]; // 固定 2 条，差异含占地/成本/换型
+  warning?: string;
+  evaluation: FlowEvaluation;
+  stations: number;
+}
+```
+
+| 形态 id | 名称 | 布局 | 工位范围 | 适配工艺 | 占地系数 | 几何 |
+|---|---|---|---:|---|---:|---|
+| `dial-6` | 六工位转盘机 | `dial` | 2–6 | 锁螺丝 / 点胶 / 装配 / 包装 | 0.78 | `dial` |
+| `dial-8` | 八工位转盘机 | `dial` | 6–8 | 检测 / 锁螺丝 / 装配 / 点胶 / 包装 | 0.95 | `dial` |
+| `linear-4` | 四工位直线机 | `linear` | 2–4 | 五类工艺 | 1.00 | `linear` |
+| `linear-8` | 八工位直线线体 | `linear` | 5–8 | 装配 / 检测 / 包装 / 锁螺丝 / 点胶 | 1.55 | `linear` |
+| `gantry-2` | 双工位龙门机 | `parallel` | 1–6 | 点胶 / 锁螺丝 / 装配 / 检测 / 包装 | 0.90 | `gantry` |
+| `dual-lane` | 双轨并行线 | `cell` | 4–6 | 检测 / 包装 / 装配 / 锁螺丝 / 点胶 | 1.35 | `dual` |
+
+- `validateMachineForms()` 校验 id 唯一、`layout` 与 `flow.ts` 对齐、`stationRange` 自洽（1–12）、`footprintScale > 0`、`suits` 非空、`geometry.kind` 与布局兼容。
+- 形态参数进入产能模型：转盘 `indexSeconds`（dial-6 0.6 s、dial-8 0.45 s）、直线/双轨 `transferSeconds`（linear-8 0.8 s、dual-lane 0.6 s）。
+- 几何层优先使用 `form.geometry.kind`：`dial` / `linear` / `gantry` / `dual` 分别生成转盘、直线输送、龙门机架、双轨两排工位；1 工位仍回退单工位几何。
+- 落盘 `machine/<id>.json` 同时写 `form.id`、`form.geometry` 与两条备选，之后可复现同一形态。
+
+边界：形态只在典型范围与静态节拍上选型，不包含占地 CAD 校核、换型时间、报价与真实结构干涉；warning 是提醒换型/扩产，不是自动改图。
+
 ## 4. Agent 工具 `design_machine`（只读）
 
-只读工具，不需要二次确认；加入写工具 `apply_machine_design` 后，工具总数为 20（只读 10 + 写 10）。
+只读工具，不需要二次确认；加入写工具 `apply_machine_design` 后，工具总数为 21（只读 11 + 写 10）。
 
 ```json
 {
@@ -144,7 +177,7 @@ interface FlowOp {
 `brief` 必填；`stationCount` 为 1–12 的整数；`cyclePerMin` 必须大于 0。返回：
 
 ```ts
-{ ok: true, design: { config, cycle, power, bomDraft, warnings, assumptions }, summary, needs: [], question: null }
+{ ok: true, design: { config, cycle, power, bomDraft, warnings, assumptions, form }, summary, geometry, needs: [], question: null }
 ```
 
 `summary` 为中文摘要，≤600 字，包含工位、执行机构、传感器、节拍、功率与风险。`needs` / `question` 来自 `buildClarify(brief)`，供会话层决定是否先追问；完整需求返回空数组与 `null`。空 brief、超范围工位数、非正节拍返回 `INVALID_ARGUMENT`，不抛未捕获异常。

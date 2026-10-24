@@ -662,10 +662,11 @@ export class AgentTools {
               power: design.power,
               bomDraft: design.bomDraft,
               warnings: design.warnings,
-              assumptions: design.assumptions
+              assumptions: design.assumptions,
+              form: design.form
             },
             summary: summarizeMachineDesign(design),
-            geometry: summarizeGeometry(generateMachineGeometry(design.config)),
+            geometry: summarizeGeometry(generateMachineGeometry(design)),
             needs: clarify.needs,
             question: clarify.question
           };

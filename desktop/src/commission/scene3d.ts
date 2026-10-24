@@ -210,6 +210,7 @@ export class CommissionScene3D {
   private annotationVisuals: AnnotationVisual[] = [];
   private annotationGroup: THREE.Group | null = null;
   private annotationScale = 1;
+  private layoutOverride: GeomLayout | null;
   private kinematics: CommissionKinematicsMode = {
     mode: 'config',
     reason: '尚未加载运动学标注',
@@ -217,10 +218,16 @@ export class CommissionScene3D {
     sourceFile: ''
   };
 
-  constructor(container: HTMLElement, config: MachineConfig, clock: () => number = defaultNow) {
+  constructor(
+    container: HTMLElement,
+    config: MachineConfig,
+    clock: () => number = defaultNow,
+    layout: GeomLayout | null = null
+  ) {
     this.container = container;
     this.config = validateMachineConfig(config);
     this.clock = clock;
+    this.layoutOverride = layout;
     this.motion = new MachineMotion(this.config, clock);
     this.scene.background = new THREE.Color(BACKGROUND);
     this.scene.add(this.controlsRoot);
@@ -594,7 +601,7 @@ export class CommissionScene3D {
   }
 
   private buildModel(): void {
-    const geometry = generateMachineGeometry(this.config);
+    const geometry = generateMachineGeometry(this.config, this.layoutOverride ? { layout: this.layoutOverride } : {});
     const machine = buildThreeMachine(geometry, { targetSpan: SCENE_SPAN, sensorOffColor: SENSOR_OFF });
     this.geometry = geometry;
     this.geometryScale = machine.scale;
@@ -642,6 +649,11 @@ export class CommissionScene3D {
   }
 }
 
-export function createScene3D(container: HTMLElement, config: MachineConfig, clock?: () => number): CommissionScene3D {
-  return new CommissionScene3D(container, config, clock);
+export function createScene3D(
+  container: HTMLElement,
+  config: MachineConfig,
+  clock?: () => number,
+  layout?: GeomLayout | null
+): CommissionScene3D {
+  return new CommissionScene3D(container, config, clock, layout ?? null);
 }
