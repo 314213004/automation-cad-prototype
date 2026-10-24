@@ -16,6 +16,8 @@ import {
   validateExportFileName
 } from '../src/export/file';
 import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
+import { assertCadFileSize } from '../src/shared/input-limits.ts';
+import { recordDiagnosticError, setDiagnosticOperation } from '../src/shared/diagnostics.ts';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
 import { CostExportError, planExportName } from '../src/cost/export.ts';
 import type { AgentTools } from '../src/agent/tools.ts';
@@ -244,7 +246,8 @@ function plcHistoryFile(): string {
 function readPlcGenHistory(): PlcHistoryEntry[] {
   try {
     return parsePlcHistory(JSON.parse(readFileSync(plcHistoryFile(), 'utf8')));
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('PLC_HISTORY_READ_FAILED', error, { site: 'desktop/electron/ipc.ts' });
     return [];
   }
 }
@@ -278,10 +281,21 @@ function plcExportFailure(error: unknown): { ok: false; code: string; message: s
   };
 }
 
+let ipcRuntime: { factory: FactoryManager; plc: PlcManager } | null = null;
+
+/** 退出前由主进程调用；断开工厂/PLC 网络与定时器。 */
+export async function disposeIpcRuntime(): Promise<void> {
+  const runtime = ipcRuntime;
+  ipcRuntime = null;
+  if (!runtime) return;
+  await Promise.allSettled([runtime.factory.dispose(), runtime.plc.dispose()]);
+}
+
 export function registerIpcHandlers(context: IpcContext): PackRegistry {
   const registry = createPackRegistry(context);
   const factory = new FactoryManager({ configFile: context.factoryConfigFile });
   const plc = new PlcManager({ configFile: context.plcConfigFile });
+  ipcRuntime = { factory, plc };
   const broadcast = (channel: string, payload: unknown): void => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
@@ -437,11 +451,24 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   });
 
   ipcMain.handle('cad:read-file', (_event, filePath: unknown) => {
-    if (typeof filePath !== 'string' || !filePath) throw new Error('缺少文件路径');
-    if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new Error(`文件不存在：${filePath}`);
-    const ext = extname(filePath).toLowerCase();
-    if (!isCadExtension(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
-    return readFileSync(filePath);
+    setDiagnosticOperation('cad:read-file');
+    try {
+      if (typeof filePath !== 'string' || !filePath) throw new Error('缺少文件路径');
+      if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new Error(`文件不存在：${filePath}`);
+      const ext = extname(filePath).toLowerCase();
+      if (!isCadExtension(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
+      const size = statSync(filePath).size;
+      // 在 readFileSync 之前拒绝超大文件，避免主进程一次性分配数百 MB。
+      assertCadFileSize(filePath, size);
+      setDiagnosticOperation(`cad:read-file:${ext.slice(1)}`);
+      return readFileSync(filePath);
+    } catch (error) {
+      recordDiagnosticError('CAD_READ_FAILED', error, {
+        extension: typeof filePath === 'string' ? extname(filePath).toLowerCase() : '',
+        fileName: typeof filePath === 'string' ? filePath.split(/[\\/]/).pop() ?? '' : ''
+      });
+      throw error;
+    }
   });
 
   // 成本估算的内置价格簿：只读，返回校验后的价格簿与条目统计（示例条目不计价）。
@@ -787,7 +814,8 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
           const result = await bus.execute('get_project_context');
           if (!result.ok) return null;
           return collectAgentContext({ projectContext: () => result.data });
-        } catch {
+        } catch (error) {
+          recordDiagnosticError('AGENT_CONTEXT_FAILED', error, { site: 'desktop/electron/ipc.ts' });
           return null;
         }
       },
@@ -1126,8 +1154,9 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       try {
         const bom = await bus.execute('get_bom');
         if (bom.ok && Array.isArray(bom.data)) ctx.bom = bom.data;
-      } catch {
+      } catch (error) {
         // BOM 只影响成本流程前置条件；读取失败时让前置条件如实拦截。
+        console.warn(`[COST_BOM_PRECHECK_READ_FAILED]`, { site: 'desktop/electron/ipc.ts:1155' }, error);
       }
     }
 

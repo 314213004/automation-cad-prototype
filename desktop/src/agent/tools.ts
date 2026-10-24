@@ -651,8 +651,9 @@ export class AgentTools {
               design.warnings.push(...bomMapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
             }
             design.warnings.push(...bomMapping.notices);
-          } catch {
+          } catch (error) {
             // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
+            console.warn(`[MACHINE_BOM_MAPPING_FAILED]`, { site: 'desktop/src/agent/tools.ts:654' }, error);
           }
           return {
             ok: true,

@@ -633,8 +633,9 @@ export class EnclosureCanvas {
     };
     try {
       window.localStorage.setItem(STORE_KEY, JSON.stringify(stored));
-    } catch {
+    } catch (error) {
       // localStorage 不可用时不影响当前画布，仅失去刷新恢复能力。
+      console.warn(`[ENCLOSURE_LOCALSTORAGE_FAILED]`, { site: 'desktop/src/enclosure/canvas.ts:636' }, error);
     }
   }
 

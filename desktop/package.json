@@ -17,6 +17,8 @@
     "build:machine-case": "node scripts/build-machine-case.mjs",
     "bench:render": "node scripts/bench-render-plan.mjs",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
+    "diagnose": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --diagnose",
+    "perf:baseline": "node --expose-gc scripts/perf-baseline.mjs",
     "check:orbit-webgl": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a -s \"-screen 0 1700x1100x24\" electron scripts/orbit-webgl-check.cjs",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "screenshots:machine": "npm run build:ext && node scripts/capture-machine-screenshots.mjs",

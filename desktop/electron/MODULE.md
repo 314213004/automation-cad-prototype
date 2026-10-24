@@ -60,6 +60,16 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 2. 单实例二次启动时把文件参数转给已存在窗口（`second-instance` 目前只聚焦）。
 3. 打包体积治理：`node-opcua` 懒加载或改为可选 sidecar（当前便携包 472 MB 解压）。
 
+## 诊断、崩溃与性能（2026-10-24）
+
+- `diagnostics.ts`：`collectDiagnosis()` 采集应用/Electron/Node/Chrome 版本、平台、userData、WebGL 探测结果、内置包 `id@version` 与数量、KB 文档/分段/字节、审计文件大小、最近 20 条 `recordDiagnosticError` 摘要。`probeWebGL()` 用隐藏窗口执行一次 canvas 探测，`finally` 中销毁；`--diagnose` 模式下 `window-all-closed` 不退出进程，避免探测窗口关闭把主进程提前带走。
+- `crash-report.ts`：`writeLastCrash()` 原子写 `<userData>/diagnostics/last-crash.json`（临时文件 + rename，POSIX 权限 600）。字段固定为 `schemaVersion/kind/at/operation/code/message/stack/appVersion/electronVersion/nodeVersion/platform`，消息与堆栈先脱敏截断，绝不写工具参数或用户正文。
+- `perf-smoke.ts`：`runPerfSmoke(1000)` 生成 1000 件线性装配、构建 three.js 场景并跑 300 tick；由 `main.ts` 在 headless smoke 分支动态 `import()`，末尾 `disposeThreeMachine()`。
+- 退出释放：`before-quit` 调 `disposeIpcRuntime()`，释放 `FactoryManager` / `PlcManager` 的适配器、订阅与 timer；PLC 仿真与工厂 demo 的周期任务使用 `src/shared/resources.ts` 的显式计数，测试断言连接/断开归零。
+- 测试：`desktop/test/robustness/` 下 30 条，覆盖缓存命中、共享资源一次性释放、增量变换、输入上限、幂等 apply、资源计数、诊断字段/脱敏与崩溃文件。
+
+`npm run diagnose` 输出 `DIAGNOSE_OK fields=... errors=N` 后跟 JSON；`npm run smoke` 额外断言 `SMOKE_PERF_OK parts=1000 buildMs=… tickMs=…` 与 `SMOKE_DIAGNOSE_OK fields=... errors=…`。
+
 ## parametric.ts
 
 职责：管理 build123d sidecar 的完整生命周期，是渲染层与 Python 内核之间唯一的网络代理。

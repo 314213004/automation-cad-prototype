@@ -101,7 +101,8 @@ export function listRotatedIndexes(file: string): number[] {
   let names: string[] = [];
   try {
     names = readdirSync(dir);
-  } catch {
+  } catch (error) {
+    console.warn('[AUDIT_DIR_READ_FAILED]', { site: 'desktop/src/agent/audit-store.ts', dir }, error);
     return [];
   }
   return names
@@ -115,7 +116,8 @@ export function listRotatedIndexes(file: string): number[] {
 function fileSize(path: string): number {
   try {
     return statSync(path).size;
-  } catch {
+  } catch (error) {
+    console.warn('[AUDIT_FILE_STAT_FAILED]', { site: 'desktop/src/agent/audit-store.ts', file: path }, error);
     return 0;
   }
 }
@@ -151,7 +153,8 @@ export function pruneAuditFiles(
     if (cutoff === null) return false;
     try {
       return statSync(path).mtimeMs < cutoff;
-    } catch {
+    } catch (error) {
+      console.warn('[AUDIT_FILE_MTIME_FAILED]', { site: 'desktop/src/agent/audit-store.ts', file: path }, error);
       return false;
     }
   };
@@ -225,8 +228,9 @@ export function readAuditEntries(file: string, options?: Partial<AuditRetentionO
     try {
       entries.push(...parseAuditLines(readFileSync(path, 'utf8')));
       files.push(path);
-    } catch {
+    } catch (error) {
       // 单个文件不可读（权限/被并发删除）时跳过，保留其余审计。
+      console.warn(`[AUDIT_FILE_READ_FAILED]`, { site: 'desktop/src/agent/audit-store.ts:228' }, error);
     }
   }
   return { entries, files };

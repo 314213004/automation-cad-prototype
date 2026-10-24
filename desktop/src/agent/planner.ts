@@ -538,8 +538,9 @@ export async function executePlan(plan: AgentPlan, deps: ExecutePlanDeps): Promi
   const emit = (event: AgentProgressEvent): void => {
     try {
       deps.onProgress?.(event);
-    } catch {
+    } catch (error) {
       // 进度展示失败不能影响计划执行。
+      console.warn(`[PLAN_PROGRESS_UI_FAILED]`, { site: 'desktop/src/agent/planner.ts:541' }, error);
     }
   };
 

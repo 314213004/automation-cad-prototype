@@ -1,7 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { recordDiagnosticError } from '../src/shared/diagnostics.ts';
 import { randomBytes } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { trackedClearTimeout, trackedSetTimeout } from '../src/shared/resources.ts';
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path';
 import {
   compileOps,
@@ -77,7 +79,8 @@ function isJavaScriptFile(path: string): boolean {
 function isExecutableFile(path: string): boolean {
   try {
     return statSync(path).isFile();
-  } catch {
+  } catch (error) {
+    console.debug('[PARAMETRIC_EXECUTABLE_STAT_FAILED]', { site: 'desktop/electron/parametric.ts', path }, error);
     return false;
   }
 }
@@ -371,7 +374,11 @@ export class ParametricManager {
       return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
         ? parsed as Record<string, unknown>
         : null;
-    } catch {
+    } catch (error) {
+      recordDiagnosticError('PARAMETRIC_RESPONSE_PARSE_FAILED', error, {
+        site: 'desktop/electron/parametric.ts',
+        status: response.status
+      });
       return null;
     }
   }
@@ -481,8 +488,9 @@ export class ParametricManager {
             return typeof payload.version === 'string' && payload.version ? payload.version : 'unknown';
           }
         }
-      } catch {
+      } catch (error) {
         // 启动期连接拒绝属于正常情况，继续重试。
+        console.debug(`[PARAMETRIC_HEALTH_RETRY]`, { site: 'desktop/electron/parametric.ts:485' }, error);
       }
       await delay(this.healthIntervalMs);
     }
@@ -527,8 +535,9 @@ export class ParametricManager {
     for (const listener of this.statusListeners) {
       try {
         listener({ ...this.state });
-      } catch {
+      } catch (error) {
         // 状态监听器不能影响 sidecar 生命周期。
+        console.warn(`[PARAMETRIC_STATUS_LISTENER_FAILED]`, { site: 'desktop/electron/parametric.ts:531' }, error);
       }
     }
   }
@@ -536,7 +545,7 @@ export class ParametricManager {
   private armIdleTimer(): void {
     this.clearIdleTimer();
     if (this.idleMs <= 0) return;
-    this.idleTimer = setTimeout(() => {
+    this.idleTimer = trackedSetTimeout(() => {
       this.idleTimer = null;
       void this.stop();
     }, this.idleMs);
@@ -545,7 +554,7 @@ export class ParametricManager {
 
   private clearIdleTimer(): void {
     if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
+      trackedClearTimeout(this.idleTimer);
       this.idleTimer = null;
     }
   }
@@ -566,14 +575,16 @@ export class ParametricManager {
     }
     try {
       process.kill(-pid, 'SIGTERM');
-    } catch {
+    } catch (error) {
       // 进程可能已经退出。
+      console.debug(`[PARAMETRIC_KILL_TERM_RACE]`, { site: 'desktop/electron/parametric.ts:570' }, error);
     }
     if (!(await waitForExit(child, 1_500))) {
       try {
         process.kill(-pid, 'SIGKILL');
-      } catch {
+      } catch (error) {
         // 忽略退出竞态。
+        console.debug(`[PARAMETRIC_KILL_EXIT_RACE]`, { site: 'desktop/electron/parametric.ts:576' }, error);
       }
       await waitForExit(child, 500);
     }

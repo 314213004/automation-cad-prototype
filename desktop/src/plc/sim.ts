@@ -1,4 +1,5 @@
 import type { PlcAdapter, PlcConfig, PlcPoint, PlcStatus, PlcValue, SimRule } from './types.ts';
+import { trackedClearInterval, trackedSetInterval } from '../shared/resources.ts';
 
 type ValueMap = Record<string, PlcValue>;
 type Predicate = (values: ValueMap) => boolean;
@@ -300,14 +301,15 @@ export class SimPlcAdapter implements PlcAdapter {
 
   private startTicker(): void {
     this.stopTicker();
-    this.ticker = setInterval(() => {
+    const ticker = trackedSetInterval(() => {
       this.evaluateRules();
     }, 100);
-    this.ticker.unref?.();
+    if (typeof ticker === 'object' && ticker && 'unref' in ticker) ticker.unref();
+    this.ticker = ticker;
   }
 
   private stopTicker(): void {
-    if (this.ticker) clearInterval(this.ticker);
+    trackedClearInterval(this.ticker);
     this.ticker = null;
   }
 

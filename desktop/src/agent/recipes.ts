@@ -785,8 +785,9 @@ function stepResult(input: {
 function shouldSkip(step: RecipeStep, index: number, executor: RecipeExecutor): boolean {
   try {
     if (executor.isSkipped?.(step, index)) return true;
-  } catch {
+  } catch (error) {
     // 选择器异常按「未跳过」处理，避免静默漏步骤。
+    console.warn(`[RECIPE_SELECTOR_SKIP_CHECK_FAILED]`, { site: 'desktop/src/agent/recipes.ts:788' }, error);
   }
   const skipSteps = [
     ...(Array.isArray(executor.skipSteps) ? executor.skipSteps : []),
@@ -976,8 +977,9 @@ export async function runRecipe(
   const emit = (event: RecipeProgressEvent): void => {
     try {
       exec.onProgress?.(event);
-    } catch {
+    } catch (error) {
       // 进度展示失败不能阻断流程。
+      console.warn(`[RECIPE_PROGRESS_UI_FAILED]`, { site: 'desktop/src/agent/recipes.ts:979' }, error);
     }
   };
 

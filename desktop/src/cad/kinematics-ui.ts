@@ -15,6 +15,7 @@ import {
   type KinematicsRole
 } from './kinematics.ts';
 import type { CadViewer } from './viewer';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import {
   acceptSuggestions,
   CATEGORY_LABELS,
@@ -629,7 +630,8 @@ function parseAxisValue(value: string): { axis: KinematicsAxisName; direction: 1
 function defaultStorage(): StorageLike | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
+  } catch (error) {
+    console.debug('[KINEMATICS_STORAGE_UNAVAILABLE]', { site: 'desktop/src/cad/kinematics-ui.ts' }, error);
     return null;
   }
 }
@@ -1019,7 +1021,8 @@ export function initKinematicsUi(options: KinematicsUiOptions): KinematicsUiHand
       emit();
       return true;
     } catch (error) {
-      notify(`保存失败：${error instanceof Error ? error.message : String(error)}`, true);
+      recordDiagnosticError('KINEMATICS_SAVE_FAILED', error, { site: 'desktop/src/cad/kinematics-ui.ts' });
+      notify(`保存失败：${error instanceof Error ? error.message : String(error)}。请检查浏览器存储空间后重试。`, true);
       return false;
     }
   };

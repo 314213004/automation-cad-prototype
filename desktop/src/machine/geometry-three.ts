@@ -12,6 +12,10 @@ export interface ThreeActuatorNode {
   /** linear：整体平移组；rotary：枢轴组；gripper：未使用（见 jaws）。 */
   mover: THREE.Group | null;
   jaws: { group: THREE.Group; sign: 1 | -1 }[];
+  /** 上一次应用的归一化值；相同值不重复写矩阵。 */
+  lastValue?: number;
+  /** rotary 单位轴缓存，避免每帧分配 Vector3。 */
+  axisUnit?: THREE.Vector3;
 }
 
 export interface ThreeSensorNode {
@@ -29,22 +33,38 @@ export interface ThreeMachine {
   meshCount: number;
 }
 
-function partMesh(part: GeomPart, material: THREE.Material, segments: number): THREE.Mesh {
+function geometryKey(part: GeomPart): string {
+  const shape = part.shape;
+  if (shape.type === 'box') return `box:${shape.size.join(',')}`;
+  return `cylinder:${shape.radius},${shape.length},${shape.axis}`;
+}
+
+function createPartGeometry(part: GeomPart, segments: number): THREE.BufferGeometry {
   const local = partLocalMesh(part, segments);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(local.positions, 3));
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(local.normals, 3));
   geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function partMesh(part: GeomPart, material: THREE.Material, geometry: THREE.BufferGeometry): THREE.Mesh {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = part.id;
   mesh.position.set(part.center[0], part.center[1], part.center[2]);
   mesh.rotation.z = THREE.MathUtils.degToRad(part.rotationZDeg);
   mesh.userData.partId = part.id;
   if (part.sensorPoint) mesh.userData.pointId = part.sensorPoint;
+  // 静态零件的矩阵在整棵场景建好后统一冻结；随动件保留自动更新。
+  mesh.updateMatrix();
   return mesh;
 }
 
-function material(part: GeomPart): THREE.MeshStandardMaterial {
+function materialKey(part: GeomPart): string {
+  return `${part.role}|${part.color}`;
+}
+
+function createMaterial(part: GeomPart): THREE.MeshStandardMaterial {
   const metal = part.role === 'actuator' ? 0.55 : part.role === 'frame' || part.role === 'structure' ? 0.35 : 0.15;
   return new THREE.MeshStandardMaterial({ color: new THREE.Color(part.color), metalness: metal, roughness: 0.5 });
 }
@@ -101,6 +121,26 @@ export function buildThreeMachine(
   }
 
   const sensors = new Map<string, ThreeSensorNode>();
+  const geometryCache = new Map<string, THREE.BufferGeometry>();
+  const materialCache = new Map<string, THREE.MeshStandardMaterial>();
+  const geometryOf = (part: GeomPart): THREE.BufferGeometry => {
+    const key = geometryKey(part);
+    let entry = geometryCache.get(key);
+    if (!entry) {
+      entry = createPartGeometry(part, segments);
+      geometryCache.set(key, entry);
+    }
+    return entry;
+  };
+  const materialOf = (part: GeomPart): THREE.MeshStandardMaterial => {
+    const key = materialKey(part);
+    let entry = materialCache.get(key);
+    if (!entry) {
+      entry = createMaterial(part);
+      materialCache.set(key, entry);
+    }
+    return entry;
+  };
   let meshCount = 0;
   for (const part of geometry.parts) {
     if (part.sensorPoint && (part.role === 'sensor' || part.role === 'safety')) {
@@ -120,13 +160,13 @@ export function buildThreeMachine(
         };
         sensors.set(key, sensor);
       }
-      const mesh = partMesh(part, sensor.material, segments);
+      const mesh = partMesh(part, sensor.material, geometryOf(part));
       sensor.meshes.push(mesh);
       (stationGroups.get(part.stationId ?? '') ?? machineGroup).add(mesh);
       meshCount += 1;
       continue;
     }
-    const mesh = partMesh(part, material(part), segments);
+    const mesh = partMesh(part, materialOf(part), geometryOf(part));
     meshCount += 1;
     const moving = movingByPart.get(part.id);
     if (moving) {
@@ -150,6 +190,22 @@ export function buildThreeMachine(
     }
   }
 
+  // 一次性建立静态矩阵；动画只重算 mover/jaw 子树，避免整棵 3000 件场景每帧重建矩阵。
+  root.updateMatrixWorld(true);
+  const dynamic = new Set<THREE.Object3D>();
+  for (const node of actuators.values()) {
+    if (node.mover) dynamic.add(node.mover);
+    for (const jaw of node.jaws) dynamic.add(jaw.group);
+  }
+  root.traverse((object) => {
+    if (dynamic.has(object)) return;
+    for (let ancestor = object.parent; ancestor; ancestor = ancestor.parent) {
+      if (dynamic.has(ancestor)) return;
+    }
+    object.updateMatrix();
+    object.matrixAutoUpdate = false;
+  });
+
   return { root, scale, stationGroups, actuators, sensors, meshCount };
 }
 
@@ -157,18 +213,47 @@ export function buildThreeMachine(
  * 把 MachineMotion 的状态值作用到场景：
  * linear value 0~1（伸出比例）；gripper value 0~1（1 为闭合）；rotary value 为角度（0~rangeDeg）。
  */
-export function applyAxisValue(node: ThreeActuatorNode, value: number): void {
+export function applyAxisValue(node: ThreeActuatorNode, value: number): boolean {
   const axis = node.axis;
+  const normalized = axis.kind === 'rotary'
+    ? Math.max(0, Math.min(axis.rangeDeg || 90, value))
+    : Math.max(0, Math.min(1, value));
+  if (node.lastValue !== undefined && Math.abs(node.lastValue - normalized) < 1e-6) return false;
+  node.lastValue = normalized;
   if (axis.kind === 'linear' && node.mover) {
-    const distance = Math.max(0, Math.min(1, value)) * axis.strokeMm;
+    const distance = normalized * axis.strokeMm;
     node.mover.position.set(axis.axis[0] * distance, axis.axis[1] * distance, axis.axis[2] * distance);
   } else if (axis.kind === 'gripper') {
-    const distance = (Math.max(0, Math.min(1, value)) * axis.strokeMm) / 2;
+    const distance = (normalized * axis.strokeMm) / 2;
     for (const jaw of node.jaws) {
       jaw.group.position.set(axis.axis[0] * distance * jaw.sign, axis.axis[1] * distance * jaw.sign, axis.axis[2] * distance * jaw.sign);
     }
   } else if (axis.kind === 'rotary' && node.mover) {
-    const angle = THREE.MathUtils.degToRad(Math.max(0, Math.min(axis.rangeDeg || 90, value)));
-    node.mover.quaternion.setFromAxisAngle(new THREE.Vector3(axis.axis[0], axis.axis[1], axis.axis[2]).normalize(), angle);
+    node.axisUnit ??= new THREE.Vector3(axis.axis[0], axis.axis[1], axis.axis[2]).normalize();
+    node.mover.quaternion.setFromAxisAngle(node.axisUnit, THREE.MathUtils.degToRad(normalized));
   }
+  return true;
+}
+
+/** 释放整机场景的共享几何、材质与组层级；共享资源只释放一次。 */
+export function disposeThreeMachine(machine: ThreeMachine): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  machine.root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (mesh.geometry) geometries.add(mesh.geometry);
+    const material = mesh.material;
+    if (Array.isArray(material)) {
+      for (const entry of material) materials.add(entry);
+    } else if (material) {
+      materials.add(material);
+    }
+  });
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  machine.root.removeFromParent();
+  machine.root.clear();
+  machine.stationGroups.clear();
+  machine.actuators.clear();
+  machine.sensors.clear();
 }

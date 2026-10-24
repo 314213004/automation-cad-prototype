@@ -603,8 +603,9 @@ export class AgentSession {
     if (!onProgress) return;
     try {
       onProgress(event);
-    } catch {
+    } catch (error) {
       // 进度展示失败不能影响工具执行。
+      console.warn(`[SESSION_PROGRESS_UI_FAILED]`, { site: 'desktop/src/agent/session.ts:606' }, error);
     }
   }
 

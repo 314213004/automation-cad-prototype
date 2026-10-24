@@ -42,6 +42,8 @@ import { toDxf, type DxfShape } from './export/dxf';
 import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
+import { assertCadFileSize } from './shared/input-limits';
+import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -699,6 +701,14 @@ function resolveWasmUrl(): string {
   return new URL(relative, base).href;
 }
 
+function disposeCadWorker(reason = 'shutdown'): void {
+  const error = new Error(`CAD 解析已取消：${reason}`);
+  for (const pending of pendingWorker.values()) pending.reject(error);
+  pendingWorker.clear();
+  worker?.terminate();
+  worker = null;
+}
+
 function getWorker(): Worker {
   if (worker) return worker;
   worker = new CadImportWorker();
@@ -711,16 +721,15 @@ function getWorker(): Worker {
   };
   worker.onerror = (event) => {
     const error = new Error(event.message || 'CAD Worker 异常');
-    for (const pending of pendingWorker.values()) pending.reject(error);
-    pendingWorker.clear();
-    worker?.terminate();
-    worker = null;
+    recordDiagnosticError('CAD_WORKER_ERROR', error, { event: event.message ?? '' });
+    disposeCadWorker('worker-error');
   };
   return worker;
 }
 
 async function parseInWorker(buffer: ArrayBuffer, name: string): Promise<CadImportResult> {
   const id = ++workerSequence;
+  setDiagnosticOperation('cad:parse-worker');
   return await new Promise<CadImportResult>((resolve, reject) => {
     pendingWorker.set(id, { resolve, reject });
     getWorker().postMessage({ id, kind: 'occt', name, buffer, wasmUrl: resolveWasmUrl() }, [buffer]);
@@ -750,6 +759,7 @@ async function inspectPath(path: string): Promise<CadImportResult['stats']> {
 }
 
 async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImportResult> {
+  assertCadFileSize(name, buffer.byteLength);
   if (busy) {
     throw new Error('已有文件正在解析，请稍候');
   }
@@ -824,6 +834,14 @@ async function importDroppedFile(file: File): Promise<void> {
     showNotice(`不支持的文件类型：${file.name}`, true);
     return;
   }
+  try {
+    assertCadFileSize(file.name, file.size);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    recordDiagnosticError('CAD_FILE_REJECTED', error, { fileName: file.name, bytes: file.size });
+    showNotice(message, true);
+    return;
+  }
   if (window.desktop) {
     try {
       const path = window.desktop.getPathForFile(file);
@@ -831,8 +849,9 @@ async function importDroppedFile(file: File): Promise<void> {
         await importPath(path);
         return;
       }
-    } catch {
+    } catch (error) {
       // 浏览器预览或非本地文件时退回 File.arrayBuffer。
+      console.debug(`[DROP_FILE_PATH_FALLBACK]`, { site: 'desktop/src/extension.ts:852' }, error);
     }
   }
   await importBuffer(await file.arrayBuffer(), file.name);
@@ -891,7 +910,8 @@ function persistedEnclosurePlate(): {
         placements: source.placements
       } : {})
     };
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('ENCLOSURE_PERSIST_READ_FAILED', error, { site: 'desktop/src/extension.ts' });
     return null;
   }
 }
@@ -968,16 +988,18 @@ function currentAgentSelection(): AgentUiSelection | null {
         };
       }
     }
-  } catch {
+  } catch (error) {
     // 某个面板未就绪时继续尝试下一个。
+    console.warn(`[EXTENSION_PANEL_BOOTSTRAP_FAILED]`, { site: 'desktop/src/extension.ts:989' }, error);
   }
   try {
     if (kinematics?.isOpen()) {
       const mesh = kinematics.state().selectedMeshes[0];
       if (mesh) return { kind: 'mesh', id: String(mesh.id), label: mesh.name };
     }
-  } catch {
+  } catch (error) {
     // ignore
+    console.warn(`[SELECTION_SNAPSHOT_FAILED]`, { site: 'desktop/src/extension.ts:997' }, error);
   }
   try {
     if (parametric?.isOpen()) {
@@ -994,14 +1016,16 @@ function currentAgentSelection(): AgentUiSelection | null {
         };
       }
     }
-  } catch {
+  } catch (error) {
     // ignore
+    console.warn(`[AGENT_VIEWER_SCENE_FAILED]`, { site: 'desktop/src/extension.ts:1015' }, error);
   }
   try {
     const snapshot = viewer?.getSelectionSnapshot();
     if (snapshot) return { kind: 'component', id: snapshot.name, label: snapshot.name };
-  } catch {
+  } catch (error) {
     // ignore
+    console.warn(`[AGENT_VIEWER_SELECTION_FAILED]`, { site: 'desktop/src/extension.ts:1021' }, error);
   }
   return null;
 }
@@ -1601,6 +1625,14 @@ function bindWindowEvents(): void {
   window.desktop?.parametric.onStatus((state) => {
     setParametricStatus(state);
   });
+  window.addEventListener('pagehide', () => {
+    disposeCadWorker('pagehide');
+    window.clearTimeout(noticeTimer);
+    viewer?.dispose();
+    viewer = null;
+    commission?.dispose();
+    commission = null;
+  }, { once: true });
 }
 
 function init(): void {

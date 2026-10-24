@@ -5,6 +5,7 @@
  * 面板只负责编排；生成、预检、文件树与历史去重都由可单测的纯函数完成。
  */
 import plcgenStyles from './plcgen.css?inline';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { buildEntryButton, ensurePanelStyles, errorMessage, escapeHtml, notify } from '../ui/panels';
 import { precheck } from './precheck.ts';
 import { buildTags } from './tags.ts';
@@ -102,13 +103,15 @@ function resolveConfig(): PlcGenConfig | null {
   if (typeof provider === 'function') {
     try {
       return provider() ?? null;
-    } catch {
+    } catch (error) {
+      recordDiagnosticError('PLCGEN_CONFIG_PROVIDER_FAILED', error, { site: 'desktop/src/plcgen/ui.ts', source: 'window' });
       return null;
     }
   }
   try {
     return options.getConfig?.() ?? null;
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('PLCGEN_CONFIG_PROVIDER_FAILED', error, { site: 'desktop/src/plcgen/ui.ts', source: 'options' });
     return null;
   }
 }
@@ -380,10 +383,11 @@ async function runPrecheck(): Promise<PrecheckResult | null> {
     }
     return lastPrecheck;
   } catch (error) {
+    recordDiagnosticError('PLCGEN_PRECHECK_FAILED', error, { site: 'desktop/src/plcgen/ui.ts' });
     lastPrecheck = null;
     renderPrecheck();
     setStatus(`预检失败：${errorMessage(error)}`, 'error');
-    notify(`预检失败：${errorMessage(error)}`, true);
+    notify(`预检失败：${errorMessage(error)}。请检查点位与表达式配置后重试。`, true);
     return null;
   }
 }
@@ -397,14 +401,16 @@ async function recordHistory(entry: PlcHistoryEntry): Promise<void> {
       history = parsePlcHistory(await api.recordHistory(entry));
       renderHistory();
       return;
-    } catch {
+    } catch (error) {
       // 主进程不可写时仍保留当前会话历史。
+      console.warn(`[PLCGEN_HISTORY_MAIN_WRITE_FAILED]`, { site: 'desktop/src/plcgen/ui.ts:400' }, error);
     }
   }
   try {
     window.localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  } catch {
+  } catch (error) {
     // localStorage 不可用时只保留当前会话。
+    console.warn(`[PLCGEN_HISTORY_LOCALSTORAGE_WRITE_FAILED]`, { site: 'desktop/src/plcgen/ui.ts:406' }, error);
   }
 }
 
@@ -415,8 +421,9 @@ async function loadHistory(): Promise<void> {
       history = parsePlcHistory(await api.history());
       renderHistory();
       return;
-    } catch {
+    } catch (error) {
       // 回落到 localStorage。
+      console.warn(`[PLCGEN_HISTORY_LOCALSTORAGE_READ_FAILED]`, { site: 'desktop/src/plcgen/ui.ts:418' }, error);
     }
   }
   try {
@@ -459,8 +466,9 @@ async function runSimulate(): Promise<VerifyResult | null> {
     }
     return result;
   } catch (error) {
+    recordDiagnosticError('PLCGEN_SIMULATION_FAILED', error, { site: 'desktop/src/plcgen/ui.ts' });
     setStatus(`模拟验证失败：${errorMessage(error)}`, 'error');
-    notify(`模拟验证失败：${errorMessage(error)}`, true);
+    notify(`模拟验证失败：${errorMessage(error)}。请检查点位映射与梯形图条件后重试。`, true);
     return null;
   } finally {
     generating = false;
@@ -522,8 +530,9 @@ async function runGenerate(): Promise<GenerateProjectSuccess | null> {
     notify(`已生成 ${result.stats.files} 个 PLC 文件`);
     return result;
   } catch (error) {
+    recordDiagnosticError('PLCGEN_GENERATE_FAILED', error, { site: 'desktop/src/plcgen/ui.ts' });
     setStatus(`生成失败：${errorMessage(error)}`, 'error');
-    notify(`生成失败：${errorMessage(error)}`, true);
+    notify(`生成失败：${errorMessage(error)}。请先通过预检，或检查导出目录权限。`, true);
     return null;
   } finally {
     generating = false;

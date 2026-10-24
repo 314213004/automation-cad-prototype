@@ -125,7 +125,11 @@ export function unwrapToolResultData(content: string | null | undefined): string
     const parsed = JSON.parse(content) as unknown;
     if (!isRecord(parsed) || parsed.kind !== 'tool_result_data' || typeof parsed.data !== 'string') return null;
     return parsed.data;
-  } catch {
+  } catch (error) {
+    console.debug('[TOOL_RESULT_UNWRAP_FALLBACK]', {
+      site: 'desktop/src/agent/guard.ts',
+      chars: content.length
+    }, error);
     return null;
   }
 }
@@ -137,7 +141,11 @@ export function parseToolResultData(content: string | null | undefined): Record<
   try {
     const parsed = JSON.parse(raw) as unknown;
     return isRecord(parsed) ? parsed : null;
-  } catch {
+  } catch (error) {
+    console.debug('[TOOL_RESULT_JSON_FALLBACK]', {
+      site: 'desktop/src/agent/guard.ts',
+      chars: raw.length
+    }, error);
     return null;
   }
 }

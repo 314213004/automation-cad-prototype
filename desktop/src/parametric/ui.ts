@@ -108,7 +108,8 @@ const STATUS_LABELS: Record<ParametricUiStatus['status'], string> = {
 function defaultStorage(): StorageLike | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;
-  } catch {
+  } catch (error) {
+    console.debug('[PARAMETRIC_STORAGE_UNAVAILABLE]', { site: 'desktop/src/parametric/ui.ts' }, error);
     return null;
   }
 }
@@ -371,8 +372,9 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
   function persist(): void {
     try {
       store?.set(sourceFile, currentAssembly());
-    } catch {
+    } catch (error) {
       // localStorage 不可用时仍允许编辑与导出 JSON。
+      console.warn(`[PARAMETRIC_LOCALSTORAGE_READ_FAILED]`, { site: 'desktop/src/parametric/ui.ts:374' }, error);
     }
   }
 

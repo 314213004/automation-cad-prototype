@@ -292,8 +292,9 @@ function evaluateCondition(expression: string | undefined, context: ConditionCon
     const value = parseOr();
     if (cursor !== tokens.length) return false;
     return value;
-  } catch {
+  } catch (error) {
     // 表达式语法不合法按 false 处理；配置预检会单独报告表达式错误。
+    console.debug('[PLC_EXPRESSION_PARSE_FALLBACK]', { site: 'desktop/src/plcgen/simulate.ts' }, error);
     return false;
   }
 }

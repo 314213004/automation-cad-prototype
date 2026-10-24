@@ -89,8 +89,9 @@ function preview(value: unknown): string {
   try {
     const text = JSON.stringify(value);
     if (text !== undefined) return text.length > 80 ? `${text.slice(0, 77)}…` : text;
-  } catch {
+  } catch (error) {
     // 循环引用等异常值只做字符串化兜底。
+    console.warn(`[AGENT_REPAIR_STRINGIFY_FAILED]`, { site: 'desktop/src/agent/repair.ts:92' }, error);
   }
   return String(value);
 }
@@ -379,7 +380,8 @@ function parseCandidate(candidate: string, maxClosures: number): ParsedJson | nu
       const value = JSON.parse(closed.text) as unknown;
       repairs.push(`completed truncated JSON (${closed.layers} layer${closed.layers === 1 ? '' : 's'})`);
       return { value, repairs };
-    } catch {
+    } catch (error) {
+      console.debug('[REPAIR_CANDIDATE_FALLBACK]', { site: 'desktop/src/agent/repair.ts' }, error);
       return null;
     }
   }
@@ -592,7 +594,8 @@ function maybeUnwrap(value: Record<string, unknown>, schema: Record<string, unkn
     const text = current;
     try {
       current = JSON.parse(text) as unknown;
-    } catch {
+    } catch (error) {
+      console.debug('[REPAIR_ENVELOPE_JSON_FALLBACK]', { site: 'desktop/src/agent/repair.ts', chars: text.length }, error);
       const parsed = parseCandidate(text, DEFAULT_MAX_CLOSURES);
       if (!parsed) return null;
       current = parsed.value;

@@ -9,7 +9,13 @@ import {
 } from '../cad/kinematics-ui.ts';
 import { type ActuatorConfig, type MachineConfig, validateMachineConfig } from './machine-config.ts';
 import { generateMachineGeometry, type GeomLayout, type MachineGeometry, type Vec3 } from '../machine/geometry.ts';
-import { applyAxisValue, buildThreeMachine, type ThreeActuatorNode } from '../machine/geometry-three.ts';
+import {
+  applyAxisValue,
+  buildThreeMachine,
+  disposeThreeMachine,
+  type ThreeActuatorNode,
+  type ThreeMachine
+} from '../machine/geometry-three.ts';
 
 // 诚实边界：这里的“联动”来自 machine-config.ts 中的点位/执行机构配置。
 // STEP 文件只提供几何，没有轴类型、行程、方向或运动学关系，因此本场景不会从 STEP
@@ -33,6 +39,8 @@ export interface Commission3DStats {
   /** 外形包络 mm（X × Y × Z）。 */
   envelopeMm: Vec3;
   layout: GeomLayout;
+  /** 实际写入 three.js 的变换次数；相同值会被跳过。 */
+  transformUpdates: number;
 }
 
 export interface CommissionKinematicsMode {
@@ -109,6 +117,7 @@ export class MachineMotion {
   private readonly clock: () => number;
   private readonly states = new Map<string, MutableMotion>();
   private readonly sensorStates = new Map<string, boolean>();
+  private readonly active = new Set<string>();
 
   constructor(config: MachineConfig, clock: () => number = defaultNow) {
     this.config = config;
@@ -128,7 +137,8 @@ export class MachineMotion {
     for (const sensor of config.sensors) this.sensorStates.set(sensor.point.toUpperCase(), false);
   }
 
-  update(values: PointValues, now: number = this.clock()): void {
+  update(values: PointValues, now: number = this.clock()): boolean {
+    let changed = false;
     for (const actuator of this.config.actuators) {
       const state = this.states.get(actuator.id);
       if (!state) continue;
@@ -138,24 +148,37 @@ export class MachineMotion {
         state.from = state.value;
         state.startedAt = now;
         state.target = nextTarget;
+        this.active.add(actuator.id);
+        changed = true;
       }
     }
     for (const sensor of this.config.sensors) {
-      this.sensorStates.set(sensor.point.toUpperCase(), pointIsOn(values, sensor.point));
+      const key = sensor.point.toUpperCase();
+      const on = pointIsOn(values, sensor.point);
+      if (this.sensorStates.get(key) !== on) changed = true;
+      this.sensorStates.set(key, on);
     }
+    return changed;
   }
 
   advance(now: number = this.clock()): void {
-    for (const state of this.states.values()) {
+    for (const id of this.active) {
+      const state = this.states.get(id);
+      if (!state) {
+        this.active.delete(id);
+        continue;
+      }
       const elapsed = Math.max(0, now - state.startedAt);
       const ratio = Math.min(1, elapsed / Math.max(1, state.durationMs));
       const eased = ratio * ratio * (3 - 2 * ratio);
       state.value = ratio >= 1 ? state.target : state.startedFrom + (state.target - state.startedFrom) * eased;
+      if (ratio >= 1) this.active.delete(id);
     }
   }
 
   snap(): void {
     for (const state of this.states.values()) state.value = state.target;
+    this.active.clear();
   }
 
   getActuator(id: string): ActuatorMotionSnapshot | undefined {
@@ -205,7 +228,10 @@ export class CommissionScene3D {
   private readonly sensorVisuals = new Map<string, SensorVisual>();
   private readonly targets = new Map<string, THREE.Object3D[]>();
   private geometry: MachineGeometry | null = null;
+  private machine: ThreeMachine | null = null;
   private geometryScale = 1;
+  private transformUpdates = 0;
+  private readonly sensorOff = new THREE.Color(0x000000);
   private annotation: KinematicsAnnotation | null = null;
   private annotationVisuals: AnnotationVisual[] = [];
   private annotationGroup: THREE.Group | null = null;
@@ -252,10 +278,10 @@ export class CommissionScene3D {
       this.ticks += 1;
       this.frames += 1;
     }
-    this.motion.update(values, now);
+    const changed = this.motion.update(values, now);
     if (this.degraded || !this.renderer) this.motion.snap();
     else this.motion.advance(now);
-    this.paintSensors();
+    if (changed) this.paintSensors();
     this.applyTransforms();
   }
 
@@ -328,7 +354,8 @@ export class CommissionScene3D {
       active: this.active,
       geometryParts: this.geometry?.parts.length ?? 0,
       envelopeMm: this.geometry ? [...this.geometry.envelope] : [0, 0, 0],
-      layout: this.geometry?.layout ?? 'single'
+      layout: this.geometry?.layout ?? 'single',
+      transformUpdates: this.transformUpdates
     };
   }
 
@@ -351,6 +378,28 @@ export class CommissionScene3D {
     this.resizeObserver = null;
     this.controls?.dispose();
     this.controls = null;
+    if (this.machine) {
+      disposeThreeMachine(this.machine);
+      this.machine = null;
+    }
+    // GridHelper 等场景直属资源不在 ThreeMachine 内，单独清理。
+    this.scene.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      mesh.geometry?.dispose();
+      const material = mesh.material;
+      if (Array.isArray(material)) {
+        for (const entry of material) entry.dispose();
+      } else {
+        material?.dispose();
+      }
+    });
+    this.scene.clear();
+    this.stationGroups.clear();
+    this.actuatorVisuals.clear();
+    this.sensorVisuals.clear();
+    this.targets.clear();
+    this.highlightedMaterials = [];
+    this.geometry = null;
     this.renderer?.dispose();
     if (this.renderer?.domElement.parentElement === this.container) this.container.removeChild(this.renderer.domElement);
     this.renderer = null;
@@ -568,7 +617,7 @@ export class CommissionScene3D {
     for (const visual of this.actuatorVisuals.values()) {
       const state = this.motion.getActuator(visual.config.id);
       if (!state) continue;
-      applyAxisValue(visual.node, state.value);
+      if (applyAxisValue(visual.node, state.value)) this.transformUpdates += 1;
     }
   }
 
@@ -580,7 +629,7 @@ export class CommissionScene3D {
       if (!visual) continue;
       const on = this.motion.isSensorOn(sensor.point);
       visual.material.color.copy(on ? visual.onColor : SENSOR_OFF);
-      visual.material.emissive.copy(on ? visual.onColor : new THREE.Color(0x000000));
+      visual.material.emissive.copy(on ? visual.onColor : this.sensorOff);
       visual.material.emissiveIntensity = on ? 1.15 : 0.05;
     }
   }
@@ -601,9 +650,15 @@ export class CommissionScene3D {
   }
 
   private buildModel(): void {
+    if (this.machine) {
+      this.controlsRoot.remove(this.machine.root);
+      disposeThreeMachine(this.machine);
+      this.machine = null;
+    }
     const geometry = generateMachineGeometry(this.config, this.layoutOverride ? { layout: this.layoutOverride } : {});
     const machine = buildThreeMachine(geometry, { targetSpan: SCENE_SPAN, sensorOffColor: SENSOR_OFF });
     this.geometry = geometry;
+    this.machine = machine;
     this.geometryScale = machine.scale;
 
     const span = Math.max(geometry.envelope[0], geometry.envelope[1]) * machine.scale;

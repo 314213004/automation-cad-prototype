@@ -155,8 +155,9 @@ export function parseAuditLines(text: string): AgentAuditEntry[] {
     try {
       const parsed = JSON.parse(trimmed) as AgentAuditEntry;
       if (parsed && typeof parsed.tool === 'string' && typeof parsed.at === 'string') entries.push(parsed);
-    } catch {
+    } catch (error) {
       // 损坏行跳过，不因一行脏数据丢掉整份审计。
+      console.warn(`[AUDIT_LINE_PARSE_FAILED]`, { site: 'desktop/src/agent/audit.ts:158' }, error);
     }
   }
   return entries;

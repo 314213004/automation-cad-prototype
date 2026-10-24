@@ -24,7 +24,8 @@ function parsePayload(payload: Uint8Array): unknown {
       return (parsed as { value: unknown }).value;
     }
     return parsed;
-  } catch {
+  } catch (error) {
+    console.debug('[MQTT_PAYLOAD_TEXT_FALLBACK]', { site: 'desktop/src/factory/mqtt.ts', chars: text.length }, error);
     if (/^-?\d+(\.\d+)?$/.test(text)) return Number(text);
     if (text === 'true') return true;
     if (text === 'false') return false;

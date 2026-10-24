@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "kind": "automation-cad-perf-baseline",
+  "generatedAt": "2026-10-24T05:18:47.270Z",
+  "runtime": {
+    "node": "v26.7.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "workload": {
+    "tickCount": 300,
+    "frameMs": 16.666666666666668,
+    "renderer": "headless three.js scene tree (no WebGL)"
+  },
+  "results": [
+    {
+      "targetParts": 200,
+      "actualParts": 200,
+      "stations": 4,
+      "actuators": 24,
+      "coldBuildMs": 6.319,
+      "warmBuildMs": 0.083,
+      "sceneBuildMs": 9.956,
+      "tickTotalMs": 10.525,
+      "tickAvgMs": 0.0351,
+      "tickP50Ms": 0.0256,
+      "tickP95Ms": 0.0484,
+      "heapPeakMb": 16.07,
+      "heapDeltaMb": 4.81,
+      "meshes": 200,
+      "materials": 36,
+      "transformUpdates": 600,
+      "ticks": 300
+    },
+    {
+      "targetParts": 1000,
+      "actualParts": 1000,
+      "stations": 16,
+      "actuators": 128,
+      "coldBuildMs": 6.412,
+      "warmBuildMs": 0.312,
+      "sceneBuildMs": 15.088,
+      "tickTotalMs": 50.185,
+      "tickAvgMs": 0.1673,
+      "tickP50Ms": 0.1488,
+      "tickP95Ms": 0.2439,
+      "heapPeakMb": 22.12,
+      "heapDeltaMb": 10.09,
+      "meshes": 1000,
+      "materials": 140,
+      "transformUpdates": 3200,
+      "ticks": 300
+    },
+    {
+      "targetParts": 3000,
+      "actualParts": 3000,
+      "stations": 33,
+      "actuators": 396,
+      "coldBuildMs": 16.057,
+      "warmBuildMs": 0.851,
+      "sceneBuildMs": 42.335,
+      "tickTotalMs": 202.648,
+      "tickAvgMs": 0.6755,
+      "tickP50Ms": 0.6029,
+      "tickP95Ms": 0.9139,
+      "heapPeakMb": 38.52,
+      "heapDeltaMb": 25.51,
+      "meshes": 3000,
+      "materials": 410,
+      "transformUpdates": 9900,
+      "ticks": 300
+    }
+  ]
+}

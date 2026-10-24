@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { CadImportResult, CadMeshData } from '../shared/types';
-import { boundsFromPositions, type InterferencePart } from '../mech/interference';
-import { probeWebGL } from './webgl';
+import type { CadImportResult, CadMeshData } from '../shared/types.ts';
+import { boundsFromPositions, type InterferencePart } from '../mech/interference.ts';
+import { probeWebGL } from './webgl.ts';
 import { buildPartMeta, planFrame, type FrustumPlane, type LodLevel, type PartMeta } from './render-plan.ts';
 import {
   boxProxyGeometry,
@@ -12,6 +12,7 @@ import {
   describeRenderOps,
   type RenderOps
 } from './render-batch.ts';
+import { assertBomRowCount } from '../shared/input-limits.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -218,6 +219,8 @@ export class CadViewer {
   }
 
   load(result: CadImportResult, fileName: string, options: { ghost?: boolean } = {}): void {
+    // 超过 5000 行的 BOM 会拖垮侧栏与导出，解析后立即拒绝并给出拆分建议。
+    assertBomRowCount(result.meshes.length);
     if (options.ghost === true) this.captureGhost();
     else this.clearGhost();
     this.clearModel();
@@ -692,6 +695,11 @@ export class CadViewer {
   appendDraftBomRows(rows: readonly Omit<CadBomRow, 'no'>[], batchId: string): number {
     if (!Array.isArray(rows) || rows.length === 0) return 0;
     if (typeof batchId !== 'string' || !batchId.trim()) throw new Error('BOM 批次 id 不能为空');
+    // 同一批次重复应用是幂等操作：不重复追加行。
+    if (this.draftBomRows.some((row) => (row as Omit<CadBomRow, 'no'> & { batchId?: string }).batchId === batchId)) {
+      return 0;
+    }
+    assertBomRowCount(this.getBomRows().length, rows.length);
     const accepted: Array<Omit<CadBomRow, 'no'>> = [];
     for (const [index, row] of rows.entries()) {
       if (!row || typeof row.name !== 'string' || !row.name.trim()) {
@@ -1087,8 +1095,17 @@ export class CadViewer {
       this.renderer.domElement.removeEventListener('pointerup', this.handlePointerUp);
     }
     this.partsElement.removeEventListener('click', this.handlePartClick);
+    this.controls?.dispose();
+    this.controls = null;
     this.clearModel();
     this.clearGhost();
+    if (this.grid) {
+      this.scene.remove(this.grid);
+      this.grid.geometry.dispose();
+      (this.grid.material as THREE.Material).dispose();
+      this.grid = null;
+    }
+    this.scene.clear();
     this.renderer?.dispose();
     this.renderer?.domElement.remove();
     this.fallbackElement?.remove();

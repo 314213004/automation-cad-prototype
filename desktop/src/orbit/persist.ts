@@ -100,7 +100,8 @@ export function saveOrbit(storage: StorageLike | null, overrides: ParamOverrides
     if (Object.keys(kept).length === 0 && storage.removeItem) storage.removeItem(ORBIT_STORE_KEY);
     else storage.setItem(ORBIT_STORE_KEY, serializeOrbit(kept, now));
     return true;
-  } catch {
+  } catch (error) {
+    console.warn('[ORBIT_PERSIST_FAILED]', { site: 'desktop/src/orbit/persist.ts' }, error);
     return false;
   }
 }

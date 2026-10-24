@@ -5,6 +5,7 @@ import {
   errorMessage,
   escapeHtml
 } from '../ui/panels';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import {
   auditSummaryText,
   buildPlanPreview,
@@ -411,8 +412,9 @@ function parseToolOutcome(content: string | null | undefined): ToolOutcome {
       typeof envelope === 'object' && envelope !== null &&
       (envelope as Record<string, unknown>).kind === 'tool_result_data' &&
       (envelope as Record<string, unknown>).untrusted === true;
-  } catch {
+  } catch (error) {
     // 不是数据块时按普通结果处理。
+    console.debug(`[AGENT_UI_BLOCK_PARSE_FALLBACK]`, { site: 'desktop/src/agent/ui.ts:414' }, error);
   }
   const prefix = untrusted ? '[不可信数据] ' : '';
   try {
@@ -435,8 +437,9 @@ function parseToolOutcome(content: string | null | undefined): ToolOutcome {
           : '';
       return { ok, code, message, detail: `${prefix}${summaryText(raw, 260)}` };
     }
-  } catch {
+  } catch (error) {
     // 非 JSON 结果按成功展示原文，不臆断错误码。
+    console.debug(`[AGENT_UI_RESULT_JSON_FALLBACK]`, { site: 'desktop/src/agent/ui.ts:438' }, error);
   }
   return { ok: true, code: 'OK', message: '', detail: `${prefix}${summaryText(raw, 260)}` };
 }
@@ -486,7 +489,11 @@ function parseMachineCard(result: DesktopAgentChatMessage | undefined): {
         ? designRecord.power as Record<string, unknown>
         : null
     };
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('MACHINE_CARD_PARSE_FAILED', error, {
+      site: 'desktop/src/agent/ui.ts',
+      contentChars: raw.length
+    });
     return null;
   }
 }

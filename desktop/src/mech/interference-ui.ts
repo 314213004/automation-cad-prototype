@@ -111,8 +111,9 @@ export function initInterferencePanel(options: InterferencePanelOptions): Interf
     try {
       const result = run();
       options.notify(result.length > 0 ? `干涉检测完成：${result.length} 处候选` : '干涉检测完成：未发现候选');
-    } catch {
+    } catch (error) {
       // run() 已给出中文提示。
+      console.warn(`[INTERFERENCE_UI_RUN_FAILED]`, { site: 'desktop/src/mech/interference-ui.ts:114' }, error);
     }
   });
 

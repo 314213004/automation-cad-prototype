@@ -67,7 +67,8 @@ function statusMessage(label: string, status: number, body: string): string {
 async function safeText(response: Response): Promise<string> {
   try {
     return await response.text();
-  } catch {
+  } catch (error) {
+    console.warn('[SYNC_RESPONSE_BODY_READ_FAILED]', { site: 'desktop/src/sync/client.ts' }, error);
     return '';
   }
 }

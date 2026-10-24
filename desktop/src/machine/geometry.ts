@@ -137,6 +137,38 @@ export interface MachineGeometryOptions {
   process?: MachineProcess;
   /** 强制布局；缺省按工艺与工位数选择。 */
   layout?: GeomLayout;
+  /** 仅用于性能诊断：跳过结果缓存。 */
+  bypassCache?: boolean;
+}
+
+/** 生产路径上同时保留的整机几何结果数；每项最多数千个零件，避免无界增长。 */
+const GEOMETRY_CACHE_LIMIT = 16;
+const geometryCache = new Map<string, MachineGeometry>();
+let geometryCacheHits = 0;
+let geometryCacheMisses = 0;
+let geometryCacheEvictions = 0;
+
+export function geometryCacheStats(): {
+  size: number;
+  limit: number;
+  hits: number;
+  misses: number;
+  evictions: number;
+} {
+  return {
+    size: geometryCache.size,
+    limit: GEOMETRY_CACHE_LIMIT,
+    hits: geometryCacheHits,
+    misses: geometryCacheMisses,
+    evictions: geometryCacheEvictions
+  };
+}
+
+export function clearGeometryCache(): void {
+  geometryCache.clear();
+  geometryCacheHits = 0;
+  geometryCacheMisses = 0;
+  geometryCacheEvictions = 0;
 }
 
 // ── 典型尺寸（mm），全部集中在此便于评审 ─────────────────────────────────────
@@ -839,10 +871,30 @@ export function generateMachineGeometry(
 ): MachineGeometry {
   const config = validateMachineConfig(isMachineDesignLike(input) ? input.config : input);
   const process = options.process ?? inferProcess(config);
+  const formLayout = formGeometryLayout(input);
   const layout = options.layout
     ?? (config.stations.length <= 1 ? 'single' : undefined)
-    ?? formGeometryLayout(input)
+    ?? formLayout
     ?? chooseLayout(process, config.stations.length);
+  const cacheKey = options.bypassCache
+    ? ''
+    : JSON.stringify({
+        config,
+        process,
+        layout,
+        formLayout: formLayout ?? null
+      });
+  if (cacheKey) {
+    const cached = geometryCache.get(cacheKey);
+    if (cached) {
+      geometryCacheHits += 1;
+      // Map 保持插入顺序，命中的项移到末尾即 LRU。
+      geometryCache.delete(cacheKey);
+      geometryCache.set(cacheKey, cached);
+      return cached;
+    }
+    geometryCacheMisses += 1;
+  }
   const usedIds = new Set<string>();
   const warnings: string[] = [];
   const assumptions: string[] = [
@@ -1234,7 +1286,7 @@ export function generateMachineGeometry(
     warnings.push(`双轨 ${config.stations.length} 工位超出标准 2×3 配置，几何按两轨均分，需复核节拍与换型。`);
   }
 
-  return {
+  const result: MachineGeometry = {
     schemaVersion: 1,
     kind: 'machine-geometry',
     machineId: config.id,
@@ -1253,6 +1305,16 @@ export function generateMachineGeometry(
     assumptions,
     warnings
   };
+  if (cacheKey) {
+    geometryCache.set(cacheKey, result);
+    while (geometryCache.size > GEOMETRY_CACHE_LIMIT) {
+      const oldest = geometryCache.keys().next().value;
+      if (oldest === undefined) break;
+      geometryCache.delete(oldest);
+      geometryCacheEvictions += 1;
+    }
+  }
+  return result;
 }
 
 function buildStructureBom(

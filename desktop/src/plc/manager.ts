@@ -176,6 +176,26 @@ export class PlcManager extends EventEmitter {
     }
   }
 
+  /** 应用退出时释放活动适配器、订阅与事件监听；可重复调用。 */
+  async dispose(): Promise<void> {
+    this.stopSubscriptions();
+    try {
+      await this.disconnect();
+    } finally {
+      for (const adapter of this.adapters.values()) {
+        if (adapter.status() === 'connected') {
+          try {
+            await adapter.disconnect();
+          } catch (error) {
+            console.warn('[plc] 退出时断开适配器失败', error instanceof Error ? error.message : String(error));
+          }
+        }
+      }
+      this.adapters.clear();
+      this.removeAllListeners();
+    }
+  }
+
   async read(id: string): Promise<PlcActionResult<PlcValue>> {
     if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     return await this.run('读取点位', (adapter) => adapter.read(id));

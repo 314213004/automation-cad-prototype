@@ -142,8 +142,9 @@ export function summarizeTurn(
       if (typeof parsed === 'object' && parsed !== null && (parsed as { ok?: unknown }).ok === false) {
         failures += 1;
       }
-    } catch {
+    } catch (error) {
       // 非 JSON 结果不计失败，避免把文本回执误判成错误。
+      console.debug(`[AGENT_PREVIEW_JSON_FALLBACK]`, { site: 'desktop/src/agent/preview.ts:145' }, error);
     }
   }
   return { toolCalls, failures };

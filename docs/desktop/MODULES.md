@@ -13,6 +13,7 @@
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | 包格式、校验、导入/启停/删除、检索、电气元件库面板 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | smc-cn 8 个型号、iec-cn 44 型号 / 12 分类与字段约定 |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
+| 公共健壮性 / 诊断 / 性能 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md)、[PERF.md](PERF.md) | 输入上限、显式资源计数、错误摘要与脱敏、崩溃落盘、性能基线 |
 | 智慧工厂 | [desktop/src/factory/MODULE.md](../../desktop/src/factory/MODULE.md) | demo / OPC UA / MQTT 适配器与点位模型 |
 | 智慧工厂同步 | [desktop/src/sync/MODULE.md](../../desktop/src/sync/MODULE.md) | 设计包 ZIP、manifest、上传/列表/diff 与设置页 |
 | PLC | [desktop/src/plc/MODULE.md](../../desktop/src/plc/MODULE.md) | sim / Modbus TCP 适配器、28 点位与 plc.json |
@@ -124,6 +125,18 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - 一致性：报告 JSON 写出后立即读回比对；`verifyReport` 还会逐项核对总览、分组与离线指标是否等于源 JSON。缺失源文件写「缺失：<文件>」、打印 WARN，退出码 0。
 - 测试：`desktop/test/agent/report.test.mjs`（10 条），覆盖真实源数字、源变更传导、篡改拦截、缺源降级、Markdown 来源/时间、SVG 数据驱动、BACKLOG 缺口摘取、md/json/svg 文件产出。
 - 审计路径：优先 `AGENT_REPORT_AUDIT_FILE`，其次 `AGENT_REPORT_USER_DATA`，否则按平台默认 `userData/AutomationCAD/agent-audit.jsonl`；目录不可达或文件不存在时跳过并说明。
+
+## 共享健壮性、诊断与性能（2026-10-24）
+
+| 模块 | 职责 | 关键约束 |
+|------|------|----------|
+| `desktop/src/shared/input-limits.ts` | BOM / STEP / 其它 CAD 文件的硬上限 | BOM 5,000 行、STEP 200 MB、其它 CAD 50 MB；读文件前先 `stat`，超限抛带 `code` 的中文可操作错误，不进入解析器 |
+| `desktop/src/shared/diagnostics.ts` | 错误环形缓冲、脱敏、诊断报告与崩溃报告纯函数 | 最近 100 条、输出最多 20 条；`apiKey/token/password/authorization` 等字段与 `sk-…`/`Bearer …` 文本递归脱敏；不保存用户正文 |
+| `desktop/src/shared/resources.ts` | 显式 timer 计数 | 测试不依赖 `process._getActiveHandles`；`trackedSetTimeout/trackedSetInterval` 与清理函数成对使用 |
+| `desktop/electron/diagnostics.ts` | `--diagnose` 采集 | 版本、WebGL、userData、内置包版本/数量、KB 统计、审计大小、最近 20 条错误；隐藏窗口探测后立即销毁 |
+| `desktop/electron/crash-report.ts` | `userData/diagnostics/last-crash.json` | 原子写（tmp + rename）、权限 600、只含堆栈/版本/操作类型，不含用户输入 |
+| `desktop/electron/perf-smoke.ts` | headless smoke 性能 workload | 仅在 `--headless-smoke` 动态加载，普通启动不静态引入 three.js |
+| `desktop/scripts/perf-baseline.mjs` | 200/1000/3000 件性能基线 | 冷/热构建、场景构建、300 tick、堆峰值；结果写 JSON，分析见 [PERF.md](PERF.md) |
 
 ## 维护约定
 

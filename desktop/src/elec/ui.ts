@@ -13,6 +13,7 @@ import {
   notify,
   type DrawerHandle
 } from '../ui/panels';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import {
   describeCheck,
   runElectricalCheck,
@@ -48,7 +49,8 @@ function docFromSource(): ElecDocument | null {
   if (typeof provider !== 'function') return null;
   try {
     return provider() ?? null;
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('ELEC_DOC_PROVIDER_FAILED', error, { site: 'desktop/src/elec/ui.ts' });
     return null;
   }
 }
@@ -115,7 +117,8 @@ async function runWith(doc: ElecDocument | null): Promise<ElecCheckResult | null
       : `电气校验完成：警告 ${result.counts.warning} 项`, result.counts.error > 0);
     return result;
   } catch (error) {
-    notify(`电气校验失败：${errorMessage(error)}`, true);
+    recordDiagnosticError('ELEC_CHECK_FAILED', error, { site: 'desktop/src/elec/ui.ts' });
+    notify(`电气校验失败：${errorMessage(error)}。请检查电气图数据后重试。`, true);
     return null;
   }
 }

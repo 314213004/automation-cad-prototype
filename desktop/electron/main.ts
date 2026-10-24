@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, Menu, type MenuItemConstructorOptions } from 'electron';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,7 +8,8 @@ import {
   registerAgentChatIpc,
   CAD_EXTENSIONS,
   renderAssemblyReportPdf,
-  renderCostReportPdf
+  renderCostReportPdf,
+  disposeIpcRuntime
 } from './ipc';
 import { PackRegistry } from '../src/packs/registry';
 import { AgentTools } from '../src/agent/tools';
@@ -42,7 +43,7 @@ import { describeCheck, runElectricalCheck } from '../src/elec/check';
 import { computeCost, type CostInput } from '../src/cost/engine';
 import { validatePricebook } from '../src/cost/pricebook';
 import { planExportName } from '../src/cost/export';
-import { demoMachineConfig } from '../src/commission/machine-config';
+import { demoMachineConfig, type ActuatorConfig, type SensorConfig } from '../src/commission/machine-config';
 import { parseMachineBrief } from '../src/machine/spec';
 import { TEMPLATES } from '../src/machine/templates';
 import { buildClarify } from '../src/machine/clarify';
@@ -54,8 +55,18 @@ import { verifyGenerated } from '../src/plcgen/verify';
 import { ParametricManager } from './parametric.ts';
 import { captureProductScreenshots } from './screenshots';
 import { captureMachineScreenshots } from './machine-screenshots';
+import { writeLastCrash } from './crash-report.ts';
+import { collectDiagnosis } from './diagnostics.ts';
+import {
+  buildDiagnosisReport,
+  currentDiagnosticOperation,
+  recentDiagnosticErrors,
+  recordDiagnosticError,
+  setDiagnosticOperation
+} from '../src/shared/diagnostics.ts';
 
 const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
+const DIAGNOSE = process.argv.includes('--diagnose');
 const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
 const HEADLESS_MACHINE_SCREENSHOTS = process.argv.includes('--headless-machine-screenshots');
 const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS;
@@ -86,11 +97,15 @@ if (HEADLESS) {
   app.setPath('userData', mkdtempSync(join(tmpdir(), prefix)));
 }
 
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
+if (DIAGNOSE) {
+  void runDiagnoseMode();
 } else {
-  void bootstrap();
+  const gotLock = app.requestSingleInstanceLock();
+  if (!gotLock) {
+    app.quit();
+  } else {
+    void bootstrap();
+  }
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -99,6 +114,64 @@ let agentTools: AgentTools | null = null;
 let commandBus: CommandBus | null = null;
 let parametric: ParametricManager | null = null;
 let agentInfo: (AgentRpcInfo & { toolCount: number }) | { error: string } = { error: 'Agent 服务尚未启动' };
+
+let crashHandlersInstalled = false;
+
+function installCrashHandlers(): void {
+  if (crashHandlersInstalled) return;
+  crashHandlersInstalled = true;
+  const userData = app.getPath('userData');
+  const capture = (error: unknown, code: string): void => {
+    try {
+      const report = writeLastCrash(userData, {
+        error,
+        operation: currentDiagnosticOperation(),
+        code,
+        appVersion: app.getVersion(),
+        electronVersion: process.versions.electron ?? 'unknown',
+        nodeVersion: process.versions.node,
+        platform: process.platform
+      });
+      console.error(`[crash] ${report.code} operation=${report.operation} saved=${join(userData, 'diagnostics', 'last-crash.json')}`);
+    } catch (writeError) {
+      console.error('[crash] last-crash.json 写入失败', writeError instanceof Error ? writeError.message : String(writeError));
+    }
+  };
+  process.on('uncaughtException', (error) => {
+    capture(error, 'UNCAUGHT_EXCEPTION');
+    if (app.isReady()) app.exit(1);
+    else setTimeout(() => process.exit(1), 50);
+  });
+  process.on('unhandledRejection', (reason) => {
+    capture(reason, 'UNHANDLED_REJECTION');
+    recordDiagnosticError('UNHANDLED_REJECTION', reason);
+  });
+  app.on('child-process-gone', (_event, details) => {
+    capture(new Error(`子进程退出：${details.type} ${details.reason}`), 'CHILD_PROCESS_GONE');
+  });
+}
+
+async function runDiagnoseMode(): Promise<void> {
+  try {
+    await app.whenReady();
+    installCrashHandlers();
+    setDiagnosticOperation('diagnose');
+    const userDataPath = app.getPath('userData');
+    const report = await collectDiagnosis({
+      appVersion: app.getVersion(),
+      userDataPath,
+      builtinDir: builtinPacksDir(),
+      auditPath: join(userDataPath, 'agent-audit.jsonl')
+    });
+    console.log(`DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+    console.log(JSON.stringify(report, null, 2));
+    app.exit(0);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`DIAGNOSE_FAIL ${message.replace(/\bsk-[A-Za-z0-9_-]{4}[A-Za-z0-9_-]*/g, 'sk-****')}`);
+    app.exit(1);
+  }
+}
 
 function publicAgentInfo(): unknown {
   if ('error' in agentInfo) return agentInfo;
@@ -127,6 +200,23 @@ function extensionPath(): string {
 
 function extensionBaseUrl(): string {
   return pathToFileURL(join(app.getAppPath(), 'dist') + '/').href;
+}
+
+function readDiagnosticPackVersion(): string {
+  const directory = builtinPacksDir();
+  if (!existsSync(directory)) return 'missing';
+  const versions: string[] = [];
+  for (const name of ['iec-cn', 'smc-cn', 'pricebook-cn']) {
+    const file = join(directory, name, 'manifest.json');
+    if (!existsSync(file)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as { id?: unknown; version?: unknown };
+      versions.push(`${typeof parsed.id === 'string' ? parsed.id : name}@${typeof parsed.version === 'string' ? parsed.version : 'unknown'}`);
+    } catch (error) {
+      recordDiagnosticError('DIAGNOSE_PACK_READ_FAILED', error, { pack: name });
+    }
+  }
+  return versions.length > 0 ? versions.join(', ') : 'none';
 }
 
 function builtinPacksDir(): string {
@@ -296,6 +386,23 @@ function createWindow(): BrowserWindow {
   window.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file:')) event.preventDefault();
   });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    const error = new Error(`渲染进程退出：${details.reason} (exitCode=${details.exitCode})`);
+    recordDiagnosticError('RENDERER_PROCESS_GONE', error, { reason: details.reason, exitCode: details.exitCode });
+    try {
+      writeLastCrash(app.getPath('userData'), {
+        error,
+        operation: currentDiagnosticOperation(),
+        code: 'RENDERER_PROCESS_GONE',
+        appVersion: app.getVersion(),
+        electronVersion: process.versions.electron ?? 'unknown',
+        nodeVersion: process.versions.node,
+        platform: process.platform
+      });
+    } catch (writeError) {
+      console.error('[crash] 渲染进程崩溃报告写入失败', writeError instanceof Error ? writeError.message : String(writeError));
+    }
+  });
 
   window.webContents.on('did-finish-load', async () => {
     try {
@@ -310,6 +417,7 @@ function createWindow(): BrowserWindow {
         })()`
       );
     } catch (error) {
+      recordDiagnosticError('EXTENSION_INJECT_FAILED', error);
       console.error('[desktop] 扩展脚本注入失败', error);
     }
       if (HEADLESS_MACHINE_SCREENSHOTS) {
@@ -3015,6 +3123,61 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        // 1000 件规模：几何生成 + three.js 场景树 + 300 次 headless tick。
+        // 动态加载，避免普通桌面启动把 three.js / 几何生成器打进主进程启动路径。
+        const { runPerfSmoke } = await import('./perf-smoke.ts');
+        const perf = runPerfSmoke(1000);
+        if (perf.parts !== 1000 || perf.buildMs > 5000 || !Number.isFinite(perf.tickMs) || perf.tickMs > 50) {
+          console.error('SMOKE_FAIL perf', JSON.stringify(perf));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_PERF_OK parts=${perf.parts} buildMs=${perf.buildMs.toFixed(1)} tickMs=${perf.tickMs.toFixed(3)}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL perf_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
+        const userDataPath = app.getPath('userData');
+        const report = buildDiagnosisReport({
+          appVersion: app.getVersion(),
+          electronVersion: process.versions.electron ?? 'unknown',
+          nodeVersion: process.versions.node,
+          chromeVersion: process.versions.chrome,
+          platform: process.platform,
+          userDataPath,
+          webgl: { available: false, renderer: 'headless-smoke disables WebGL' },
+          dataPackVersion: readDiagnosticPackVersion(),
+          packCount: 3,
+          kbDocs: KB_STATS.docs,
+          kbChunks: KB_STATS.chunks,
+          kbBytes: KB_STATS.bytes,
+          auditPath: join(userDataPath, 'agent-audit.jsonl'),
+          auditBytes: (() => {
+            try {
+              return existsSync(join(userDataPath, 'agent-audit.jsonl')) ? statSync(join(userDataPath, 'agent-audit.jsonl')).size : 0;
+            } catch (auditError) {
+              recordDiagnosticError('SMOKE_AUDIT_STAT_FAILED', auditError);
+              return 0;
+            }
+          })(),
+          errors: recentDiagnosticErrors(20)
+        });
+        const serialized = JSON.stringify(report);
+        if (!report.app.version || !report.userDataPath || !report.dataPack.version ||
+            !report.kb.docs || report.audit.bytes < 0 || /sk-[A-Za-z0-9_-]{8,}/.test(serialized)) {
+          console.error('SMOKE_FAIL diagnose_report', serialized.slice(0, 500));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_DIAGNOSE_OK fields=app,webgl,userDataPath,dataPack,kb,audit,recentErrors errors=${report.recentErrors.length}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL diagnose_exception', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -3122,6 +3285,7 @@ async function startAgent(registry: PackRegistry, commands: CommandBus): Promise
 }
 
 async function bootstrap(): Promise<void> {
+  installCrashHandlers();
   app.on('second-instance', () => {
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -3180,12 +3344,15 @@ async function bootstrap(): Promise<void> {
 }
 
 app.on('window-all-closed', () => {
+  // --diagnose 会临时创建隐藏窗口探测 WebGL；窗口关闭不能把诊断进程提前带走。
+  if (DIAGNOSE) return;
   if (process.platform !== 'darwin') app.quit();
 });
 
 let quitAfterParametricStop = false;
 app.on('before-quit', (event) => {
   if (agentServer) void agentServer.stop();
+  void disposeIpcRuntime();
   if (!parametric || parametric.status().status === 'stopped') return;
   if (quitAfterParametricStop) return;
   event.preventDefault();

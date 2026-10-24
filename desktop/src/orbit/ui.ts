@@ -10,6 +10,7 @@
  * `selectPart / applyIssue` 处理，因此结构树、属性面板、状态栏、撤销栈全部沿用原型逻辑。
  */
 import orbitStyles from './orbit.css?inline';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { detectInterferences, type InterferenceHit } from '../mech/interference.ts';
 import { isStandardView, VIEW_LABELS, type StandardView } from './camera.ts';
 import {
@@ -141,7 +142,8 @@ function readTree(): ProtoTreeNode[] {
   try {
     const value = protoApi()?.getTree?.();
     return Array.isArray(value) ? (value as ProtoTreeNode[]) : [];
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('ORBIT_TREE_READ_FAILED', error, { site: 'desktop/src/orbit/ui.ts' });
     return [];
   }
 }
@@ -556,7 +558,8 @@ function resetPart(partId: string): void {
 function storage(): StorageLike | null {
   try {
     return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
-  } catch {
+  } catch (error) {
+    console.debug('[ORBIT_STORAGE_UNAVAILABLE]', { site: 'desktop/src/orbit/ui.ts' }, error);
     return null;
   }
 }

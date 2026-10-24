@@ -21,6 +21,8 @@ import { computeCost, type CostBomRow, type CostInput, type CostReport } from '.
 import { isUsablePricebookItem, validatePricebook, type Pricebook } from './pricebook.ts';
 import { costReportCsv, describeCost, money, renderCostReportHtml } from './report.ts';
 import { bomSignatureFromRows } from '../agent/advisor.ts';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
+import { assertBomRowCount } from '../shared/input-limits.ts';
 
 const COST_ICON = '<svg viewBox="0 0 16 16"><path d="M2.5 13.5V2.5h8.2l2.8 2.8v8.2z"/><path d="M4.8 6.4h4.4M4.8 9h4.4M4.8 11.4h2.8"/><path d="M10.7 2.7v2.8h2.8"/></svg>';
 const NO_PRICEBOOK_HINT = '尚未加载价格簿：请导入正式价目表 JSON，或确认桌面版内置价格簿可用';
@@ -218,6 +220,7 @@ async function runWith(input: Partial<CostInput> | null): Promise<CostReport | n
       notify('没有可计算的 BOM：请先导入 BOM JSON，或由上层注入 __CostBomProvider', true);
       return null;
     }
+    assertBomRowCount(bom.length);
     const book = input?.pricebook ? setBook(validatePricebook(input.pricebook), '本次指定价格簿') : await ensureBook();
     renderBookSource();
     const merged: CostInput = {
@@ -249,7 +252,8 @@ async function runWith(input: Partial<CostInput> | null): Promise<CostReport | n
     }
     return report;
   } catch (error) {
-    notify(`成本计算失败：${errorMessage(error)}`, true);
+    recordDiagnosticError('COST_COMPUTE_FAILED', error, { site: 'desktop/src/cost/ui.ts' });
+    notify(`成本计算失败：${errorMessage(error)}。请检查 BOM 行与价格簿后重试。`, true);
     return null;
   }
 }
@@ -298,7 +302,8 @@ async function importPricebook(): Promise<BookState | null> {
     if (lastReport) await runWith(null);
     return state;
   } catch (error) {
-    notify(`价格簿导入失败：${errorMessage(error)}`, true);
+    recordDiagnosticError('COST_PRICEBOOK_IMPORT_FAILED', error, { site: 'desktop/src/cost/ui.ts', file: picked.name });
+    notify(`价格簿导入失败：${errorMessage(error)}。请确认文件是 UTF-8 JSON 且字段完整。`, true);
     return null;
   }
 }
@@ -311,10 +316,14 @@ function parseBomPayload(text: string): Partial<CostInput> {
     const detail = error instanceof Error ? error.message : String(error);
     throw new Error(`BOM 不是合法 JSON：${detail}`);
   }
-  if (Array.isArray(value)) return { bom: value as CostBomRow[] };
+  if (Array.isArray(value)) {
+    assertBomRowCount(value.length);
+    return { bom: value as CostBomRow[] };
+  }
   if (typeof value !== 'object' || value === null) throw new Error('BOM 必须是数组或含 bom 字段的对象');
   const source = value as Record<string, unknown>;
   if (!Array.isArray(source.bom)) throw new Error('BOM 对象必须含 bom 数组');
+  assertBomRowCount(source.bom.length);
   const payload: Partial<CostInput> = { bom: source.bom as CostBomRow[] };
   if (Array.isArray(source.placements)) payload.placements = source.placements as NonNullable<CostInput['placements']>;
   if (typeof source.plate === 'object' && source.plate !== null) payload.plate = source.plate as NonNullable<CostInput['plate']>;
@@ -334,7 +343,8 @@ async function importBom(): Promise<CostReport | null> {
     notify(`BOM 已载入：${picked.name} · ${pendingBom.bom?.length ?? 0} 行`);
     return await runWith(pendingBom);
   } catch (error) {
-    notify(`BOM 导入失败：${errorMessage(error)}`, true);
+    recordDiagnosticError('COST_BOM_IMPORT_FAILED', error, { site: 'desktop/src/cost/ui.ts', file: picked.name });
+    notify(`BOM 导入失败：${errorMessage(error)}。请确认文件是 UTF-8 JSON 且包含 bom 数组。`, true);
     return null;
   }
 }
@@ -463,6 +473,7 @@ export function initCostPanel(): void {
       return { usable: state.usable, examples: state.examples };
     },
     setBom: (payload: Partial<CostInput>, label = '脚本指定 BOM') => {
+      if (payload.bom) assertBomRowCount(payload.bom.length);
       pendingBom = payload;
       bomLabel = label;
       return { rows: payload.bom?.length ?? 0 };

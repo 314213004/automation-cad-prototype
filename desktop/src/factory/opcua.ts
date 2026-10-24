@@ -149,8 +149,9 @@ export class OpcUaFactoryAdapter implements FactoryAdapter {
         const childResult = await this.session.browse(node.id);
         const children = this.referencesToNodes(childResult);
         if (children.length > 0) node.children = children;
-      } catch {
+      } catch (error) {
         // 叶子节点或权限受限节点没有可浏览子项，保留该节点本身。
+        console.warn(`[OPCUA_BROWSE_CHILD_FAILED]`, { site: 'desktop/src/factory/opcua.ts:152' }, error);
       }
     }
     return nodes;

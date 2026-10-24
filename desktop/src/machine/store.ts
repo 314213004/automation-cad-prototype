@@ -2,6 +2,7 @@
 // 以及 userData/machine 下的最小文件读写。命令总线负责编排 3D/BOM/PLC 联动。
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { dirname, join } from 'node:path';
 import { validateMachineConfig, type MachineConfig } from '../commission/machine-config.ts';
 import type { MachineBomItem, MachineCycleEstimate, MachinePowerEstimate } from './synth.ts';
@@ -354,7 +355,8 @@ export function machineGeometryPaths(userDataRoot: string, machineId: string): {
 export function readBase64IfExists(path: string): string | null {
   try {
     return existsSync(path) ? readFileSync(path).toString('base64') : null;
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('MACHINE_BINARY_READ_FAILED', error, { site: 'desktop/src/machine/store.ts', file: path.split(/[\\/]/).pop() ?? '' });
     return null;
   }
 }
@@ -379,7 +381,8 @@ export function activeMachinePath(userDataRoot: string): string {
 export function readTextIfExists(path: string): string | null {
   try {
     return existsSync(path) ? readFileSync(path, 'utf8') : null;
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('MACHINE_TEXT_READ_FAILED', error, { site: 'desktop/src/machine/store.ts', file: path.split(/[\\/]/).pop() ?? '' });
     return null;
   }
 }
@@ -414,7 +417,8 @@ export function readActivePointer(userDataRoot: string): ActiveMachinePointer | 
       file: `machine/${machineId}.json`,
       appliedAt
     };
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('MACHINE_ACTIVE_POINTER_PARSE_FAILED', error, { site: 'desktop/src/machine/store.ts' });
     return null;
   }
 }
@@ -438,7 +442,8 @@ export function readStoredMachineDesign(userDataRoot: string, machineId: string)
       name: design.config.name,
       appliedAt: typeof parsed.appliedAt === 'string' ? parsed.appliedAt : ''
     };
-  } catch {
+  } catch (error) {
+    recordDiagnosticError('MACHINE_DESIGN_PARSE_FAILED', error, { site: 'desktop/src/machine/store.ts', machineId });
     return null;
   }
 }
@@ -447,6 +452,21 @@ export function readActiveMachineDesign(userDataRoot: string): StoredMachineDesi
   const pointer = readActivePointer(userDataRoot);
   if (!pointer) return null;
   return readStoredMachineDesign(userDataRoot, pointer.machineId);
+}
+
+
+/** 用于幂等判断的稳定内容（不含 appliedAt，避免重复执行被误判为变更）。 */
+export function machineDesignContent(design: NormalizedMachineDesign): string {
+  return JSON.stringify({
+    config: design.config,
+    points: design.points,
+    cycle: design.cycle ?? null,
+    power: design.power ?? null,
+    bomDraft: design.bomDraft ?? null,
+    warnings: design.warnings,
+    assumptions: design.assumptions,
+    form: design.form ?? null
+  });
 }
 
 export function buildMachineBomRows(design: NormalizedMachineDesign): MachineBomRow[] {

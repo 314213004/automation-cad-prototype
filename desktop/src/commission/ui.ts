@@ -10,6 +10,7 @@ import {
 import { createSimulatorConfig, COMMISSION_CASES, COMMISSION_POINTS, POWER_UP_STEPS } from './standard.ts';
 import { runSequence, type SequenceIo, type SequenceResult, type Step, type StepResult } from './sequence.ts';
 import { diagnose, type Diagnosis } from './diagnose.ts';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { demoMachineConfig, validateMachineConfig, type MachineConfig } from './machine-config.ts';
 import { createScene3D, type Commission3DStats, type CommissionKinematicsMode, type CommissionScene3D } from './scene3d.ts';
 import type { GeomLayout } from '../machine/geometry.ts';
@@ -83,6 +84,8 @@ export interface CommissionPanelHandle {
   runPowerUp(): Promise<boolean>;
   runCase(id: string): Promise<boolean>;
   runAllCases(): Promise<boolean>;
+  /** 页面关闭时释放 3D 场景、ResizeObserver 与动画循环；可重复调用。 */
+  dispose(): void;
 }
 
 let elements: Elements | null = null;
@@ -503,7 +506,8 @@ async function runPowerUp(): Promise<boolean> {
       : result.failure?.message ?? '上电流程失败', !result.pass);
     return result.pass;
   } catch (error) {
-    setMessage(`上电流程异常：${errorMessage(error)}`, true);
+    recordDiagnosticError('COMMISSION_POWER_UP_FAILED', error, { site: 'desktop/src/commission/ui.ts' });
+    setMessage(`上电流程异常：${errorMessage(error)}。请检查 PLC 连接与点位配置后重试。`, true);
     return false;
   } finally {
     running = false;
@@ -539,7 +543,8 @@ async function runPowerStep(): Promise<boolean> {
     setMessage(stepResult?.pass ? `${step.name} 通过` : stepResult?.message ?? `${step.name} 失败`, !stepResult?.pass);
     return powerPassed();
   } catch (error) {
-    setMessage(`${step.name} 异常：${errorMessage(error)}`, true);
+    recordDiagnosticError('COMMISSION_POWER_STEP_FAILED', error, { site: 'desktop/src/commission/ui.ts', step: step.name });
+    setMessage(`${step.name} 异常：${errorMessage(error)}。请检查该步骤点位后重试。`, true);
     return false;
   } finally {
     running = false;
@@ -573,7 +578,8 @@ async function runCaseById(id: string): Promise<boolean> {
     setMessage(result.pass ? `用例「${testCase.name}」通过` : result.failure?.message ?? `用例「${testCase.name}」失败`, !result.pass);
     return result.pass;
   } catch (error) {
-    setMessage(`用例「${testCase.name}」异常：${errorMessage(error)}`, true);
+    recordDiagnosticError('COMMISSION_CASE_FAILED', error, { site: 'desktop/src/commission/ui.ts', caseName: testCase.name });
+    setMessage(`用例「${testCase.name}」异常：${errorMessage(error)}。请检查点位与节拍配置后重试。`, true);
     return false;
   } finally {
     running = false;
@@ -606,7 +612,8 @@ async function runAllCases(): Promise<boolean> {
     if (allPass) setMessage('3 条联调用例全部通过。');
     return allPass;
   } catch (error) {
-    setMessage(`用例全跑异常：${errorMessage(error)}`, true);
+    recordDiagnosticError('COMMISSION_RUN_ALL_FAILED', error, { site: 'desktop/src/commission/ui.ts' });
+    setMessage(`用例全跑异常：${errorMessage(error)}。已保留当前结果，请修复后重新运行。`, true);
     return false;
   } finally {
     running = false;
@@ -950,7 +957,13 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
     setKinematics,
     runPowerUp,
     runCase: runCaseById,
-    runAllCases
+    runAllCases,
+    dispose(): void {
+      scene3dObserver?.disconnect();
+      scene3dObserver = null;
+      scene3d?.dispose();
+      scene3d = null;
+    }
   };
   Object.defineProperty(window, '__Commission3D', {
     value: Object.freeze({
@@ -966,7 +979,8 @@ export function initCommissionPanel(options: PanelOptions): CommissionPanelHandl
         active: false,
         geometryParts: 0,
         envelopeMm: [0, 0, 0],
-        layout: 'single'
+        layout: 'single',
+        transformUpdates: 0
       },
       update: (incoming: Record<string, boolean | number>): void => scene3d?.update(incoming),
       highlight: (pointId: string, on: boolean): void => scene3d?.highlight(pointId, on),

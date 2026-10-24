@@ -395,8 +395,9 @@ export async function captureMachineScreenshots(
         shots,
         error: error instanceof Error ? error.message : String(error)
       }, null, 2)}\n`, 'utf8');
-    } catch {
+    } catch (error) {
       // 失败报告是辅助信息，不覆盖原始错误。
+      console.warn(`[MACHINE_SCREENSHOT_FAILURE_REPORT]`, { site: 'desktop/electron/machine-screenshots.ts:398' }, error);
     }
     return { captured: shots.length, failed: 1 };
   }

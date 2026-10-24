@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import type { PackRegistry } from '../packs/registry';
@@ -23,6 +24,7 @@ import {
   type CostExportSaveResult
 } from '../cost/export.ts';
 import { createZip } from '../shared/zip.ts';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { resolvePartReference } from './placement.ts';
 import { checkExportTargetPath } from './policy.ts';
 import { parseMachineBrief } from '../machine/spec.ts';
@@ -32,6 +34,7 @@ import {
   buildMachineBomRows,
   machineBomDraftPath,
   machineDesignPath,
+  machineDesignContent,
   machineGeometryPaths,
   readActiveMachineDesign,
   readBase64IfExists,
@@ -1159,8 +1162,9 @@ function registerPlcGenerateCommand(bus: CommandBus): void {
         writeFileSync(plan.zipPath, zip);
         try {
           await ctx.bridge.call('markPlcGenerated');
-        } catch {
+        } catch (error) {
           // 建议区状态是可降级信息，不能因标记失败影响已完成的 PLC 落盘。
+          console.warn(`[PLC_SUGGESTION_UI_FAILED]`, { site: 'desktop/src/agent/commands.ts:1165' }, error);
         }
         return {
           ok: true,
@@ -1249,11 +1253,52 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       const machineId = sanitizeMachineId(normalized.config.id);
       normalized.config.id = machineId;
       const machineFile = machineDesignPath(ctx.userDataRoot, machineId);
-      if (existsSync(machineFile) && !overwrite) {
+      const designContent = machineDesignContent(normalized);
+      const designHash = createHash('sha256').update(designContent).digest('hex').slice(0, 12);
+      const existingDesign = existsSync(machineFile)
+        ? readStoredMachineDesign(ctx.userDataRoot, machineId)
+        : null;
+      const idempotent = existingDesign !== null && machineDesignContent(existingDesign) === designContent;
+      if (existsSync(machineFile) && !overwrite && !idempotent) {
         throw new CommandFailure(
           'FILE_EXISTS',
           `机型方案已存在：${machineId}；如需覆盖请显式传入 overwrite=true`
         );
+      }
+      if (idempotent) {
+        // 相同方案重复应用：不重写文件、不追加 BOM、不动 appliedAt；只确保当前渲染层已切到该方案。
+        let sceneRefreshed = false;
+        try {
+          const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
+            config: normalized.config,
+            machineId,
+            name: normalized.config.name,
+            layout: normalized.form?.geometry?.kind ?? null
+          });
+          sceneRefreshed = refreshed?.ok !== false;
+        } catch (error) {
+          recordDiagnosticError('MACHINE_SCENE_REFRESH_FAILED', error, { machineId, phase: 'idempotent-apply' });
+        }
+        const bomRows = buildMachineBomRows(normalized);
+        return {
+          ok: true,
+          data: {
+            machineId,
+            name: normalized.config.name,
+            stations: normalized.config.stations.length,
+            actuators: normalized.config.actuators.length,
+            sensors: normalized.config.sensors.length,
+            warnings: [...normalized.warnings],
+            activePath: activeMachinePath(ctx.userDataRoot),
+            designPath: machineFile,
+            sceneRefreshed,
+            idempotent: true,
+            ...(withBom ? {
+              bomPath: machineBomDraftPath(ctx.userDataRoot, machineId),
+              bom: { count: bomRows.length, added: 0, source: 'machine-design' }
+            } : {})
+          }
+        };
       }
 
       const now = ctx.now?.() ?? new Date();
@@ -1292,7 +1337,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
 
       const warnings = [...normalized.warnings];
       const bomRows: MachineBomRow[] = buildMachineBomRows(normalized);
-      const batchId = `machine-${machineId}-${now.getTime()}`;
+      const batchId = `machine-${machineId}-${designHash}`;
       let bomPath: string | undefined;
       let bomText: string | null | undefined;
       let bomAdded = 0;
@@ -1501,8 +1546,9 @@ function registerMachineApplyCommand(bus: CommandBus): void {
       if (undo.withBom) {
         try {
           await ctx.bridge.call('removeMachineBomRows', { batchId: undo.batchId });
-        } catch {
+        } catch (error) {
           // BOM 行是内存草稿；撤销文件与 active 指针优先，渲染层不可用时不阻断。
+          recordDiagnosticError('MACHINE_BOM_UNDO_FAILED', error, { machineId: undo.machineId });
         }
       }
       try {
@@ -1511,8 +1557,9 @@ function registerMachineApplyCommand(bus: CommandBus): void {
           name: undo.previousConfig?.name ?? null,
           layout: undo.previousLayout
         });
-      } catch {
+      } catch (error) {
         // 3D 刷新失败不回滚已恢复的文件状态。
+        recordDiagnosticError('MACHINE_SCENE_RESTORE_FAILED', error, { machineId: undo.machineId });
       }
       return {
         machineId: undo.machineId,
@@ -1634,8 +1681,9 @@ function registerCostExportCommand(bus: CommandBus): void {
           if (typeof source === 'string' && source.trim()) {
             projectName = basename(source.trim(), extname(source.trim()));
           }
-        } catch {
+        } catch (error) {
           // 项目名只影响默认文件名，取不到时回落「机台」，不阻塞导出。
+          console.debug(`[EXPORT_PROJECT_NAME_FALLBACK]`, { site: 'desktop/src/agent/commands.ts:1683' }, error);
         }
       }
 

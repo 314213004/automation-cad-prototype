@@ -6,6 +6,7 @@ import type {
   TagNode,
   TagValue
 } from './types';
+import { trackedClearInterval, trackedSetInterval } from '../shared/resources.ts';
 
 interface DemoTickTag {
   id: string;
@@ -170,13 +171,13 @@ export class DemoFactoryAdapter implements FactoryAdapter {
 
   private startSimulation(): void {
     if (this.timer) return;
-    this.timer = setInterval(() => this.step(), 1000);
+    this.timer = trackedSetInterval(() => this.step(), 1000);
     if (typeof this.timer === 'object' && this.timer && 'unref' in this.timer) this.timer.unref();
   }
 
   private stopSimulation(): void {
     if (!this.timer) return;
-    clearInterval(this.timer);
+    trackedClearInterval(this.timer);
     this.timer = null;
   }
 

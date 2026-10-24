@@ -7,6 +7,7 @@ import {
   notify
 } from '../ui/panels.ts';
 import type { SyncPackageSummary, SyncPublicConfig, SyncResult, SyncUploadPayload } from './types.ts';
+import { recordDiagnosticError } from '../shared/diagnostics.ts';
 
 const SYNC_ICON = '<svg viewBox="0 0 16 16"><path d="M13.5 5.5a5.5 5.5 0 0 0-9.8-1.8L2.5 5.2"/><path d="M2.5 2.8v2.4h2.4"/><path d="M2.5 10.5a5.5 5.5 0 0 0 9.8 1.8l1.2-1.5"/><path d="M13.5 13.2v-2.4h-2.4"/></svg>';
 
@@ -95,7 +96,8 @@ async function saveConfig(quiet = false): Promise<boolean> {
     if (!quiet) setStatus('同步设置已保存，API Key 仅以掩码回显。', 'ok');
     return true;
   } catch (error) {
-    setStatus(`保存设置失败：${errorMessage(error)}`, 'error');
+    recordDiagnosticError('SYNC_CONFIG_SAVE_FAILED', error, { site: 'desktop/src/sync/ui.ts' });
+    setStatus(`保存设置失败：${errorMessage(error)}。请检查 baseUrl 与 API Key 是否为有效值。`, 'error');
     return false;
   }
 }

@@ -213,6 +213,27 @@ export class FactoryManager extends EventEmitter {
     }
   }
 
+  /** 应用退出时释放活动适配器、订阅与事件监听；可重复调用。 */
+  async dispose(): Promise<void> {
+    this.unsubscribeCurrent?.();
+    this.unsubscribeCurrent = null;
+    try {
+      await this.disconnect();
+    } finally {
+      for (const adapter of this.adapters.values()) {
+        if (adapter.status() === 'connected') {
+          try {
+            await adapter.disconnect();
+          } catch (error) {
+            console.warn('[factory] 退出时断开适配器失败', error instanceof Error ? error.message : String(error));
+          }
+        }
+      }
+      this.adapters.clear();
+      this.removeAllListeners();
+    }
+  }
+
   async browse(nodeId?: string): Promise<FactoryActionResult<TagNode[]>> {
     return await this.run('浏览点位', (adapter) => adapter.browse(nodeId));
   }
