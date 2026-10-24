@@ -4,6 +4,20 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+## 整机形态选型一致性修复（2026-10-24，本轮）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1426/1426**（较上轮 +18）、`npm run smoke` 更新 `SMOKE_MACHINE_FORMS_OK forms=6 picked=dial-6`、`npm run eval:agent` **1.00**；未 push。
+- 缺陷：第 37 轮形态库把 `gantry-2` 的 `stationRange` 写成 1–6，选型器又让布局/得分压过工位数，导致双工位龙门承接 3/6 工位需求。复现命令（在 `desktop/` 下）：
+  ```bash
+  node --experimental-strip-types -e "import('./src/machine/spec.ts').then(async s=>{const y=await import('./src/machine/synth.ts'); for (const t of ['六工位锁螺丝机，节拍 20 件/分钟','三工位点胶机，节拍 15 件/分钟','四工位装配线，节拍 12 件/分钟']) {const d=y.synthMachine(s.parseMachineBrief(t)); console.log(t.slice(0,20), d.form.id, d.config.stations.length)}})"
+  ```
+  修复前输出：三工位、六工位均 `gantry-2`；修复后：`dial-6 / dial-6 / linear-4`。
+- 修复：`forms.ts` 改为 `minStations + defaultStations + maxStations` 单一来源推导 `stationRange`，六个形态区间收敛为 `gantry-2 [1,2] / dial-6 [2,6] / dial-8 [6,8] / linear-4 [2,4] / linear-8 [5,8] / dual-lane [4,6]`；加载期 `assertMachineFormsConsistent()` 校验 `stationRange[0] <= defaultStations <= stationRange[1]`，越界直接抛错。
+- 选型：`pickForm` 先按工位数硬筛，再按工艺适配 → 节拍达标 → 占地系数最小 → 推荐工位数最接近排序；布局意图只在覆盖工位数的候选内生效。无覆盖时取区间最接近形态并输出「该形态支持 X–Y 工位，需求 N 工位，已按 X/Y 生成，请确认是否需要非标设计」。
+- 一致性：`design_machine.form` 增加 `stationRange/defaultStations`；`build-machine-case.mjs` 把 `design.form` 写入 `machine-case.json`；`apply_machine_design` 落盘的 machine json 保存 `form.id/stationRange/defaultStations`，`readStoredMachineDesign` 重载后可复现 `dial-6`。
+- 后果说明：六工位案例因形态改为 `dial-6`，产能模型从 `parallel 113.21` 变为 `dial 15.87` 件/分钟；20 件/分钟目标不再达标，案例与文档保留真实缺口 warning，不硬凑达标。
+- 文档：`MACHINE-DESIGN.md` 形态表补 `defaultStations/maxStations` 与选型优先级；`MACHINE-DESIGN-DEMO.md` 写明本案例选中 `dial-6` 的理由与重算结果。
+
 
 ## 软件整体优化（2026-10-24，本轮）
 

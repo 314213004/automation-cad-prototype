@@ -280,19 +280,19 @@
       "ST6-PRX-S1"
     ],
     "cycle": {
-      "mode": "parallel",
+      "mode": "dial",
       "perMin": 20,
       "secondsPerPiece": 3,
       "stationSeconds": 3.18,
-      "throughputPerMin": 113.21,
+      "throughputPerMin": 15.87,
       "estimatedSecondsPerPiece": 3.18,
       "baseSeconds": 2.2,
       "slowestStation": 1,
       "slowestActionSeconds": 0.98,
       "requiredParallelStations": 2,
-      "requiredTotalStations": 2,
-      "meetsTarget": true,
-      "bottleneck": "单工位 3.18 秒/件，6 工位并行 → 113.21 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，余量 5.66 倍）"
+      "requiredTotalStations": 12,
+      "meetsTarget": false,
+      "bottleneck": "转盘分度：最慢工位1 单件 3.18 秒，含分度 0.60 秒 → 15.87 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，未达标）"
     },
     "power": {
       "va": 4628,
@@ -315,14 +315,47 @@
         }
       ]
     },
+    "form": {
+      "id": "dial-6",
+      "name": "六工位转盘机",
+      "rationale": "转盘让上下料与作业同时进行，六工位内换型只需更换治具与凸轮程序，适合中小件锁螺丝/点胶/装配。",
+      "layout": "dial",
+      "stationRange": [
+        2,
+        6
+      ],
+      "defaultStations": 6,
+      "maxStations": 6,
+      "geometry": {
+        "kind": "dial",
+        "indexer": "cam"
+      },
+      "score": 90.4,
+      "alternatives": [
+        {
+          "id": "dial-8",
+          "name": "八工位转盘机",
+          "difference": "占地约大 22%；成本接近；换型沿用同类治具。"
+        },
+        {
+          "id": "dual-lane",
+          "name": "双轨并行线",
+          "difference": "占地约大 73%；成本更高；换型需从六工位转盘机切到双轨并行线。"
+        }
+      ],
+      "warning": "六工位转盘机 预估 15.87 件/分钟，低于目标 20 件/分钟，缺口 4.13 件/分钟（约 20.6%）；需增加工位/复制瓶颈或改用更高节拍形态。"
+    },
     "warnings": [
+      "节拍瓶颈（dial）：工位1 估算 3.18 秒/件，超过目标 3.00 秒/件；当前产能 15.87 件/分钟，低于目标 20 件/分钟；建议总工位 ≥ 12（每道工序并行工位 ≥ 2）。",
+      "形态选型：六工位转盘机 预估 15.87 件/分钟，低于目标 20 件/分钟，缺口 4.13 件/分钟（约 20.6%）；需增加工位/复制瓶颈或改用更高节拍形态。",
       "安全光栅：已初选 F3SG-4SRA0640-14（14 mm、保护高度 640 mm），安装距离需按 ISO 13855 用实测停机时间核算，保护高度需覆盖实际上料开口。"
     ],
     "assumptions": [
+      "整机形态：六工位转盘机（dial-6）——转盘让上下料与作业同时进行，六工位内换型只需更换治具与凸轮程序，适合中小件锁螺丝/点胶/装配。",
       "功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。",
       "节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。",
       "三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。",
-      "布局按同工序并行估算（parallel）：6 个工位执行同一工艺「锁螺丝」，整机产能 = 工位数 / 单工位时间 × 60。",
+      "布局按转盘分度估算（dial）：各工位同时作业，节拍 = 最慢工位时间 + 分度时间；indexSeconds 采用形态默认 0.6 秒/次。",
       "检测到伺服/步进驱动：按旋转轴建模，并在功率估算中按 750 VA/轴计入伺服驱动。",
       "品牌按需求中的「汇川」记录，具体型号待选型。",
       "执行机构按需求数量均分到各工位。",
@@ -442,20 +475,20 @@
     }
   },
   "cycleAnalysis": {
-    "mode": "parallel",
+    "mode": "dial",
     "targetPerMin": 20,
     "targetSecondsPerPiece": 3,
     "stationSeconds": 3.18,
-    "throughputPerMin": 113.21,
+    "throughputPerMin": 15.87,
     "estimatedSecondsPerPiece": 3.18,
     "baseSeconds": 2.2,
     "slowestStation": 1,
     "slowestActionSeconds": 0.98,
-    "meetsTarget": true,
+    "meetsTarget": false,
     "requiredParallelStations": 2,
-    "requiredTotalStations": 2,
-    "verdict": "当前方案按同工序并行满足目标节拍：单工位 3.18 秒/件 × 6 工位 ≈ 113.21 件/分钟",
-    "bottleneck": "单工位 3.18 秒/件，6 工位并行 → 113.21 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，余量 5.66 倍）"
+    "requiredTotalStations": 12,
+    "verdict": "当前 dial 布局未满足目标节拍，按现估算需每道工序 2 个并行工位，总工位至少 12 个",
+    "bottleneck": "转盘分度：最慢工位1 单件 3.18 秒，含分度 0.60 秒 → 15.87 件/分钟（工艺固定 2.20s + 旋转轴 0.70s；目标 20 件/分钟，未达标）"
   },
   "stations": [
     {

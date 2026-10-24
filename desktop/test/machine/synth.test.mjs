@@ -15,15 +15,16 @@ function sensorKind(point) {
   return 'proximity';
 }
 
-test('三工位锁螺丝机：6 执行机构、3 传感器，同工序并行满足 20 件/分钟', () => {
+test('三工位锁螺丝机：6 执行机构、3 传感器，按 dial-6 预演并提示节拍缺口', () => {
   const design = synthMachine(basicBrief(), { stationCount: 3 });
   assert.equal(design.config.stations.length, 3);
   assert.equal(design.config.actuators.length, 6);
   assert.equal(design.config.sensors.length, 3);
-  assert.equal(design.cycle.mode, 'parallel');
-  assert.equal(design.cycle.throughputPerMin, 56.6);
-  assert.equal(design.cycle.meetsTarget, true);
-  assert.equal(design.warnings.length, 0);
+  assert.equal(design.form.id, 'dial-6');
+  assert.equal(design.cycle.mode, 'dial');
+  assert.equal(design.cycle.throughputPerMin, 15.87);
+  assert.equal(design.cycle.meetsTarget, false);
+  assert.ok(design.warnings.some((warning) => /节拍瓶颈/.test(warning)));
 });
 
 test('工位均分：每个工位至少 1 个动作、至少 1 个检测', () => {

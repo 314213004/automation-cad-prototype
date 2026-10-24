@@ -31,6 +31,10 @@ export interface MachineForm {
   name: string;
   layout: MachineLayout;
   stationRange: [number, number];
+  /** 形态推荐工位数；必须落在 stationRange 内。 */
+  defaultStations?: number;
+  /** 形态硬上限；存在时必须等于 stationRange 上限。 */
+  maxStations?: number;
   indexSeconds?: number;
   transferSeconds?: number;
   footprintScale: number;
@@ -67,6 +71,9 @@ export interface MachineFormSummary {
   name: string;
   rationale: string;
   layout: MachineLayout;
+  stationRange: [number, number];
+  defaultStations: number;
+  maxStations: number;
   geometry: MachineFormGeometry;
   score: number;
   alternatives: { id: string; name: string; difference: string }[];
@@ -89,12 +96,21 @@ export const ACTUATOR_SECONDS: Record<'cylinder' | 'gripper' | 'rotary', number>
   rotary: 0.7
 };
 
-export const MACHINE_FORMS: readonly MachineForm[] = [
+type MachineFormSeed = Omit<MachineForm, 'stationRange' | 'defaultStations' | 'maxStations'> & {
+  /** 形态可承接的最小工位数；stationRange 由它与 maxStations 推导。 */
+  minStations: number;
+  defaultStations: number;
+  maxStations: number;
+};
+
+const FORM_SEEDS: readonly MachineFormSeed[] = [
   {
     id: 'dial-6',
     name: '六工位转盘机',
     layout: 'dial',
-    stationRange: [2, 6],
+    minStations: 2,
+    defaultStations: 6,
+    maxStations: 6,
     indexSeconds: 0.6,
     footprintScale: 0.78,
     suits: ['screw', 'dispense', 'assembly', 'packaging'],
@@ -105,7 +121,9 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     id: 'dial-8',
     name: '八工位转盘机',
     layout: 'dial',
-    stationRange: [6, 8],
+    minStations: 6,
+    defaultStations: 8,
+    maxStations: 8,
     indexSeconds: 0.45,
     footprintScale: 0.95,
     suits: ['inspection', 'screw', 'assembly', 'dispense', 'packaging'],
@@ -116,7 +134,9 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     id: 'linear-4',
     name: '四工位直线机',
     layout: 'linear',
-    stationRange: [2, 4],
+    minStations: 2,
+    defaultStations: 4,
+    maxStations: 4,
     footprintScale: 1,
     suits: ['screw', 'dispense', 'assembly', 'inspection', 'packaging'],
     rationale: '直线四工位结构简单、输送短，工序能一一落位，适合中等节拍且换型不频繁的单机。',
@@ -126,7 +146,9 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     id: 'linear-8',
     name: '八工位直线线体',
     layout: 'linear',
-    stationRange: [5, 8],
+    minStations: 5,
+    defaultStations: 8,
+    maxStations: 8,
     transferSeconds: 0.8,
     footprintScale: 1.55,
     suits: ['assembly', 'inspection', 'packaging', 'screw', 'dispense'],
@@ -137,7 +159,9 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     id: 'gantry-2',
     name: '双工位龙门机',
     layout: 'parallel',
-    stationRange: [1, 6],
+    minStations: 1,
+    defaultStations: 2,
+    maxStations: 2,
     footprintScale: 0.9,
     suits: ['dispense', 'screw', 'assembly', 'inspection', 'packaging'],
     rationale: '龙门双轴跨越大件上方作业，两个工位可并行上下料，适合大件点胶/锁螺丝与不宜转盘的工件。',
@@ -147,7 +171,9 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     id: 'dual-lane',
     name: '双轨并行线',
     layout: 'cell',
-    stationRange: [4, 6],
+    minStations: 4,
+    defaultStations: 6,
+    maxStations: 6,
     transferSeconds: 0.6,
     footprintScale: 1.35,
     suits: ['inspection', 'packaging', 'assembly', 'screw', 'dispense'],
@@ -155,6 +181,16 @@ export const MACHINE_FORMS: readonly MachineForm[] = [
     geometry: { kind: 'dual', lanes: 2, stationsPerLane: 3, conveyor: 'belt' }
   }
 ] as const;
+
+/** 由最小工位与硬上限推导区间，避免 stationRange 与 default/max 各写一份。 */
+export function deriveStationRange(minStations: number, maxStations: number): [number, number] {
+  return [minStations, maxStations];
+}
+
+export const MACHINE_FORMS: readonly MachineForm[] = FORM_SEEDS.map((seed) => {
+  const { minStations, ...form } = seed;
+  return { ...form, stationRange: deriveStationRange(minStations, form.maxStations) };
+});
 
 const FLOW_LAYOUTS: ReadonlySet<MachineLayout> = new Set(['single', 'linear', 'dial', 'parallel', 'cell']);
 const PROCESSES: ReadonlySet<MachineProcess> = new Set([
@@ -186,6 +222,22 @@ export function validateMachineForm(form: MachineForm): string[] {
       errors.push(`${form.id || '?'}：stationRange 必须是 1–12 的整数`);
     } else if (min > max) {
       errors.push(`${form.id || '?'}：stationRange 的 min 不能大于 max`);
+    }
+    if (form.defaultStations !== undefined) {
+      if (!isInteger(form.defaultStations)) {
+        errors.push(`${form.id || '?'}：defaultStations 必须是整数`);
+      } else if (form.defaultStations < min || form.defaultStations > max) {
+        errors.push(
+          `${form.id || '?'}：defaultStations 必须落在 stationRange ${min}–${max} 内（实际 ${form.defaultStations}）`
+        );
+      }
+    }
+    if (form.maxStations !== undefined) {
+      if (!isInteger(form.maxStations)) {
+        errors.push(`${form.id || '?'}：maxStations 必须是整数`);
+      } else if (form.maxStations !== max) {
+        errors.push(`${form.id || '?'}：maxStations 必须等于 stationRange 上限 ${max}（实际 ${form.maxStations}）`);
+      }
     }
   }
   if (form.indexSeconds !== undefined && (!Number.isFinite(form.indexSeconds) || form.indexSeconds <= 0)) {
@@ -224,6 +276,38 @@ export function validateMachineForm(form: MachineForm): string[] {
   }
   return errors;
 }
+
+/**
+ * 运行时自检：形态加载时必须满足 stationRange[0] <= defaultStations <= stationRange[1]。
+ * validateMachineForm 面向「收集全部错误」；这里用于加载期快速失败。
+ */
+export function assertMachineFormConsistency(form: MachineForm): void {
+  if (!Array.isArray(form.stationRange) || form.stationRange.length !== 2) {
+    throw new Error(`${form.id || '?'}：stationRange 必须是 [min,max]`);
+  }
+  const [min, max] = form.stationRange;
+  if (!isInteger(min) || !isInteger(max) || min > max) {
+    throw new Error(`${form.id || '?'}：stationRange 必须是合法整数区间`);
+  }
+  if (form.defaultStations === undefined) {
+    throw new Error(`${form.id || '?'}：缺少 defaultStations`);
+  }
+  if (!isInteger(form.defaultStations) || form.defaultStations < min || form.defaultStations > max) {
+    throw new Error(
+      `${form.id || '?'}：defaultStations 必须落在 stationRange ${min}–${max} 内（实际 ${form.defaultStations}）`
+    );
+  }
+  if (form.maxStations !== undefined && form.maxStations !== max) {
+    throw new Error(`${form.id || '?'}：maxStations 必须等于 stationRange 上限 ${max}（实际 ${form.maxStations}）`);
+  }
+}
+
+/** 整组形态加载期自检；任一形态不一致直接抛错。 */
+export function assertMachineFormsConsistent(forms: readonly MachineForm[] = MACHINE_FORMS): void {
+  for (const form of forms) assertMachineFormConsistency(form);
+}
+
+assertMachineFormsConsistent();
 
 /** 校验整组形态：单条合法性 + id 唯一 + 形态数量。 */
 export function validateMachineForms(forms: readonly MachineForm[] = MACHINE_FORMS): string[] {
@@ -318,6 +402,7 @@ interface Candidate {
   processFit: boolean;
   layoutFit: boolean;
   stationDistance: number;
+  defaultDistance: number;
   evaluation: FlowEvaluation;
   score: number;
 }
@@ -337,11 +422,40 @@ function scoreCandidate(
   const layoutFit = form.layout === intended;
   const throughput = evaluation.throughputPerMin;
   const meets = evaluation.meetsTarget === true;
-  const stationScore = inRange ? 20 : Math.max(0, 20 - distance * 6);
-  const processScore = process === 'unknown' ? 18 : processFit ? 25 : 0;
-  const throughputScore = meets ? 15 : Math.min(12, (throughput / Math.max(targetPerMin, 1e-9)) * 12);
-  const efficiency = Math.max(0, 5 - (min - 1) * 0.5);
-  return (layoutFit ? 35 : 0) + processScore + stationScore + throughputScore + efficiency;
+  const defaultStations = form.defaultStations ?? (min + max) / 2;
+  const stationScore = inRange ? 30 : Math.max(0, 30 - distance * 8);
+  const processScore = process === 'unknown' ? 20 : processFit ? 25 : 0;
+  const throughputScore = meets ? 20 : Math.min(18, (throughput / Math.max(targetPerMin, 1e-9)) * 18);
+  const footprintScore = Math.max(0, 15 - form.footprintScale * 5);
+  const closenessScore = Math.max(0, 10 - Math.abs(defaultStations - stations));
+  return (layoutFit ? 5 : 0) + processScore + stationScore + throughputScore + footprintScore + closenessScore;
+}
+
+function compareCovering(left: Candidate, right: Candidate): number {
+  if (left.processFit !== right.processFit) return left.processFit ? -1 : 1;
+  const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
+  const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
+  if (leftMeets !== rightMeets) return rightMeets - leftMeets;
+  if (Math.abs(left.form.footprintScale - right.form.footprintScale) > 1e-9) {
+    return left.form.footprintScale - right.form.footprintScale;
+  }
+  if (left.defaultDistance !== right.defaultDistance) return left.defaultDistance - right.defaultDistance;
+  if (Math.abs(right.score - left.score) > 1e-9) return right.score - left.score;
+  return left.form.stationRange[0] - right.form.stationRange[0];
+}
+
+function compareFallback(left: Candidate, right: Candidate): number {
+  if (left.stationDistance !== right.stationDistance) return left.stationDistance - right.stationDistance;
+  if (left.layoutFit !== right.layoutFit) return left.layoutFit ? -1 : 1;
+  if (left.processFit !== right.processFit) return left.processFit ? -1 : 1;
+  const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
+  const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
+  if (leftMeets !== rightMeets) return rightMeets - leftMeets;
+  if (Math.abs(left.form.footprintScale - right.form.footprintScale) > 1e-9) {
+    return left.form.footprintScale - right.form.footprintScale;
+  }
+  if (left.defaultDistance !== right.defaultDistance) return left.defaultDistance - right.defaultDistance;
+  return right.score - left.score;
 }
 
 function footprintPercent(chosen: MachineForm, other: MachineForm): string {
@@ -373,8 +487,11 @@ function differenceText(chosen: MachineForm, other: MachineForm): string {
 }
 
 /**
- * 形态选型：先按布局意图与工艺适配筛候选，再用 flow 引擎预演工位范围内节拍；
- * 达标者优先、工位范围更小者优先。没有候选同时满足时回退到最接近形态并给出 warning。
+ * 形态选型：工位数是硬约束。
+ * 1. 先筛 stationRange 覆盖需求工位数的形态；
+ * 2. 再按工艺适配 → 节拍达标 → 占地系数最小 → 与需求工位数最接近排序；
+ * 3. 无覆盖时取区间最接近的形态，并给出非标设计 warning。
+ * 布局意图只在工位数已覆盖的候选内做偏好，不能反过来放宽工位约束。
  */
 export function pickForm(
   brief: MachineBrief,
@@ -390,58 +507,46 @@ export function pickForm(
   const formMatchesProcess = (form: MachineForm): boolean =>
     brief.process === 'unknown' || form.suits.includes(brief.process);
 
-  let pool = previewable.filter((form) => formMatchesLayout(form) && formMatchesProcess(form));
-  let fallbackReason = '';
-  if (pool.length === 0) {
-    pool = previewable.filter((form) => formMatchesLayout(form));
-    fallbackReason = '没有同时满足布局与工艺适配的形态';
-  }
-  if (pool.length === 0) {
-    pool = [...previewable];
-    fallbackReason = '没有与需求布局一致的形态';
-  }
-
-  const candidates: Candidate[] = pool.map((form) => {
+  const allCandidates: Candidate[] = previewable.map((form) => {
     const evaluation = evaluateFlow(previewModel(brief, form, stations, cyclePerMin, templates));
     const [min, max] = form.stationRange;
+    const inRange = stations >= min && stations <= max;
+    const defaultStations = form.defaultStations ?? (min + max) / 2;
     return {
       form,
-      inRange: stations >= min && stations <= max,
+      inRange,
       processFit: formMatchesProcess(form),
       layoutFit: formMatchesLayout(form),
       stationDistance: stations < min ? min - stations : stations > max ? stations - max : 0,
+      defaultDistance: Math.abs(defaultStations - stations),
       evaluation,
       score: scoreCandidate(form, stations, brief.process, intended, evaluation, cyclePerMin)
     };
   });
 
-  const eligible = candidates.filter((candidate) => candidate.inRange && candidate.layoutFit && candidate.processFit);
-  const ranked = (eligible.length > 0 ? eligible : candidates)
-    .slice()
-    .sort((left, right) => {
-      if (eligible.length === 0 && left.stationDistance !== right.stationDistance) {
-        return left.stationDistance - right.stationDistance;
-      }
-      const leftMeets = left.evaluation.meetsTarget === true ? 1 : 0;
-      const rightMeets = right.evaluation.meetsTarget === true ? 1 : 0;
-      if (leftMeets !== rightMeets) return rightMeets - leftMeets;
-      if (Math.abs(right.score - left.score) > 1e-9) return right.score - left.score;
-      return left.form.stationRange[0] - right.form.stationRange[0];
-    });
+  const covering = allCandidates.filter((candidate) => candidate.inRange);
+  let pool = covering;
+  if (covering.length > 0) {
+    // 工艺适配优先于布局偏好：只有「布局匹配且工艺适配」的候选存在时才收窄。
+    const layoutMatched = covering.filter((candidate) => candidate.layoutFit && candidate.processFit);
+    if (layoutMatched.length > 0) pool = layoutMatched;
+  }
 
+  const ranked = (pool.length > 0 ? pool : allCandidates)
+    .slice()
+    .sort(pool.length > 0 ? compareCovering : compareFallback);
   const chosen = ranked[0] as Candidate;
+  const noCoverage = covering.length === 0;
+
   const missingCapacity = chosen.evaluation.meetsTarget === false
     ? Math.max(0, cyclePerMin - chosen.evaluation.throughputPerMin)
     : 0;
   const warnings: string[] = [];
-  if (eligible.length === 0) {
-    const reason = fallbackReason || '没有工位范围匹配的形态';
+  if (noCoverage) {
+    const [min, max] = chosen.form.stationRange;
     warnings.push(
-      `${reason}：已回退到最接近的 ${chosen.form.name}（支持 ${chosen.form.stationRange[0]}–${chosen.form.stationRange[1]} 工位，需求 ${stations} 工位）。`
-    );
-  } else if (!chosen.inRange) {
-    warnings.push(
-      `${chosen.form.name} 支持 ${chosen.form.stationRange[0]}–${chosen.form.stationRange[1]} 工位，需求 ${stations} 工位；请确认换型或拆分产线。`
+      `该形态支持 ${min}–${max} 工位，需求 ${stations} 工位，已按 ${min}/${max} 生成，请确认是否需要非标设计` +
+      `（已回退到 ${chosen.form.name}）。`
     );
   }
   if (missingCapacity > 1e-9) {
@@ -453,18 +558,18 @@ export function pickForm(
     );
   }
 
-  const alternatives = previewable
-    .filter((form) => form.id !== chosen.form.id)
-    .map((form) => {
-      const evaluation = evaluateFlow(previewModel(brief, form, stations, cyclePerMin, templates));
-      return {
-        form,
-        score: scoreCandidate(form, stations, brief.process, intended, evaluation, cyclePerMin),
-        difference: differenceText(chosen.form, form)
-      };
+  const alternatives = allCandidates
+    .filter((candidate) => candidate.form.id !== chosen.form.id)
+    .sort((left, right) => {
+      if (left.inRange !== right.inRange) return left.inRange ? -1 : 1;
+      return left.inRange ? compareCovering(left, right) : compareFallback(left, right);
     })
-    .sort((left, right) => right.score - left.score)
-    .slice(0, 2);
+    .slice(0, 2)
+    .map((candidate) => ({
+      form: candidate.form,
+      score: Math.round(candidate.score * 10) / 10,
+      difference: differenceText(chosen.form, candidate.form)
+    }));
 
   return {
     form: chosen.form,
@@ -478,11 +583,15 @@ export function pickForm(
 
 /** 供 design_machine / 落盘 / 方案卡使用的紧凑形态记录。 */
 export function summarizeForm(pick: FormPick): MachineFormSummary {
+  const [min, max] = pick.form.stationRange;
   return {
     id: pick.form.id,
     name: pick.form.name,
     rationale: pick.form.rationale,
     layout: pick.form.layout,
+    stationRange: [min, max],
+    defaultStations: pick.form.defaultStations ?? min,
+    maxStations: pick.form.maxStations ?? max,
     geometry: pick.form.geometry,
     score: pick.score,
     alternatives: pick.alternatives.map((entry) => ({

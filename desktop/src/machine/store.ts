@@ -6,7 +6,7 @@ import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { dirname, join } from 'node:path';
 import { validateMachineConfig, type MachineConfig } from '../commission/machine-config.ts';
 import type { MachineBomItem, MachineCycleEstimate, MachinePowerEstimate } from './synth.ts';
-import type { MachineFormGeometry, MachineFormSummary } from './forms.ts';
+import { MACHINE_FORMS, type MachineFormGeometry, type MachineFormSummary } from './forms.ts';
 
 export interface NormalizedMachineDesign {
   config: MachineConfig;
@@ -97,6 +97,37 @@ function parseMachineForm(value: unknown): MachineFormSummary {
   if (!id) throw new Error('design.form.id 不能为空');
   if (!name) throw new Error('design.form.name 不能为空');
   if (!rationale) throw new Error('design.form.rationale 不能为空');
+  const known = MACHINE_FORMS.find((form) => form.id === id);
+  let stationRange: [number, number] | undefined;
+  if (value.stationRange !== undefined) {
+    const raw = value.stationRange;
+    if (
+      !Array.isArray(raw) || raw.length !== 2 ||
+      !Number.isInteger(raw[0]) || !Number.isInteger(raw[1]) ||
+      raw[0] < 1 || raw[1] > 12 || raw[0] > raw[1]
+    ) {
+      throw new Error('design.form.stationRange 必须是 1–12 内的 [min,max] 整数区间');
+    }
+    stationRange = [raw[0], raw[1]];
+  }
+  const range = stationRange ?? known?.stationRange ?? [1, 12];
+  const rawDefault = value.defaultStations;
+  const defaultStations = rawDefault === undefined
+    ? known?.defaultStations ?? range[0]
+    : rawDefault;
+  if (
+    typeof defaultStations !== 'number' || !Number.isInteger(defaultStations) ||
+    defaultStations < range[0] || defaultStations > range[1]
+  ) {
+    throw new Error(`design.form.defaultStations 必须落在 stationRange ${range[0]}–${range[1]} 内`);
+  }
+  const rawMax = value.maxStations;
+  const maxStations = rawMax === undefined
+    ? known?.maxStations ?? range[1]
+    : rawMax;
+  if (typeof maxStations !== 'number' || !Number.isInteger(maxStations) || maxStations !== range[1]) {
+    throw new Error(`design.form.maxStations 必须等于 stationRange 上限 ${range[1]}`);
+  }
   const layouts = new Set(['single', 'linear', 'dial', 'parallel', 'cell']);
   const layout = layouts.has(String(value.layout))
     ? value.layout as MachineFormSummary['layout']
@@ -149,6 +180,9 @@ function parseMachineForm(value: unknown): MachineFormSummary {
     name,
     rationale,
     layout,
+    stationRange: [range[0], range[1]],
+    defaultStations,
+    maxStations,
     geometry,
     score,
     alternatives,

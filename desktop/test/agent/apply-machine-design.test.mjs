@@ -14,6 +14,7 @@ import {
   machineBomDraftPath,
   machineDesignPath,
   readActivePointer,
+  readStoredMachineDesign,
   validateMachineDesign
 } from '../../src/machine/store.ts';
 
@@ -220,7 +221,7 @@ test('成功后调用渲染桥 applyMachineConfig，返回统计与 warnings', a
   assert.equal(result.ok, true);
   assert.equal(result.data.sceneRefreshed, true);
   assert.ok(Array.isArray(result.data.warnings));
-  assert.equal(result.data.warnings.length, 0);
+  assert.ok(result.data.warnings.some((warning) => /节拍瓶颈/.test(warning)));
   const refresh = calls.find((call) => call.method === 'applyMachineConfig');
   assert.ok(refresh);
   assert.equal(refresh.args.config.stations.length, 3);
@@ -400,6 +401,20 @@ test('落盘时把 form.id 写进 machine json，可复现形态', async () => {
   assert.equal(stored.form.geometry.kind, 'dial');
   assert.equal(stored.form.name, '六工位转盘机');
   assert.equal(result.data.geometry.layout, 'dial');
+});
+
+test('machine json 保存 form.stationRange，重载后仍是同一形态', async () => {
+  const { root, bus } = setup();
+  const result = await apply(bus, { brief: '六工位锁螺丝机，节拍 10 件/分钟' });
+  assert.equal(result.ok, true);
+  const stored = JSON.parse(readFileSync(result.data.designPath, 'utf8'));
+  assert.equal(stored.form.id, 'dial-6');
+  assert.deepEqual(stored.form.stationRange, [2, 6]);
+  const reloaded = readStoredMachineDesign(root, result.data.machineId);
+  assert.ok(reloaded);
+  assert.equal(reloaded.form.id, 'dial-6');
+  assert.deepEqual(reloaded.form.stationRange, [2, 6]);
+  assert.equal(reloaded.form.defaultStations, 6);
 });
 
 test('apply 的 design 入参保留 form 并传给几何', async () => {

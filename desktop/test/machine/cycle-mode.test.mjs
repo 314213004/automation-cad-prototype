@@ -49,30 +49,31 @@ test('layout 推断：单工位但写明流水线 → linear', () => {
   assert.equal(parseMachineBrief('一工位检测流水线，20 件/分钟').layout, 'linear');
 });
 
-test('layout 兜底：工艺未知且多工位 → parallel + 可显式指定 layout 的 warning', () => {
+test('layout 兜底：工艺未知且多工位 → 工位覆盖形态 + 可显式指定 layout 的 warning', () => {
   const design = synthMachine(parseMachineBrief('三工位，20 件/分钟'));
-  assert.equal(design.cycle.mode, 'parallel');
+  assert.equal(design.form.id, 'dial-6');
+  assert.equal(design.cycle.mode, 'dial');
   assert.ok(design.warnings.some((warning) => /未识别布局/.test(warning)));
   assert.ok(design.warnings.some((warning) => /显式指定 layout/.test(warning)));
-  assert.ok(design.assumptions.some((line) => /按同工序并行估算/.test(line)));
+  assert.ok(design.assumptions.some((line) => /布局按转盘分度估算/.test(line)));
 });
 
-test('parallel 公式：3.18 秒/件 × 6 工位 ≈ 113 件/分钟', () => {
+test('dial 公式：3.18 秒/件 + 0.6 秒分度 → 15.87 件/分钟', () => {
   const design = synthMachine(parseMachineBrief(SIX_STATION));
-  assert.equal(design.cycle.mode, 'parallel');
+  assert.equal(design.form.id, 'dial-6');
+  assert.equal(design.cycle.mode, 'dial');
   assert.equal(design.cycle.stationSeconds, 3.18);
-  assert.equal(design.cycle.throughputPerMin, 113.21);
-  assert.ok(Math.abs(design.cycle.throughputPerMin - (6 / 3.18) * 60) < 0.01);
-  assert.ok(design.assumptions.some((line) => line.includes('按同工序并行估算')));
+  assert.equal(design.cycle.throughputPerMin, 15.87);
+  assert.ok(Math.abs(design.cycle.throughputPerMin - 60 / (3.18 + 0.6)) < 0.01);
+  assert.ok(design.assumptions.some((line) => line.includes('布局按转盘分度估算')));
 });
 
-test('parallel 目标 20 件/分钟达标，瓶颈文案给出工位并行关系', () => {
+test('dial 目标 20 件/分钟不达标，瓶颈文案给出分度与缺口', () => {
   const design = synthMachine(parseMachineBrief(SIX_STATION));
-  assert.equal(design.cycle.meetsTarget, true);
-  assert.match(design.cycle.bottleneck, /单工位 3\.18 秒\/件/);
-  assert.match(design.cycle.bottleneck, /6 工位并行/);
-  assert.match(design.cycle.bottleneck, /113\.21 件\/分钟/);
-  assert.doesNotMatch(design.cycle.bottleneck, /最慢工序/);
+  assert.equal(design.cycle.meetsTarget, false);
+  assert.match(design.cycle.bottleneck, /最慢工位1 单件 3\.18 秒/);
+  assert.match(design.cycle.bottleneck, /含分度 0\.60 秒/);
+  assert.match(design.cycle.bottleneck, /15\.87 件\/分钟/);
 });
 
 test('parallel 单工位 3.18 秒/件 → 18.87 件/分钟，不达标', () => {
@@ -144,14 +145,15 @@ test('显式 layout=line 覆盖解析器的 parallel 推断', () => {
   assert.equal(design.cycle.throughputPerMin, 24.19);
 });
 
-test('案例 json：mode=parallel、throughput≈113、meetsTarget=true', () => {
+test('案例 json：mode=dial、throughput≈16、meetsTarget=false', () => {
   const stored = JSON.parse(readFileSync(caseFile, 'utf8'));
-  assert.equal(stored.design.cycle.mode, 'parallel');
+  assert.equal(stored.design.form.id, 'dial-6');
+  assert.equal(stored.design.cycle.mode, 'dial');
   assert.equal(stored.design.cycle.stationSeconds, 3.18);
-  assert.equal(stored.design.cycle.throughputPerMin, 113.21);
-  assert.equal(stored.design.cycle.meetsTarget, true);
-  assert.equal(stored.cycleAnalysis.mode, 'parallel');
-  assert.equal(stored.cycleAnalysis.throughputPerMin, 113.21);
-  assert.equal(stored.cycleAnalysis.meetsTarget, true);
+  assert.equal(stored.design.cycle.throughputPerMin, 15.87);
+  assert.equal(stored.design.cycle.meetsTarget, false);
+  assert.equal(stored.cycleAnalysis.mode, 'dial');
+  assert.equal(stored.cycleAnalysis.throughputPerMin, 15.87);
+  assert.equal(stored.cycleAnalysis.meetsTarget, false);
   assert.equal(stored.parsed.layout, 'parallel');
 });

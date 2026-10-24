@@ -79,6 +79,7 @@ const caseData = {
     points: design.points,
     cycle: design.cycle,
     power: design.power,
+    form: design.form,
     warnings: design.warnings,
     assumptions: design.assumptions,
     bomDraft: design.bomDraft
@@ -129,5 +130,6 @@ mkdirSync(dirname(outFile), { recursive: true });
 writeFileSync(outFile, `${JSON.stringify(caseData, null, 2)}\n`, 'utf8');
 console.log(`MACHINE_CASE_OK ${outFile}`);
 console.log(`stations=${design.config.stations.length} actuators=${design.config.actuators.length} sensors=${design.config.sensors.length} points=${ioMap.rows.length}`);
+console.log(`form=${design.form.id} range=${design.form.stationRange.join('-')} default=${design.form.defaultStations}`);
 console.log(`cycle mode=${design.cycle.mode} station=${design.cycle.stationSeconds}s throughput=${design.cycle.throughputPerMin}/min meetsTarget=${design.cycle.meetsTarget} requiredStations=${design.cycle.requiredTotalStations}`);
 console.log(`bomRows=${mapping.items.length} realParts=${caseData.bom.realPartCount} pending=${caseData.bom.pendingCount}`);

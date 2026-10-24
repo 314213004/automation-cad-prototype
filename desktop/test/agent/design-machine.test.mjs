@@ -62,7 +62,10 @@ test('design_machine 返回 config/cycle/power/bomDraft/warnings/assumptions 与
   assert.equal(result.design.cycle.secondsPerPiece, 3);
   assert.ok(result.design.power.va > 0);
   assert.ok(result.design.bomDraft.items.length > 0);
-  assert.equal(result.design.warnings.length, 0);
+  assert.ok(result.design.warnings.some((warning) => /节拍瓶颈/.test(warning)));
+  assert.equal(result.design.form.id, 'dial-6');
+  assert.deepEqual(result.design.form.stationRange, [2, 6]);
+  assert.equal(result.design.form.defaultStations, 6);
   assert.ok(result.design.assumptions.length >= 3);
   assert.ok(result.summary.length <= 600);
   assert.match(result.summary, /3/);
