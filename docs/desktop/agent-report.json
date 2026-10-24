@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-23T23:09:32.953Z",
+  "generatedAt": "2026-10-24T02:32:33.175Z",
   "generator": "desktop/scripts/agent-report.mjs",
   "sources": {
     "live": {
@@ -20,7 +20,7 @@
     "offline": {
       "file": "docs/desktop/eval/latest.json",
       "status": "ok",
-      "generatedAt": "2026-10-23T23:04:14.973Z",
+      "generatedAt": "2026-10-24T02:15:02.558Z",
       "version": "0.3.0",
       "mode": "offline-rules"
     },
@@ -32,7 +32,7 @@
     "backlog": {
       "file": "docs/desktop/BACKLOG.md",
       "status": "ok",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     },
     "tools": {
       "file": "desktop/src/agent/tools.ts",
@@ -46,16 +46,16 @@
     "toolCount": {
       "value": 21,
       "source": "docs/desktop/eval/latest.json#dataset.toolCoverage",
-      "generatedAt": "2026-10-23T23:04:14.973Z",
+      "generatedAt": "2026-10-24T02:15:02.558Z",
       "missing": false
     },
     "testCount": {
-      "value": 1247,
+      "value": 1270,
       "source": "desktop/test/**/*.test.*（`node --test` 实测）",
-      "generatedAt": "2026-10-23T23:09:03.542Z",
+      "generatedAt": "2026-10-24T02:32:00.603Z",
       "missing": false
     },
-    "testPassed": false,
+    "testPassed": true,
     "singleTurn": {
       "total": {
         "value": 36,
@@ -170,95 +170,95 @@
     },
     "offline": {
       "total": {
-        "value": 75,
+        "value": 102,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-23T23:04:14.973Z",
+        "generatedAt": "2026-10-24T02:15:02.558Z",
         "missing": false
       },
       "passed": {
         "value": 1,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-23T23:04:14.973Z",
+        "generatedAt": "2026-10-24T02:15:02.558Z",
         "missing": false
       },
       "metrics": {
         "intent": {
           "correct": {
-            "value": 75,
+            "value": 102,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "total": {
-            "value": 75,
+            "value": 102,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           }
         },
         "tools": {
           "correct": {
-            "value": 75,
+            "value": 102,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "total": {
-            "value": 75,
+            "value": 102,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           }
         },
         "params": {
           "correct": {
-            "value": 40,
+            "value": 53,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "total": {
-            "value": 40,
+            "value": 53,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           }
         },
         "refused": {
           "correct": {
-            "value": 5,
+            "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "total": {
-            "value": 5,
+            "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           }
         },
@@ -266,19 +266,19 @@
           "correct": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "total": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-23T23:04:14.973Z",
+            "generatedAt": "2026-10-24T02:15:02.558Z",
             "missing": false
           }
         }
@@ -828,37 +828,37 @@
     {
       "text": "BOM 需手工导入 JSON（或上层注入 `__CostBomProvider`），未做 CAD 零件名 → 元器件物料号映射；Agent 工具未传 `bom` 时用场景简化 BOM，零件无物料号 → 全部计入缺价（不按 0 计价）；面板 CSV 仍走系统保存对话框，Agent 导出固定写 `userData/exports/` 且不弹框",
       "section": "P6 机台硬件成本自动统计",
-      "line": 66,
+      "line": 74,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     },
     {
       "text": "**3D 联动原为写死 5 零件**：已由 P3 通用化改造解决；STEP 不含运动学，任意装配体仍需标注层。36-auto-kinematics 起可按名称/型号/层级/几何自动给出标注**建议**（需逐条确认），但识别是启发式：命名不规范或几何不典型的机构仍需人工标注，斜向运动只能取最近主轴，夹爪对侧手指、缩回位与无型号行程仍需人工确认。 迭代 34 起机型方案的 3D 改为参数化整机几何，但仍是标准件外形，不是结构设计。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 180,
+      "line": 188,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     },
     {
       "text": "**真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 187,
+      "line": 195,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     },
     {
-      "text": "**离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。",
+      "text": "**离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。 **2026-10-24 更新（feat/agent-audit-router）**：① 审计已按大小轮转 + 保留期清理（默认 5 MB × 5 份 × 90 天，可配置），面板/报告读全部保留份数；被保留期删除的份数不可恢复，CSV 仍只导出面板当前列表（≤200 条）。② 路由已系统补同义/口语词并加非工程话题拦截（评估集 102 条）；仍是关键词规则：未收录的说法照旧判超纲，「撞」「会动」「规划」等单字/泛词可能把边缘句子拉进工程意图，非工程话题表是有限枚举。回执 token 用量问题未变。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 188,
+      "line": 196,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     },
     {
-      "text": "**多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。",
+      "text": "**多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（Fri 2026-10-23 8:28 PM CST (UTC+08:00)）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。 **2026-10-24 更新**：上述描述已过时——仓库内 `agent-multiturn.json` 已是修复后的真实模型结果（`cn:deepseek-v4.1-flash`，生成于 Fri 2026-10-23 10:08 PM CST (UTC+08:00)，6/6 场景、15/15 轮，MT04 通过），Agent 报告按此展示。本轮补了 `test/agent/multiturn-mt04.test.mjs` 会话层确定性回归（fake LLM 回放 MT04：原样重试与 `partId` 写法重试都被短路、不弹确认）。本机无 `AGENT_LIVE_BASE_URL/API_KEY/MODEL`，**真实模型重跑待有 key 时执行**（换模型/换措辞仍需重跑，单模型单次结果不是通用结论）。遗留边界：拒绝记忆按「工具 + 目标」匹配，模型若在「继续」后改用别的写工具动同一目标（如 `remove_component QF1`）仍会走确认框，真实评测会算违规。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 189,
+      "line": 197,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-23T23:08:55.749Z"
+      "generatedAt": "2026-10-24T02:31:53.240Z"
     }
   ],
   "audit": {

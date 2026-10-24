@@ -4,6 +4,13 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
+**本迭代 · Agent 打磨：审计轮转 + 路由同义词 + MT04 离线回归（feat/agent-audit-router，2026-10-24）**（为不改 `kb.json` 标题 hash 暂不加二级标题，集成重建 KB 时可升为 `##` 节）
+
+- 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` 全绿（+22：路由同义词 7、审计轮转 11、MT04 4）、`build:ext`、smoke `SMOKE_OK`（新增 `SMOKE_AGENT_AUDIT_ROTATED_OK rows=3 files=2`）、`npm run eval:agent` **102/102**（+27 条 `sy01`–`sy27`，各指标 1.00）、`npm run agent:report` 已更新；未打包、未触发 CI、未发版、未 push。
+- 审计（已知问题 9）：新增 `src/agent/audit-store.ts`，按大小轮转 `agent-audit.N.jsonl` + 保留期整份清理，默认 5 MB × 5 份 × 90 天，`userData/agent-audit-retention.json` 可调；面板/`agent:audit:read` 与 Agent 报告读取全部保留份数，脱敏与坏行跳过不变；轮转失败只回调、继续写入。
+- 路由（已知问题 9）：查询/计算/修改/生成与各工具触发补同义/口语词（意图关键词与工具正则同步），新增非工程话题拦截 `isOffDomainTopic`；轮转后的审计文件名与新增同义写动词同样触发审计篡改/危险路径拒绝。
+- MT04（已知问题 10）：本机无 `AGENT_LIVE_*` 环境变量、无 userData 模型配置，**未跑真实模型、未改 `agent-multiturn.json`**（现有 JSON 已是修复后 6/6，问题 10 原描述已过时并已标注）；只补会话层确定性单测证明拒绝记忆生效。
+
 ## 知识库容量治理 + Agent 工具 `suggest_kinematics`（integ/3d-all，2026-10-24，本轮）
 
 - 状态：✅ `tsc` 干净、`TZ=Asia/Shanghai npm test` **1248/1248**（+10：工具 9 + KB 余量守卫 1；+1：STEP 旧分块清理与近似件透出）、`build:ext`、smoke 全绿（新增 `SMOKE_AGENT_KINEMATICS_OK high=4 low=1 written=0`）、`npm run eval:agent` 75/75；未打包、未触发 CI、未发版。
@@ -186,8 +193,8 @@
 6. **数据准确性**：元器件参数为公开样本汇总，定型前以铭牌/最新样本为准（manifest 已声明）。
 7. **前端原型限制**：原型自身 3D 仍为固定等轴测投影（插入与撤销已真实化）。**桌面版已缓解（35-orbit-view）**：有 WebGL 时主视口为可旋转 three.js，缸径/行程与桌面版尺寸/位置编辑沿叠放链重建几何；仍未解决：几何为参数化示意体（非 B-rep、无配合求解、缸径为原型示意比例），桌面版几何参数不进撤销栈/不持久化，WebGL 模式无框选多选，无 WebGL 时回到固定等轴测。
 8. **真实模型拒绝/澄清类**：已从 4/6 修到 6/6（判定语义修正 + 两条系统提示）；但仍是单模型单轮结果，换模型或换措辞需重跑 `npm run agent:live`，不要把 30/30 当成通用结论。
-9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。
-10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（2026-10-23T12:28:04Z）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。
+9. **离线意图路由是关键词规则**：同义表达未收录会判「超纲」；审计文件只追加、未做轮转与保留期清理；审计面板最多显示最近 200 条（可筛选/导出），回执不含 token 用量（网关未回传 usage）。 **2026-10-24 更新（feat/agent-audit-router）**：① 审计已按大小轮转 + 保留期清理（默认 5 MB × 5 份 × 90 天，可配置），面板/报告读全部保留份数；被保留期删除的份数不可恢复，CSV 仍只导出面板当前列表（≤200 条）。② 路由已系统补同义/口语词并加非工程话题拦截（评估集 102 条）；仍是关键词规则：未收录的说法照旧判超纲，「撞」「会动」「规划」等单字/泛词可能把边缘句子拉进工程意图，非工程话题表是有限枚举。回执 token 用量问题未变。
+10. **多轮评测证据仍是 5/6**：`docs/desktop/eval/agent-multiturn.json`（Fri 2026-10-23 8:28 PM CST (UTC+08:00)）中 MT04「拒绝后自动重试」两轮未过；会话层拒绝记忆已修复，但尚未有新的真实模型多轮 JSON，报告按现有证据展示，重跑 `npm run eval:agent:multiturn` 后再更新。 **2026-10-24 更新**：上述描述已过时——仓库内 `agent-multiturn.json` 已是修复后的真实模型结果（`cn:deepseek-v4.1-flash`，生成于 Fri 2026-10-23 10:08 PM CST (UTC+08:00)，6/6 场景、15/15 轮，MT04 通过），Agent 报告按此展示。本轮补了 `test/agent/multiturn-mt04.test.mjs` 会话层确定性回归（fake LLM 回放 MT04：原样重试与 `partId` 写法重试都被短路、不弹确认）。本机无 `AGENT_LIVE_BASE_URL/API_KEY/MODEL`，**真实模型重跑待有 key 时执行**（换模型/换措辞仍需重跑，单模型单次结果不是通用结论）。遗留边界：拒绝记忆按「工具 + 目标」匹配，模型若在「继续」后改用别的写工具动同一目标（如 `remove_component QF1`）仍会走确认框，真实评测会算违规。
 11. **两条成本导出单测依赖本地时区**：`test/cost-export.test.ts` 的文件名断言按 Asia/Shanghai 本地时间（`…-20261023-1200`）；在 UTC 环境（如本轮沙箱）直接 `npm test` 会 1130/1132，需 `TZ=Asia/Shanghai npm test`。35-orbit-view 未改这两条断言，只记录。
 12. **安全光栅型号缺失（待补录）**：`smc-cn` / `iec-cn` 均无安全光栅型号，六工位案例的 BOM 只能标「待选型」；需补录真实安全光栅型号、分辨率/保护高度/安全等级与安全继电器匹配参数，完成后再更新 `machine-case.json` 与 MACHINE-DESIGN-DEMO.md。
 

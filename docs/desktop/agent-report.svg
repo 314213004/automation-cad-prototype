@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1120" height="650" viewBox="0 0 1120 650" role="img" aria-labelledby="title desc">
   <title id="title">Agent 能力报告</title>
-  <desc id="desc">工具 21，测试 1,247，单轮 36/36，多轮 6/6</desc>
+  <desc id="desc">工具 21，测试 1,270，单轮 36/36，多轮 6/6</desc>
   <style>
     text { font-family: "Noto Sans CJK SC", "Microsoft YaHei", "PingFang SC", "Source Han Sans SC", sans-serif; }
     .mono { font-family: "JetBrains Mono", "Cascadia Code", "Consolas", monospace; }
   </style>
   <rect width="1120" height="650" fill="#0b1220"/>
   <text x="40" y="58" fill="#f2f7ff" font-size="30" font-weight="700">Agent 能力报告</text>
-  <text x="40" y="88" fill="#8fa3bf" font-size="15">真实模型单轮 36 条 · 多轮 6 个场景 · 离线规则 75 条 · 模型 deepseek-v4.1-flash</text>
+  <text x="40" y="88" fill="#8fa3bf" font-size="15">真实模型单轮 36 条 · 多轮 6 个场景 · 离线规则 102 条 · 模型 deepseek-v4.1-flash</text>
 
   <g>
     <rect x="40" y="120" width="244" height="112" rx="14" fill="#111c2e" stroke="#22314a"/>
@@ -21,7 +21,7 @@
     <rect x="306" y="120" width="244" height="112" rx="14" fill="#111c2e" stroke="#22314a"/>
     <rect x="306" y="120" width="5" height="112" rx="2.5" fill="#a78bfa"/>
     <text x="328" y="152" fill="#8fa3bf" font-size="15">测试数</text>
-    <text x="328" y="191" fill="#f2f7ff" font-size="32" font-weight="700">1,247</text>
+    <text x="328" y="191" fill="#f2f7ff" font-size="32" font-weight="700">1,270</text>
     <text x="328" y="215" fill="#7f93ad" font-size="13">npm test</text>
   </g>
   <g>
@@ -88,5 +88,5 @@
   </g>
   <line x1="40" y1="586" x2="1080" y2="586" stroke="#22314a"/>
   <text x="40" y="614" fill="#7086a3" font-size="12">来源：docs/desktop/eval/agent-live.json · agent-multiturn.json · latest.json</text>
-  <text x="40" y="635" fill="#7086a3" font-size="12">缺失：/home/sandbox/.config/AutomationCAD/agent-audit.jsonl · 生成：2026-10-23T23:09:32.953Z</text>
+  <text x="40" y="635" fill="#7086a3" font-size="12">缺失：/home/sandbox/.config/AutomationCAD/agent-audit.jsonl · 生成：2026-10-24T02:32:33.175Z</text>
 </svg>

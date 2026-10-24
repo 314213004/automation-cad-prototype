@@ -34,6 +34,7 @@ tools.ts（AgentTools + 21 个 AgentTool；含只读 `suggest_kinematics`；含�
  │    ├─ memory.ts  → 最近 5 次工具调用摘要（仅内存）
  │    ├─ trim.ts    → 列表 20 条 / 文本 2 KB / 单结果 10 KB 裁剪
  │    ├─ audit.ts   → 每次工具调用一行 NDJSON（凭据脱敏 + 耗时）
+ │    ├─ audit-store.ts → 审计落盘：按大小轮转 agent-audit.N.jsonl + 保留期清理 + 跨份读取（仅主进程）
  │    ├─ audit-view.ts → 审计筛选 / 时间倒序 / 200 条上限 / CSV
  │    ├─ feedback.ts → 进度事件 / 参数摘要 / 耗时 / 取消文案
  │    ├─ suggest.ts → 失败建议纯函数（六类错误码 + 未知码回落）
@@ -160,13 +161,27 @@ maskSecrets(text): string                 // sk- / Bearer / token= / X-Design-Ke
 redactValue(value): unknown               // 按字段名脱敏，数组截 20 项，深度 4
 parseAuditLines(text): AgentAuditEntry[]  // 坏行跳过
 summarizeAudit(entries): { total, failed, tools, lastAt }
+
+// audit-store.ts（唯一碰文件系统的审计层，只在主进程用）
+DEFAULT_AUDIT_RETENTION = { maxBytes: 5 MB, maxFiles: 5, retentionDays: 90 }
+loadAuditRetention(userDataDir)           // 读 userData/agent-audit-retention.json，缺失/损坏回落默认
+normalizeAuditRetention(partial)          // 非法值回落默认；maxBytes ≥ 64 KB、maxFiles 1–50、retentionDays 0–3650（0 = 不按时间清理）
+createAuditFileWriter(file, { retention?, now?, onError? }): (line) => void  // 写前超限先轮转，创建时先清理
+rotateAuditFile / pruneAuditFiles / listRotatedIndexes / rotatedAuditPath
+readAuditEntries(file, retention?): { entries, files }  // 最旧轮转 → 当前，坏行跳过
 ```
 
 - 意图规则：`query / compute / modify / generate / commission / sync`，全 0 命中判 `out_of_scope`；同分按 `modify > generate > sync > commission > compute > query`，保证「搜索并插入」不会被当成只读查询。
 - `planTool` 先判写（导出成本报告、插入、撤销、导入），再按 `干涉 → 电气校验 → 成本 → BOM → 元件` 的具体到泛顺序；类别同义词（空开→断路器、热继→热继电器…）按长度倒序匹配，避免「继电器」吃掉「热继电器」。
+- 同义/口语覆盖（迭代：审计轮转 + 路由同义词）：查询「有啥/有没有/看下/检索/罗列/调出/物料明细/用料清单」、计算「花多少/造价/价钱/核算/撞到/打架/线径/三相平衡/校核/哪些零件会动/可动件」、修改「新增/加装/去掉/拿掉/删了/撤回/回退/载入/加载/换为/调成/设为」、生成「输出/另存为/存成/做个…报价单/编一个 PLC 程序」、PLC「仿真/空跑/试运行」、机型「规划/搞一台」、文档「咋放/咋用/怎样用」。新增词同时落在意图关键词与对应工具触发正则上，两层保持一致。
+- 非工程话题拦截：`isOffDomainTopic()` 对天气/电影/新闻/机票/外卖/股票/房贷/写作等话题直接判 `out_of_scope`（句子里同时有机台/元件/BOM/PLC 等工程锚词时不拦），防止扩充的口语动词把闲聊拉进查询/计算。
+- 抽词顺序：`STOPWORDS` 中「库里/库中」先于「里」，`QUERY_VERBS` 中「检查一下/检查」先于「查一下」，避免残留单字进搜索词；「检查一下」计入计算意图，「检查一下有没有零件打架」不再被「查一下」抢成查询。
+- 拒绝不回退：`FORBIDDEN_TARGET` 与 `guard.ts` 的 `dangerous_path` 改为匹配 `agent-audit(.N).jsonl`；`AUDIT_TAMPER` 动词补「去掉/拿掉/抹/擦除/移除/隐藏/撤销/撤回/回退/remove」，同义写动词不能绕过审计保护。
 - 离线降级：`session.run()` 里 `llm.chat()` 抛错才触发 `runOffline()`；只执行 `planReadOnly`，写计划直接抛回原错误，由 UI 提示需要联网。
 - 上下文：`buildAgentContext` 超限时按「删工具描述 → 逐个删工具 → 删最近操作 → 硬截断」降级，`truncated/droppedTools/droppedRecent` 如实回报。
-- 审计：`session` 每次工具调用（含 `USER_DENIED`/参数非法/离线）回调 `audit`；`ipc.ts` 写 `userData/agent-audit.jsonl` 并暴露 `agent:audit:read`（最近 50 条 + 汇总）。写失败只回调 `onError`，不影响对话。
+- 审计：`session` 每次工具调用（含 `USER_DENIED`/参数非法/离线）回调 `audit`；`ipc.ts` 经 `createAuditFileWriter` 写 `userData/agent-audit.jsonl`，并暴露 `agent:audit:read`（最近 200 条 + 汇总）。写失败只回调 `onError`，不影响对话。
+- 轮转与保留期：当前文件「大小 + 本行」超过 `maxBytes`（默认 5 MB）即轮转为 `agent-audit.1.jsonl`（旧的顺延为 .2…，超出 `maxFiles` 默认 5 份删除）；轮转只发生在行边界。保留期按文件 mtime（= 该份最后一条的写入时间）整份删除，默认 90 天，写入器创建时与每次轮转后各清理一次；编号大于 `maxFiles` 的残留一并清理。轮转/清理失败只回调 `onError` 并继续追加到当前文件（宁可超限也不丢审计）。参数可在 `userData/agent-audit-retention.json` 写 `{maxBytes,maxFiles,retentionDays}`。
+- 读取：`agent:audit:read` 用 `readAuditEntries` 按「最旧轮转 → 当前」拼接全部保留份数，`total/summary` 覆盖全部份数，列表仍只回最近 200 条（`dropped` 如实回报）；CSV 导出的是面板当前列表（筛选后、≤200 条）。`npm run agent:report` 同样连同轮转份数统计。脱敏在写入前完成，轮转不改写内容；坏行沿用 `parseAuditLines` 跳过。
 
 ## 上下文快照 / 指代 / 记忆 / 结果裁剪（P7-E）
 
