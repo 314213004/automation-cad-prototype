@@ -2893,7 +2893,14 @@
       "额定电压": "800 V",
       "连接方式": "螺钉",
       "安装": "35 mm 导轨"
-    }
+    },
+    "dims": {
+      "w": 8.2,
+      "h": 42.5,
+      "d": 47,
+      "source": "菲尼克斯 UK 6 N（3004524）产品数据 官方（Width 8.2 / Height 42.5 / Depth on NS 35/7,5 47）：https://www.phoenixcontact.com/en-us/products/feed-through-terminal-block-uk-6-n-3004524"
+    },
+    "railMount": true
   },
   {
     "id": "ST-2.5",
@@ -3326,7 +3333,14 @@
       "输出电流": "10 A",
       "输入": "85–264 V AC",
       "安装": "35 mm 导轨"
-    }
+    },
+    "dims": {
+      "w": 144,
+      "h": 121,
+      "d": 118.6,
+      "source": "台达 DRP048V480W1BA 数据表 官方（H121×W144×D118.6）：https://psu.deltaww.com/en/products/download/Datasheet/DRP048V480W1BA"
+    },
+    "railMount": true
   },
   {
     "id": "PYF08A-E",
@@ -3579,6 +3593,12 @@
       "额定功率": "7.5 kW（AC-23，400 V）",
       "操作": "旋钮 前面安装",
       "类型": "主开关/隔离开关"
+    },
+    "dims": {
+      "w": 67,
+      "h": 84,
+      "d": 92.5,
+      "source": "西门子 3LD2003-0TK51 数据表 官方（width 67 / height 84 / depth 92.5）：https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=3LD2003-0TK51"
     }
   },
   {
@@ -5011,6 +5031,12 @@
       "编码器": "绝对值（1FL6 电机，分辨率视电机型号）",
       "控制": "位置/速度/转矩",
       "数据来源": "厂商官网/数据表"
+    },
+    "dims": {
+      "w": 55,
+      "h": 170,
+      "d": 170,
+      "source": "西门子 SINAMICS V90 6SL3210-5FB10-4UF1 数据表 官方（FSB，W55×H170×D170）：https://mall.industry.siemens.com/spice/docuservice/rest/document.spring?articleNumber=6SL32105FB104UF1&language=en&region=ww&documentGroup=TED&documentId=DCS_DATASHEET_PMD_CLEANED"
     }
   },
   {
@@ -5470,6 +5496,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "M12 4 芯接插件"
+    },
+    "dims": {
+      "w": 30,
+      "h": 71,
+      "d": 30,
+      "source": "西克 IME30-10BPSZC0S 数据表 官方（Ø30，Housing length 71）：https://www.sick.com/media/pdf/5/15/615/dataSheet_IME30-10BPSZC0S_1040998_en.pdf"
     }
   },
   {
@@ -5525,6 +5557,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 30,
+      "h": 64,
+      "d": 30,
+      "source": "图尔克 BI10-M30-AP6X 数据表 ID 46170 官方（M30×1.5，Dimensions 64 mm）：https://www.turck.us/datasheet/_us/edb_46170_eng_us.pdf"
     }
   },
   {
@@ -5540,6 +5578,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 12,
+      "h": 53,
+      "d": 12,
+      "source": "倍加福 NBB2-12GM50-E2 产品页 官方（Length 53 / Diameter 12）：https://www.pepperl-fuchs.com/en/products-gp25581/98931"
     }
   },
   {
@@ -5555,6 +5599,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 18,
+      "h": 56,
+      "d": 18,
+      "source": "倍加福 NBB5-18GM50-E2 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99190"
     }
   },
   {
@@ -5570,6 +5620,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 18,
+      "h": 56,
+      "d": 18,
+      "source": "倍加福 NBB5-18GM50-E0 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99191"
     }
   },
   {
@@ -5585,6 +5641,12 @@
       "电源": "10–30 V DC",
       "防护": "IP67",
       "连接": "2 m 电缆"
+    },
+    "dims": {
+      "w": 30,
+      "h": 60,
+      "d": 30,
+      "source": "倍加福 NBB10-30GM50-E2 产品页 官方（Length 60 / Diameter 30）：https://www.pepperl-fuchs.com/en/products-gp25581/99278"
     }
   },
   {
@@ -6016,6 +6078,12 @@
       "电源": "10–30 V DC",
       "外形": "M18×1",
       "连接": "M12 接插件"
+    },
+    "dims": {
+      "w": 18,
+      "h": 85,
+      "d": 18,
+      "source": "倍加福 UB500-18GM75-E5-V15 数据表 133053 官方（Length 85 / Diameter 18）：https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/133053_eng.pdf"
     }
   },
   {
@@ -6396,7 +6464,15 @@
       "检测距离": "0.3–10 m",
       "输出": "PNP/NPN（OSSD 2 路）",
       "电源": "24 V DC",
-      "安全等级": "Type 4 / PL e"
+      "安全等级": "Type 4 / PL e",
+      "响应时间": "ON→OFF 8 ms（光学同步）/ 10 ms（有线同步）",
+      "数据来源": "https://assets.omron.eu/downloads/latest/datasheet/en/f105_f3sg-sr_pg_datasheet_en.pdf ; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": {
+      "w": 32,
+      "h": 400,
+      "d": 38,
+      "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38，C=保护高度）"
     }
   },
   {
@@ -6426,7 +6502,15 @@
       "保护高度": "450 mm",
       "检测距离": "10 m",
       "电源": "24 V DC",
-      "配套": "C4C-EA04510A10000 接收器"
+      "配套": "C4C-EA04510A10000 接收器",
+      "响应时间": "12 ms",
+      "数据来源": "https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 463,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
     }
   },
   {
@@ -6441,7 +6525,231 @@
       "检测距离": "10 m",
       "输出": "OSSD",
       "电源": "24 V DC",
-      "配套": "C4C-SA04510A10000 发送器"
+      "配套": "C4C-SA04510A10000 发送器",
+      "响应时间": "12 ms",
+      "数据来源": "https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 463,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
+    }
+  },
+  {
+    "id": "F3SG-4SRA0640-14",
+    "model": "F3SG-4SRA0640-14",
+    "category": "安全件",
+    "vendor": "欧姆龙",
+    "specs": {
+      "类型": "安全光幕（Type 4，发射器+接收器一套）",
+      "分辨率": "14 mm（手指保护，光轴间距 10 mm）",
+      "光轴数": "63",
+      "保护高度": "640 mm",
+      "检测距离": "0.3–10 m（长距离模式）/ 0.3–3 m（短距离模式）",
+      "响应时间": "ON→OFF 13 ms（光学同步）/ 17 ms（有线同步）",
+      "安全等级": "Type 4 / PL e / Cat.4",
+      "输出": "OSSD 2 路晶体管，PNP/NPN 可选，最大 300 mA",
+      "电源": "24 V DC ±20%",
+      "消耗电流": "发射器 106 mA / 接收器 139 mA",
+      "防护": "IP65/IP67",
+      "数据来源": "https://assets.omron.eu/downloads/latest/datasheet/en/f105_f3sg-sr_pg_datasheet_en.pdf ; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": {
+      "w": 32,
+      "h": 640,
+      "d": 38,
+      "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38，C=保护高度）"
+    }
+  },
+  {
+    "id": "F3SG-4SRA0960-25",
+    "model": "F3SG-4SRA0960-25",
+    "category": "安全件",
+    "vendor": "欧姆龙",
+    "specs": {
+      "类型": "安全光幕（Type 4，发射器+接收器一套）",
+      "分辨率": "25 mm（手掌保护，光轴间距 20 mm）",
+      "光轴数": "48",
+      "保护高度": "960 mm",
+      "检测距离": "0.3–20 m（长距离模式）/ 0.3–7 m（短距离模式）",
+      "响应时间": "ON→OFF 13 ms（光学同步）/ 17 ms（有线同步）",
+      "安全等级": "Type 4 / PL e / Cat.4",
+      "输出": "OSSD 2 路晶体管，PNP/NPN 可选，最大 300 mA",
+      "电源": "24 V DC ±20%",
+      "消耗电流": "发射器 117 mA / 接收器 151 mA",
+      "防护": "IP65/IP67",
+      "数据来源": "https://assets.omron.eu/downloads/latest/datasheet/en/f105_f3sg-sr_pg_datasheet_en.pdf ; https://www.ia.omron.com/products/family/3736/specification.html"
+    },
+    "dims": {
+      "w": 32,
+      "h": 960,
+      "d": 38,
+      "source": "欧姆龙 F3SG-SR/PG 样本 F105 p.71 外形图 官方（单支 32×C×38，C=保护高度）"
+    }
+  },
+  {
+    "id": "C4C-SA06010A10000",
+    "model": "C4C-SA06010A10000",
+    "category": "安全件",
+    "vendor": "西克",
+    "specs": {
+      "类型": "安全光幕发送器（deTec4 Core）",
+      "分辨率": "14 mm（手指保护）",
+      "保护高度": "600 mm",
+      "检测距离": "10 m",
+      "响应时间": "13 ms",
+      "安全等级": "Type 4 / SIL 3 / PL e / Cat.4",
+      "电源": "24 V DC（19.2–28.8 V）",
+      "典型功耗": "1.20 W",
+      "连接": "M12 5 针插头（150 mm 引线）",
+      "防护": "IP65/IP67",
+      "配套": "C4C-EA06010A10000 接收器",
+      "订货号": "1211471",
+      "数据来源": "https://www.sick.com/media/pdf/9/99/199/dataSheet_C4C-PA06010A10000_p308199_en.pdf ; https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 613,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
+    }
+  },
+  {
+    "id": "C4C-EA06010A10000",
+    "model": "C4C-EA06010A10000",
+    "category": "安全件",
+    "vendor": "西克",
+    "specs": {
+      "类型": "安全光幕接收器（deTec4 Core）",
+      "分辨率": "14 mm（手指保护）",
+      "保护高度": "600 mm",
+      "检测距离": "10 m",
+      "响应时间": "13 ms",
+      "安全等级": "Type 4 / SIL 3 / PL e / Cat.4",
+      "输出": "OSSD 2 路 PNP，每路 ≤300 mA，短路/交叉短路监控",
+      "电源": "24 V DC（19.2–28.8 V）",
+      "典型功耗": "2.40 W（不含 OSSD 负载）",
+      "连接": "M12 5 针插头（150 mm 引线）",
+      "防护": "IP65/IP67",
+      "配套": "C4C-SA06010A10000 发送器",
+      "订货号": "1211472",
+      "数据来源": "https://www.sick.com/media/pdf/9/99/199/dataSheet_C4C-PA06010A10000_p308199_en.pdf ; https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 613,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
+    }
+  },
+  {
+    "id": "C4C-SA09030A10000",
+    "model": "C4C-SA09030A10000",
+    "category": "安全件",
+    "vendor": "西克",
+    "specs": {
+      "类型": "安全光幕发送器（deTec4 Core）",
+      "分辨率": "30 mm（手掌保护）",
+      "保护高度": "900 mm",
+      "检测距离": "15 m",
+      "响应时间": "11 ms",
+      "安全等级": "Type 4 / SIL 3 / PL e / Cat.4",
+      "电源": "24 V DC（19.2–28.8 V）",
+      "典型功耗": "1.01 W",
+      "连接": "M12 5 针插头（150 mm 引线）",
+      "防护": "IP65/IP67",
+      "配套": "C4C-EA09030A10000 接收器",
+      "订货号": "1211498",
+      "数据来源": "https://www.sick.com/media/pdf/4/14/214/dataSheet_C4C-PA09030A10000_p308214_en.pdf ; https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 913,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
+    }
+  },
+  {
+    "id": "C4C-EA09030A10000",
+    "model": "C4C-EA09030A10000",
+    "category": "安全件",
+    "vendor": "西克",
+    "specs": {
+      "类型": "安全光幕接收器（deTec4 Core）",
+      "分辨率": "30 mm（手掌保护）",
+      "保护高度": "900 mm",
+      "检测距离": "15 m",
+      "响应时间": "11 ms",
+      "安全等级": "Type 4 / SIL 3 / PL e / Cat.4",
+      "输出": "OSSD 2 路 PNP，每路 ≤300 mA，短路/交叉短路监控",
+      "电源": "24 V DC（19.2–28.8 V）",
+      "典型功耗": "2.02 W（不含 OSSD 负载）",
+      "连接": "M12 5 针插头（150 mm 引线）",
+      "防护": "IP65/IP67",
+      "配套": "C4C-SA09030A10000 发送器",
+      "订货号": "1211516",
+      "数据来源": "https://www.sick.com/media/pdf/4/14/214/dataSheet_C4C-PA09030A10000_p308214_en.pdf ; https://www.sick.com/media/docs/1/11/011/operating_instructions_detec4_core_en_im0048011.pdf"
+    },
+    "dims": {
+      "w": 34,
+      "h": 913,
+      "d": 32.8,
+      "source": "西克 deTec4 Core 数据表 外形图 官方（单支 34×L×32.8，L 见保护高度对照表）"
+    }
+  },
+  {
+    "id": "SLSP14-600Q88",
+    "model": "SLSP14-600Q88",
+    "category": "安全件",
+    "vendor": "邦纳",
+    "specs": {
+      "类型": "安全光幕（EZ-SCREEN SLS，发射器+接收器一对）",
+      "分辨率": "14 mm（手指保护）",
+      "光轴数": "80",
+      "保护高度": "600 mm（Defined Area）",
+      "检测距离": "0.1–6 m",
+      "响应时间": "23 ms",
+      "安全等级": "Type 4 / Cat.4 PL e / SIL 3",
+      "输出": "OSSD 2 路固态 PNP，24 V DC，每路最大 0.5 A",
+      "电源": "24 V DC ±15%",
+      "消耗电流": "发射器 ≤100 mA / 接收器 ≤275 mA（不含 OSSD 负载）",
+      "连接": "8 针 M12 快插（电缆另购）",
+      "防护": "IP65",
+      "数据来源": "https://info.bannerengineering.com/cs/groups/public/documents/literature/112852.pdf ; https://www.bannerengineering.com/us/en/products/part.72382.html"
+    },
+    "dims": {
+      "w": 36,
+      "h": 671,
+      "d": 45.2,
+      "source": "邦纳 EZ-SCREEN SLS 手册 112852 §3.6.4 外形尺寸 官方（单支 36×L1×45.2）"
+    }
+  },
+  {
+    "id": "SLSP30-900Q88",
+    "model": "SLSP30-900Q88",
+    "category": "安全件",
+    "vendor": "邦纳",
+    "specs": {
+      "类型": "安全光幕（EZ-SCREEN SLS，发射器+接收器一对）",
+      "分辨率": "30 mm（手掌保护）",
+      "光轴数": "60",
+      "保护高度": "900 mm（Defined Area）",
+      "检测距离": "0.1–18 m",
+      "响应时间": "19 ms",
+      "安全等级": "Type 4 / Cat.4 PL e / SIL 3",
+      "输出": "OSSD 2 路固态 PNP，24 V DC，每路最大 0.5 A",
+      "电源": "24 V DC ±15%",
+      "消耗电流": "发射器 ≤100 mA / 接收器 ≤275 mA（不含 OSSD 负载）",
+      "连接": "8 针 M12 快插（电缆另购）",
+      "防护": "IP65",
+      "数据来源": "https://info.bannerengineering.com/cs/groups/public/documents/literature/112852.pdf"
+    },
+    "dims": {
+      "w": 36,
+      "h": 971,
+      "d": 45.2,
+      "source": "邦纳 EZ-SCREEN SLS 手册 112852 §3.6.4 外形尺寸 官方（单支 36×L1×45.2）"
     }
   },
   {

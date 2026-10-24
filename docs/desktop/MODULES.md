@@ -51,7 +51,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 | `14-enclosure.png` | 底板布置：3 个真实尺寸元件、1 处重叠红框/角标、利用率与冲突计数（1600×1000） |
 | `15-machine-design-card.png` | 机型方案卡：6 工位、12 执行机构、7 传感器、3.18 秒/件、4628 VA、2 条警告与「应用到工程」（1600×1000） |
 | `16-machine-3d.png` | 6 工位 3D 联调：12 个执行机构、7 个传感器，运行若干 tick（1600×1000，SwiftShader WebGL） |
-| `17-machine-bom.png` | BOM 面板：12 行，含 SV660P 750 W / MHZ2-20D / D-M9B / SY5120-5LZD 与安全光栅待选型（1600×1000） |
+| `17-machine-bom.png` | BOM 面板：12 行，含 SV660P 750 W / MHZ2-20D / D-M9B / SY5120-5LZD 与安全光栅行（1600×1000；截图为补录前版本，仍显示待选型，待有 GUI 时重拍） |
 | `18-machine-iomap.png` | PLC IO 面板：19 行（7 输入 + 12 输出），点位与夹爪/旋转轴/传感器对应（1600×1000） |
 
 引用约定：README 与文档一律用**相对仓库根**的路径（如 `docs/desktop/screenshots/01-home.png`），保证 GitHub 上可直接渲染；补拍或替换截图时保持同名覆盖，避免文档批量改链接。
@@ -101,7 +101,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
 - ✅ 迭代 34 机型参数化几何：纯函数 `generateMachineGeometry` 由 `MachineConfig` 生成带 mm 尺寸的整机（分度转盘 / 直线输送 / 单工位三种布局），运动件带轴向/行程/点位元数据；3D 联调改为渲染该几何并按 `MachineMotion` 驱动；`apply_machine_design` 默认落盘 geometry.json / model.stl / model.gltf / sidecar-assembly.json，`withSolids` 在 build123d 内核就绪时实体化为 STEP、否则回退 TS 网格；单测 24 条，`SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`
 - ✅ 主视口可旋转 3D（35-orbit-view）：`src/orbit/` 注入扩展替换原型装配/干涉视口的固定等轴测（原型零改动）；轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F）、树↔3D 选择同步、属性编辑（原型缸径/行程 + 桌面版尺寸/位置）沿叠放链改几何、干涉视图问题件高亮 + 剖切裁剪 + 包围盒初筛叠加；WebGL 不可用保留原型 SVG。38 条单测；`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径 `npm run check:orbit-webgl` → `ORBIT_WEBGL_OK`
-- ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；节拍目标 3.00 秒/件、估算 3.18 秒/件，如实记录未达标并给出 12 总工位建议；BOM 映射 11 行真实型号 + 1 行安全光栅待选型，电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
+- ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；节拍目标 3.00 秒/件、估算 3.18 秒/件，如实记录未达标并给出 12 总工位建议；BOM 映射 11 行真实型号 + 1 行安全光栅待选型（2026-10-24 补录安全光栅后为 12 行真实型号，安全光栅初选 F3SG-4SRA0640-14），电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
 - ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
 
 ## 参数化建模（P9）

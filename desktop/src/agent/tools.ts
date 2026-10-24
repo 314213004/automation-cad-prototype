@@ -650,6 +650,7 @@ export class AgentTools {
             if (bomMapping.pending.length > 0) {
               design.warnings.push(...bomMapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
             }
+            design.warnings.push(...bomMapping.notices);
           } catch {
             // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
           }

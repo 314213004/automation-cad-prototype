@@ -135,6 +135,52 @@ const FILL = {
   'E5CC-RX2DSM-800': { dims: { w: 48, h: 48, d: 60, source: E5CC_SOURCE } }
 };
 
+// 第二批（2026-10-24，feat/lib-safety-dims）：只收厂商官网/官方数据表上逐型号写明的外形尺寸，
+// 不做同系列推定。圆柱传感器按既有口径记 w=d=螺纹直径、h=壳体长度；导轨件 w 为沿导轨宽度。
+const FILL_BATCH2 = {
+  'NBB2-12GM50-E2': {
+    dims: { w: 12, h: 53, d: 12, source: '倍加福 NBB2-12GM50-E2 产品页 官方（Length 53 / Diameter 12）：https://www.pepperl-fuchs.com/en/products-gp25581/98931' }
+  },
+  'NBB5-18GM50-E2': {
+    dims: { w: 18, h: 56, d: 18, source: '倍加福 NBB5-18GM50-E2 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99190' }
+  },
+  'NBB5-18GM50-E0': {
+    dims: { w: 18, h: 56, d: 18, source: '倍加福 NBB5-18GM50-E0 产品页 官方（Length 56 / Diameter 18）：https://www.pepperl-fuchs.com/en/products-gp25581/99191' }
+  },
+  'NBB10-30GM50-E2': {
+    dims: { w: 30, h: 60, d: 30, source: '倍加福 NBB10-30GM50-E2 产品页 官方（Length 60 / Diameter 30）：https://www.pepperl-fuchs.com/en/products-gp25581/99278' }
+  },
+  'UB500-18GM75-E5-V15': {
+    dims: { w: 18, h: 85, d: 18, source: '倍加福 UB500-18GM75-E5-V15 数据表 133053 官方（Length 85 / Diameter 18）：https://files.pepperl-fuchs.com/webcat/navi/productInfo/pds/133053_eng.pdf' }
+  },
+  'IME30-10BPSZC0S': {
+    dims: { w: 30, h: 71, d: 30, source: '西克 IME30-10BPSZC0S 数据表 官方（Ø30，Housing length 71）：https://www.sick.com/media/pdf/5/15/615/dataSheet_IME30-10BPSZC0S_1040998_en.pdf' }
+  },
+  'BI10-M30-AP6X': {
+    dims: { w: 30, h: 64, d: 30, source: '图尔克 BI10-M30-AP6X 数据表 ID 46170 官方（M30×1.5，Dimensions 64 mm）：https://www.turck.us/datasheet/_us/edb_46170_eng_us.pdf' }
+  },
+  '3LD2003-0TK51': {
+    dims: { w: 67, h: 84, d: 92.5, source: '西门子 3LD2003-0TK51 数据表 官方（width 67 / height 84 / depth 92.5）：https://support.industry.siemens.com/teddatasheet/?caller=SIOS&format=pdf&language=en&mlfbs=3LD2003-0TK51' }
+  },
+  '6SL3210-5FB10-4UF1': {
+    dims: { w: 55, h: 170, d: 170, source: '西门子 SINAMICS V90 6SL3210-5FB10-4UF1 数据表 官方（FSB，W55×H170×D170）：https://mall.industry.siemens.com/spice/docuservice/rest/document.spring?articleNumber=6SL32105FB104UF1&language=en&region=ww&documentGroup=TED&documentId=DCS_DATASHEET_PMD_CLEANED' }
+  },
+  DRP048V480W1BA: {
+    dims: { w: 144, h: 121, d: 118.6, source: '台达 DRP048V480W1BA 数据表 官方（H121×W144×D118.6）：https://psu.deltaww.com/en/products/download/Datasheet/DRP048V480W1BA' },
+    railMount: true
+  },
+  'UK-6N': {
+    dims: { w: 8.2, h: 42.5, d: 47, source: '菲尼克斯 UK 6 N（3004524）产品数据 官方（Width 8.2 / Height 42.5 / Depth on NS 35/7,5 47）：https://www.phoenixcontact.com/en-us/products/feed-through-terminal-block-uk-6-n-3004524' },
+    railMount: true
+  }
+};
+
+const BATCH2_IDS = new Set(Object.keys(FILL_BATCH2));
+for (const [id, fill] of Object.entries(FILL_BATCH2)) {
+  if (FILL[id]) throw new Error(`第二批与第一批重复：${id}`);
+  FILL[id] = fill;
+}
+
 function positiveNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
@@ -211,7 +257,8 @@ function collectStats(parts) {
       estimated: 0,
       batch: 0,
       batchOfficial: 0,
-      batchEstimated: 0
+      batchEstimated: 0,
+      batch2: 0
     };
     row.total += 1;
     if (part.dims) {
@@ -225,7 +272,9 @@ function collectStats(parts) {
       row.missing += 1;
     }
     const fill = FILL[part.id];
-    if (fill) {
+    if (fill && BATCH2_IDS.has(part.id)) {
+      row.batch2 += 1;
+    } else if (fill) {
       row.batch += 1;
       if (fill.dims.estimated === true) row.batchEstimated += 1;
       else row.batchOfficial += 1;
@@ -243,9 +292,10 @@ function collectStats(parts) {
       estimated: acc.estimated + row.estimated,
       batch: acc.batch + row.batch,
       batchOfficial: acc.batchOfficial + row.batchOfficial,
-      batchEstimated: acc.batchEstimated + row.batchEstimated
+      batchEstimated: acc.batchEstimated + row.batchEstimated,
+      batch2: acc.batch2 + row.batch2
     }),
-    { total: 0, have: 0, missing: 0, sourced: 0, official: 0, estimated: 0, batch: 0, batchOfficial: 0, batchEstimated: 0 }
+    { total: 0, have: 0, missing: 0, sourced: 0, official: 0, estimated: 0, batch: 0, batchOfficial: 0, batchEstimated: 0, batch2: 0 }
   );
   return { rows, summary };
 }
@@ -304,10 +354,10 @@ function validate(parts) {
 }
 
 function printMarkdown(rows) {
-  console.log('| 分类 | 总数 | 有尺寸 | 初始缺口 | 本批官方 | 本批推定 | 剩余缺口 |');
+  console.log('| 分类 | 总数 | 有尺寸 | 首批官方 | 首批推定 | 二批官方 | 剩余缺口 |');
   console.log('|------|-----:|-------:|---------:|---------:|---------:|---------:|');
   for (const row of rows) {
-    console.log(`| ${row.category} | ${row.total} | ${row.have} | ${row.missing + row.batch} | ${row.batchOfficial} | ${row.batchEstimated} | ${row.missing} |`);
+    console.log(`| ${row.category} | ${row.total} | ${row.have} | ${row.batchOfficial} | ${row.batchEstimated} | ${row.batch2} | ${row.missing} |`);
   }
 }
 
@@ -355,7 +405,7 @@ if (flags.has('--json')) {
 } else {
   if (flags.has('--markdown')) printMarkdown(rows);
   else console.log(`backfill-dims: ${summary.total} 个型号，${summary.have} 个有尺寸，${summary.missing} 个缺失`);
-  console.log(`补录表：${summary.batch} 条（官方 ${summary.batchOfficial} / 推定 ${summary.batchEstimated}）；本次写入 ${inserted} 条，已有尺寸跳过 ${skipped.length} 条`);
+  console.log(`补录表：首批 ${summary.batch} 条（官方 ${summary.batchOfficial} / 推定 ${summary.batchEstimated}），二批 ${summary.batch2} 条（全部官方）；本次写入 ${inserted} 条，已有尺寸跳过 ${skipped.length} 条`);
   console.log(`来源标记：官方 ${summary.official} / 推定 ${summary.estimated}；覆盖 ${summary.have}/${summary.total}（${(summary.have / summary.total * 100).toFixed(1)}%）`);
   if (validationWarnings.length > 0) console.log(`警告 ${validationWarnings.length} 条：${validationWarnings.join('；')}`);
   if (validationErrors.length > 0) {

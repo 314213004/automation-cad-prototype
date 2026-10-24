@@ -100,7 +100,7 @@ test('BOM 型号存在性：每个 partId 都在声明的 builtin 包中，型�
   }
 });
 
-test('BOM 明确包含 SV660P / MHZ2-20D / D-M9B / SY5120-5LZD，安全光栅待选型', () => {
+test('BOM 明确包含 SV660P / MHZ2-20D / D-M9B / SY5120-5LZD，安全光栅选到 F3SG-4SRA0640-14', () => {
   const mapping = mapMachineBom(caseDesign(), parts);
   const byModel = new Map(mapping.items.map((item) => [item.model, item]));
   assert.equal(byModel.get('SV660P 750 W')?.qty, 6);
@@ -108,9 +108,52 @@ test('BOM 明确包含 SV660P / MHZ2-20D / D-M9B / SY5120-5LZD，安全光栅待
   assert.equal(byModel.get('D-M9B')?.qty, 6);
   assert.equal(byModel.get('D-M9B')?.packId, 'smc-cn');
   assert.equal(byModel.get('SY5120-5LZD')?.qty, 6);
-  assert.equal(byModel.get('待选型')?.pendingSelection, true);
-  assert.match(byModel.get('待选型')?.note ?? '', /库里无安全光栅型号，需补录/);
-  assert.deepEqual(mapping.pending, [{ name: '安全光栅', reason: '库里无安全光栅型号，需补录' }]);
+  const curtain = byModel.get('F3SG-4SRA0640-14');
+  assert.ok(curtain, '安全光栅应映射到真实型号');
+  assert.equal(curtain.name, '安全光栅');
+  assert.equal(curtain.kind, 'sensor');
+  assert.equal(curtain.qty, 1);
+  assert.equal(curtain.packId, 'iec-cn');
+  assert.equal(curtain.partId, 'F3SG-4SRA0640-14');
+  assert.equal(curtain.pendingSelection, undefined);
+  assert.match(curtain.note, /14 mm \/ 640 mm \/ Type 4 \/ PL e/);
+  assert.equal(byModel.has('待选型'), false);
+  assert.equal(mapping.items.filter((item) => item.pendingSelection).length, 0);
+  assert.deepEqual(mapping.pending, []);
+  assert.equal(mapping.notices.length, 1);
+  assert.match(mapping.notices[0], /F3SG-4SRA0640-14.*ISO 13855/);
+  assert.match(byModel.get('PNOZ s3 750103')?.note ?? '', /F3SG-4SRA0640-14 的 OSSD/);
+});
+
+test('六工位所选安全光栅规格：14 mm 手指保护、Type 4/PL e、OSSD、24 V DC，带官方来源与尺寸', () => {
+  const raw = JSON.parse(readFileSync(join(builtinDir, 'iec-cn', 'parts.json'), 'utf8'));
+  const curtain = raw.find((part) => part.id === 'F3SG-4SRA0640-14');
+  assert.ok(curtain);
+  assert.equal(curtain.category, '安全件');
+  assert.match(curtain.specs['分辨率'], /^14 mm/);
+  assert.equal(curtain.specs['保护高度'], '640 mm');
+  assert.match(curtain.specs['安全等级'], /Type 4 \/ PL e/);
+  assert.match(curtain.specs['输出'], /OSSD/);
+  assert.match(curtain.specs['电源'], /24 V DC/);
+  assert.match(curtain.specs['数据来源'], /^https:\/\/assets\.omron\.eu\//);
+  assert.deepEqual([curtain.dims.w, curtain.dims.h, curtain.dims.d], [32, 640, 38]);
+  assert.equal(curtain.price, undefined, '无官方价，不应填价格');
+});
+
+test('元件包缺少安全光栅型号时退回「待选型」并写明原因，不编造型号', () => {
+  const withoutCurtain = parts.filter((part) => part.id !== 'F3SG-4SRA0640-14');
+  const mapping = mapMachineBom(caseDesign(), withoutCurtain);
+  const pendingItems = mapping.items.filter((item) => item.pendingSelection);
+  assert.equal(pendingItems.length, 1);
+  assert.equal(pendingItems[0].name, '安全光栅');
+  assert.equal(pendingItems[0].model, '待选型');
+  assert.equal(pendingItems[0].partId, undefined);
+  assert.deepEqual(mapping.pending, [{
+    name: '安全光栅',
+    reason: '元件包 iec-cn 中未找到安全光栅 F3SG-4SRA0640-14，需补录或手工选型'
+  }]);
+  assert.deepEqual(mapping.notices, []);
+  assert.match(mapping.electrical.assumptions.at(-1), /未选到型号/);
 });
 
 test('电气选型：总进线/伺服支路/电源进线/24V 输出余量均 ≥1.25 倍', () => {
@@ -151,6 +194,10 @@ test('machine-case.json 与实时计算结果一致，且截图校验齐全', ()
   assert.equal(stored.cycleAnalysis.requiredTotalStations, design.cycle.requiredTotalStations);
   assert.equal(stored.ioMap.rowCount, 19);
   assert.equal(stored.bom.items.length, 12);
+  assert.equal(stored.bom.pendingCount, 0);
+  assert.equal(stored.bom.realPartCount, 12);
+  assert.ok(stored.bom.items.some((item) => item.partId === 'F3SG-4SRA0640-14' && item.packId === 'iec-cn'));
+  assert.ok(stored.design.warnings.some((warning) => /F3SG-4SRA0640-14.*ISO 13855/.test(warning)));
   assert.equal(stored.screenshotValidation.shots.length, 4);
   for (const shot of stored.screenshotValidation.shots) {
     assert.deepEqual(shot.width, 1600);

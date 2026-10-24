@@ -19,6 +19,8 @@ export interface MachineElectricalCalculation {
 export interface MachineBomMapping {
   items: MachineDesign['bomDraft']['items'];
   pending: { name: string; reason: string }[];
+  /** 已选到真实型号、但仍需工程师现场核对的提示（如安全距离），不是待选型。 */
+  notices: string[];
   electrical: {
     assumptions: string[];
     auxLoadBreakdown: { name: string; qty: number; watts: number }[];
@@ -73,6 +75,10 @@ const MODEL_REFS = {
   proximity: { id: 'D-M9B', packId: 'smc-cn' },
   plc: { id: 'CP1E-N40DR-A', packId: 'iec-cn' },
   safetyRelay: { id: 'PNOZ-s3-750103', packId: 'iec-cn' },
+  // 安全光栅初选：14 mm 手指保护（ISO 13855 中 C = 8 × (d − 14) = 0，所需安全距离最小，
+  // 适合锁螺丝等手部靠近危险点的上料口）；保护高度 640 mm 覆盖整机几何中 600 mm 的光栅立柱；
+  // Type 4 / PL e，OSSD 接 PNOZ s3 的光栅监控输入。安装距离与保护高度仍需按现场开口核算。
+  safetyCurtain: { id: 'F3SG-4SRA0640-14', packId: 'iec-cn' },
   psu24v: { id: 'LRS-350-24', packId: 'iec-cn' },
   servoBreaker: { id: 'iC65N-C6-1P', packId: 'iec-cn' },
   mainBreaker: { id: '5SY63-C16', packId: 'iec-cn' },
@@ -134,8 +140,8 @@ function item(
 }
 
 /**
- * 把方案 BOM 映射到真实型号。缺少任一必需型号会抛错；安全光栅是明确的
- * 待选型项，不伪造型号。
+ * 把方案 BOM 映射到真实型号。缺少任一必需型号会抛错；安全光栅只在方案含光栅时
+ * 才需要，元件包里找不到该型号时退回「待选型」并写明原因，不伪造型号。
  */
 export function mapMachineBom(
   design: MachineDesign,
@@ -175,15 +181,38 @@ export function mapMachineBom(
     items.push(item('actuator', '电磁阀', valve, gripperCount, '按 1 气爪 1 阀配置'));
   }
   if (proximityCount > 0) items.push(item('sensor', '到位检测（磁性开关）', proximity, proximityCount));
-  if (safetyCount > 0) {
+  const pending: MachineBomMapping['pending'] = [];
+  const notices: string[] = [];
+  const safetyCurtain = safetyCount > 0
+    ? parts.find((candidate) =>
+      candidate.id === MODEL_REFS.safetyCurtain.id && candidate.packId === MODEL_REFS.safetyCurtain.packId)
+    : undefined;
+  if (safetyCount > 0 && safetyCurtain) {
+    const resolution = String(safetyCurtain.specs['分辨率'] ?? '').split('（')[0];
+    const height = String(safetyCurtain.specs['保护高度'] ?? '');
+    const level = String(safetyCurtain.specs['安全等级'] ?? '');
+    items.push(item(
+      'sensor',
+      '安全光栅',
+      safetyCurtain,
+      safetyCount,
+      `${resolution} / ${height} / ${level}，OSSD 接安全继电器`
+    ));
+    notices.push(
+      `安全光栅：已初选 ${safetyCurtain.model}（${resolution}、保护高度 ${height}），` +
+      '安装距离需按 ISO 13855 用实测停机时间核算，保护高度需覆盖实际上料开口。'
+    );
+  } else if (safetyCount > 0) {
+    const reason = `元件包 ${MODEL_REFS.safetyCurtain.packId} 中未找到安全光栅 ${MODEL_REFS.safetyCurtain.id}，需补录或手工选型`;
     items.push({
       kind: 'sensor',
       name: '安全光栅',
       qty: safetyCount,
       model: '待选型',
-      note: '库里无安全光栅型号，需补录',
+      note: reason,
       pendingSelection: true
     });
+    pending.push({ name: '安全光栅', reason });
   }
 
   const aux = settings.auxLoadW;
@@ -271,7 +300,13 @@ export function mapMachineBom(
   ];
 
   items.push(item('electrical', 'PLC', plc, 1, '24 DI / 16 DO，覆盖 19 点位'));
-  items.push(item('electrical', '安全继电器', safetyRelay, 1, '光栅/安全门监控，光栅型号待补录'));
+  items.push(item(
+    'electrical',
+    '安全继电器',
+    safetyRelay,
+    1,
+    safetyCurtain ? `光栅/安全门监控，接 ${safetyCurtain.model} 的 OSSD` : '光栅/安全门监控'
+  ));
   items.push(item('electrical', '24 V 开关电源', psu, 1, `${psuRatedW} W / ${psuRatedA} A`));
   items.push(item('electrical', '伺服支路断路器', servoBreaker, servoCount, `计算 ${round(servoLoadA)} A，额定 ${servoRatedA} A`));
   items.push(item('electrical', '总进线断路器', mainBreaker, 1, `计算 ${round(mainLoadA)} A，额定 ${mainRatedA} A`));
@@ -282,15 +317,17 @@ export function mapMachineBom(
 
   return {
     items,
-    pending: safetyCount > 0
-      ? [{ name: '安全光栅', reason: '库里无安全光栅型号，需补录' }]
-      : [],
+    pending,
+    notices,
     electrical: {
       assumptions: [
         `总进线按 ${settings.mainVoltage} V 三相四线估算，伺服支路取相电压 ${settings.branchVoltage} V。`,
         `cosφ=${settings.cosPhi}、效率 η=${settings.efficiency}，功率因数为工程估算，需按实际电机/驱动数据复核。`,
         `所有断路器与开关电源按计算电流/功率的 ${settings.marginFactor} 倍以上选取；额定值来自元件包 specs。`,
-        '安全光栅库内无型号，未参与具体电气参数校核，仅按 1 套 15 W 预留。'
+        safetyCurtain
+          ? `安全光栅按 ${safetyCurtain.model} 计（样本消耗电流 ${String(safetyCurtain.specs['消耗电流'] ?? '见样本')}），` +
+            `24 V 负载仍按每套 ${aux.safetyCurtain} W 预留（含 OSSD 负载与余量）。`
+          : `安全光栅未选到型号，未参与具体电气参数校核，仅按每套 ${aux.safetyCurtain} W 预留。`
       ],
       auxLoadBreakdown,
       totalServoW,
