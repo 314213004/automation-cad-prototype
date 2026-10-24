@@ -63,6 +63,7 @@ test('parallel 公式：3.18 秒/件 × 6 工位 ≈ 113 件/分钟', () => {
   assert.equal(design.cycle.stationSeconds, 3.18);
   assert.equal(design.cycle.throughputPerMin, 113.21);
   assert.ok(Math.abs(design.cycle.throughputPerMin - (6 / 3.18) * 60) < 0.01);
+  assert.ok(design.assumptions.some((line) => line.includes('按同工序并行估算')));
 });
 
 test('parallel 目标 20 件/分钟达标，瓶颈文案给出工位并行关系', () => {

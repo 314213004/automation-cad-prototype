@@ -347,11 +347,11 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
 
   if (layout.mode === 'line') {
     const chain = brief.processes?.length ? brief.processes.join(' → ') : '多道工序';
-    assumptions.push(`布局按流水线（line）估算：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
+    assumptions.push(`布局按流水线估算（line）：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
   } else if (brief.notes.includes(DEFAULT_NOTE_LAYOUT) || layout.fallback) {
     assumptions.push('未识别布局，按同工序并行估算；如实际为流水线，请显式指定 layout=line。');
   } else {
-    assumptions.push(`布局按同工序并行（parallel）估算：${stations} 个工位执行同一工艺「${PROCESS_LABEL[process]}」，整机产能 = 工位数 / 单工位时间 × 60。`);
+    assumptions.push(`布局按同工序并行估算（parallel）：${stations} 个工位执行同一工艺「${PROCESS_LABEL[process]}」，整机产能 = 工位数 / 单工位时间 × 60。`);
   }
 
   if (process === 'unknown') {
