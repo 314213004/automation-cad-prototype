@@ -66,7 +66,7 @@ const INJECTION_PATTERNS: Array<{ id: string; pattern: RegExp }> = [
   },
   {
     id: 'dangerous_path',
-    pattern: /(?:[A-Za-z]:\\(?:Windows|System32|Program Files|ProgramData)\\|(?:^|[\\/])(?:etc|proc|sys)[\\/]|(?:^|[\\/])\.ssh[\\/]|agent-audit\.jsonl)/i
+    pattern: /(?:[A-Za-z]:\\(?:Windows|System32|Program Files|ProgramData)\\|(?:^|[\\/])(?:etc|proc|sys)[\\/]|(?:^|[\\/])\.ssh[\\/]|agent-audit(?:\.\d+)?\.jsonl)/i
   }
 ];
 

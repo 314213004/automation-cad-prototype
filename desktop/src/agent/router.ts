@@ -59,13 +59,15 @@ const RULES: IntentRule[] = [
     strong: [
       '插入', '放置', '放到', '放在', '摆到', '摆在', '摆一个', '放一个', '加一个',
       '删掉', '删除', '撤销', '撤消', '改线号', '改型号', '换型号', '换成', '换掉',
-      '替换', '导入'
+      '替换', '导入',
+      // 同义/口语（迭代：同义词覆盖）
+      '新增', '去掉', '拿掉', '移除', '撤回', '回退', '退回上一步', '载入', '加载', '换为', '调成', '改为', '更换'
     ],
-    normal: ['放两个', '加个', '添加', '摆', '修改', '改成', '改一下', '改掉', '移走']
+    normal: ['放两个', '加个', '添加', '摆', '修改', '改成', '改一下', '改掉', '移走', '删了', '移掉', '改下', '调整为', '设为']
   },
   {
     intent: 'generate',
-    strong: ['出图', '导出', '生成', '出一份', '出份', '生成报告', '生成BOM', '生成 BOM', '报价单'],
+    strong: ['出图', '导出', '生成', '出一份', '出份', '生成报告', '生成BOM', '生成 BOM', '报价单', '输出', '另存为', '存成', '编写', '编一个', '编个'],
     normal: ['报告', 'pdf', 'PDF', 'csv', 'CSV', 'excel', '打印', '出一份', '出份']
   },
   {
@@ -75,18 +77,27 @@ const RULES: IntentRule[] = [
   },
   {
     intent: 'commission',
-    strong: ['联调', '上电', '跑序列', '故障诊断', '报警'],
+    strong: ['联调', '上电', '跑序列', '故障诊断', '报警', '仿真', '空跑', '试运行'],
     normal: ['点位', '调试', '手动模式', '自动模式', '诊断', 'IO']
   },
   {
     intent: 'compute',
-    strong: ['成本', '多少钱', '报价', '干涉', '电气校验', '载流量', '不平衡度', '余量', '动件', '运动部件', '运动学识别'],
-    normal: ['计算', '算一下', '算一遍', '重算', '算算', '够不够', '合规', '校验', '检查', '统计', '功率', '费用', '总价', '合计']
+    strong: [
+      '成本', '多少钱', '报价', '干涉', '电气校验', '载流量', '不平衡度', '余量', '动件', '运动部件', '运动学识别',
+      '造价', '花多少', '价钱', '碰撞', '撞', '打架', '线径', '三相平衡', '核算', '会动', '活动部件', '检查一下'
+    ],
+    normal: [
+      '计算', '算一下', '算一遍', '重算', '算算', '够不够', '合规', '校验', '检查', '统计', '功率', '费用', '总价', '合计',
+      '校核', '核对', '算下', '估一下', '估算', '花费', '开销'
+    ]
   },
   {
     intent: 'query',
-    strong: ['有哪些', '有什么', '列出', '列一下', '搜索', '搜一下', '查找', '找一下', '查一下', 'BOM', '物料清单'],
-    normal: ['型号', '参数', '在哪', '什么', '清单', '看看', '看一下', '多少', '几个', '价格', '读一下']
+    strong: [
+      '有哪些', '有什么', '列出', '列一下', '搜索', '搜一下', '查找', '找一下', '查一下', 'BOM', '物料清单',
+      '有啥', '有没有', '罗列', '检索', '看下', '调出', '物料明细', '用料清单', '材料清单'
+    ],
+    normal: ['型号', '参数', '在哪', '什么', '清单', '看看', '看一下', '多少', '几个', '价格', '读一下', '瞅瞅', '瞅一眼', '状态', '上下文', '塞下', '放得下']
   }
 ];
 
@@ -139,11 +150,23 @@ export function splitInstructionSteps(text: string): string[] {
     .filter(Boolean);
 }
 
+/**
+ * 明显的非工程话题（天气、娱乐、出行、理财、写作…）。关键词扩充后「看下」「有啥」
+ * 「算一下」这类口语动词也会命中工程意图，因此先按话题拦截；句子里同时出现工程对象时不拦。
+ */
+const OFF_DOMAIN_TOPIC = /(天气|气温|下雨|下雪|笑话|段子|电影|电视剧|综艺|新闻|八卦|机票|火车票|高铁票|酒店|外卖|点餐|股票|基金|彩票|房贷|月供|房价|年终总结|作文|写诗|情书|旅游|攻略|星座|菜谱|歌曲|小说)/;
+const ENGINEERING_ANCHOR = /(机台|整机|设备|工位|气缸|电气|bom|物料|元件|器件|plc|底板|装配|干涉|线号|报价|成本|伺服|电机|接触器|断路器|继电器|传感器|导轨|step|工程|项目|机型)/i;
+
+export function isOffDomainTopic(text: string): boolean {
+  const value = (text ?? '').trim();
+  return OFF_DOMAIN_TOPIC.test(value) && !ENGINEERING_ANCHOR.test(value);
+}
+
 /** 机型设计请求：例如「设计一台三工位锁螺丝机，节拍 20 件/分钟」。 */
 export function isMachineDesignRequest(text: string): boolean {
   const value = (text ?? '').trim();
   if (!value) return false;
-  const designVerb = /设计|做一台|做一套|做一条|搭一台|搭一套/.test(value);
+  const designVerb = /设计|规划|做一台|做一套|做一条|搭一台|搭一套|搞一台|弄一台|整一台|造一台|来一台/.test(value);
   const machineNoun = /(?:机|线|设备|装置|工位)/.test(value);
   return designVerb && machineNoun;
 }
@@ -162,6 +185,9 @@ export function routeIntent(text: string): IntentMatch {
   const normalized = (text ?? '').trim();
   if (!normalized) {
     return { intent: 'out_of_scope', confidence: 'low', score: 0, hits: [], reason: '输入为空' };
+  }
+  if (isOffDomainTopic(normalized)) {
+    return { intent: 'out_of_scope', confidence: 'high', score: 0, hits: [], reason: '非工程话题，按超纲处理' };
   }
   if (isDocQuestion(normalized)) {
     return { intent: 'query', confidence: 'high', score: 3, hits: ['本地文档'], reason: '文档类问题，查本地知识库' };
@@ -303,6 +329,9 @@ const POLITE_PREFIXES = [
 ];
 
 const QUERY_VERBS = [
+  // 「检查一下」须先于「查一下」剔除，否则会残留「检」。
+  '检查一下',
+  '检查',
   '查一下',
   '查查',
   '查',
@@ -322,10 +351,25 @@ const QUERY_VERBS = [
   '读一下',
   '读',
   '有哪些',
-  '有什么'
+  '有什么',
+  '都有啥',
+  '有啥',
+  '有没有',
+  '罗列一下',
+  '罗列',
+  '检索一下',
+  '检索',
+  '看下',
+  '瞅瞅',
+  '瞅一眼',
+  '调出来',
+  '调出'
 ];
 
 const STOPWORDS = [
+  // 「库里」须先于「里」剔除，否则会残留「库」。
+  '库里',
+  '库中',
   '怎么样',
   '多少钱',
   '多少',
@@ -363,10 +407,11 @@ const STOPWORDS = [
   '有',
   '和',
   '与',
-  '吧'
+  '吧',
+  '都'
 ];
 
-const LIST_VERBS = ['有哪些', '列出', '列举', '所有', '全部', '清单', '显示'];
+const LIST_VERBS = ['有哪些', '列出', '列举', '所有', '全部', '清单', '显示', '有啥', '罗列'];
 
 /** 指代词只用于消解上下文，不能当成元件搜索词。 */
 const REFERENCE_WORDS = [
@@ -440,14 +485,14 @@ function isBareReferencePriceQuery(text: string, category: string | null): boole
 }
 
 /** 明确禁止的操作：系统目录、系统账户文件、审计文件。 */
-const FORBIDDEN_TARGET = /(?:[A-Za-z]:\\(?:Windows|System32|Program Files|ProgramData)\\|(?:^|[\\/])(?:etc|proc|sys)[\\/]|(?:^|[\\/])\.ssh[\\/]|agent-audit\.jsonl)/i;
-const AUDIT_TAMPER = /(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|delete|clear|tamper|overwrite)[^。；;\n]{0,30}(?:审计|agent-audit|audit)|(?:审计|agent-audit|audit)[^。；;\n]{0,30}(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|delete|clear|tamper|overwrite)/i;
+const FORBIDDEN_TARGET = /(?:[A-Za-z]:\\(?:Windows|System32|Program Files|ProgramData)\\|(?:^|[\\/])(?:etc|proc|sys)[\\/]|(?:^|[\\/])\.ssh[\\/]|agent-audit(?:\.\d+)?\.jsonl)/i;
+const AUDIT_TAMPER = /(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|去掉|拿掉|抹|擦除|移除|隐藏|撤销|撤回|回退|delete|clear|tamper|overwrite|remove)[^。；;\n]{0,30}(?:审计|agent-audit|audit)|(?:审计|agent-audit|audit)[^。；;\n]{0,30}(?:删|改|清|覆盖|篡改|写入|伪造|修改|编辑|去掉|拿掉|抹|擦除|移除|隐藏|撤销|撤回|回退|delete|clear|tamper|overwrite|remove)/i;
 /** 典型跨域误用：拿 PLC 程序去生成/修改报价、BOM、干涉或电气结论。 */
 const CROSS_DOMAIN_MISUSE = /(?:(?:plc|程序)[^。；;\n]{0,24}(?:bom|报价|成本|干涉|电气校验)|(?:bom|报价|成本|干涉|电气校验)[^。；;\n]{0,24}(?:plc|程序))/i;
 
 /** 文档类问题：问用法、限制、决策依据或缺失尺寸处理，应查本地知识库而不是猜。 */
-const DOC_QUESTION = /(怎么用|怎么放|怎么操作|怎么处理|怎么办|如何|为什么|为何|决策|限制|规范|约定|原理|含义|文档|知识库|缺尺寸|没有尺寸|尺寸缺失|(?:^|[^a-z0-9])d\d+(?:[^a-z0-9]|$))/i;
-const DOC_QUERY_NOISE = /(?:请问|帮我|麻烦|查一下|查查|搜索一下|搜一下|看一下|说说|解释一下|怎么处理|怎么办|怎么用|怎么放|怎么操作|如何|为什么|为何|是什么|是啥|一下|怎么|的|吗|呢|吧)/g;
+const DOC_QUESTION = /(怎么用|怎么放|怎么操作|怎么处理|怎么办|咋用|咋放|咋处理|咋操作|怎样用|怎样放|怎样处理|怎么弄|如何|为什么|为何|决策|限制|规范|约定|原理|含义|文档|知识库|缺尺寸|没有尺寸|尺寸缺失|(?:^|[^a-z0-9])d\d+(?:[^a-z0-9]|$))/i;
+const DOC_QUERY_NOISE = /(?:请问|帮我|麻烦|查一下|查查|搜索一下|搜一下|看一下|说说|解释一下|怎么处理|怎么办|怎么用|怎么放|怎么操作|咋用|咋放|咋处理|咋操作|怎样用|怎样放|怎样处理|怎么弄|如何|为什么|为何|是什么|是啥|一下|怎么|的|吗|呢|吧)/g;
 
 export function isDocQuestion(text: string): boolean {
   return DOC_QUESTION.test(text ?? '');
@@ -468,7 +513,7 @@ const DESIGNATOR_PATTERN = /^(?:[A-Za-z]{1,4}[-_]?\d+[A-Za-z0-9-]*|\d+)$/;
 
 function planUpdateComponent(value: string): ToolPlan | null {
   const match = value.match(
-    /(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:的)?\s*(型号|数量|备注|位号|名称)?\s*(?:改成|改为|换成|换型号|型号改成|数量改成|备注改成|修改为|设置为)\s*(.*)$/
+    /(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:的)?\s*(型号|数量|备注|位号|名称)?\s*(?:改成|改为|换成|换为|换型号|型号改成|数量改成|备注改成|修改为|设置为|调整为|调成|调为|设为|设成|变成|更换为|替换为)\s*(.*)$/
   );
   if (!match) return null;
   const ref = (match[1] ?? '').trim();
@@ -505,8 +550,8 @@ function planUpdateComponent(value: string): ToolPlan | null {
 }
 
 function planRemoveComponent(value: string): ToolPlan | null {
-  const explicit = value.match(/(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:从底板|从\s*BOM|从\s*bom)?\s*(?:删掉|删除|移除)/);
-  const afterVerb = value.match(/(?:删掉|删除|移除)\s*(.+)$/);
+  const explicit = value.match(/(?:把|将|给)\s*([^\s，。；;、]+?)\s*(?:从底板|从\s*BOM|从\s*bom)?\s*(?:删掉|删除|移除|去掉|拿掉|删了|移掉)/);
+  const afterVerb = value.match(/(?:删掉|删除|移除|去掉|拿掉|删了|移掉)\s*(.+)$/);
   const explicitRef = explicit?.[1]?.trim();
   const afterText = afterVerb?.[1]?.trim();
   const mentionsPlate = /底板/.test(value);
@@ -533,7 +578,7 @@ function planRemoveComponent(value: string): ToolPlan | null {
 }
 
 function planExportFiles(value: string): ToolPlan | null {
-  if (!/(?:导出|出图|输出)/.test(value)) return null;
+  if (!/(?:导出|出图|输出|另存为|存成|保存为|保存成|转成|转为)/.test(value)) return null;
   if (/(?:成本|报价|费用|报告|报表)/.test(value)) return null;
   const kind = value.match(/(?:pdf|dxf|glb|bom)\b/i)?.[0]?.toLowerCase();
   if (!kind) return null;
@@ -553,7 +598,7 @@ function planExportFiles(value: string): ToolPlan | null {
 function planToolBase(text: string): ToolPlan | null {
   const value = (text ?? '').trim();
   if (!value) return null;
-  if (/(?:验证|模拟|自检).*(?:plc|程序)|(?:plc|程序).*(?:验证|模拟|自检)/i.test(value)) {
+  if (/(?:验证|模拟|自检|仿真|空跑|试跑|试运行).*(?:plc|程序)|(?:plc|程序).*(?:验证|模拟|自检|仿真|空跑|试跑|试运行)/i.test(value)) {
     return {
       tool: 'verify_plc_program',
       args: {},
@@ -597,10 +642,10 @@ function planToolBase(text: string): ToolPlan | null {
 
   const category = matchCategory(value);
 
-  if (/(撤销|撤消)/.test(value)) {
+  if (/(撤销|撤消|撤回|回退|退回上一步|返回上一步|恢复上一步)/.test(value)) {
     return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '撤销最近一次写操作' };
   }
-  if (/(删掉|删除|移除)/.test(value)) {
+  if (/(删掉|删除|移除|去掉|拿掉|删了|移掉)/.test(value)) {
     const removePlan = planRemoveComponent(value);
     if (removePlan) return removePlan;
     return { tool: 'undo_last', args: {}, readOnly: false, missing: [], why: '删除能力暂由撤销最近一次写操作承接（需确认）' };
@@ -609,7 +654,7 @@ function planToolBase(text: string): ToolPlan | null {
   if (updatePlan) return updatePlan;
 
   // 写操作优先判断：宁可多要一次确认，也不能把写当成只读。
-  if (/(导出|生成|出一份|出份|打印)/.test(value) && /(成本|报价|费用|报告|报表|报价单)/.test(value)) {
+  if (/(导出|生成|出一份|出份|打印|输出|做一份|做个|做份|来一份|整一份|弄一份|另存为|存成)/.test(value) && /(成本|报价|费用|报告|报表|报价单)/.test(value)) {
     return {
       tool: 'export_cost_report',
       args: { format: exportFormat(value) },
@@ -620,7 +665,7 @@ function planToolBase(text: string): ToolPlan | null {
   }
   const exportFilesPlan = planExportFiles(value);
   if (exportFilesPlan) return exportFilesPlan;
-  if (/(?:生成|导出|输出).*(?:plc|程序)/i.test(value) && /plc/i.test(value)) {
+  if (/(?:生成|导出|输出|编写|编一个|编个|写一个|写个).*(?:plc|程序)/i.test(value) && /plc/i.test(value)) {
     return {
       tool: 'run_plc_generate',
       args: {},
@@ -629,7 +674,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: '按当前机型生成 PLC 工程文件与 ZIP（写入 userData/exports/，需确认）'
     };
   }
-  if (/(?:当前|现在|我这台机器)[^。；;\n]{0,12}(?:上下文|状态|视图|域|项目)|工程上下文|项目上下文|底板[^。；;\n]{0,8}(?:空间|剩余)|还剩多少空间|剩余多少空间/.test(value)) {
+  if (/(?:当前|现在|我这台机器)[^。；;\n]{0,12}(?:上下文|状态|视图|域|项目)|工程上下文|项目上下文|底板[^。；;\n]{0,8}(?:空间|剩余|塞得下|塞下|放得下|装得下|还能放)|还剩多少空间|剩余多少空间/.test(value)) {
     return {
       tool: 'get_project_context',
       args: {},
@@ -648,7 +693,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: `检索本地项目文档与元件库知识：${query}`
     };
   }
-  if (/(导入|打开).*(step|stp|iges|stl|obj|glb)/i.test(value)) {
+  if (/(导入|打开|载入|加载|读入).*(step|stp|iges|stl|obj|glb)/i.test(value)) {
     const path = extractCadPath(value);
     return {
       tool: 'import_cad',
@@ -682,7 +727,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: `在底板放置 ${placementSpec.partRef ?? '元件'}（${at}${placementSpec.rotate ? '，旋转 90°' : ''}，需确认）`
     };
   }
-  if (/(插入|放一个|放置|添加)/.test(value)) {
+  if (/(插入|放一个|放置|添加|新增|加装)/.test(value)) {
     const partId = extractPartId(value);
     return {
       tool: 'insert_component',
@@ -694,7 +739,7 @@ function planToolBase(text: string): ToolPlan | null {
   }
 
   // 只读工具：按「最具体」到「最泛」排序，避免「BOM 成本」落到 get_bom。
-  if (/(识别|推断|找出|找找|自动标注|分析).{0,20}(运动件|动件|运动部件|运动轴|运动学)|运动学.{0,4}(识别|建议)/.test(value)) {
+  if (/(识别|推断|找出|找找|自动标注|分析).{0,20}(运动件|动件|运动部件|运动轴|运动学)|运动学.{0,4}(识别|建议)|可动件|可动部件|活动部件|哪些(?:零件|部件|件)?会动/.test(value)) {
     return {
       tool: 'suggest_kinematics',
       args: {},
@@ -703,7 +748,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: '对当前 STEP 装配自动识别运动件，只给建议、不写入标注'
     };
   }
-  if (/干涉|碰撞/.test(value)) {
+  if (/干涉|碰撞|撞到|撞上|会不会撞|打架|碰到一起/.test(value)) {
     return {
       tool: 'run_interference_check',
       args: {},
@@ -712,7 +757,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: '对当前装配体做包围盒级干涉初筛'
     };
   }
-  if (/(电气校验|线号|载流量|截面|不平衡|功率统计|余量)/.test(value)) {
+  if (/(电气校验|电气校核|线号|载流量|截面|线径|不平衡|三相平衡|相平衡|功率统计|余量)/.test(value)) {
     return {
       tool: 'run_electrical_check',
       args: {},
@@ -721,7 +766,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: '按当前电气文档做线号合规与功率统计校验'
     };
   }
-  if (/(成本|报价|多少钱|费用|总价|合计)/.test(value)) {
+  if (/(成本|报价|多少钱|费用|总价|合计|造价|价钱|花多少|花费|开销)/.test(value)) {
     if (isBareReferencePriceQuery(value, category)) return null;
     return {
       tool: 'run_cost_report',
@@ -731,7 +776,7 @@ function planToolBase(text: string): ToolPlan | null {
       why: '按当前 BOM 与内置价格簿计算硬件成本'
     };
   }
-  if (/bom|物料清单|物料表/i.test(value)) {
+  if (/bom|物料清单|物料表|物料明细|用料清单|用料表|材料清单/i.test(value)) {
     return {
       tool: 'get_bom',
       args: {},
