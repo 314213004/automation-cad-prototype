@@ -46,6 +46,7 @@ import { demoMachineConfig } from '../src/commission/machine-config';
 import { parseMachineBrief } from '../src/machine/spec';
 import { TEMPLATES } from '../src/machine/templates';
 import { buildClarify } from '../src/machine/clarify';
+import { evaluateFlow, type FlowModel } from '../src/machine/flow';
 import { generateSt } from '../src/plcgen/st';
 import { generateProject } from '../src/plcgen/generate';
 import { verifyGenerated } from '../src/plcgen/verify';
@@ -1396,6 +1397,80 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_MACHINE_CYCLE_OK mode=${cycle.mode} throughput=${Math.round(Number(cycle.throughputPerMin))} meets=${cycle.meetsTarget ? 1 : 0}`);
+
+        const flowModels: FlowModel[] = [
+          {
+            layout: 'parallel',
+            stations: 6,
+            copies: 6,
+            targetPerMin: 20,
+            ops: [{ id: 'screw', name: '锁螺丝', seconds: 3.18, station: 0 }]
+          },
+          {
+            layout: 'dial',
+            stations: 3,
+            indexSeconds: 0.6,
+            targetPerMin: 20,
+            ops: [
+              { id: 'dial-load', name: '上料', seconds: 2.5, station: 0 },
+              { id: 'dial-dispense', name: '点胶', seconds: 3, station: 1 },
+              { id: 'dial-unload', name: '下料', seconds: 1.8, station: 2 }
+            ]
+          },
+          {
+            layout: 'linear',
+            stations: 5,
+            transferSeconds: 1.5,
+            targetPerMin: 12,
+            ops: [
+              { id: 'line-load', name: '上料', seconds: 2, station: 0 },
+              { id: 'line-press', name: '压装', seconds: 3.5, station: 1 },
+              { id: 'line-screw', name: '锁螺丝', seconds: 2.5, station: 2 },
+              { id: 'line-inspect', name: '检测', seconds: 4, station: 3 },
+              { id: 'line-unload', name: '下料', seconds: 1.5, station: 4 }
+            ]
+          },
+          {
+            layout: 'single',
+            stations: 1,
+            targetPerMin: 12,
+            ops: [
+              { id: 'single-load', name: '上料', seconds: 1.5, station: 0 },
+              { id: 'single-inspect', name: '检测', seconds: 2, station: 0 },
+              { id: 'single-unload', name: '下料', seconds: 0.5, station: 0 }
+            ]
+          },
+          {
+            layout: 'cell',
+            stations: 4,
+            transferSeconds: 0.8,
+            targetPerMin: 12,
+            ops: [
+              { id: 'cell-a1', name: '上料', seconds: 1.2, station: 0 },
+              { id: 'cell-a2', name: '锁螺丝', seconds: 1.8, station: 0 },
+              { id: 'cell-b1', name: '检测', seconds: 1.5, station: 1 },
+              { id: 'cell-b2', name: '下料', seconds: 2.2, station: 1 }
+            ]
+          },
+          {
+            layout: 'parallel',
+            stations: 2,
+            copies: 2,
+            targetPerMin: 30,
+            ops: [{ id: 'parallel-dispense', name: '点胶', seconds: 2.8, station: 0 }]
+          }
+        ];
+        const flowEvaluations = flowModels.map((model) => evaluateFlow(model));
+        const flowModes = new Set(flowEvaluations.map((entry) => entry.mode));
+        const flowOk = flowEvaluations.length === 6
+          && flowModes.size === 5
+          && flowEvaluations.every((entry) => Number.isFinite(entry.cycleSeconds) && entry.cycleSeconds > 0);
+        if (!flowOk) {
+          console.error('SMOKE_FAIL flow_engine', JSON.stringify(flowEvaluations.map((entry) => ({ mode: entry.mode, cycle: entry.cycleSeconds }))));
+          setTimeout(() => app.exit(1), 100);
+          return;
+        }
+        console.log(`SMOKE_FLOW_ENGINE_OK modes=${flowModes.size} archetypes=${flowEvaluations.length}`);
 
         const templateCount = Object.keys(TEMPLATES).length;
         const clarify = buildClarify(parseMachineBrief('随便设计一台检测机'));

@@ -7,7 +7,7 @@
 - **几何是「按规则摆放的标准件外形」，不是结构设计**：`generateMachineGeometry` 由 `MachineConfig` 生成真实 mm 尺寸与位置的装配（典型值：台面 850 mm、缸径 Ø32、M12 接近开关、50 方门架型材），运动件带轴向/行程/点位；但**不做**强度/刚度/挠度校核、零件间干涉求解、型号选型，不生成紧固件、钣金、气路/线缆、电柜，也不建模工位与输送线/转盘之间的上下料机构；输送线驱动与转盘分度没有接入点位。仍不会从 STEP 反推机构。
 - **STEP 只能经 build123d sidecar 产出**：离线时只有 TS 三角网格（STL / glTF，圆柱为多边形近似）；sidecar 只有 box / 竖直 cylinder 与绕 Z 旋转，水平圆柱（接近开关、压力传感器、输送线电机）实体化时按**等截面积方棒近似**，并在 `approximated` 中逐个列出。
 - **功率是估算表**：气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA。它是选型前的粗略容量参考，不是实测有功功率、启动电流或断路器选型结论。
-- **节拍是估算**：单工位动作时间 = 工艺固定余量 + 机构动作时间之和。`parallel`（同工序并行）按 `工位数 / 单工位时间 × 60` 放大，`line`（流水线分工序）按 `60 / 最慢工位` 计算；均未计入上下料、通讯、人工干预、调试损失与真实加减速曲线。
+- **节拍是估算**：单工位动作时间 = 工艺固定余量 + 机构动作时间之和，再交给 `evaluateFlow` 按 `single / linear / dial / parallel / cell` 五种布局之一求值；均未计入上下料、通讯、人工干预、调试损失与真实加减速曲线。公式与边界见 3.1。
 - **不做安全决策**：不提安全等级、不替代风险评估；安全光栅数量只按需求记录。
 - **只读与写分离**：`design_machine` 只返回方案与摘要；`apply_machine_design` 才写文件、改 active 指针与联动视图，且必须经过用户确认、可用 `undo_last` 撤销。
 
@@ -24,7 +24,7 @@ parseMachineBrief(text: string): MachineBrief
   process: 'screw' | 'dispense' | 'assembly' | 'inspection' | 'packaging' | 'unknown',
   stations: number,            // 1–12，默认 2
   cyclePerMin: number | null,  // 件/分钟；也接受 秒/件、CT
-  layout: 'parallel' | 'line' | 'auto', // 解析器通常给出 parallel/line；auto 由解析器推断
+  layout: 'single' | 'linear' | 'dial' | 'parallel' | 'cell' | 'line' | 'auto', // line 为 linear 兼容别名
   processes?: string[],        // 显式列出的工序名，如 ['上料','锁螺丝','检测','下料']
   actuators: { kind: 'cylinder' | 'gripper' | 'rotary'; count: number }[],
   sensors: { kind: 'proximity' | 'photoelectric' | 'safety' | 'pressure'; count: number }[],
@@ -38,7 +38,7 @@ parseMachineBrief(text: string): MachineBrief
 
 - 工位：`三工位` / `四工位` / `六工位` / `12 工位`，支持中文数字与「两」；超过 12 截到 12 并记 note。
 - 节拍：`分钟 20 件`、`20 件/分钟`、`3 秒一件`、`2 秒/件`、`CT 4.5s`、`节拍 6 秒`。
-- 布局：出现「流水线 / 线体 / 产线」或两个及以上不同工序（上料、锁螺丝、检测、下料等）→ `line`；单一工艺 → `parallel`；工艺未知且多工位时兜底 `parallel` 并写 warning，提示可显式指定 `layout`。`processes` 按出现顺序记录识别到的工序名。
+- 布局：出现「转盘 / 分度」→ `dial`；「单元式」→ `cell`；「并行 / 复制式」→ `parallel`；「流水线 / 线体 / 产线」或两个及以上不同工序 → `linear`；单一工艺 → `parallel`；工艺未知且多工位时兜底 `parallel` 并写 warning，提示可显式指定 `layout`。`processes` 按出现顺序记录识别到的工序名。
 - 工艺：锁螺丝/锁付、点胶、装配/压装、检测/视觉、包装。
 - 执行机构：气缸、夹爪/气爪、旋转轴/旋转台；`伺服`/`步进`带数量时按 `rotary` 建模，仅给 `750W 伺服` 这类驱动规格时写入 notes，不把 750 当数量。
 - 传感器：接近、光电、安全光栅、压力。
@@ -79,19 +79,55 @@ synthMachine(brief: MachineBrief, options?: {
 - 未给执行机构/传感器清单时，按 `templates.ts` 的工艺模板补全；assumptions 明确写「按 X 模板补全」。模板是纯数据，测试可直接读取 `TEMPLATES`。
 - 缺工位时按模板默认 2 工位生成；缺节拍时按 10 件/分钟估算。两者都会同时写 warning 与 assumption。
 - 点位按 `ST{工位}-{EXT|RET|GRIP|ROT|PRX|PHT|SAFE|PRS}-{A|S}{序号}` 生成，全部唯一。
-- `secondsPerPiece = 60 / perMin`；`stationSeconds` = 工艺固定余量 + 该工位动作时间。`parallel` 下 `throughputPerMin = stations / stationSeconds × 60`、`requiredTotalStations = ceil(perMin × stationSeconds / 60)`；`line` 下 `throughputPerMin = 60 / 最慢工位时间`，不达标时按 `ceil(最慢工位时间 / 节拍)` 复制瓶颈工序，`requiredTotalStations = 工位数 × 复制数`。两种模式的 warning 文案分别以「并行同工序」和「流水线节拍瓶颈」开头。
+- `secondsPerPiece = 60 / perMin`；`stationSeconds` = 工艺固定余量 + 该工位动作时间。所有布局统一由 `evaluateFlow` 求 `cycleSeconds`、`throughputPerMin`、`requiredStations` 与瓶颈；`MachineCycleEstimate.mode` 直接使用 `MachineLayout`（`single / linear / dial / parallel / cell`），旧字段保留。`parallel` 的 warning 以「并行同工序」开头，`linear` 以「流水线节拍瓶颈」开头，其余布局使用各自的 `mode` 标签。
 - 功率按固定表求和；检测到伺服/步进时，旋转轴按 750 VA/轴计入「伺服」组，不重复计 200 VA 旋转轴。
 - BOM 草案按执行机构、传感器、电气分组；型号一律标「待定」，不编造品牌型号。
 - 缺工艺/工位/节拍只记 warning，不阻断；每条缺省都在 `warnings` 里点名缺省值，并在 `assumptions` 说明假设。
 
-### 3.1 两种布局模型
+### 3.1 通用产能模型 `desktop/src/machine/flow.ts`
 
-| 模型 | 适用场景 | 产能公式 | 瓶颈处理 |
-|---|---|---|---|
-| `parallel` 同工序并行 | N 个工位重复执行同一道工序（如「六工位锁螺丝机」「两工位点胶机」），物料可在工位间独立分配 | `throughputPerMin = 工位数 / 单工位时间 × 60` | 单工位时间就是节拍；不达标时增加总工位数 |
-| `line` 流水线分工序 | 工位按上料 → 加工 → 检测 → 下料等工序串联，整线节拍由最慢工序决定 | `throughputPerMin = 60 / 最慢工位时间` | 只复制瓶颈工序，复制数 = `ceil(最慢工位时间 / 目标节拍)` |
+产能不再写死在 `synthMachine` 里。`synthMachine` 只把 brief 的布局、工位组成与工艺模板映射成 `FlowModel`，统一调用纯函数：
 
-边界：布局推断是关键词与工序数量的启发式规则，不是产线仿真。`parallel` 默认各工位可独立上下料且负荷均衡；`line` 默认工位严格串行、无缓冲。两者都不建模缓存区、换型、故障、人员节拍与真实运动曲线。需求含糊时应显式指定 `layout`，或把工序链写全，避免把串行流水线误按并行放大。
+```ts
+evaluateFlow(model: FlowModel): FlowEvaluation
+
+interface FlowModel {
+  layout: 'single' | 'linear' | 'dial' | 'parallel' | 'cell';
+  stations: number;
+  copies?: number;           // parallel 副本数；缺省 = stations
+  ops: FlowOp[];
+  transferSeconds?: number;  // linear/cell 工位间转移，缺省 0
+  indexSeconds?: number;     // dial 分度，缺省 0.6
+  targetPerMin?: number;
+}
+
+interface FlowOp {
+  id: string;
+  name: string;
+  seconds: number;           // 单件在该工序的作业时间
+  station: number;           // 工位/单元组索引（0-based）
+  optional?: boolean;        // 可选工序不计入关键路径，但计入成本
+}
+```
+
+五种布局的公式：
+
+| 布局 | `stationSeconds` | `cycleSeconds`（单件节拍） | 产能 | 达标所需工位/副本 |
+|---|---|---|---|---|
+| `single` | 全部工序求和，单元素数组 | `sum(ops.seconds)` | `60 / cycle` | 达标为 1；不可达为 `Infinity`（单工位无法靠加工位降节拍） |
+| `linear` | `stationSeconds[i] = sum(第 i 站工序) + transferSeconds` | `max(stationSeconds)` | `60 / cycle` | `stations × ceil(max(工序和) / (目标节拍 - transfer))` |
+| `dial` | `stationSeconds[i] = sum(第 i 站工序)`，不含分度 | `max(stationSeconds) + indexSeconds` | `60 / cycle` | `stations × ceil(max(stationSeconds) / (目标节拍 - index))` |
+| `parallel` | 一套完整工序的时间和（各副本相同） | `stationSeconds / copies` | `copies × 60 / stationSeconds` | `ceil(stationSeconds / 目标节拍)` |
+| `cell` | `stationSeconds[s] = sum(station=s 的工序)`，同一 `station` 为一组 | `max(stationSeconds) + transferSeconds` | `60 / cycle` | `stations × ceil(max(组时间) / (目标节拍 - transfer))` |
+
+- `targetPerMin` 缺省时 `meetsTarget=null`、`requiredStations=0`；提供了目标才反解所需工位数并向上取整。
+- `optional` 工序不进入关键路径与瓶颈，但仍保留在 `ops` 中计入成本；只有可选工序时关键路径按 0 秒处理并写 note。
+- `notes` 记录所有默认值：`linear/cell` 的 `transferSeconds=0`、`dial` 的 `indexSeconds=0.6`、`parallel` 的 `copies=stations`，以及可选工序被排除等。
+- 非法输入直接抛中文错误：工位不是正整数、`ops` 为空、工序时间 ≤ 0、工位索引越界、目标节拍/转移/分度时间非法。
+
+布局选择 `chooseLayout(process, stations)` 与几何层共用 `dial` 工艺集合与工位上限（锁螺丝/装配、≤8 工位）；1 工位为 `single`，明确同工序复制时传 `sameProcess` 得到 `parallel`，其余为 `linear`。`cell` 只在显式指定时使用。解析器识别「转盘/分度」「单元式」「并行/复制式」等关键词；`layout:'auto'` 仍可解析，推断结论写入 `assumptions`。
+
+边界：这是**静态产能估算**，不包含故障、换型、人工节拍、缓存区、上下料波动与真实加减速曲线；`transferSeconds` / `indexSeconds` 是固定分摊，不是运动仿真。仍不能替代节拍分析或现场测量。
 
 ## 4. Agent 工具 `design_machine`（只读）
 
@@ -218,10 +254,10 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 ## 7. 验证
 
 - 几何（迭代 34）：`test/machine/geometry.test.mjs`（10）、`geometry-export.test.mjs`（6）、`geometry-three.test.mjs`（3）、`test/agent/apply-machine-geometry.test.mjs`（5），覆盖尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴、BOM 对账、STL/glTF/sidecar、动画、落盘/撤销/回退。冒烟 `SMOKE_MACHINE_GEOMETRY_OK layout=dial parts=58 axes=6 envelope=1490x1300x1177 chunks=2 scene=58`。
-- 节拍模型：`test/machine/cycle-mode.test.mjs`（19 条）覆盖 layout 推断、parallel/line 两套公式、边界、warning 文案、案例 JSON；六工位案例为 `mode=parallel`、`stationSeconds=3.18`、`throughputPerMin=113.21`、`meetsTarget=true`。
+- 产能引擎：`test/machine/flow.test.mjs`（23 条）覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs`（6 条）覆盖六工位锁螺丝 parallel、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs`（5 条）覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `mode=parallel`、`stationSeconds=3.18`、`throughputPerMin=113.21`、`meetsTarget=true`。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
 - 全量测试：`TZ=Asia/Shanghai npm test` **1316/1316**（基线 1297，新增 19）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0`、`SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
+- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=0`、`SMOKE_MACHINE_CYCLE_OK mode=parallel throughput=113 meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
 ### 7.1 真实模型评测（2026-10-24）

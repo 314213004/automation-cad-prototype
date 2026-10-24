@@ -186,7 +186,12 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
     const requiredParallelStations = Math.max(1, Math.trunc(optionalNumber('requiredParallelStations') ?? 1));
     const stations = normalized.config.stations.length;
     const rawMode = (value.cycle as Record<string, unknown>).mode;
-    const mode: 'parallel' | 'line' = rawMode === 'parallel' ? 'parallel' : 'line';
+    const flowModes: MachineCycleEstimate['mode'][] = ['single', 'linear', 'dial', 'parallel', 'cell'];
+    const mode: MachineCycleEstimate['mode'] = rawMode === 'line'
+      ? 'linear'
+      : flowModes.includes(rawMode as MachineCycleEstimate['mode'])
+        ? rawMode as MachineCycleEstimate['mode']
+        : 'linear';
     const stationSeconds = optionalNumber('stationSeconds') ?? estimated;
     const throughputPerMin = optionalNumber('throughputPerMin')
       ?? (stationSeconds > 0 ? Math.round((60 / stationSeconds) * 100) / 100 : 0);

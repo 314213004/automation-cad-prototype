@@ -99,10 +99,10 @@ const caseData = {
     verdict: design.cycle.meetsTarget
       ? design.cycle.mode === 'parallel'
         ? `当前方案按同工序并行满足目标节拍：单工位 ${design.cycle.stationSeconds} 秒/件 × ${brief.stations} 工位 ≈ ${design.cycle.throughputPerMin} 件/分钟`
-        : `当前流水线方案满足目标节拍：最慢工位 ${design.cycle.stationSeconds} 秒/件 → ${design.cycle.throughputPerMin} 件/分钟`
+        : `当前 ${design.cycle.mode} 布局满足目标节拍：最慢工位 ${design.cycle.stationSeconds} 秒/件 → ${design.cycle.throughputPerMin} 件/分钟`
       : design.cycle.mode === 'parallel'
         ? `当前并行方案未满足目标节拍，按现估算总工位至少 ${design.cycle.requiredTotalStations} 个`
-        : `当前流水线方案未满足目标节拍，按现估算需每道工序 ${design.cycle.requiredParallelStations} 个并行工位，总工位至少 ${design.cycle.requiredTotalStations} 个`,
+        : `当前 ${design.cycle.mode} 布局未满足目标节拍，按现估算需每道工序 ${design.cycle.requiredParallelStations} 个并行工位，总工位至少 ${design.cycle.requiredTotalStations} 个`,
     bottleneck: design.cycle.bottleneck
   },
   stations: stationTable(design),

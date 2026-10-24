@@ -16,11 +16,14 @@ export type MachineVoltage = '220VAC' | '380VAC' | '24VDC';
 
 /**
  * 布局模型：
- * - parallel：N 个工位做同一道工序，产能随工位数放大（复制式布局）。
- * - line：工位串成流水线，每站一道工序，产能由最慢工序决定。
+ * - single：单工位完成全部工序。
+ * - linear：工位串成直线流水线，每站一道工序，产能由最慢工序决定（line 为兼容别名）。
+ * - dial：转盘分度，工位同时作业，分度期间不作业。
+ * - parallel：N 个工位复制同一道工序，产能随工位数放大。
+ * - cell：单元式，组内串行、组间并行。
  * - auto：未显式指定，由解析器按需求文本推断。
  */
-export type MachineLayout = 'parallel' | 'line' | 'auto';
+export type MachineLayout = 'single' | 'linear' | 'dial' | 'parallel' | 'cell' | 'line' | 'auto';
 
 export interface MachineBrief {
   process: MachineProcess;
@@ -44,7 +47,7 @@ export const MACHINE_DEFAULT_CYCLE_PER_MIN = 10;
 export const DEFAULT_NOTE_STATIONS = `缺省：未识别工位数，按 ${MACHINE_DEFAULT_STATIONS} 工位合成`;
 export const DEFAULT_NOTE_CYCLE = `缺省：未识别节拍，按 ${MACHINE_DEFAULT_CYCLE_PER_MIN} 件/分钟估算`;
 export const DEFAULT_NOTE_PROCESS = '缺省：未识别工艺，按通用工艺方案合成';
-export const DEFAULT_NOTE_LAYOUT = '缺省：未识别布局，按同工序并行估算；可显式指定 layout（parallel/line）';
+export const DEFAULT_NOTE_LAYOUT = '缺省：未识别布局，按同工序并行估算；可显式指定 layout（single/linear/dial/parallel/cell）';
 
 const PROCESS_RULES: Array<{ process: Exclude<MachineProcess, 'unknown'>; pattern: RegExp }> = [
   { process: 'screw', pattern: /锁螺丝|锁付|拧螺丝|打螺丝|螺丝机|上螺丝/ },
@@ -70,6 +73,9 @@ const PROCESS_NAME_RULES: Array<{ name: string; pattern: RegExp }> = [
 ];
 
 const LINE_KEYWORD = /流水线|线体|产线|生产线|装配线|包装线|检测线|自动线|输送线/;
+const DIAL_KEYWORD = /转盘|分度盘|分度转盘|回转台|圆盘|转台式|分度式/;
+const CELL_KEYWORD = /单元式|单元线|独立单元|cell/i;
+const PARALLEL_KEYWORD = /并行|复制式|多工位并行/;
 
 /** 传感器/上下料描述里的「检测」不是独立工序，推断布局前先屏蔽。 */
 function maskNonProcessPhrases(text: string): string {
@@ -101,11 +107,20 @@ function detectLayout(text: string, process: MachineProcess, processNames: strin
   layout: Exclude<MachineLayout, 'auto'>;
   inferred: string;
 } {
+  if (CELL_KEYWORD.test(text)) {
+    return { layout: 'cell', inferred: '需求含单元式布局线索' };
+  }
+  if (DIAL_KEYWORD.test(text)) {
+    return { layout: 'dial', inferred: '需求含转盘/分度布局线索' };
+  }
   if (LINE_KEYWORD.test(text)) {
-    return { layout: 'line', inferred: '需求含流水线/线体/产线线索' };
+    return { layout: 'linear', inferred: '需求含流水线/线体/产线线索' };
+  }
+  if (PARALLEL_KEYWORD.test(text)) {
+    return { layout: 'parallel', inferred: '需求含并行/复制式布局线索' };
   }
   if (processNames.length >= 2) {
-    return { layout: 'line', inferred: `识别到多个不同工序（${processNames.join('、')}）` };
+    return { layout: 'linear', inferred: `识别到多个不同工序（${processNames.join('、')}）` };
   }
   if (process !== 'unknown') {
     return { layout: 'parallel', inferred: `单一工艺「${processNames[0] ?? process}」按同工序并行` };
@@ -503,8 +518,12 @@ export function parseMachineBrief(text: string): MachineBrief {
   if (process === 'unknown' && stations > 1) notes.push(DEFAULT_NOTE_LAYOUT);
   if (inferred.layout === 'parallel' && process !== 'unknown') {
     notes.push(`布局推断：${inferred.inferred}，按同工序并行估算`);
-  } else if (inferred.layout === 'line') {
+  } else if (inferred.layout === 'linear') {
     notes.push(`布局推断：${inferred.inferred}，按流水线分工序估算`);
+  } else if (inferred.layout === 'dial') {
+    notes.push(`布局推断：${inferred.inferred}，按转盘分度估算`);
+  } else if (inferred.layout === 'cell') {
+    notes.push(`布局推断：${inferred.inferred}，按单元式估算`);
   } else {
     notes.push(`布局推断：${inferred.inferred}`);
   }

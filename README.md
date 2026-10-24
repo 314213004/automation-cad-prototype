@@ -206,6 +206,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 离线评估 | `docs/desktop/eval/cases.json` 75 条中文用例（21 个工具全覆盖 + 6 类拒绝场景 + 5 类工艺模板/信息不足）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | **Agent 能力报告** | 在 `desktop/` 下运行 `npm run agent:report`，读取单轮 / 多轮 / 离线评测 JSON 与本机 `<userData>/agent-audit.jsonl`，生成 `docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json` 和深色一页图 `docs/desktop/agent-report.svg`；每个数字标注来源文件与生成时间，缺源文件写「缺失：<文件>」并打印 WARN（退出码 0） | ✅ |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
+| 通用产能引擎 | `desktop/src/machine/flow.ts` 的 `evaluateFlow` 按 `single / linear / dial / parallel / cell` 五种布局，由任意工位组成、工序时间、转移/分度时间与目标节拍统一求 cycle、产能、瓶颈和所需工位数；`synthMachine` 只做 `FlowModel` 映射。6 个机型回归（6 工位并行锁螺丝 ≈113 件/分钟、转盘点胶、5 工位直线、单工位检测、2×2 单元、2 副本并行点胶），见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ |
 | 自然语言完整方案 | 21 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、75 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始

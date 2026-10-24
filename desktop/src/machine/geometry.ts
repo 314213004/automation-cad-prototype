@@ -189,8 +189,8 @@ export const GEOMETRY_DIMENSIONS = {
 } as const;
 
 const D = GEOMETRY_DIMENSIONS;
-const DIAL_PROCESSES: ReadonlySet<MachineProcess> = new Set(['screw', 'assembly']);
-const DIAL_MAX_STATIONS = 8;
+export const DIAL_PROCESSES: ReadonlySet<MachineProcess> = new Set(['screw', 'assembly']);
+export const DIAL_MAX_STATIONS = 8;
 
 const COLORS = {
   frame: '#5c646b',

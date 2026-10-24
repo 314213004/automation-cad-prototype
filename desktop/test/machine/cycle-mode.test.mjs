@@ -12,21 +12,21 @@ const caseFile = join(repoRoot, 'docs', 'desktop', 'eval', 'machine-case.json');
 const SIX_STATION =
   '六工位锁螺丝机，节拍 20 件/分钟，每工位 1 套汇川 750W 伺服 + 1 个 SMC 气爪 + 1 个到位检测 + 安全光栅';
 
-test('layout 推断：出现「流水线」→ line', () => {
-  assert.equal(parseMachineBrief('三工位锁螺丝流水线，20 件/分钟').layout, 'line');
+test('layout 推断：出现「流水线」→ linear', () => {
+  assert.equal(parseMachineBrief('三工位锁螺丝流水线，20 件/分钟').layout, 'linear');
 });
 
-test('layout 推断：出现「线体」→ line', () => {
-  assert.equal(parseMachineBrief('四工位装配线体').layout, 'line');
+test('layout 推断：出现「线体」→ linear', () => {
+  assert.equal(parseMachineBrief('四工位装配线体').layout, 'linear');
 });
 
-test('layout 推断：出现「产线」→ line', () => {
-  assert.equal(parseMachineBrief('包装产线，六工位').layout, 'line');
+test('layout 推断：出现「产线」→ linear', () => {
+  assert.equal(parseMachineBrief('包装产线，六工位').layout, 'linear');
 });
 
-test('layout 推断：上料/锁螺丝/检测/下料多工序 → line，并记录工序链', () => {
+test('layout 推断：上料/锁螺丝/检测/下料多工序 → linear，并记录工序链', () => {
   const brief = parseMachineBrief('三工位：上料、锁螺丝、检测、下料，20 件/分钟');
-  assert.equal(brief.layout, 'line');
+  assert.equal(brief.layout, 'linear');
   assert.deepEqual(brief.processes, ['上料', '锁螺丝', '检测', '下料']);
 });
 
@@ -45,8 +45,8 @@ test('layout 推断：单工位锁螺丝机 → parallel', () => {
   assert.equal(parseMachineBrief('一工位锁螺丝机，20 件/分钟').layout, 'parallel');
 });
 
-test('layout 推断：单工位但写明流水线 → line', () => {
-  assert.equal(parseMachineBrief('一工位检测流水线，20 件/分钟').layout, 'line');
+test('layout 推断：单工位但写明流水线 → linear', () => {
+  assert.equal(parseMachineBrief('一工位检测流水线，20 件/分钟').layout, 'linear');
 });
 
 test('layout 兜底：工艺未知且多工位 → parallel + 可显式指定 layout 的 warning', () => {
@@ -85,9 +85,9 @@ test('parallel 单工位 3.18 秒/件 → 18.87 件/分钟，不达标', () => {
   assert.ok(design.warnings.some((warning) => /并行同工序/.test(warning)));
 });
 
-test('line 公式保持修复前逻辑：产能 = 60 / 最慢工位', () => {
+test('linear 公式保持修复前逻辑：产能 = 60 / 最慢工位', () => {
   const design = synthMachine(parseMachineBrief('三工位锁螺丝流水线，20 件/分钟，每工位 1 个气爪'));
-  assert.equal(design.cycle.mode, 'line');
+  assert.equal(design.cycle.mode, 'linear');
   assert.equal(design.cycle.stationSeconds, 2.48);
   assert.equal(design.cycle.throughputPerMin, 24.19);
   assert.equal(design.cycle.meetsTarget, true);
@@ -96,9 +96,9 @@ test('line 公式保持修复前逻辑：产能 = 60 / 最慢工位', () => {
   assert.match(design.cycle.bottleneck, /流水线最慢工序/);
 });
 
-test('line 不达标时建议复制瓶颈工序，并给出复制数与总工位', () => {
+test('linear 不达标时建议复制瓶颈工序，并给出复制数与总工位', () => {
   const design = synthMachine(parseMachineBrief('三工位锁螺丝流水线，30 件/分钟，每工位 1 个气爪'));
-  assert.equal(design.cycle.mode, 'line');
+  assert.equal(design.cycle.mode, 'linear');
   assert.equal(design.cycle.meetsTarget, false);
   assert.equal(design.cycle.requiredParallelStations, 2);
   assert.equal(design.cycle.requiredTotalStations, 6);
@@ -111,7 +111,7 @@ test('边界：估算产能恰好等于目标时 meetsTarget=true', () => {
     parseMachineBrief('三工位锁螺丝流水线，每工位 1 个气爪'),
     { cyclePerMin: 60 / 2.48 }
   );
-  assert.equal(design.cycle.mode, 'line');
+  assert.equal(design.cycle.mode, 'linear');
   assert.equal(design.cycle.throughputPerMin, 24.19);
   assert.equal(design.cycle.meetsTarget, true);
 });
@@ -140,7 +140,7 @@ test('显式 layout=line 覆盖解析器的 parallel 推断', () => {
   const parsed = parseMachineBrief('三工位锁螺丝机，20 件/分钟，每工位 1 个气爪');
   assert.equal(parsed.layout, 'parallel');
   const design = synthMachine({ ...parsed, layout: 'line' });
-  assert.equal(design.cycle.mode, 'line');
+  assert.equal(design.cycle.mode, 'linear');
   assert.equal(design.cycle.throughputPerMin, 24.19);
 });
 

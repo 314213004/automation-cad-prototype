@@ -15,15 +15,16 @@ import {
   MACHINE_STATIONS_MIN,
   type MachineActuatorKind,
   type MachineBrief,
-  type MachineLayout,
   type MachineProcess,
   type MachineSensorKind
 } from './spec.ts';
+import { DIAL_MAX_STATIONS, DIAL_PROCESSES } from './geometry.ts';
+import { evaluateFlow, type FlowEvaluation, type FlowModel, type FlowOp, type MachineLayout } from './flow.ts';
 import { templateFor, templateKinds } from './templates.ts';
 
 export interface MachineCycleEstimate {
-  /** 布局模型：parallel = 同工序并行，line = 流水线分工序。 */
-  mode: 'parallel' | 'line';
+  /** 布局模型：single / linear / dial / parallel / cell。 */
+  mode: MachineLayout;
   perMin: number;
   /** 目标节拍，60 / perMin。 */
   secondsPerPiece: number;
@@ -37,7 +38,7 @@ export interface MachineCycleEstimate {
   slowestStation: number;
   slowestActionSeconds: number;
   requiredParallelStations: number;
-  /** 达标所需总工位：parallel = ceil(目标 × 单工位时间 / 60)，line = 工位数 × 瓶颈复制数。 */
+  /** 达标所需总工位：由 evaluateFlow 按布局公式反解。 */
   requiredTotalStations: number;
   meetsTarget: boolean;
   bottleneck: string;
@@ -228,13 +229,61 @@ function servoDetected(brief: MachineBrief): boolean {
   return brief.notes.some((note) => /伺服|步进/.test(note));
 }
 
-function resolveLayout(brief: MachineBrief): { mode: 'parallel' | 'line'; fallback: boolean } {
-  const declared: MachineLayout = brief.layout ?? 'auto';
-  if (declared === 'line') return { mode: 'line', fallback: false };
-  if (declared === 'parallel') return { mode: 'parallel', fallback: false };
-  // auto：解析器通常已给出结论；手工构造的 brief 只能按工序数量兜底。
-  if ((brief.processes?.length ?? 0) >= 2) return { mode: 'line', fallback: false };
-  return { mode: 'parallel', fallback: true };
+export interface ChooseLayoutOptions {
+  /** true：多个工位重复同一道工序（复制式并行），优先于几何布局。 */
+  sameProcess?: boolean;
+  /** true：需求明确为单元式布局（仅显式指定时使用）。 */
+  cell?: boolean;
+}
+
+/**
+ * 与几何层一致的布局选择：1 工位 single；转盘适用工艺且不超过几何上限 dial；
+ * 其余 linear。调用方明确知道「同工序多工位」时传 sameProcess=true 得到 parallel；
+ * cell 只在显式指定时使用。
+ */
+export function chooseLayout(
+  process: MachineProcess,
+  stations: number,
+  options: ChooseLayoutOptions = {}
+): MachineLayout {
+  if (options.cell === true) return 'cell';
+  if (stations <= 1) return 'single';
+  if (options.sameProcess === true) return 'parallel';
+  if (DIAL_PROCESSES.has(process) && stations <= DIAL_MAX_STATIONS) return 'dial';
+  return 'linear';
+}
+
+function resolveLayout(
+  brief: MachineBrief,
+  stations: number
+): { mode: MachineLayout; fallback: boolean; inferred: string; auto: boolean } {
+  const declared = brief.layout ?? 'auto';
+  if (declared === 'line' || declared === 'linear') {
+    return { mode: 'linear', fallback: false, inferred: '显式指定流水线布局', auto: false };
+  }
+  if (declared === 'parallel') {
+    return { mode: 'parallel', fallback: false, inferred: '显式指定同工序并行布局', auto: false };
+  }
+  if (declared === 'single' || declared === 'dial' || declared === 'cell') {
+    return { mode: declared, fallback: false, inferred: `显式指定 ${declared} 布局`, auto: false };
+  }
+  // auto：解析器通常已给出结论；手工构造的 brief 按工序链与几何规则兜底。
+  const processNames = brief.processes ?? [];
+  if (processNames.length >= 2) {
+    return { mode: 'linear', fallback: false, inferred: `识别到多个不同工序（${processNames.join('、')}）`, auto: true };
+  }
+  if (stations <= 1) {
+    return { mode: 'single', fallback: false, inferred: '单工位布局', auto: true };
+  }
+  if (brief.process === 'unknown') {
+    return { mode: 'linear', fallback: true, inferred: '工艺未知，按流水线分工序兜底', auto: true };
+  }
+  return {
+    mode: chooseLayout(brief.process, stations, { sameProcess: true }),
+    fallback: false,
+    inferred: `单一工艺「${processNames[0] ?? PROCESS_LABEL[brief.process]}」按同工序并行`,
+    auto: true
+  };
 }
 
 function templateDescription(kinds: readonly string[]): string {
@@ -333,7 +382,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const stations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
-  const layout = resolveLayout(brief);
+  const layout = resolveLayout(brief, stations);
   const template = templateFor(process);
   const templateActuatorKinds = templateKinds(template.actuators);
   const templateSensorKinds = templateKinds(template.sensors);
@@ -341,13 +390,22 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const warnings: string[] = [];
   const assumptions: string[] = [
     '功率按固定估算表计算（气缸 5 VA、夹爪 15 VA、旋转轴 200 VA、伺服 750 VA、传感器 3 VA、安全光栅 20 VA），为粗略估算，不等于实测有功功率。',
-    '节拍按单工位动作加固定工艺余量估算；同工序并行与流水线分工序使用不同产能公式，均未计入上下料、通讯、人工干预与调试损失。',
+    '节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
 
-  if (layout.mode === 'line') {
+  if (layout.auto) {
+    assumptions.push(`布局自动推断为 ${layout.mode}：${layout.inferred}。`);
+  }
+  if (layout.mode === 'linear') {
     const chain = brief.processes?.length ? brief.processes.join(' → ') : '多道工序';
-    assumptions.push(`布局按流水线估算（line）：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
+    assumptions.push(`布局按流水线估算（linear）：工序按 ${chain} 分工位，整线产能 = 60 / 最慢工位时间，建议复制瓶颈工序。`);
+  } else if (layout.mode === 'dial') {
+    assumptions.push('布局按转盘分度估算（dial）：各工位同时作业，节拍 = 最慢工位时间 + 分度时间。');
+  } else if (layout.mode === 'cell') {
+    assumptions.push('布局按单元式估算（cell）：组内工位串行、组间并行，节拍 = 最慢组时间 + 转移时间。');
+  } else if (layout.mode === 'single') {
+    assumptions.push('布局按单工位估算（single）：一个工位完成全部工序，节拍 = 各工序时间之和。');
   } else if (brief.notes.includes(DEFAULT_NOTE_LAYOUT) || layout.fallback) {
     assumptions.push('未识别布局，按同工序并行估算；如实际为流水线，请显式指定 layout=line。');
   } else {
@@ -470,33 +528,64 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   });
 
   const baseSeconds = PROCESS_BASE_SECONDS[process];
-  let slowest = { station: 1, seconds: 0, kind: templateActuatorKinds[0] ?? 'cylinder' };
-  for (const [stationIndex, kinds] of actuatorBuckets.entries()) {
+  const stationWork = actuatorBuckets.map((kinds, stationIndex) => {
     const actionSeconds = kinds.reduce((sum, kind) => sum + ACTUATOR_SECONDS[kind], 0);
     const stationKind = kinds.reduce<MachineActuatorKind | null>((best, kind) => {
       if (!best) return kind;
       return ACTUATOR_SECONDS[kind] > ACTUATOR_SECONDS[best] ? kind : best;
     }, null) ?? 'cylinder';
-    const seconds = baseSeconds + actionSeconds;
-    if (seconds > slowest.seconds) slowest = { station: stationIndex + 1, seconds, kind: stationKind };
+    return { stationIndex, seconds: baseSeconds + actionSeconds, kind: stationKind };
+  });
+  const processChain = brief.processes?.length ? brief.processes : [PROCESS_LABEL[process]];
+  const stationOps: FlowOp[] = stationWork.map((work) => ({
+    id: `st${work.stationIndex + 1}-op`,
+    name: processChain[work.stationIndex % processChain.length] ?? PROCESS_LABEL[process],
+    seconds: work.seconds,
+    station: work.stationIndex
+  }));
+
+  let flowOps: FlowOp[] = stationOps;
+  let copies: number | undefined;
+  if (layout.mode === 'parallel') {
+    // 并行布局下每个副本执行同一套完整工序；合成器用各工位的最大作业时间代表一套副本。
+    const fullSetSeconds = stationWork.reduce((max, work) => Math.max(max, work.seconds), 0);
+    flowOps = [{
+      id: 'parallel-full-set',
+      name: processChain.join(' + '),
+      seconds: fullSetSeconds,
+      station: 0
+    }];
+    copies = stations;
   }
+
+  const flowModel: FlowModel = {
+    layout: layout.mode,
+    stations,
+    ops: flowOps,
+    targetPerMin: cyclePerMin,
+    ...(copies === undefined ? {} : { copies })
+  };
+  const evaluation: FlowEvaluation = evaluateFlow(flowModel);
+  for (const note of evaluation.notes) assumptions.push(`产能模型：${note}`);
+
   const secondsPerPiece = round(60 / cyclePerMin);
-  const stationSeconds = round(slowest.seconds, 3);
-  const stationLabel =
-    `工艺固定 ${baseSeconds.toFixed(2)}s + ${ACTUATOR_LABEL[slowest.kind]} ${ACTUATOR_SECONDS[slowest.kind].toFixed(2)}s`;
-  let throughputPerMin: number;
-  let meetsTarget: boolean;
-  let requiredParallelStations: number;
-  let requiredTotalStations: number;
+  const stationSeconds = round(evaluation.stationSecondsMax, 3);
+  const throughputPerMin = round(evaluation.throughputPerMin, 2);
+  const meetsTarget = evaluation.meetsTarget === true;
+  const requiredTotalStations = Number.isFinite(evaluation.requiredStations)
+    ? evaluation.requiredStations
+    : 0;
+  const requiredParallelStations = layout.mode === 'parallel'
+    ? requiredTotalStations
+    : Math.max(1, Math.ceil(requiredTotalStations / stations));
+  const bottleneckStation = (evaluation.bottleneck?.station ?? 0) + 1;
+  const bottleneckWork = stationWork[evaluation.bottleneck?.station ?? 0]
+    ?? stationWork[0]
+    ?? { stationIndex: 0, seconds: stationSeconds, kind: templateActuatorKinds[0] ?? 'cylinder' };
+  const stationLabel = `工艺固定 ${baseSeconds.toFixed(2)}s + ${ACTUATOR_LABEL[bottleneckWork.kind]} ${ACTUATOR_SECONDS[bottleneckWork.kind].toFixed(2)}s`;
   let bottleneck: string;
 
   if (layout.mode === 'parallel') {
-    // 同工序并行：N 个工位各做一件，整机产能按工位数线性放大。
-    const rawThroughput = (stations / slowest.seconds) * 60;
-    throughputPerMin = round(rawThroughput, 2);
-    meetsTarget = rawThroughput >= cyclePerMin - 1e-9;
-    requiredTotalStations = Math.max(1, Math.ceil((cyclePerMin * stationSeconds) / 60 - 1e-9));
-    requiredParallelStations = requiredTotalStations;
     const margin = throughputPerMin / cyclePerMin;
     bottleneck =
       `单工位 ${stationSeconds.toFixed(2)} 秒/件，${stations} 工位并行 → ${throughputPerMin.toFixed(2)} 件/分钟` +
@@ -508,23 +597,39 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
         `建议总工位 ≥ ${requiredTotalStations}（每道工序并行工位 ≥ ${requiredParallelStations}）。`
       );
     }
-  } else {
-    // 流水线分工序：每站一道工序，整线产能由最慢工位决定，补工位只针对瓶颈工序。
-    const rawThroughput = 60 / slowest.seconds;
-    throughputPerMin = round(rawThroughput, 2);
-    meetsTarget = rawThroughput >= cyclePerMin - 1e-9;
-    requiredParallelStations = meetsTarget
-      ? 1
-      : Math.max(1, Math.ceil(slowest.seconds / secondsPerPiece - 1e-9));
-    requiredTotalStations = stations * requiredParallelStations;
+  } else if (layout.mode === 'linear') {
     bottleneck =
-      `流水线最慢工序为工位${slowest.station}，单件 ${stationSeconds.toFixed(2)} 秒 → ${throughputPerMin.toFixed(2)} 件/分钟` +
+      `流水线最慢工序为工位${bottleneckStation}，单件 ${stationSeconds.toFixed(2)} 秒 → ${throughputPerMin.toFixed(2)} 件/分钟` +
       `（${stationLabel}；目标 ${cyclePerMin} 件/分钟${meetsTarget ? '，满足' : '，未达标'}）`;
     if (!meetsTarget) {
       warnings.push(
-        `流水线节拍瓶颈：工位${slowest.station} 估算 ${stationSeconds.toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
+        `流水线节拍瓶颈：工位${bottleneckStation} 估算 ${stationSeconds.toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
         `整线产能 ${throughputPerMin.toFixed(2)} 件/分钟，低于目标 ${cyclePerMin} 件/分钟；` +
         `建议复制瓶颈工序，每道工序并行工位 ≥ ${requiredParallelStations}（总工位 ≥ ${requiredTotalStations}）。`
+      );
+    }
+  } else {
+    const indexSeconds = flowModel.indexSeconds ?? 0.6;
+    const modeLabel: Record<Exclude<MachineLayout, 'parallel' | 'linear'>, string> = {
+      single: '单工位',
+      dial: '转盘分度',
+      cell: '单元布局'
+    };
+    const extra = layout.mode === 'dial'
+      ? `，含分度 ${indexSeconds.toFixed(2)} 秒`
+      : layout.mode === 'cell'
+        ? '，组间并行'
+        : '';
+    bottleneck =
+      `${modeLabel[layout.mode]}：最慢工位${bottleneckStation} 单件 ${stationSeconds.toFixed(2)} 秒${extra} → ` +
+      `${throughputPerMin.toFixed(2)} 件/分钟（${stationLabel}；目标 ${cyclePerMin} 件/分钟${meetsTarget ? '，满足' : '，未达标'}）`;
+    if (!meetsTarget) {
+      warnings.push(
+        `节拍瓶颈（${layout.mode}）：工位${bottleneckStation} 估算 ${stationSeconds.toFixed(2)} 秒/件，超过目标 ${secondsPerPiece.toFixed(2)} 秒/件；` +
+        `当前产能 ${throughputPerMin.toFixed(2)} 件/分钟，低于目标 ${cyclePerMin} 件/分钟；` +
+        (Number.isFinite(evaluation.requiredStations)
+          ? `建议总工位 ≥ ${requiredTotalStations}（每道工序并行工位 ≥ ${requiredParallelStations}）。`
+          : '当前布局的固定分度/转移时间已超过目标节拍，仅靠增加工位无法达标。')
       );
     }
   }
@@ -552,8 +657,8 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
       throughputPerMin,
       estimatedSecondsPerPiece: stationSeconds,
       baseSeconds,
-      slowestStation: slowest.station,
-      slowestActionSeconds: round(slowest.seconds - baseSeconds),
+      slowestStation: bottleneckStation,
+      slowestActionSeconds: round(Math.max(0, stationSeconds - baseSeconds)),
       requiredParallelStations,
       requiredTotalStations,
       meetsTarget,

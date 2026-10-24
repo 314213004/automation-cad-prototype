@@ -510,9 +510,15 @@ function renderMachineCard(call: DesktopAgentToolCall, result: DesktopAgentChatM
   const throughput = typeof card.cycle?.throughputPerMin === 'number' ? card.cycle.throughputPerMin : null;
   const mode = card.cycle?.mode === 'parallel'
     ? '同工序并行'
-    : card.cycle?.mode === 'line'
+    : card.cycle?.mode === 'linear' || card.cycle?.mode === 'line'
       ? '流水线分工序'
-      : null;
+      : card.cycle?.mode === 'dial'
+        ? '转盘分度'
+        : card.cycle?.mode === 'cell'
+          ? '单元式'
+          : card.cycle?.mode === 'single'
+            ? '单工位'
+            : null;
   const targetSeconds = typeof card.cycle?.secondsPerPiece === 'number' ? card.cycle.secondsPerPiece : null;
   const estimate = throughput ?? seconds;
   const estimateUnit = throughput === null ? '估算秒/件' : '估算件/分钟';

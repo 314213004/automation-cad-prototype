@@ -1,6 +1,6 @@
 # 六工位锁螺丝机 · 完整设计案例
 
-本文是一个从中文需求到 3D / BOM / PLC IO 的完整案例。案例数字不是手写的：`desktop/scripts/build-machine-case.mjs` 调用 `parseMachineBrief`、`synthMachine`、`mapMachineBom` 与 `buildMachineIoMap` 生成 [`eval/machine-case.json`](eval/machine-case.json)，再由该 JSON 生成方案表和截图校验结果。
+本文是一个从中文需求到 3D / BOM / PLC IO 的完整案例。**本案例是通用产能引擎的 `parallel` 实例**（六工位同工序复制，6 个副本并行）；其余 `single / linear / dial / cell` 由同一 `evaluateFlow` 入口求值。案例数字不是手写的：`desktop/scripts/build-machine-case.mjs` 调用 `parseMachineBrief`、`synthMachine`、`mapMachineBom` 与 `buildMachineIoMap` 生成 [`eval/machine-case.json`](eval/machine-case.json)，再由该 JSON 生成方案表和截图校验结果。
 
 ```bash
 cd desktop
@@ -75,7 +75,7 @@ requiredTotalStations = ceil(目标 × stationSeconds / 60)
 
 **结论：6 工位并行 ≈ 113 件/分钟，满足 20 件/分钟，余量 5.66 倍。**
 
-边界：该结论成立的前提是 6 个工位确实执行同一道锁螺丝工序、可独立并行上下料；模型仍未计入上下料、通讯、人工干预、调试损失与真实加减速。若实际工艺是「上料 → 锁螺丝 → 检测 → 下料」串行流水线，应在需求中写「流水线 / 线体 / 产线」，或显式指定 `layout=line`；此时产能按 `60 / 最慢工位` 计算，不能拿 6 工位做线性放大。
+边界：该结论成立的前提是 6 个工位确实执行同一道锁螺丝工序、可独立并行上下料；模型仍未计入上下料、通讯、人工干预、调试损失与真实加减速。若实际工艺是「上料 → 锁螺丝 → 检测 → 下料」串行流水线，应在需求中写「流水线 / 线体 / 产线」，或显式指定 `layout=linear`（兼容 `line`）；此时产能按 `60 / 最慢工位` 计算，不能拿 6 工位做线性放大。
 
 ## 功率与电气估算
 
