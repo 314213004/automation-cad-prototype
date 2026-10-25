@@ -108,6 +108,8 @@ export interface OrbitHandle {
   /** 最近一次采集的渲染指标；WebGL 降级时为 null。 */
   renderStats(): RenderStats | null;
   resize(): void;
+  /** 装配工作台的 OrbitView 实例（标准件拖放需要它做射线落位）；WebGL 不可用时为 null。 */
+  assemblyView(): OrbitView | null;
 }
 
 declare global {
@@ -1132,7 +1134,8 @@ export function initOrbitView(): OrbitHandle {
     renderStats: () => slots.map((slot) => slot.view?.renderStats()).find((stats): stats is RenderStats => stats !== undefined) ?? null,
     resize: () => {
       slots.forEach((slot) => slot.view?.resize());
-    }
+    },
+    assemblyView: () => slots.find((slot) => slot.kind === 'assembly')?.view ?? null
   };
   Object.defineProperty(window, 'AutomationCadOrbit', {
     value: Object.freeze(handle),

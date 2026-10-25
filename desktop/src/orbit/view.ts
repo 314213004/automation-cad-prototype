@@ -38,6 +38,7 @@ import {
 } from './quality.ts';
 import { isCredibleFrameSample, isSoftwareRenderer, type RenderStats } from '../shared/render-stats.ts';
 import { clientPointToNdc, isClickSelect, isStaleDrag } from './pointer.ts';
+import type { AssemblyInstance, SurfaceHit } from '../assembly/instances.ts';
 
 /**
  * 排队中的渲染帧最大等待时长。页面被遮挡/最小化时 rAF 不触发，超过这个窗口就认为该帧已失效，
@@ -135,6 +136,9 @@ export class OrbitView {
   private dragMaxFrameMs = 0;
   private dragDroppedFrames = 0;
   private renderQueuedAt = 0;
+  /** 装配实例（标准件代理体）与拖入时的预览体；与装配模型分开管理，互不覆盖。 */
+  private readonly assemblyInstances = new THREE.Group();
+  private assemblyGhost: THREE.Mesh | null = null;
   private readonly inputCounters = { pointerDowns: 0, pointerUps: 0, pointerMoves: 0, wheels: 0 };
   private controlsRebuilds = 0;
   private lastControlsRebuildAt = 0;
@@ -167,6 +171,8 @@ export class OrbitView {
     const fill = new THREE.DirectionalLight(0xb9c6d2, 0.6);
     fill.position.set(-1.4, 1.2, 0.8);
     this.scene.add(fill);
+
+    this.scene.add(this.assemblyInstances);
 
     this.perspective.up.set(0, 0, 1);
     this.ortho.up.set(0, 0, 1);
@@ -547,6 +553,78 @@ export class OrbitView {
     return null;
   }
 
+  /** 标准件代理体：盒体直出，圆柱的轴向对齐本场景的 +Z（CylinderGeometry 默认 +Y）。 */
+  private buildInstanceMesh(instance: AssemblyInstance, ghost: boolean): THREE.Mesh {
+    const [sx, sy, sz] = instance.dims.size;
+    const geometry = instance.dims.shape === 'cylinder' && instance.dims.diameter !== null
+      ? new THREE.CylinderGeometry(instance.dims.diameter / 2, instance.dims.diameter / 2, sz, 24)
+      : new THREE.BoxGeometry(sx, sy, sz);
+    if (instance.dims.shape === 'cylinder') geometry.rotateZ(Math.PI / 2); // 轴向 +Y → +X
+    const material = new THREE.MeshStandardMaterial({
+      color: instance.dims.estimated ? 0xd08a3a : 0x4a90c2,
+      metalness: 0.25,
+      roughness: 0.55,
+      transparent: ghost,
+      opacity: ghost ? 0.45 : 1,
+      depthWrite: !ghost
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(instance.position[0], instance.position[1], instance.position[2]);
+    mesh.quaternion.set(instance.quaternion[0], instance.quaternion[1], instance.quaternion[2], instance.quaternion[3]);
+    if (ghost) mesh.renderOrder = 10;
+    else mesh.userData.assemblyId = instance.id;
+    return mesh;
+  }
+
+  /** 重建装配实例层（与装配模型/干涉叠加层互不影响）。 */
+  setAssemblyInstances(items: readonly AssemblyInstance[]): void {
+    for (const child of [...this.assemblyInstances.children]) {
+      this.assemblyInstances.remove(child);
+      disposeObject(child);
+    }
+    this.assemblyGhost = null;
+    for (const item of items) this.assemblyInstances.add(this.buildInstanceMesh(item, false));
+    this.requestRender();
+  }
+
+  /** 拖入预览体：传 null 清除。 */
+  previewAssemblyInstance(item: AssemblyInstance | null): void {
+    if (this.assemblyGhost) {
+      this.assemblyInstances.remove(this.assemblyGhost);
+      disposeObject(this.assemblyGhost);
+      this.assemblyGhost = null;
+    }
+    if (item) {
+      this.assemblyGhost = this.buildInstanceMesh(item, true);
+      this.assemblyInstances.add(this.assemblyGhost);
+    }
+    this.requestRender();
+  }
+
+  /** 客户端坐标 → 命中点 + 法向（先打已有零件，未命中退到 Z=0 基准面）。 */
+  pickAssemblyHit(clientX: number, clientY: number): SurfaceHit | null {
+    const ndc = clientPointToNdc(clientX, clientY, this.canvas.getBoundingClientRect());
+    if (!ndc) return null;
+    this.raycaster.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), this.camera);
+    const targets: THREE.Object3D[] = [];
+    if (this.assemblyRoot) targets.push(this.assemblyRoot);
+    for (const child of this.assemblyInstances.children) {
+      if (child !== this.assemblyGhost) targets.push(child);
+    }
+    const hit = this.raycaster.intersectObjects(targets, true)[0];
+    if (hit) {
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(hit.object.matrixWorld);
+      const normal = hit.face
+        ? hit.face.normal.clone().applyMatrix3(normalMatrix).normalize()
+        : new THREE.Vector3(0, 0, 1);
+      return { point: [hit.point.x, hit.point.y, hit.point.z], normal: [normal.x, normal.y, normal.z] };
+    }
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    const point = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(plane, point)) return null;
+    return { point: [point.x, point.y, 0], normal: [0, 0, 1] };
+  }
+
   setMarqueeMode(on: boolean): void {
     this.marqueeMode = on;
     this.canvas.style.cursor = on ? 'crosshair' : '';
@@ -668,6 +746,7 @@ export class OrbitView {
     this.controls.dispose();
     if (this.assemblyRoot) disposeObject(this.assemblyRoot);
     if (this.overlayRoot) disposeObject(this.overlayRoot);
+    for (const child of [...this.assemblyInstances.children]) disposeObject(child);
     this.renderer.dispose();
     this.canvas.remove();
   }

@@ -53,6 +53,8 @@ import { toDxf, type DxfShape } from './export/dxf';
 import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
+import { initAssemblyUi, assemblyStyles } from './assembly/ui';
+import { buildEntryButton as buildPanelEntryButton } from './ui/panels';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
@@ -2202,11 +2204,40 @@ function init(): void {
   refreshProjectArchiveControls();
   initMechUi();
   injectStressTab();
+  let orbitHandle: ReturnType<typeof initOrbitView> | null = null;
   try {
-    initOrbitView();
+    orbitHandle = initOrbitView();
   } catch (error) {
     // 主视口 3D 注入失败时保留原型等轴测视图，不影响其他扩展。
     console.warn('[orbit] 主视口 3D 初始化失败，保留等轴测视图', error);
+  }
+  // 标准件装配：拖进 3D 落位（不走 agent）
+  let assemblyUi: ReturnType<typeof initAssemblyUi> | null = null;
+  try {
+    const assemblyView = orbitHandle?.assemblyView() ?? null;
+    if (assemblyView) {
+      if (!document.getElementById('acp-assembly-styles')) {
+        const style = document.createElement('style');
+        style.id = 'acp-assembly-styles';
+        style.textContent = assemblyStyles();
+        document.head.appendChild(style);
+      }
+      assemblyUi = initAssemblyUi({ view: assemblyView });
+      buildPanelEntryButton(
+        'assemblyEntryButton',
+        '装配',
+        '<svg viewBox="0 0 16 16" class="ico"><path d="M3 3h5v5H3zM8 8h5v5H8zM9 8l3-3"/></svg>',
+        () => assemblyUi?.open()
+      );
+      Object.defineProperty(window, 'AutomationCadAssembly', {
+        value: Object.freeze(assemblyUi),
+        writable: false,
+        configurable: false,
+        enumerable: false
+      });
+    }
+  } catch (error) {
+    console.warn('[assembly] 标准件装配初始化失败', error);
   }
   bindWindowEvents();
   Object.defineProperty(window, 'AutomationCadKinematics', {
