@@ -782,11 +782,12 @@
     s += `<section class="pgroup" data-pgroup>
       <button class="pgroup-head" type="button" data-pgroup-head>页属性<svg viewBox="0 0 16 16" class="ico"><path d="M4 6.5l4 4 4-4"/></svg></button>
       <div class="pgroup-body"><div class="pb-inner"><div class="pb-pad">
-        <div class="field"><label>图号</label><div class="ctl-ro mono">EL-001</div></div>
-        <div class="field"><label>页</label><div class="ctl-ro mono">3 / 12</div></div>
+        <div class="field"><label>图号</label><div class="ctl-ro mono">${(ES.machine && ES.machine.drawingNo) || 'EL-001'}</div></div>
+        <div class="field"><label>页</label><div class="ctl-ro mono">${ES.machine ? '1 / 1' : '3 / 12'}</div></div>
+        <div class="field"><label>来源</label><div class="ctl-ro mono">${ES.machine ? (ES.machine.project || '工程生成') : '示例柜'}</div></div>
         <div class="field"><label>幅面</label><div class="ctl-ro mono">A3 · 420 × 297</div></div>
         <div class="field"><label>比例</label><div class="ctl-ro mono">1:1</div></div>
-        <div class="field"><label>元件</label><div class="ctl-ro mono">${11 + $$('#elPlaceLayer .esym').length} 个符号</div></div>
+        <div class="field"><label>元件</label><div class="ctl-ro mono">${(ES.machine && ES.machine.devices ? ES.machine.devices.length : 11) + $$('#elPlaceLayer .esym').length} 个符号</div></div>
         <div class="field"><label>栅格</label><div class="ctl-ro mono">4 mm</div></div>
       </div></div></div>
     </section>
@@ -2362,8 +2363,65 @@
   }
 
   /* 供调试/外部调用 */
+  /**
+   * 用「工程生成」的图纸替换示例页（EL-001 滑台气缸控制柜）。
+   * 生成器在 desktop/src/elec/schematic.ts，按输送机的驱动/传感器/IO 出图。
+   */
+  function setSchematic(payload) {
+    const svg = $('#elSheet');
+    if (!svg) return false;
+    if (!payload || typeof payload.svg !== 'string' || payload.svg.length < 100) return false;
+    svg.innerHTML = payload.svg + '<g id="elPlaceLayer"></g><g id="elGhost" class="eghost" hidden></g>';
+    if (payload.meta) {
+      ES.machine = payload.meta;
+      const label = $('#elSheetProject');
+      if (label) label.textContent = payload.meta.project || '';
+      renderMachinePageTree(payload.meta);
+    }
+    applySheetState();
+    ensureSheetsRerendered();
+    return true;
+  }
+
+  /** 页浏览器同步成"工程图纸"，不再显示示例的 12 页 */
+  function renderMachinePageTree(meta) {
+    const tree = $('#elPageTree');
+    if (!tree) return;
+    const no = meta.drawingNo || 'EL-CV-001';
+    const rows = (meta.devices || []).slice(0, 12).map((d) => `
+      <div class="prow" style="padding-left:30px">
+        <span class="pt-ico">${ICO.page}</span>
+        <span class="lbl">${d.tag} ${d.name}</span>
+        <span class="pg">${d.qty || 1}</span>
+      </div>`).join('');
+    tree.innerHTML = `<div class="tree" role="tree">
+      <div class="prow is-open" style="padding-left:8px">
+        <span class="tw">${ICO.chev}</span><span class="pt-ico">${ICO.folder}</span>
+        <span class="lbl">工程图纸</span><span class="pg">1</span>
+      </div>
+      <div class="prow is-sel" style="padding-left:30px">
+        <span class="pt-ico">${ICO.page}</span>
+        <span class="lbl">1.1 ${no} 原理图</span>
+        <span class="pg">A3</span>
+      </div>
+      <div class="prow is-open" style="padding-left:8px">
+        <span class="tw">${ICO.chev}</span><span class="pt-ico">${ICO.folder}</span>
+        <span class="lbl">本页元件</span><span class="pg">${(meta.devices || []).length}</span>
+      </div>
+      <div>${rows}</div>
+    </div>`;
+  }
+
+  /** 图纸换成工程生成版后，右栏元件属性表要跟着换 */
+  function ensureSheetsRerendered() {
+    const r = $('[data-panel="right"][data-for="schematic"]') || $('#elRight');
+    if (r) r.innerHTML = schematicRightHTML();
+  }
+
   window.ElecDomain = {
     setDomain: setDomain,
+    setSchematic: setSchematic,
+    hasMachineSheet: () => !!(ES.machine && ES.machine.generated),
     show: showElecView,
     insertSymbol: insertSymbol,
     state: ES

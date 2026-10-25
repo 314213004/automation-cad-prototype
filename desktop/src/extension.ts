@@ -55,6 +55,8 @@ import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
+import { buildElectricalSheet, type ElectricMachineModel } from './elec/schematic';
+import { estimateConveyorDrive } from './machine/conveyor-synth';
 import {
   buildConveyorParts,
   conveyorAssembly,
@@ -299,6 +301,22 @@ function buildOverlay(): void {
       if (domainBtn.dataset.cadDomain === 'elec') {
         // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前工程上下文
         const project = lastOpenedProject;
+        const sheet = project ? generateElecSheet(project) : null;
+        try {
+          if (sheet) {
+            (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
+              svg: sheet.svg,
+              meta: {
+                project: project?.name ?? '',
+                drawingNo: 'EL-CV-001',
+                generated: true,
+                devices: sheet.devices
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('[cad] 生成电气图失败', error);
+        }
         closeOverlay();
         try {
           (window as unknown as { ElecDomain?: { setDomain?: (domain: string) => void } }).ElecDomain?.setDomain?.('elec');
@@ -849,6 +867,8 @@ interface ProjectMenuRecord {
   createdAt: string;
   /** 零件清单（外壳结构树用） */
   partsList?: Array<{ file: string; name: string }>;
+  /** 机型参数（生成电气图用） */
+  params?: Record<string, number>;
 }
 
 /**
@@ -911,6 +931,54 @@ function toggleProjectMenu(open?: boolean): void {
 }
 
 /** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
+/**
+ * 由工程生成电气原理图数据。
+ * 驱动功率来自 conveyor-synth 的真实阻力/功率估算（不是拍脑袋），
+ * 传感器来自零件清单里的光电支架，IO 由 schematic.ts 统一排布。
+ */
+function generateElecSheet(project: ProjectMenuRecord): ReturnType<typeof buildElectricalSheet> | null {
+  const params = {
+    lengthMm: Number(project.params?.lengthMm ?? 2000),
+    widthMm: Number(project.params?.widthMm ?? 300),
+    beltHeightMm: Number(project.params?.beltHeightMm ?? 850),
+    pulleyDiameterMm: Number(project.params?.pulleyDiameterMm ?? 50),
+    beltThicknessMm: Number(project.params?.beltThicknessMm ?? 4),
+    frameSectionMm: Number(project.params?.frameSectionMm ?? 40)
+  };
+  // 驱动功率与滚筒转速来自同一套估算：v = 0.2 m/s 默认，n = 60v / (πD)
+  let powerKw = 0.04;
+  let speedMps = 0.2;
+  let rpm = 76;
+  let ratio = 18;
+  try {
+    const drive = estimateConveyorDrive(params, {});
+    powerKw = Math.max(0.04, Math.round((drive.motorW / 1000) * 100) / 100);
+    speedMps = 0.2;
+    const pulleyRadiusM = Math.max(0.01, params.pulleyDiameterMm / 2 / 1000);
+    rpm = Math.max(1, Math.round((60 * speedMps) / (2 * Math.PI * pulleyRadiusM)));
+    ratio = Math.max(1, Math.round((1400 / rpm) * 10) / 10);
+  } catch (error) {
+    console.warn('[elec] 驱动估算失败，回退默认值', error);
+  }
+  const names = (project.partsList ?? []).map((item) => item.name);
+  const sensors: ElectricMachineModel['sensors'] = [];
+  if (names.some((name) => name.includes('进料'))) sensors.push({ tag: '-PE1', label: '进料检测', type: 'photo' });
+  if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', type: 'photo' });
+  if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', type: 'proximity' });
+
+  return buildElectricalSheet({
+    project: project.name,
+    drive: { powerKw, rpm, ratio, voltage: 380 },
+    sensors,
+    controls: { estop: true, startStop: true },
+    notes: [
+      `线体 ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)} mm · 皮带面高 ${Math.round(params.beltHeightMm)} mm`,
+      `零件 ${project.parts} 件 · 总质量 ${project.massKg ?? '—'} kg`
+    ],
+    drawingNo: 'EL-CV-001'
+  });
+}
+
 /** 最近打开的工程：外壳冷启动时恢复卡片用 */
 let lastOpenedProject: ProjectMenuRecord | null = null;
 
@@ -955,7 +1023,8 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
       massKg: result.record.massKg,
       envelope: result.record.envelope,
       createdAt: result.record.createdAt,
-      partsList: (result.record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name }))
+      partsList: (result.record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name })),
+      params: result.record.params ?? {}
     };
     return lastOpenedProject;
   } catch (error) {
