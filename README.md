@@ -252,7 +252,7 @@ npm run build:ext   # 首次必需：dist/ 与 dist-electron/ 不入库
 npm start
 ```
 
-构建过一次之后，日常只需 `cd desktop` + `npm start`。Linux 开发机可用 `npm run smoke`（xvfb + `--headless-smoke`）验证主流程。
+构建过一次之后，日常只需 `cd desktop` + `npm start`。Linux 开发机可用 `npm run smoke`（xvfb + `--headless-smoke`）验证主流程；Windows 开发机用 `npm run smoke:win`（关 GPU 后走 SwiftShader，同样覆盖无 WebGL 降级面板）。
 
 本地验证设计同步全链路（需 `/root/mf-main/material-flow-backend` 的 `.venv`）：`cd desktop && npm run sync:e2e`。脚本会起临时后端，跑通打包 → 上传 → 幂等 → 列表 → diff → 下载 → 断连错误，日志写 `docs/desktop/eval/sync-e2e.json`。
 
@@ -328,6 +328,7 @@ npm run packs:add -- ../packs/builtin/my-pack # 生成新包骨架（manifest + 
 npm run perf:baseline # 200/1000/3000 件场景构建、tick 与堆峰值基线
 npm run agent:report # 生成 Agent 汇报报告（md / json / svg）
 npm run smoke     # xvfb + Electron headless；含 SMOKE_PERF_OK 与 SMOKE_DIAGNOSE_OK
+npm run smoke:win # Windows 本地 headless smoke（--disable-gpu 走 SwiftShader，覆盖无 WebGL 降级面板）
 npm run sync:e2e  # 本地起 material-flow 后端，跑设计同步端到端（不进单测）
 npm run kb:build  # 从 docs/desktop/*.md + 截图 + 元件分类重建 kb.json
 npm run build:ext # tsc --noEmit + Vite 扩展 + esbuild main/preload/MCP
