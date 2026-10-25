@@ -1278,6 +1278,61 @@ function renderFileMenu(records) {
   menu.innerHTML = head + body;
 }
 
+let currentProjectRecord = null;
+
+/**
+ * 打开工程后，外壳的演示 3D（示例滑台气缸）必须让位：
+ * 换成工程卡片 + 左侧零件清单 + 右侧工程参数，避免"选了输送机却还是气缸"。
+ */
+function applyProjectStage(record) {
+  currentProjectRecord = record || null;
+  const stage = $('#stageProject');
+  const scene = $('#scene3d');
+  if (!record) {
+    if (stage) stage.hidden = true;
+    if (scene) scene.style.display = '';
+    document.getElementById('app')?.classList.remove('is-project');
+    return;
+  }
+  if (scene) scene.style.display = 'none';
+  if (stage) stage.hidden = false;
+  const title = $('#spTitle');
+  const meta = $('#spMeta');
+  if (title) title.textContent = record.name;
+  const env = Array.isArray(record.envelope)
+    ? `${Math.round(record.envelope[0])}×${Math.round(record.envelope[1])}×${Math.round(record.envelope[2])} mm`
+    : '—';
+  if (meta) {
+    meta.innerHTML = [
+      `零件 ${record.parts} 件`,
+      record.massKg != null ? `总质量 ${record.massKg} kg` : null,
+      `包络 ${env}`,
+      `保存于 ${fmtProjectTime(record.createdAt)}`
+    ].filter(Boolean).join(' · ');
+  }
+  document.getElementById('app')?.classList.add('is-project');
+  renderProjectTree(record);
+}
+
+/** 左侧结构树改成工程零件清单（演示装配的 6 件不再冒充） */
+function renderProjectTree(record) {
+  const left = $('[data-panel="left"][data-for="assembly"]');
+  const body = left && left.querySelector('.panel-body');
+  if (!body) return;
+  const names = Array.isArray(record.partsList) ? record.partsList.map((item) => item.name) : [];
+  const rows = names.slice(0, 60).map((name, index) => `
+    <div class="tree-row" style="display:flex;gap:6px;align-items:center;padding:3px 8px;font-size:12px;color:var(--text-2)">
+      <span class="mono" style="color:var(--text-3);width:22px">${String(index + 1).padStart(2, '0')}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span>
+    </div>`).join('');
+  body.innerHTML = `
+    <div class="panel-section">
+      <div class="panel-section-head">工程零件 · ${record.parts} 件</div>
+      ${rows || '<div class="panel-empty">工程里没有零件记录</div>'}
+      ${names.length > 60 ? `<div class="panel-empty">还有 ${names.length - 60} 件…</div>` : ''}
+    </div>`;
+}
+
 function esc(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -1323,7 +1378,7 @@ function syncFileName() {
 
 // 原型页与测试沙箱都会加载本文件：事件绑定前先确认是真实 DOM 环境
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
-  document.addEventListener('DOMContentLoaded', () => syncFileName());
+  document.addEventListener('DOMContentLoaded', () => { syncFileName(); restoreLastProjectStage(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFileMenu(); });
 }
 
@@ -2046,8 +2101,23 @@ function bind() {
     const api = window.AutomationCadProjects;
     if (!api) { toast('工程接口未就绪', 'warn'); return; }
     Promise.resolve(api.open(id))
-      .then(() => { syncFileName(); statusMsg('已打开工程：' + id); })
+      .then((record) => {
+        if (!record) { toast('工程打开失败，看 CAD 视图里的提示', 'warn'); return; }
+        applyProjectStage(record);
+        syncFileName();
+        // 选了工程就直接进 CAD 视图，不停在外壳画布
+        if (api.show) api.show();
+        statusMsg('已打开工程：' + record.name);
+      })
       .catch((error) => toast('打开工程失败：' + (error && error.message ? error.message : error), 'warn'));
+    return;
+  }
+  if (t.closest('[data-project-reopen]')) {
+    const api = window.AutomationCadProjects;
+    const id = api && api.currentId ? api.currentId() : null;
+    const target = id || (currentProjectRecord && currentProjectRecord.id);
+    if (!target) { toast('没有选中的工程', 'warn'); return; }
+    Promise.resolve(api.open(target)).then((record) => { if (record) { applyProjectStage(record); syncFileName(); } });
     return;
   }
   const projDel = t.closest('[data-project-delete]');
@@ -2373,3 +2443,21 @@ window.ProtoApi = {
     catch (error) { return { ok: false, message: `采用约束失败：${error && error.message ? error.message : error}` }; }
   },
 };
+
+/** 冷启动：把上次打开的工程卡片恢复到外壳（外壳的演示场景不该抢戏） */
+function restoreLastProjectStage() {
+  const api = window.AutomationCadProjects;
+  if (!api || typeof api.lastOpened !== 'function') return;
+  try {
+    const record = api.lastOpened();
+    if (record) applyProjectStage(record);
+  } catch (_error) { /* 忽略：没有最近工程就保持演示场景 */ }
+}
+
+/* CAD 视图切回电气域时，外壳给出上下文提示（工程名带过去） */
+window.addEventListener('automation-cad-domain', (event) => {
+  const detail = (event && event.detail) || {};
+  if (detail.domain !== 'elec') return;
+  const name = detail.project && detail.project.name ? detail.project.name : '当前工程';
+  try { statusMsg('已切到电气域 · 上下文：' + name); } catch (_error) { /* 忽略 */ }
+});

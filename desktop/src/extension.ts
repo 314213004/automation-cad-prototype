@@ -188,6 +188,10 @@ function buildOverlay(): void {
       </div>
       <div class="cad-actions">
         <button type="button" class="cad-btn cad-btn-primary" data-cad-action="open">${ICONS.open}<span>打开文件</span></button>
+        <span class="cad-domain-sw" role="group" aria-label="设计域切换">
+          <button type="button" class="cad-domain-btn is-active" data-cad-domain="mech" title="机械域">机械</button>
+          <button type="button" class="cad-domain-btn" data-cad-domain="elec" title="电气域：切回工作台的电气侧，当前工程作为上下文">电气</button>
+        </span>
         <button type="button" class="cad-btn" data-cad-action="fit">${ICONS.fit}<span>缩放到适合</span></button>
         <button type="button" class="cad-btn" data-cad-action="wire">${ICONS.wire}<span>线框</span></button>
         <button type="button" class="cad-btn" data-cad-action="kinematics" id="cadKinematicsToggle">${ICONS.kinematics}<span>运动学</span></button>
@@ -288,6 +292,21 @@ function buildOverlay(): void {
     if ((event.target as HTMLElement).closest('[data-project-archive-close]')) {
       const preview = document.getElementById('cadProjectArchivePreview') as HTMLDialogElement | null;
       preview?.close();
+      return;
+    }
+    const domainBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-domain]');
+    if (domainBtn) {
+      if (domainBtn.dataset.cadDomain === 'elec') {
+        // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前工程上下文
+        const project = lastOpenedProject;
+        closeOverlay();
+        try {
+          (window as unknown as { ElecDomain?: { setDomain?: (domain: string) => void } }).ElecDomain?.setDomain?.('elec');
+        } catch (error) {
+          console.warn('[cad] 切换到电气域失败', error);
+        }
+        window.dispatchEvent(new CustomEvent('automation-cad-domain', { detail: { domain: 'elec', project } }));
+      }
       return;
     }
     const projectToggle = (event.target as HTMLElement).closest<HTMLElement>('[data-project-menu-toggle]');
@@ -828,6 +847,8 @@ interface ProjectMenuRecord {
   massKg: number | null;
   envelope: [number, number, number] | null;
   createdAt: string;
+  /** 零件清单（外壳结构树用） */
+  partsList?: Array<{ file: string; name: string }>;
 }
 
 /**
@@ -890,17 +911,20 @@ function toggleProjectMenu(open?: boolean): void {
 }
 
 /** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
-async function openSavedProject(id: string): Promise<void> {
-  if (!window.desktop?.projects) return;
+/** 最近打开的工程：外壳冷启动时恢复卡片用 */
+let lastOpenedProject: ProjectMenuRecord | null = null;
+
+async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
+  if (!window.desktop?.projects) return null;
   const result = await window.desktop.projects.open(id);
   if (!result.ok || !result.record) {
     showNotice(result.message ?? '打开工程失败', true);
-    return;
+    return null;
   }
   const items = result.partPaths ?? [];
   if (items.length === 0) {
     showNotice('工程里没有零件网格，可能只保存了 STEP', true);
-    return;
+    return null;
   }
   try {
     const buffers: Array<{ buffer: ArrayBuffer; name: string }> = [];
@@ -924,8 +948,19 @@ async function openSavedProject(id: string): Promise<void> {
     setEmptyVisible(false);
     toggleProjectMenu(false);
     showNotice(`${label} 已载入 · ${merged.stats.triangleCount} 个三角面`, false);
+    lastOpenedProject = {
+      id: result.record.id,
+      name: result.record.name,
+      parts: merged.meshes.length,
+      massKg: result.record.massKg,
+      envelope: result.record.envelope,
+      createdAt: result.record.createdAt,
+      partsList: (result.record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name }))
+    };
+    return lastOpenedProject;
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), true);
+    return null;
   }
 }
 
@@ -2616,7 +2651,18 @@ function init(): void {
       list: () => window.desktop?.projects?.list() ?? Promise.resolve([]),
       open: (id: string) => openSavedProject(id),
       remove: (id: string) => window.desktop?.projects?.remove(id) ?? Promise.resolve({ ok: false }),
-      current: () => currentFileName
+      current: () => currentFileName,
+      currentId: () => lastOpenedProject?.id ?? null,
+      /** 外壳选了工程后直接跳到 CAD 视图，而不是停在外壳画布 */
+      show: () => {
+        openOverlay();
+        if (root) {
+          root.hidden = false;
+          root.style.zIndex = '2147483000';
+        }
+        return true;
+      },
+      lastOpened: () => lastOpenedProject
     }),
     writable: false,
     configurable: false,

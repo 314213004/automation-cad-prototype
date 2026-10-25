@@ -45,6 +45,10 @@ html{zoom:var(--acad-ui-scale,1.15)}
 .cad-parametric-status[data-state="unavailable"],.cad-parametric-status[data-state="crashed"]{border-color:#7b4540;color:#ffaaa2;background:#332321}
 .cad-spacer{flex:1}
 .cad-file-info{max-width:44vw;color:#8f9aa3;font:11px/1.4 var(--font-mono,monospace);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cad-domain-sw{display:inline-flex;align-items:stretch;gap:2px;padding:2px;border:1px solid #33383d;border-radius:6px;background:#1c2024}
+.cad-domain-btn{border:0;background:transparent;color:#8f9aa3;font-size:11.5px;padding:3px 10px;border-radius:4px;cursor:pointer}
+.cad-domain-btn:hover{color:#d7dde2;background:#262c31}
+.cad-domain-btn.is-active{color:#5fd6c7;background:#1a2927}
 .cad-file-wrap{position:relative;display:flex;align-items:center;gap:4px;min-width:0}
 .cad-file-caret{border:1px solid transparent;background:transparent;color:#8f9aa3;font-size:10px;line-height:1;padding:4px 5px;border-radius:4px;cursor:pointer}
 .cad-file-caret:hover,.cad-file-caret[aria-expanded="true"]{border-color:#3b4a48;color:#5fd6c7;background:#1a2927}

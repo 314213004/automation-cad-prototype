@@ -73,6 +73,19 @@ h1,h2,h3,p{margin:0}
 .file-btn .ico{color:var(--text-3); margin-left:2px}
 .file-ext{color:var(--text-3); font-size:11px; font-family:var(--font-mono)}
 
+/* 打开工程后替换演示 3D：壳层不再显示示例气缸 */
+.stage-project{position:absolute; inset:0; display:grid; place-items:center; padding:24px; background:radial-gradient(circle at 50% 40%, #23282d, #1b1e22 70%)}
+.stage-project[hidden]{display:none}
+.sp-card{max-width:460px; padding:22px 24px; border:1px solid var(--divider); border-radius:10px; background:#1f2327; box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.sp-kicker{font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3)}
+.sp-title{margin-top:6px; font-size:17px; font-weight:600; color:var(--text-1)}
+.sp-meta{margin-top:8px; font-size:12px; line-height:1.7; color:var(--text-2); font-family:var(--font-mono)}
+.sp-actions{margin-top:16px}
+.sp-btn{height:30px; padding:0 14px; border-radius:var(--r); border:1px solid var(--divider); background:transparent; color:var(--text-1); font-size:12.5px; cursor:pointer}
+.sp-btn.primary{border-color:var(--accent); background:rgba(95,214,199,.12); color:var(--accent)}
+.sp-btn:hover{filter:brightness(1.15)}
+.sp-note{margin-top:14px; font-size:11px; line-height:1.7; color:var(--text-3)}
+
 /* 工程下拉：由 app.js 用 userData/projects 填充 */
 .file-menu-wrap{position:relative; display:inline-flex; align-items:center}
 .file-btn[aria-expanded="true"]{background:var(--hover); border-color:var(--divider)}
