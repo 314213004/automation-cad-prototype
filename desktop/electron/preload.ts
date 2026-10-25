@@ -101,8 +101,12 @@ const desktopApi = {
     },
     lan: {
       get: () => ipcRenderer.invoke('agent:lan:get'),
-      save: (config: unknown) => ipcRenderer.invoke('agent:lan:save', config)
+      save: (config: unknown) => ipcRenderer.invoke('agent:lan:save', config),
+      rotateToken: () => ipcRenderer.invoke('lan:rotate-token')
     }
+  },
+  render: {
+    stats: (stats: unknown) => ipcRenderer.invoke('render:stats', stats)
   },
   parametric: {
     status: () => ipcRenderer.invoke('parametric:status'),

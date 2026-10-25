@@ -12,12 +12,12 @@
 | 运动学自动识别 | `test/cad/kinematics-auto.test.mjs` | 同上 | 34 条：名称/型号/层级/几何各启发式、置信度分级、IO 点位建议、不自动应用、schema 往返；`test/fixtures/kinematics-assembly.stp`（`scripts/gen-kinematics-fixture.mjs` 生成）端到端 |
 | Agent RPC | `test/agent/rpc.test.mjs` | 同上 | 起真实 http server，验 401 / tools/list / -32601 / 600 权限 |
 | 命令总线 | `test/agent/commands.test.mjs` | 同上 | 注册/重复注册/未知命令/失败历史/撤销、参数校验、桥超时 |
-| 工具表 | `test/agent/tools.test.mjs` | 同上 | 21 工具、BOM 空数组、干涉截断、插入与撤销 |
+| 工具表 | `test/agent/tools.test.mjs` | 同上 | 22 工具、BOM 空数组、渲染指标、干涉截断、插入与撤销 |
 | 工具扩展 v1 | `test/agent/tools-v2.test.mjs` | 同上 | 上下文 null 字段、元件修改/移除、PLC 预检拦截不落盘、导出白名单/净化/覆盖、确认拒绝 |
 | 机型方案落盘 | `test/agent/apply-machine-design.test.mjs` | 同上 | brief/design 二选一、设计校验、id/点位冲突、overwrite、active 指针、BOM/PLC 联动、撤销、确认拒绝、路径净化、参数化模块写前拒绝（31 条） |
 | 机型几何 | `test/machine/geometry*.test.mjs`、`test/agent/apply-machine-geometry.test.mjs` | 同上 | 尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴元数据、BOM 对账、STL/glTF/sidecar 契约、three 动画、几何落盘/撤销/实体化回退（24 条） |
 | 底板放置 | `test/agent/place-component.test.mjs` | 同上 | 参数校验、AMBIGUOUS、NO_DIMENSIONS、越界/重叠告警、旋转/吸附、撤销、确认拒绝 |
-| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 21 个工具 |
+| MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 22 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
 | 参数化 CAD 模块边界 | `test/modules/{registry,settings}.test.mjs`、`test/parametric-sidecar.test.ts`、`test/parametric-import-safety.test.mjs`、`test/agent/apply-machine-design.test.mjs` | 同上 | 默认启用/设置持久化、依赖失败关闭；history 开关不清树/模型/会话 undo-redo 栈；关闭时 IPC/manager 与 Agent `withSolids` 拒绝、无 sidecar/写文件副作用、保留 CAD/特征树/叠加体 |
 | Agent 跨重启恢复模块 | `test/modules/agent-resume-gate.test.mjs`、`test/agent/plan-checkpoint.test.mjs` | 同上 | 默认开启、API/依赖/能力、关停保留旧记录、状态异常 fail-closed；普通计划和写确认不受影响；checkpoint 签名/工程指纹/游标/副作用校验仍严格 |

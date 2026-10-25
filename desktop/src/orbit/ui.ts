@@ -44,6 +44,7 @@ import { loadOrbit, ORBIT_STORE_KEY, saveOrbit, type StorageLike } from './persi
 import type { ScreenRect } from './marquee.ts';
 import type { HighlightState } from './three-scene.ts';
 import { OrbitView, type OrbitViewState, type Projection, type RenderQualityDiagnostics } from './view.ts';
+import type { RenderStats } from '../shared/render-stats.ts';
 import {
   effectivePixelRatio,
   normalizeRenderQuality,
@@ -104,6 +105,8 @@ export interface OrbitHandle {
   setMarqueeMode(on: boolean, stage?: StageKind): boolean;
   setRenderQuality(quality: RenderQuality): void;
   renderQuality(): RenderQualityDiagnostics;
+  /** 最近一次采集的渲染指标；WebGL 降级时为 null。 */
+  renderStats(): RenderStats | null;
   resize(): void;
 }
 
@@ -858,15 +861,22 @@ function handleGeometryInput(input: HTMLInputElement): void {
 
 function mountSlot(kind: StageKind, stage: HTMLElement, svg: SVGSVGElement, reasons: string[]): StageSlot {
   const slot: StageSlot = { kind, stage, svg, view: null, fallbackReason: null, bar: null };
+  let lastDragDomUpdate = 0;
   const created = OrbitView.create({
     host: stage,
     onPick: (partId) => onPick(slot, partId),
     onHover: (partId) => onHover(slot, partId),
-    onRender: () => {
+    onRender: (view) => {
+      // 拖动中每帧只画 WebGL，不在 60/120 Hz 下改 DOM；HUD/坐标轴/气泡最多 10 Hz。
+      const now = performance.now();
+      if (view.isDragging && now - lastDragDomUpdate < 100) return;
+      lastDragDomUpdate = now;
       drawAxes(slot);
       positionCallout(slot);
       updateHuds();
     },
+    onStats: (stats) => reportRenderStats(stats),
+    onDragEnd: (stats) => reportRenderStats(stats, true),
     onMarquee: (rect) => { onMarquee(slot, rect); },
     marqueeBox: stage.querySelector<HTMLElement>('.marquee')
   });
@@ -924,6 +934,48 @@ function qualityDiagnostics(): RenderQualityDiagnostics {
     autoDowngraded: resolved.autoDowngraded,
     parts: assembly?.parts.length ?? 0
   };
+}
+
+let lastRenderStatsPost = 0;
+let softwareNotice: HTMLElement | null = null;
+let softwareNoticeDismissed = false;
+
+function ensureSoftwareRenderNotice(stats: RenderStats): void {
+  if (!stats.isSoftware || softwareNoticeDismissed || softwareNotice) return;
+  const notice = document.createElement('div');
+  notice.id = 'orbitSoftwareNotice';
+  notice.className = 'orbit-software-notice';
+  notice.setAttribute('role', 'status');
+  const text = document.createElement('span');
+  text.textContent = `检测到软件渲染（${stats.glRenderer || '未知渲染器'}），已自动切换到 flow 档；拖动可能仍不跟手。`;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'orbit-software-close';
+  close.setAttribute('aria-label', '关闭软件渲染提示');
+  close.textContent = '×';
+  close.addEventListener('click', () => {
+    softwareNoticeDismissed = true;
+    notice.remove();
+    softwareNotice = null;
+  });
+  notice.append(text, close);
+  document.body.prepend(notice);
+  softwareNotice = notice;
+}
+
+/** 每次拖动结束强制上报；周期采样按 5 秒节流，避免两个视口同时刷 IPC。 */
+function reportRenderStats(stats: RenderStats, force = false): void {
+  ensureSoftwareRenderNotice(stats);
+  const now = performance.now();
+  if (!force && now - lastRenderStatsPost < 4500) return;
+  lastRenderStatsPost = now;
+  try {
+    void window.desktop?.render?.stats(stats).catch((error: unknown) => {
+      recordDiagnosticError('RENDER_STATS_REPORT_FAILED', error, { site: 'desktop/src/orbit/ui.ts' });
+    });
+  } catch (error) {
+    recordDiagnosticError('RENDER_STATS_REPORT_FAILED', error, { site: 'desktop/src/orbit/ui.ts' });
+  }
 }
 
 function bindDocument(): void {
@@ -1077,6 +1129,7 @@ export function initOrbitView(): OrbitHandle {
       slots.forEach((slot) => slot.view?.setRenderQuality(qualitySetting));
     },
     renderQuality: () => qualityDiagnostics(),
+    renderStats: () => slots.map((slot) => slot.view?.renderStats()).find((stats): stats is RenderStats => stats !== undefined) ?? null,
     resize: () => {
       slots.forEach((slot) => slot.view?.resize());
     }

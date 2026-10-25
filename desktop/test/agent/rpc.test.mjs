@@ -1,11 +1,18 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { PackRegistry } from '../../src/packs/registry.ts';
 import { AgentTools } from '../../src/agent/tools.ts';
-import { AgentRpcServer, createAgentToken, createAgentTokenFile } from '../../src/agent/rpc.ts';
+import {
+  AgentRpcServer,
+  createAgentToken,
+  createAgentTokenFile,
+  isValidAgentToken,
+  loadOrCreateAgentTokenFile,
+  rotateAgentToken
+} from '../../src/agent/rpc.ts';
 
 let sandbox;
 let server;
@@ -14,6 +21,8 @@ let token;
 let plcgenEnabled = true;
 let elecValidationEnabled = true;
 let costEstimationEnabled = true;
+
+const readFileSyncText = (path) => readFileSync(path, 'utf8');
 
 async function startWriteRpc(confirmWrite) {
   const calls = [];
@@ -112,7 +121,7 @@ test('错误 token 访问返回 401', async () => {
   assert.equal(response.status, 401);
 });
 
-test('有 token 能列出 21 个工具与健康信息', async () => {
+test('有 token 能列出 22 个工具与健康信息', async () => {
   const response = await fetch(`${url}/rpc`, {
     method: 'POST',
     headers: {
@@ -123,14 +132,14 @@ test('有 token 能列出 21 个工具与健康信息', async () => {
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.result.tools.length, 21);
+  assert.equal(body.result.tools.length, 22);
 
   const health = await fetch(`${url}/health`, {
     headers: { authorization: `Bearer ${token}` }
   });
   assert.equal(health.status, 200);
   const healthBody = await health.json();
-  assert.equal(healthBody.toolCount, 21);
+  assert.equal(healthBody.toolCount, 22);
   assert.equal(healthBody.version, '0.1.0-test');
 });
 
@@ -232,5 +241,66 @@ test('Agent token 文件权限为 600（仅 POSIX；Windows 无 POSIX 位）', {
   const tokenDir = join(sandbox, 'agent-token-test');
   const created = createAgentTokenFile(tokenDir);
   assert.equal(statSync(created.tokenFile).mode & 0o777, 0o600);
-  assert.equal(created.token.length, 43);
+  assert.equal(created.token.length, 48);
+  assert.match(created.token, /^[A-Za-z0-9]{48}$/);
+});
+
+test('token 持久化：合法文件重启复用，损坏文件重建', () => {
+  const tokenDir = join(sandbox, 'agent-token-reuse');
+  const first = loadOrCreateAgentTokenFile(tokenDir);
+  assert.equal(isValidAgentToken(first.token), true);
+  const second = loadOrCreateAgentTokenFile(tokenDir);
+  assert.equal(second.token, first.token);
+  assert.equal(second.tokenFile, first.tokenFile);
+
+  const brokenDir = join(sandbox, 'agent-token-broken');
+  mkdirSync(brokenDir, { recursive: true });
+  const brokenFile = join(brokenDir, 'agent-token');
+  writeFileSync(brokenFile, 'too-short', { encoding: 'utf8', mode: 0o600 });
+  const rebuilt = loadOrCreateAgentTokenFile(brokenDir);
+  assert.equal(isValidAgentToken(rebuilt.token), true);
+  assert.equal(readFileSyncText(rebuilt.tokenFile), rebuilt.token);
+});
+
+test('rotate 后旧 token 401、新 token 200', async () => {
+  const tokenDir = join(sandbox, 'agent-token-rotate');
+  const initial = loadOrCreateAgentTokenFile(tokenDir);
+  const summary = {
+    name: 'list_components',
+    description: 'test read tool',
+    inputSchema: { type: 'object', properties: {} }
+  };
+  const rpc = new AgentRpcServer({
+    tools: {
+      list: () => [summary],
+      summaries: () => [summary],
+      has: () => true,
+      call: async () => ({ ok: true })
+    },
+    token: initial.token,
+    version: '0.1.0-rotate-test',
+    host: '127.0.0.1',
+    port: 0
+  });
+  const info = await rpc.start();
+  try {
+    const before = await fetch(`${info.url}/health`, {
+      headers: { authorization: `Bearer ${initial.token}` }
+    });
+    assert.equal(before.status, 200);
+    const rotated = rotateAgentToken(tokenDir);
+    assert.notEqual(rotated.token, initial.token);
+    assert.equal(readFileSyncText(rotated.tokenFile), rotated.token);
+    rpc.setToken(rotated.token);
+    const oldToken = await fetch(`${info.url}/health`, {
+      headers: { authorization: `Bearer ${initial.token}` }
+    });
+    assert.equal(oldToken.status, 401);
+    const newToken = await fetch(`${info.url}/health`, {
+      headers: { authorization: `Bearer ${rotated.token}` }
+    });
+    assert.equal(newToken.status, 200);
+  } finally {
+    await rpc.stop();
+  }
 });

@@ -246,7 +246,21 @@ interface DesktopAgentInfo {
   toolCount?: number;
   tools?: DesktopAgentToolInfo[];
   history?: DesktopAgentHistoryEntry[];
+  lanAddress?: string | null;
   error?: string;
+}
+
+interface DesktopRenderStats {
+  glRenderer: string;
+  isSoftware: boolean;
+  pixelRatio: number;
+  quality: 'flow' | 'standard' | 'high';
+  partCount: number;
+  triangleCount: number;
+  dragFrames: number;
+  dragAvgFrameMs: number;
+  dragMaxFrameMs: number;
+  lastDragAt: string | null;
 }
 
 interface DesktopAgentLlmConfig {
@@ -713,6 +727,8 @@ interface DesktopAgentLanAccess {
   cdpPort: number | null;
   cdpActive: boolean;
   cdpRestartRequired: boolean;
+  lanAddress: string | null;
+  cdpError?: string;
   message?: string;
 }
 
@@ -870,7 +886,11 @@ interface Window {
       lan: {
         get(): Promise<DesktopAgentLanAccess>;
         save(config: { enabled: boolean; allowlist: string[] | string; cdpEnabled: boolean }): Promise<DesktopAgentLanAccess>;
+        rotateToken(): Promise<DesktopAgentLanAccess>;
       };
+    };
+    render: {
+      stats(stats: DesktopRenderStats): Promise<{ ok: boolean; message?: string }>;
     };
     parametric: {
       status(): Promise<DesktopParametricStatusInfo>;

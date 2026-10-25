@@ -2,7 +2,7 @@
 
 面向非标自动化整机的**机械 + 电气协同设计工作台**：机械域覆盖机构选型 → 标准件调用 → 装配 → 干涉校核 → 受力校核 → 出图 → BOM；电气域覆盖原理图 → IO 规划 → 柜体底板布置 → 合规校验 → 成本统计；桌面版在此基础上叠加 **CAD 轻量化查看与运动学标注、电气元件库、PLC 程序生成、PLC 通电联调、参数化建模、智慧工厂数据同步、智能体（JSON-RPC / MCP / 应用内对话）**，单机离线可用。
 
-- 当前版本：**v0.4.1**（新增界面缩放、3D 渲染质量、局域网联调开关；安装包由 `windows-build` 手动触发构建）
+- 当前版本：**v0.4.1**（新增界面缩放、3D 渲染质量、局域网联调开关；CDP 内网转发、token 持久化/轮换、渲染指标可观测性；安装包由 `windows-build` 手动触发构建）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
 - 质量基线：**1831 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
@@ -118,7 +118,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 ![智能体面板：对话、工具、模型设置](docs/desktop/screenshots/09-agent.png)
 
-*智能体面板：最上方是「建议」区（0–3 张 next-best-action 卡片，点击填入输入框或走单步计划确认，可本次会话忽略），其下是对话与工具调用区、执行进度/结果卡片、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、21 个工具、token 文件路径）与可筛选/导出的审计面板。写操作执行前会弹出二次确认；执行中可取消。*
+*智能体面板：最上方是「建议」区（0–3 张 next-best-action 卡片，点击填入输入框或走单步计划确认，可本次会话忽略），其下是对话与工具调用区、执行进度/结果卡片、模型设置（OpenAI 兼容 baseUrl / model / apiKey，密钥只回显掩码）、本机服务信息（127.0.0.1:7420、22 个工具、token 文件路径）与可筛选/导出的审计面板。写操作执行前会弹出二次确认；执行中可取消。*
 
 ### 智慧工厂同步设置
 
@@ -167,7 +167,8 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 数据包 | 10 个内置 manifest + 用户 ZIP 导入、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重、alias 解析与全局索引；全包 schema/重复 id/依赖/`partsSha256` 校验、版本迁移与统计报表 | ✅ |
 | 界面缩放 | 注入 CSS `zoom`，100% / 110% / 115% / 125% / 140% / 150%，默认 115%；立即生效并持久化到 `userData/appearance.json`，不改根样式文件 | ✅ 桌面 |
 | 3D 渲染质量 | 流畅 / 标准 / 高清三档；拖动时临时降到 0.8 pixelRatio；大于 1500 零件的装配体自动降为流畅并标注原因 | ✅ 桌面 |
-| 局域网联调（默认关闭） | 默认仅监听 `127.0.0.1`；按需开启 `0.0.0.0`，IPv4 CIDR / 单 IP 白名单、Bearer token、远程审计；CDP 默认关闭且需重启生效 | ✅ 桌面 |
+| 局域网联调（默认关闭） | 默认仅监听 `127.0.0.1`；按需开启 `0.0.0.0`，IPv4 CIDR / 单 IP 白名单、Bearer token、远程审计；CDP 经 `0.0.0.0:9222 → 127.0.0.1:9229` 白名单转发 | ✅ 桌面 |
+| 渲染性能可观测 | `/health.render` 与只读 `get_render_stats` 返回渲染器、软件渲染、像素比、质量档、零件/三角形数与拖动帧时间；软件渲染自动 `flow` | ✅ 桌面 |
 
 ### PLC / 联调 / 工厂
 
@@ -186,7 +187,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 
 | 能力 | 内容 | 状态 |
 |------|------|------|
-| 工具集 | `list_components` / `search_components` / `search_docs` / `design_machine` / `apply_machine_design` / `import_cad` / `get_bom` / `get_project_context` / `run_interference_check` / `suggest_kinematics` / `insert_component` / `place_component` / `update_component` / `remove_component` / `run_electrical_check` / `run_cost_report` / `verify_plc_program` / `run_plc_generate` / `export_files` / `export_cost_report` / `undo_last`（21 个：只读 11 + 写 10；写操作走二次确认） | ✅ |
+| 工具集 | `list_components` / `search_components` / `search_docs` / `design_machine` / `apply_machine_design` / `import_cad` / `get_bom` / `get_render_stats` / `get_project_context` / `run_interference_check` / `suggest_kinematics` / `insert_component` / `place_component` / `update_component` / `remove_component` / `run_electrical_check` / `run_cost_report` / `verify_plc_program` / `run_plc_generate` / `export_files` / `export_cost_report` / `undo_last`（22 个：只读 12 + 写 10；写操作走二次确认） | ✅ |
 | JSON-RPC | 默认 `127.0.0.1:7420`；可选局域网监听 `0.0.0.0` + CIDR 白名单（默认关闭）。Bearer token 位于 userData 下 `agent-token`，远程来源写审计 | ✅ |
 | MCP stdio | 复用同一工具注册表；写工具经桌面 RPC 代理，桌面未启动时明确返回 `DESKTOP_NOT_RUNNING` | ✅ |
 | 应用内对话 | OpenAI 兼容接口、工具调用循环、写操作二次确认、密钥仅本机进程 | ✅ |
@@ -211,11 +212,11 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 失败建议 | `suggest.ts` 按 `PART_NOT_FOUND` / `NO_DIMENSIONS` / `UNAVAILABLE` / `DESKTOP_NOT_RUNNING` / `PRECHECK_FAILED` / `USER_DENIED` 给中文建议与替代方案；未知码只复述消息，不编造原因 | ✅ P7-F |
 | 主动建议 | `advisor.ts` 纯函数按底板重叠 / 干涉 / 缺尺寸 / 电气校验 / 成本过期 / PLC 未生成等真实状态给出 0–3 条 next-best-action；侧栏顶部卡片可直接填入输入框或走单步计划确认，支持本次会话忽略与工具执行后刷新 | ✅ P7-H |
 | 审计面板 | 最近 200 条，按时间倒序；列为时间/工具/参数摘要/结果码/耗时，可按工具与结果筛选、导出当前 CSV、单条展开完整脱敏 JSON；超出上限提示丢弃数量 | ✅ P7-F |
-| 离线评估 | `docs/desktop/eval/cases.json` 106 条中文用例（21 个工具全覆盖 + 6 类拒绝场景 + 5 类工艺模板/信息不足）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 离线评估 | `docs/desktop/eval/cases.json` 107 条中文用例（22 个工具全覆盖 + 6 类拒绝场景 + 5 类工艺模板/信息不足）；在 `desktop/` 下运行 `npm run eval:agent`，只跑离线规则、不调模型，结果写 `docs/desktop/eval/latest.json` | ✅ 100% 意图 / 100% 工具 / 100% 超纲拒绝（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 | **Agent 能力报告** | 在 `desktop/` 下运行 `npm run agent:report`，读取单轮 / 多轮 / 离线评测 JSON 与本机 `<userData>/agent-audit.jsonl`，生成 `docs/desktop/AGENT-REPORT.md`、`docs/desktop/agent-report.json` 和深色一页图 `docs/desktop/agent-report.svg`；每个数字标注来源文件与生成时间，缺源文件写「缺失：<文件>」并打印 WARN（退出码 0） | ✅ |
 | 底板放置 | `place_component`：坐标 / 旋转 / 导轨吸附；越界与重叠以 `warnings` 返回；成功后进入撤销栈，`undo_last` 返回 `removed` id | ✅ P7-B |
 | 通用产能引擎 | `desktop/src/machine/flow.ts` 的 `evaluateFlow` 按 `single / linear / dial / parallel / cell` 五种布局，由任意工位组成、工序时间、转移/分度时间与目标节拍统一求 cycle、产能、瓶颈和所需工位数；`synthMachine` 只做 `FlowModel` 映射。6 个机型回归（6 工位并行锁螺丝 ≈113 件/分钟、转盘点胶、5 工位直线、单工位检测、2×2 单元、2 副本并行点胶），见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ |
-| 自然语言完整方案 | 21 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、106 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并把「工艺 × 布局」选到 11 种整机形态（转盘/直线/龙门/双轨/转盘+直线混合/单元矩阵），联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
+| 自然语言完整方案 | 22 个已实现工具（另 3 个规划：联调 / 故障诊断 / 设计包同步）、上下文快照与指代消解、会话记忆、结果裁剪、意图路由、离线多步规划、执行进度/取消、失败建议、主动建议、可复用流程模板、本地知识检索、审计筛选与导出、107 条中文评估集、真实模型 36 条评测（36/36，拒绝/澄清 6/6）、工具结果抗注入；自然语言机型方案可确认写入工程，缺执行机构时按 5 类工艺模板补全，并把「工艺 × 布局」选到 11 种整机形态（转盘/直线/龙门/双轨/转盘+直线混合/单元矩阵），联动 3D / BOM / PLC 点位映射，见 [MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | ✅ P7-A～P7-J 与机型落盘、工艺模板/追问已落地（[NL-AGENT.md](docs/desktop/NL-AGENT.md)） |
 
 ## 快速开始
 
@@ -387,7 +388,7 @@ smoke 覆盖并断言：
 | [docs/desktop/COSTING.md](docs/desktop/COSTING.md) | 硬件成本统计：价格簿格式、计算口径、验收 |
 | [docs/desktop/MACHINE-DESIGN.md](docs/desktop/MACHINE-DESIGN.md) | 自然语言机型方案：需求抽取、方案合成、整机形态库（工艺 × 布局）、统一功率/成本模型（公式、默认系数、`machine-pricing.json`、边界）、`design_machine` / `apply_machine_design` 与 3D/BOM/PLC 联动、参数化整机几何（mm 尺寸、运动轴、STL/glTF/build123d 实体列表） |
 | [docs/desktop/MACHINE-DESIGN-DEMO.md](docs/desktop/MACHINE-DESIGN-DEMO.md) | 六工位锁螺丝机完整案例：真实解析/合成、节拍、统一功率与成本粗估、同一需求转盘/直线两种形态对比、真实 BOM、19 行 PLC IO 与四张全流程截图 |
-| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、21 个已实现工具、机型方案设计与落盘、本地知识检索、写操作分级、安全、评估集 |
+| [docs/desktop/NL-AGENT.md](docs/desktop/NL-AGENT.md) | 自然语言 Agent：架构、22 个已实现工具、机型方案设计与落盘、本地知识检索、写操作分级、安全、评估集 |
 | [docs/desktop/PARAMETRIC-CAD.md](docs/desktop/PARAMETRIC-CAD.md) | 参数化建模：build123d 选型、sidecar 契约、特征树与分期 |
 | [docs/desktop/PARAMETRIC-CAD-SPIKE.md](docs/desktop/PARAMETRIC-CAD-SPIKE.md) | CadQuery / build123d / replicad 三方案实测对比 |
 | [docs/desktop/SKETCH-SPIKE.md](docs/desktop/SKETCH-SPIKE.md) | P9-4 草图约束前置验证：planegcs 实测、build123d 衔接与分期 |

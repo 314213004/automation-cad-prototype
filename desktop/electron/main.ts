@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, type IpcMainInvokeEvent, type MenuItemConstructorOptions } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -36,7 +36,7 @@ import {
 import { resolveReference } from '../src/agent/reference';
 import { trimListResult } from '../src/agent/trim';
 import { estimateTokens, pack } from '../src/agent/budget';
-import { createAuditLog, formatAuditLine, parseAuditLines } from '../src/agent/audit';
+import { createAuditLog, formatAuditLine, parseAuditLines, type AgentAuditRecord } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
 import { TurnCallDeduper } from '../src/agent/dedupe';
 import { runReadOnlyBatch } from '../src/agent/parallel';
@@ -48,8 +48,9 @@ import { KB_STATS } from '../src/agent/kb/search';
 import { repairToolCall } from '../src/agent/repair';
 import {
   AgentRpcServer,
-  createAgentTokenFile,
+  loadOrCreateAgentTokenFile,
   restartAgentServer,
+  rotateAgentToken,
   type AgentRpcInfo
 } from '../src/agent/rpc';
 import type { AgentLanAccessView } from './ipc';
@@ -61,6 +62,16 @@ import {
   writeLanConfig,
   type LanConfig
 } from '../src/shared/lan-access.ts';
+import {
+  isCdpForwarderActive,
+  startCdpForwarder,
+  stopCdpForwarder
+} from './cdp-forwarder.ts';
+import {
+  describeRenderStats,
+  normalizeRenderStats,
+  type RenderStats
+} from '../src/shared/render-stats.ts';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage, parseDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
@@ -133,11 +144,13 @@ if (HEADLESS) {
   app.setPath('userData', mkdtempSync(join(tmpdir(), prefix)));
 }
 
-const CDP_PORT = 9222;
+const CDP_INTERNAL_PORT = 9229;
+const CDP_EXTERNAL_PORT = 9222;
 const BOOT_LAN_CONFIG = readLanConfig(app.getPath('userData'));
-if (BOOT_LAN_CONFIG.cdpEnabled && !HEADLESS && !DIAGNOSE) {
-  app.commandLine.appendSwitch('remote-debugging-port', String(CDP_PORT));
-  app.commandLine.appendSwitch('remote-debugging-address', '0.0.0.0');
+if (!HEADLESS && !DIAGNOSE) {
+  // 内部调试器始终只绑回环，便于运行中热启停转发器；对外 9222 仍由 cdp-forwarder 白名单控制。
+  // Electron 会忽略 remote-debugging-address，因此不再设置该开关。
+  app.commandLine.appendSwitch('remote-debugging-port', String(CDP_INTERNAL_PORT));
 }
 
 if (DIAGNOSE) {
@@ -169,6 +182,9 @@ let agentInfo: (AgentRpcInfo & { toolCount: number }) | { error: string } = { er
 let agentToken = '';
 let agentTokenFile = '';
 let lanConfig: LanConfig = BOOT_LAN_CONFIG;
+let lastRenderStats: RenderStats | null = null;
+let cdpForwarderError: string | null = null;
+let writeAgentAudit: ((record: AgentAuditRecord) => void) | null = null;
 
 let crashHandlersInstalled = false;
 
@@ -236,9 +252,10 @@ function publicAgentInfo(): unknown {
     token: agentToken,
     lanEnabled: lanConfig.enabled,
     allowlist: [...lanConfig.allowlist],
-    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null,
     cdpActive: cdpActive(),
     cdpRestartRequired: lanConfig.cdpEnabled && !cdpActive(),
+    lanAddress: localLanAddress(),
     toolCount: tools.length,
     tools,
     history: commandBus?.history().slice(-5) ?? []
@@ -246,7 +263,21 @@ function publicAgentInfo(): unknown {
 }
 
 function cdpActive(): boolean {
-  return app.commandLine.hasSwitch('remote-debugging-port');
+  return isCdpForwarderActive();
+}
+
+/** 面板展示的内网地址：取第一个非回环 IPv4，优先常见私网段。 */
+function localLanAddress(): string | null {
+  const candidates: string[] = [];
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.internal) continue;
+      if (entry.family !== 'IPv4') continue;
+      candidates.push(entry.address);
+    }
+  }
+  const isPrivate = (address: string): boolean => /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(address);
+  return candidates.find(isPrivate) ?? candidates[0] ?? null;
 }
 
 function currentAgentInfo(): AgentRpcInfo & { toolCount?: number } {
@@ -269,15 +300,52 @@ function agentLanView(ok: boolean, message?: string): AgentLanAccessView {
     config: { ...lanConfig, allowlist: [...lanConfig.allowlist] },
     token: agentToken,
     info,
-    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    cdpPort: cdpActive() || lanConfig.cdpEnabled ? CDP_EXTERNAL_PORT : null,
     cdpActive: cdpActive(),
     cdpRestartRequired: lanConfig.cdpEnabled && !cdpActive(),
+    lanAddress: localLanAddress(),
+    ...(cdpForwarderError ? { cdpError: cdpForwarderError } : {}),
     ...(message ? { message } : {})
   };
 }
 
 function getAgentLanAccess(): AgentLanAccessView {
   return agentLanView(true);
+}
+
+async function configureCdpForwarder(config: LanConfig): Promise<string | null> {
+  cdpForwarderError = null;
+  if (!config.enabled || !config.cdpEnabled) {
+    await stopCdpForwarder();
+    return null;
+  }
+  try {
+    await startCdpForwarder({
+      listenHost: '0.0.0.0',
+      listenPort: CDP_EXTERNAL_PORT,
+      targetHost: '127.0.0.1',
+      targetPort: CDP_INTERNAL_PORT,
+      allowlist: config.allowlist,
+      onDenied: (remoteAddress) => {
+        writeAgentAudit?.({
+          tool: 'cdp_access_check',
+          ok: false,
+          code: 'LAN_NOT_ALLOWED',
+          source: 'rpc',
+          args: { port: CDP_EXTERNAL_PORT, targetPort: CDP_INTERNAL_PORT },
+          message: `CDP 来源地址不在白名单：${remoteAddress || '(未知)'}`,
+          remoteAddress,
+          origin: 'lan'
+        });
+      },
+      resolveRemoteAddress: (address) => address
+    });
+    return null;
+  } catch (error) {
+    cdpForwarderError = error instanceof Error ? error.message : String(error);
+    console.error(`[cdp] ${cdpForwarderError}`);
+    return cdpForwarderError;
+  }
 }
 
 async function saveAgentLanAccess(patch: unknown): Promise<AgentLanAccessView> {
@@ -291,22 +359,56 @@ async function saveAgentLanAccess(patch: unknown): Promise<AgentLanAccessView> {
       cdpEnabled: source.cdpEnabled === undefined ? lanConfig.cdpEnabled : source.cdpEnabled
     });
     lanConfig = saved;
+    const cdpError = await configureCdpForwarder(saved);
     if (!agentServer || !agentTools) {
-      return agentLanView(false, 'Agent 服务尚未启动，配置已保存但无法立即重启监听。');
+      return agentLanView(false, `Agent 服务尚未启动，配置已保存但无法立即重启监听。${cdpError ? `；${cdpError}` : ''}`);
     }
     const info = await restartAgentServer(agentServer, lanHost(saved), {
       lanEnabled: saved.enabled,
       allowlist: saved.allowlist,
-      cdpPort: saved.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null
+      cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null
     });
     agentInfo = { ...info, toolCount: agentTools.list().length };
-    const message = saved.cdpEnabled && !cdpActive()
-      ? `已保存并重启 Agent（${info.host}:${info.port}）；CDP ${CDP_PORT} 端口需重启应用后生效。`
-      : `已保存并重启 Agent（${info.host}:${info.port}）。`;
+    const cdpMessage = cdpError
+      ? `；CDP 启动失败：${cdpError}`
+      : saved.cdpEnabled && saved.enabled
+        ? cdpActive()
+          ? `；CDP 已转发 0.0.0.0:${CDP_EXTERNAL_PORT} → 127.0.0.1:${CDP_INTERNAL_PORT}。`
+          : `；CDP 转发器已启动，但内部 ${CDP_INTERNAL_PORT} 未监听；请确认应用以普通模式启动。`
+        : '；CDP 已关闭。';
+    const message = `已保存并重启 Agent（${info.host}:${info.port}）${cdpMessage}`;
     return agentLanView(true, message);
   } catch (error) {
     return agentLanView(false, error instanceof Error ? error.message : String(error));
   }
+}
+
+async function rotateAgentTokenAndRestart(): Promise<AgentLanAccessView> {
+  try {
+    if (!agentServer || !agentTools) {
+      return agentLanView(false, 'Agent 服务尚未启动，无法轮换 token。');
+    }
+    const { token, tokenFile } = rotateAgentToken(app.getPath('userData'));
+    agentToken = token;
+    agentTokenFile = tokenFile;
+    agentServer.setToken(token);
+    const info = await restartAgentServer(agentServer, lanHost(lanConfig), {
+      lanEnabled: lanConfig.enabled,
+      allowlist: lanConfig.allowlist,
+      cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null
+    });
+    agentInfo = { ...info, toolCount: agentTools.list().length };
+    return agentLanView(true, '已重新生成 token；旧 token 立即失效，已连接客户端需重新配置。');
+  } catch (error) {
+    return agentLanView(false, `重新生成 token 失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function recordRenderStats(value: unknown): { ok: boolean; message?: string } {
+  const stats = normalizeRenderStats(value);
+  if (!stats) return { ok: false, message: '渲染指标格式无效' };
+  lastRenderStats = stats;
+  return { ok: true };
 }
 
 function desktopRoot(): string {
@@ -2254,7 +2356,7 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 21 ||
+          summaries.length !== 22 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
           !summaries.some((tool) => tool.name === 'suggest_kinematics') ||
           !summaries.some((tool) => tool.name === 'apply_machine_design') ||
@@ -2265,6 +2367,7 @@ function createWindow(): BrowserWindow {
           !summaries.some((tool) => tool.name === 'place_component') ||
           !summaries.some((tool) => tool.name === 'verify_plc_program') ||
           !summaries.some((tool) => tool.name === 'get_project_context') ||
+          !summaries.some((tool) => tool.name === 'get_render_stats') ||
           !summaries.some((tool) => tool.name === 'update_component') ||
           !summaries.some((tool) => tool.name === 'remove_component') ||
           !summaries.some((tool) => tool.name === 'run_plc_generate') ||
@@ -4368,6 +4471,43 @@ function createWindow(): BrowserWindow {
         console.log(
           `SMOKE_LAN_ALLOWLIST_OK allowed=1 denied=0 allowIp=${allowedAddress} denyIp=${deniedAddress}`
         );
+        // smoke 关闭了 WebGL，无法从真实视口取指标；这里走同一条 IPC → 主进程缓存 → /health/工具链路。
+        const sampleRenderStats: RenderStats = {
+          glRenderer: 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)))',
+          isSoftware: true,
+          pixelRatio: 1,
+          quality: 'flow',
+          partCount: 11,
+          triangleCount: 4832,
+          dragFrames: 4,
+          dragAvgFrameMs: 42,
+          dragMaxFrameMs: 58,
+          lastDragAt: new Date().toISOString()
+        };
+        const posted = await window.webContents.executeJavaScript(
+          `window.desktop.render.stats(${JSON.stringify(sampleRenderStats)})`
+        ) as { ok?: boolean };
+        const healthInfo = agentServer?.info();
+        if (!posted?.ok || !healthInfo) throw new Error(`渲染指标上报失败：${JSON.stringify(posted)}`);
+        const healthResponse = await fetch(`${healthInfo.url}/health`, {
+          headers: { authorization: `Bearer ${agentToken}` }
+        });
+        const health = await healthResponse.json() as { render?: RenderStats | null };
+        const renderTool = await agentTools?.call('get_render_stats') as {
+          available?: boolean;
+          render?: RenderStats | null;
+          conclusion?: string;
+        } | undefined;
+        if (!health.render || health.render.partCount !== sampleRenderStats.partCount ||
+            health.render.triangleCount !== sampleRenderStats.triangleCount ||
+            renderTool?.available !== true || renderTool.render?.quality !== 'flow' ||
+            !renderTool.conclusion?.includes('软件渲染') || !renderTool.conclusion.includes('flow')) {
+          throw new Error(`渲染指标链路异常：${JSON.stringify({ health: health.render, renderTool })}`);
+        }
+        console.log(
+          `SMOKE_RENDER_STATS_OK gl="${sampleRenderStats.glRenderer}" parts=${sampleRenderStats.partCount} triangles=${sampleRenderStats.triangleCount} quality=${sampleRenderStats.quality}`
+        );
+        console.log(`SMOKE_RENDER_STATS_HEALTH ${JSON.stringify(health.render)}`);
       } catch (error) {
         console.error('SMOKE_FAIL desktop_appearance_lan', error);
         setTimeout(() => app.exit(1), 100);
@@ -4512,17 +4652,21 @@ async function startAgent(
   commands: CommandBus,
   options: { userDataRoot: string; loadBuiltinPricebook: () => unknown; isModuleEnabled: (moduleId: string) => boolean }
 ): Promise<void> {
-  const { token, tokenFile } = createAgentTokenFile(app.getPath('userData'));
+  const { token, tokenFile } = loadOrCreateAgentTokenFile(app.getPath('userData'));
   agentToken = token;
   agentTokenFile = tokenFile;
   lanConfig = readLanConfig(app.getPath('userData'));
-  const tools = new AgentTools(registry, commands, options);
+  const tools = new AgentTools(registry, commands, { ...options, getRenderStats: () => lastRenderStats });
   agentTools = tools;
   commandBus = commands;
   const writeAudit = createAuditFileWriter(join(app.getPath('userData'), 'agent-audit.jsonl'), {
     retention: loadAuditRetention(app.getPath('userData')),
     onError: (error) => console.warn('[agent-audit] 轮转/清理失败', error instanceof Error ? error.message : String(error))
   });
+  writeAgentAudit = (record) => writeAudit(formatAuditLine(record));
+  // 先起转发器，构造 RPC 时 cdpPort 才能反映本轮真实状态。
+  const cdpError = await configureCdpForwarder(lanConfig);
+  if (cdpError) console.error(`[cdp] 未启动：${cdpError}`);
   agentServer = new AgentRpcServer({
     tools,
     token,
@@ -4531,7 +4675,8 @@ async function startAgent(
     port: HEADLESS ? 0 : 7420,
     lanEnabled: lanConfig.enabled,
     allowlist: lanConfig.allowlist,
-    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null,
+    renderStats: () => lastRenderStats,
     audit: (record) => writeAudit(formatAuditLine(record)),
     confirmWrite: async (name, args) => {
       const window = mainWindow;
@@ -4766,7 +4911,9 @@ async function bootstrap(): Promise<void> {
     trustedUiPath: indexHtmlPath(),
     isAgentResumeEnabled: () => agentResumeModuleEnabled,
     getLanAccess: getAgentLanAccess,
-    saveLanAccess: saveAgentLanAccess
+    saveLanAccess: saveAgentLanAccess,
+    rotateToken: rotateAgentTokenAndRestart,
+    recordRenderStats
   });
 
   app.on('activate', () => {
@@ -4783,6 +4930,7 @@ app.on('window-all-closed', () => {
 let quitAfterParametricStop = false;
 app.on('before-quit', (event) => {
   if (agentServer) void agentServer.stop();
+  void stopCdpForwarder();
   void disposeIpcRuntime();
   if (!parametric || parametric.status().status === 'stopped') return;
   if (quitAfterParametricStop) return;

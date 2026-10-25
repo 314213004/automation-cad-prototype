@@ -71,7 +71,7 @@ test('/health 返回监听/白名单/CDP，且不泄露 token', async () => {
   const health = await getHealth(url);
   assert.equal(health.status, 200);
   assert.deepEqual(Object.keys(health.body).sort(), [
-    'allowlist', 'cdpPort', 'host', 'lanEnabled', 'ok', 'port', 'toolCount', 'version'
+    'allowlist', 'cdpPort', 'host', 'lanEnabled', 'ok', 'port', 'render', 'toolCount', 'version'
   ]);
   assert.equal(health.body.ok, true);
   assert.equal(health.body.version, '0.1.0-lan-test');
@@ -79,6 +79,7 @@ test('/health 返回监听/白名单/CDP，且不泄露 token', async () => {
   assert.equal(health.body.lanEnabled, false);
   assert.deepEqual(health.body.allowlist, ['192.168.0.0/16']);
   assert.equal(health.body.cdpPort, null);
+  assert.equal(health.body.render, null);
   assert.equal(JSON.stringify(health.body).includes(token), false);
   assert.equal(Object.hasOwn(health.body, 'token'), false);
 });

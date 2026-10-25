@@ -75,10 +75,10 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 
 **边界原则**：渲染层无 fs/net 权限；主进程不做几何计算；Agent 与 UI 共用同一份工具/命令注册表。
 
-## 当前总体进度（2026-10-24）
+## 当前总体进度（2026-10-25）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 最新 `main` 基线上 `TZ=Asia/Shanghai npm test` 1831/1831、`npm run build:ext` 及 fake-sidecar Electron headless smoke 全部通过（最终 `SMOKE_OK`）；本轮详细记录见 [STATUS.md](./STATUS.md)。
+- ✅ 最新 `main` 基线上 `TZ=Asia/Shanghai npm test` 1842/1842、`npm run build:ext` 及 fake-sidecar Electron headless smoke 全部通过（最终 `SMOKE_OK`）；本轮详细记录见 [STATUS.md](./STATUS.md)。
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；`npm run packs:stats` 产出 `PACK-STATS.md` / `pack-stats.json`（617 条 / 612 实型号 / 612 唯一型号 / 55 分类，尺寸 55.9%、价格 7.2%）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -90,7 +90,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
 - ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
 - ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=21 audit=3 ctx=616`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
+- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=22 audit=3 ctx=616`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
 - ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
 - ✅ 数据包懒加载：`scan()` 只读 manifest；`listParts` 按分类/包名预过滤后 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局索引并解析 `aliasOf`；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs`，`diagnose` 输出 `packMetrics`。目标实测：冷启动 ≈5 ms、10 包全量搜索 ≤25 ms、单包最大 159.1 KB。
 - ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
@@ -150,15 +150,16 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - 拖动降级：OrbitControls `start` 把 pixelRatio 设为 **0.8**，`end` 后 200 ms 恢复并重绘；保留 `down` hover raycast 保护。
 - 大装配体：零件数 **> 1500** 自动改用 `flow`，诊断返回 `autoDowngraded:true`。
 - 配置：`renderQuality` 与 `uiScale` 共用 `appearance.json`；面板显示当前档位、像素比、拖动像素比、抗锯齿与降级原因。
+- 指标口径：`glRenderer` 合并 masked/unmasked（取不到用 capabilities），按 `SwiftShader|llvmpipe|Software` 判软件渲染；`dragFrames`/平均/最大帧时间来自 controls `start→end` 相邻渲染帧，`lastDragAt` 为结束时间。拖动结束强制、平时每 5 秒节流上报；主进程快照供 `/health.render` 与 `get_render_stats`，软件渲染自动 `flow` + 可关闭提示。
 
 ## 局域网联调
 
 - 入口：智能体面板「局域网联调」。默认关闭，仅监听 `127.0.0.1:7420`；开启后监听 `0.0.0.0:7420`，保存后热重启并显示结果。
 - 白名单：`desktop/src/shared/lan-access.ts` 支持 IPv4 CIDR（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`）、单 IP（`192.168.2.117`）与 `::1`，逗号/换行分隔。回环永远放行；非白名单返回 `403 { ok:false, error:'LAN_NOT_ALLOWED' }` 并审计。非法 CIDR 中文报错且不落盘。
-- 配置：默认 `{ enabled:false, allowlist:['192.168.0.0/16'], cdpEnabled:false }`，写入 `userData/lan-access.json`（0600、原子）。Bearer token 保留；token 在 `<userData>/agent-token`，面板可显示/复制。
+- 配置：默认 `{ enabled:false, allowlist:['192.168.0.0/16'], cdpEnabled:false }`，写入 `userData/lan-access.json`（0600、原子）。token 在 `<userData>/agent-token`：启动时合法 48 位 `[A-Za-z0-9]` 直接复用，缺失/损坏才原子重建（0600）；面板「重新生成 token」经 `lan:rotate-token` 强制轮换并重启服务，旧 token 立即 401。
 - 审计：`agent-audit.jsonl` 增加 `remoteAddress` 与 `origin`（`local | lan`）。写工具仍须桌面本机确认，远程不能静默写。
-- 健康检查：`GET /health` 返回 `{ ok, version, toolCount, host, port, lanEnabled, allowlist, cdpPort }`，不含 token。端口冲突返回中文错误。
-- CDP：`cdpEnabled=true` 时下次启动监听 `0.0.0.0:9222`；面板显示端口与「需重启」及高风险警告。能访问该端口的程序可接管渲染进程。
+- 健康检查：`GET /health` 返回 `{ ok, version, toolCount, host, port, lanEnabled, allowlist, cdpPort, render }`，不含 token；`render` 与 `get_render_stats` 同口径。端口冲突返回中文错误。
+- CDP 转发：Electron 调试器只监听 `127.0.0.1:9229`；`cdpEnabled && enabled` 时 `cdp-forwarder` 在 `0.0.0.0:9222` 双向 pipe 到 9229，关闭即停，保存配置热启停。来源复用 `isAddressAllowed` / `normalizeRemoteAddress`，拒绝立即销毁并审计 `cdp_access_check` / `LAN_NOT_ALLOWED`；端口占用返回中文错误且不影响主窗口。`cdpActive` = 转发器在跑且 9229 可连，面板显示 `<局域网IP>:9222`。
 - 探测脚本：`desktop/scripts/lan-debug-probe.mjs`，`--token-file` 优先于 `--token`：
 
 ```bash

@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { AgentTools } from './tools';
@@ -22,6 +22,8 @@ export interface AgentRpcOptions {
   lanEnabled?: boolean;
   allowlist?: string[];
   cdpPort?: number | null;
+  /** 主进程缓存的最新渲染指标；/health 读取时按调用取快照。 */
+  renderStats?: () => unknown;
   audit?: (record: AgentAuditRecord) => void;
   /**
    * 覆盖来源地址解析。默认取 `request.socket.remoteAddress`；
@@ -98,7 +100,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export class AgentRpcServer {
   readonly tools: AgentTools;
-  readonly token: string;
+  private tokenValue: string;
   readonly version: string;
   readonly port: number;
   readonly confirmWrite: ConfirmAgentToolWrite | undefined;
@@ -106,6 +108,7 @@ export class AgentRpcServer {
   private lanEnabledValue: boolean;
   private allowlistValue: string[];
   private cdpPortValue: number | null;
+  private readonly renderStats: (() => unknown) | undefined;
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private readonly resolveRemoteAddress: ((request: IncomingMessage) => string | undefined) | undefined;
   private server: Server | null = null;
@@ -114,7 +117,7 @@ export class AgentRpcServer {
 
   constructor(options: AgentRpcOptions) {
     this.tools = options.tools;
-    this.token = options.token;
+    this.tokenValue = options.token;
     this.version = options.version;
     this.hostValue = options.host ?? '127.0.0.1';
     this.port = options.port ?? 7420;
@@ -122,12 +125,22 @@ export class AgentRpcServer {
     this.lanEnabledValue = options.lanEnabled === true;
     this.allowlistValue = [...(options.allowlist ?? [])];
     this.cdpPortValue = options.cdpPort ?? null;
+    this.renderStats = options.renderStats;
     this.audit = options.audit;
     this.resolveRemoteAddress = options.resolveRemoteAddress;
   }
 
   get host(): string {
     return this.hostValue;
+  }
+
+  get token(): string {
+    return this.tokenValue;
+  }
+
+  /** token 轮换只换鉴权值；HTTP 监听仍由 restart 负责重建。 */
+  setToken(token: string): void {
+    this.tokenValue = token;
   }
 
   async start(tokenFile?: string): Promise<AgentRpcInfo> {
@@ -233,7 +246,7 @@ export class AgentRpcServer {
         sendJson(response, 403, { ok: false, error: 'LAN_NOT_ALLOWED' });
         return;
       }
-      if (!tokenMatches(request.headers.authorization, this.token)) {
+      if (!tokenMatches(request.headers.authorization, this.tokenValue)) {
         response.setHeader('www-authenticate', 'Bearer');
         sendJson(response, 401, { ok: false, error: 'unauthorized' });
         return;
@@ -248,7 +261,8 @@ export class AgentRpcServer {
           port: this.actualPort || this.port,
           lanEnabled: this.lanEnabledValue,
           allowlist: [...this.allowlistValue],
-          cdpPort: this.cdpPortValue
+          cdpPort: this.cdpPortValue,
+          render: this.renderStats?.() ?? null
         });
         return;
       }
@@ -373,14 +387,72 @@ export async function restartAgentServer(
 }
 
 export function createAgentToken(): string {
-  return randomBytes(32).toString('base64url');
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  while (token.length < 48) {
+    for (const byte of randomBytes(48)) {
+      // 248 = 62 * 4：拒绝采样，避免 256 % 62 带来的字符分布偏斜。
+      if (byte >= 248) continue;
+      token += alphabet[byte % alphabet.length];
+      if (token.length === 48) break;
+    }
+  }
+  return token;
 }
 
-export function createAgentTokenFile(userDataDir: string): { token: string; tokenFile: string } {
-  const token = createAgentToken();
+export const AGENT_TOKEN_PATTERN = /^[A-Za-z0-9]{48}$/;
+
+export function isValidAgentToken(value: unknown): value is string {
+  return typeof value === 'string' && AGENT_TOKEN_PATTERN.test(value);
+}
+
+function agentTokenPath(userDataDir: string): string {
+  return join(userDataDir, 'agent-token');
+}
+
+/** 原子写 0600：临时文件 + rename，避免进程在写一半时留下半截 token。 */
+function writeAgentTokenFile(userDataDir: string, token: string): string {
   const tokenFile = join(userDataDir, 'agent-token');
   mkdirSync(userDataDir, { recursive: true });
-  writeFileSync(tokenFile, token, { encoding: 'utf8', mode: 0o600 });
-  chmodSync(tokenFile, 0o600);
-  return { token, tokenFile };
+  const temporary = `${tokenFile}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, token, { encoding: 'utf8', mode: 0o600 });
+    chmodSync(temporary, 0o600);
+    renameSync(temporary, tokenFile);
+    chmodSync(tokenFile, 0o600);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw new Error(`写入 Agent token 失败：${error instanceof Error ? error.message : String(error)}`);
+  }
+  return tokenFile;
+}
+
+/** 启动时优先复用合法 token；文件缺失/损坏时重建，重启不再让已连接的客户端失效。 */
+export function loadOrCreateAgentTokenFile(userDataDir: string): { token: string; tokenFile: string } {
+  const tokenFile = agentTokenPath(userDataDir);
+  if (existsSync(tokenFile)) {
+    try {
+      const token = readFileSync(tokenFile, 'utf8').trim();
+      if (isValidAgentToken(token)) {
+        try { chmodSync(tokenFile, 0o600); } catch { /* Windows/受管目录可能拒绝 chmod，不影响鉴权 */ }
+        return { token, tokenFile };
+      }
+    } catch {
+      // 读失败按损坏处理，下面重建。
+    }
+  }
+  const token = createAgentToken();
+  return { token, tokenFile: writeAgentTokenFile(userDataDir, token) };
+}
+
+/** 面板「重新生成 token」入口：强制换新并返回，旧 token 立即失效。 */
+export function rotateAgentToken(userDataDir: string): { token: string; tokenFile: string } {
+  const token = createAgentToken();
+  return { token, tokenFile: writeAgentTokenFile(userDataDir, token) };
+}
+
+/** 兼容旧测试/调用：总是生成新 token。主进程启动改用 loadOrCreateAgentTokenFile。 */
+export function createAgentTokenFile(userDataDir: string): { token: string; tokenFile: string } {
+  const token = createAgentToken();
+  return { token, tokenFile: writeAgentTokenFile(userDataDir, token) };
 }

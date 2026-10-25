@@ -30,3 +30,39 @@
 .orbit-geom .orbit-reset:hover{color:var(--text-1); background:var(--hover)}
 .st-undo .orbit-hist{margin-left:5px; padding:0 4px; height:14px; line-height:14px; border-radius:2px; font-size:10px;
   color:var(--accent); background:rgba(20,184,166,.14)}
+
+/* 软件渲染提示条：固定在应用顶部，可关闭；只在首次检测到 SwiftShader/llvmpipe/Software 时出现。 */
+.orbit-software-notice {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 12000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 14px;
+  color: #f6e6c6;
+  background: rgb(92 65 20 / 94%);
+  border-bottom: 1px solid rgb(255 199 92 / 45%);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 25%);
+}
+
+.orbit-software-close {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 18px;
+}
+
+.orbit-software-close:hover {
+  background: rgb(255 255 255 / 12%);
+}

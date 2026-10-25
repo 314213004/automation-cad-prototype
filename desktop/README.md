@@ -26,11 +26,11 @@ npm run mcp         # 启动 stdio MCP server（需先 build:ext）
 - 主视口可旋转 3D：冒烟进程关闭 WebGL，验证装配/干涉视口保留原型等轴测 SVG（降级），同时扩展模型与原型逐字一致、3D↔结构树选择映射、原型缸径编辑与撤销驱动几何、桌面版几何参数沿叠放链联动与越界拒绝（`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`）；WebGL 路径另用 `npm run check:orbit-webgl`（swiftshader，手动）验证，输出 `ORBIT_WEBGL_OK`；
 - 「工厂」面板连接内置仿真产线后出现 2 个工位 / 8 个点位；
 - 「数据包」面板能列出 10 个内置 manifest、搜索元器件并写入 localStorage 覆盖层；启动只读 manifest，命中包才加载 `parts.json`；smoke 额外输出 `SMOKE_PACKS_LAZY_OK packs=10 loaded=2 searchMs=…` 与 `SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`；
-- 智能体注册表为 21 个工具（含只读 `design_machine` 与写工具 `apply_machine_design`）：`design_machine` 返回 config / cycle / power / cost / bomDraft，其中功率优先取元件库额定值并按同时系数、负载率、效率与 `cosφ` 折算，成本按材料/电气/人工分项并统计缺价；渲染桥能读取场景与 BOM，对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4` / `SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6` / `SMOKE_MACHINE_COST_OK total=17076.23 missing=2` / `SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1` / `SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1` / `SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1` / `SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56` / `SMOKE_AGENT_BRIDGE_OK` / `SMOKE_AGENT_CHAT_UI_OK` / `SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
+- 智能体注册表为 22 个工具（含只读 `design_machine`、`get_render_stats` 与写工具 `apply_machine_design`）：`design_machine` 返回 config / cycle / power / cost / bomDraft，其中功率优先取元件库额定值并按同时系数、负载率、效率与 `cosφ` 折算，成本按材料/电气/人工分项并统计缺价；渲染桥能读取场景、BOM 与 `/health.render` 同口径的拖动帧指标；对话面板含 6 个字段与消息容器；流程区提供 5 个模板、步骤预览与执行记录导出，本地知识索引可检索文档（`SMOKE_AGENT_TOOLS_OK` / `SMOKE_RENDER_STATS_OK gl="…" parts=11 triangles=4832 quality=flow` / `SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4` / `SMOKE_AGENT_RECIPE_OK recipes=5 steps=5 failed=1 kept=2`）。
 
 ## MCP（stdio）接入
 
-MCP 入口直接复用 `src/agent/tools.ts` 的 21 个工具（只读 11 + 写 10）：`list_components`、`search_components`、`search_docs`、`suggest_kinematics`、`design_machine`、`apply_machine_design`、`import_cad`、`get_bom`、`get_project_context`、`run_interference_check`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_electrical_check`、`run_cost_report`、`run_plc_generate`、`export_files`、`export_cost_report`、`verify_plc_program`、`undo_last`。MCP 进程会读取桌面 token 并优先把工具调用转发到 `127.0.0.1:7420`；桌面未启动时，只读检索（含 `search_docs`）回退本地 registry，其余工具返回 `DESKTOP_NOT_RUNNING`，不会假装成功。
+MCP 入口直接复用 `src/agent/tools.ts` 的 22 个工具（只读 12 + 写 10）：`list_components`、`search_components`、`search_docs`、`suggest_kinematics`、`design_machine`、`apply_machine_design`、`import_cad`、`get_bom`、`get_render_stats`、`get_project_context`、`run_interference_check`、`insert_component`、`place_component`、`update_component`、`remove_component`、`run_electrical_check`、`run_cost_report`、`run_plc_generate`、`export_files`、`export_cost_report`、`verify_plc_program`、`undo_last`。MCP 进程会读取桌面 token 并优先把工具调用转发到 `127.0.0.1:7420`；桌面未启动时，只读检索（含 `search_docs`）回退本地 registry，其余工具返回 `DESKTOP_NOT_RUNNING`，不会假装成功。
 
 先构建：
 
@@ -78,7 +78,7 @@ stdio 本身是受信任的本机通道；MCP 进程只在代理写工具时读�
 
 ## JSON-RPC 接口
 
-桌面主进程启动后会监听 `127.0.0.1:7420`，并生成 token 文件：
+桌面主进程启动后会监听 `127.0.0.1:7420`，并加载或创建 token 文件（合法 48 位 token 重启复用；面板可二次确认轮换）：
 
 - Windows：`%APPDATA%/AutomationCAD/agent-token`
 - Linux：`~/.config/AutomationCAD/agent-token`

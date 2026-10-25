@@ -244,13 +244,14 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 21 个工具里，只读 11 个、写操作 10 个。 */
+/** 目前注册的 22 个工具里，只读 12 个、写操作 10 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
   'search_docs',
   'design_machine',
   'get_bom',
+  'get_render_stats',
   'get_project_context',
   'run_interference_check',
   'suggest_kinematics',
@@ -680,6 +681,15 @@ function planToolBase(text: string): ToolPlan | null {
       readOnly: false,
       missing: [],
       why: '按当前机型生成 PLC 工程文件与 ZIP（写入 userData/exports/，需确认）'
+    };
+  }
+  if (/(?:渲染统计|渲染指标|渲染状态|帧率|帧时间|每帧|fps|不跟手|拖动.{0,8}(?:卡|慢)|软件渲染|swiftshader|llvmpipe)/i.test(value)) {
+    return {
+      tool: 'get_render_stats',
+      args: {},
+      readOnly: true,
+      missing: [],
+      why: '读取当前视口渲染器、软件渲染标记、零件/三角形数与最近拖动帧时间'
     };
   }
   if (/(?:当前|现在|我这台机器)[^。；;\n]{0,12}(?:上下文|状态|视图|域|项目)|工程上下文|项目上下文|底板[^。；;\n]{0,8}(?:空间|剩余|塞得下|塞下|放得下|装得下|还能放)|还剩多少空间|剩余多少空间/.test(value)) {

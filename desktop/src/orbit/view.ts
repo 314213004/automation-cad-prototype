@@ -36,6 +36,8 @@ import {
   resolveEffectiveQuality,
   type RenderQuality
 } from './quality.ts';
+import { isSoftwareRenderer, type RenderStats } from '../shared/render-stats.ts';
+import { clientPointToNdc } from './pointer.ts';
 
 export type Projection = 'perspective' | 'orthographic';
 
@@ -44,6 +46,9 @@ export interface OrbitViewOptions {
   onPick?: (partId: string | null, event: PointerEvent) => void;
   onHover?: (partId: string | null) => void;
   onRender?: (view: OrbitView) => void;
+  /** 拖动结束与每 5 秒一次的渲染指标；由 UI 层转发到主进程。 */
+  onStats?: (stats: RenderStats) => void;
+  onDragEnd?: (stats: RenderStats) => void;
   /** 框选结束（拖拽超过 5 px）：客户端像素矩形 */
   onMarquee?: (rect: ScreenRect) => void;
   /** 拖拽中显示的框（复用原型舞台里的 `.marquee` 元素） */
@@ -115,6 +120,14 @@ export class OrbitView {
   private rendererAntialias = true;
   private dragging = false;
   private dragRestoreTimer = 0;
+  private dragPrevFrameAt = 0;
+  private dragFrames = 0;
+  private dragTotalFrameMs = 0;
+  private dragMaxFrameMs = 0;
+  private lastDragAt: string | null = null;
+  private glRenderer = '';
+  private softwareRendering = false;
+  private statsTimer = 0;
   private panMode = false;
   onContextLost: (() => void) | null = null;
 
@@ -144,12 +157,19 @@ export class OrbitView {
     this.perspective.up.set(0, 0, 1);
     this.ortho.up.set(0, 0, 1);
     this.createControls(new THREE.Vector3());
+    if (this.softwareRendering) {
+      const rebuildAntialias = this.rendererAntialias;
+      this.qualitySetting = 'flow';
+      if (rebuildAntialias) this.rebuildRenderer();
+      else this.applyRenderQuality();
+    }
     // 框选要先于 OrbitControls 拿到 pointerdown：在宿主捕获阶段截获，移动/抬起在 window 捕获阶段跟踪。
     this.host.addEventListener('pointerdown', this.onMarqueeDown, true);
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(this.host);
     this.resize();
+    this.statsTimer = window.setInterval(() => this.options.onStats?.(this.renderStats()), 5000);
   }
 
   private createRenderer(): void {
@@ -165,6 +185,23 @@ export class OrbitView {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.localClippingEnabled = true;
+    const context = this.renderer.getContext();
+    let masked = '';
+    let unmasked = '';
+    try {
+      masked = String(context.getParameter(context.RENDERER) ?? '');
+      const debugInfo = context.getExtension('WEBGL_debug_renderer_info') as {
+        UNMASKED_RENDERER_WEBGL: number;
+      } | null;
+      if (debugInfo) unmasked = String(context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? '');
+    } catch {
+      // 扩展在隐私模式/旧驱动下可能不可读；能力摘要作为兜底。
+    }
+    const capabilitySummary = `WebGL${this.renderer.capabilities.isWebGL2 ? '2' : '1'} · maxTexture=${this.renderer.capabilities.maxTextureSize}`;
+    this.glRenderer = [unmasked, masked]
+      .filter((value, index, all) => Boolean(value) && all.indexOf(value) === index)
+      .join(' / ') || capabilitySummary;
+    this.softwareRendering = isSoftwareRenderer(this.glRenderer);
     this.canvas = this.renderer.domElement;
     this.canvas.className = 'orbit-canvas';
     this.host.appendChild(this.canvas);
@@ -272,7 +309,8 @@ export class OrbitView {
   }
 
   private resolveQuality(): { quality: RenderQuality; autoDowngraded: boolean } {
-    return resolveEffectiveQuality(this.qualitySetting, this.assembly?.parts.length ?? 0);
+    const resolved = resolveEffectiveQuality(this.qualitySetting, this.assembly?.parts.length ?? 0);
+    return this.softwareRendering ? { quality: 'flow', autoDowngraded: resolved.autoDowngraded } : resolved;
   }
 
   setRenderQuality(quality: RenderQuality): void {
@@ -320,12 +358,18 @@ export class OrbitView {
 
   private beginDrag(): void {
     this.dragging = true;
+    this.dragPrevFrameAt = performance.now();
+    this.dragFrames = 0;
+    this.dragTotalFrameMs = 0;
+    this.dragMaxFrameMs = 0;
     window.clearTimeout(this.dragRestoreTimer);
     this.renderer.setPixelRatio(DRAG_PIXEL_RATIO);
     this.requestRender();
   }
 
   private endDrag(): void {
+    this.lastDragAt = new Date().toISOString();
+    this.options.onDragEnd?.(this.renderStats());
     window.clearTimeout(this.dragRestoreTimer);
     this.dragRestoreTimer = window.setTimeout(() => {
       this.dragging = false;
@@ -455,8 +499,9 @@ export class OrbitView {
   pick(clientX: number, clientY: number): string | null {
     if (!this.assemblyRoot) return null;
     const rect = this.canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return null;
-    this.ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+    const point = clientPointToNdc(clientX, clientY, rect);
+    if (!point) return null;
+    this.ndc.set(point.x, point.y);
     this.raycaster.setFromCamera(this.ndc, this.camera);
     const hits = this.raycaster.intersectObjects(partMeshes(this.assemblyRoot), false);
     for (const hit of hits) {
@@ -503,9 +548,40 @@ export class OrbitView {
   renderNow(): void {
     if (this.disposed || this.contextLost) return;
     if (!this.host.clientWidth || !this.host.clientHeight) return;
+    const frameAt = performance.now();
+    if (this.dragging && this.dragPrevFrameAt > 0) {
+      const delta = frameAt - this.dragPrevFrameAt;
+      if (Number.isFinite(delta) && delta >= 0) {
+        this.dragFrames += 1;
+        this.dragTotalFrameMs += delta;
+        this.dragMaxFrameMs = Math.max(this.dragMaxFrameMs, delta);
+      }
+    }
+    if (this.dragging) this.dragPrevFrameAt = frameAt;
     this.renderer.render(this.scene, this.camera);
     this.renders += 1;
     this.options.onRender?.(this);
+  }
+
+  get isDragging(): boolean {
+    return this.dragging;
+  }
+
+  /** 当前视图的真实渲染指标；三角形数来自最近一帧 renderer.info.render.triangles。 */
+  renderStats(): RenderStats {
+    const resolved = this.resolveQuality();
+    return {
+      glRenderer: this.glRenderer,
+      isSoftware: this.softwareRendering,
+      pixelRatio: effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, this.dragging),
+      quality: resolved.quality,
+      partCount: this.assembly?.parts.length ?? 0,
+      triangleCount: this.renderer?.info.render.triangles ?? 0,
+      dragFrames: this.dragFrames,
+      dragAvgFrameMs: this.dragFrames > 0 ? Math.round((this.dragTotalFrameMs / this.dragFrames) * 100) / 100 : 0,
+      dragMaxFrameMs: Math.round(this.dragMaxFrameMs * 100) / 100,
+      lastDragAt: this.lastDragAt
+    };
   }
 
   resize(): void {
@@ -528,6 +604,7 @@ export class OrbitView {
 
   dispose(): void {
     this.disposed = true;
+    window.clearInterval(this.statsTimer);
     window.clearTimeout(this.dragRestoreTimer);
     this.resizeObserver.disconnect();
     this.host.removeEventListener('pointerdown', this.onMarqueeDown, true);

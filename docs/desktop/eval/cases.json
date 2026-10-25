@@ -98,6 +98,17 @@
     "note": "指代柜子；长类别词优先，不能落到“继电器”。"
   },
   {
+    "id": "q09",
+    "input": "看下当前渲染状态和拖动帧率",
+    "intent": "query",
+    "expect": {
+      "tool": "get_render_stats",
+      "argsContains": {}
+    },
+    "tags": [],
+    "note": "渲染性能只读查询：返回渲染器、软件渲染标记、场景规模与拖动帧时间，不修改视口。"
+  },
+  {
     "id": "c01",
     "input": "这台机台成本多少",
     "intent": "compute",

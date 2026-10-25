@@ -49,6 +49,7 @@ test('只读计划：成本、清单、BOM、干涉、电气校验', () => {
   assert.equal(planReadOnly('读一下当前 BOM')?.tool, 'get_bom');
   assert.equal(planReadOnly('检查有没有干涉')?.tool, 'run_interference_check');
   assert.equal(planReadOnly('电气校验线号有没有重复')?.tool, 'run_electrical_check');
+  assert.equal(planReadOnly('看下当前渲染状态和拖动帧率')?.tool, 'get_render_stats');
   const listPlan = planReadOnly('列一下所有接触器');
   assert.equal(listPlan?.tool, 'list_components');
   assert.deepEqual(listPlan?.args, { category: '接触器' });
@@ -66,8 +67,8 @@ test('写计划永远不会被离线通道执行', () => {
 });
 
 test('只读/写工具清单与注册表一致且互不重叠', () => {
-  assert.equal(READ_ONLY_TOOLS.size + WRITE_TOOLS.size, 21);
-  assert.equal(READ_ONLY_TOOLS.size, 11);
+  assert.equal(READ_ONLY_TOOLS.size + WRITE_TOOLS.size, 22);
+  assert.equal(READ_ONLY_TOOLS.size, 12);
   assert.equal(WRITE_TOOLS.has('place_component'), true);
   for (const name of READ_ONLY_TOOLS) assert.equal(WRITE_TOOLS.has(name), false, `${name} 同时被标为读写`);
 });

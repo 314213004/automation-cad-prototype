@@ -6,6 +6,7 @@ import { after, before, test } from 'node:test';
 import { PackRegistry } from '../../src/packs/registry.ts';
 import { AgentTools } from '../../src/agent/tools.ts';
 import { createAgentCommandBus, SIMPLE_BOM_NOTE } from '../../src/agent/commands.ts';
+import { READ_ONLY_TOOLS } from '../../src/agent/router.ts';
 
 let sandbox;
 let tools;
@@ -59,7 +60,7 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 21 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 22 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'apply_machine_design',
     'design_machine',
@@ -67,6 +68,7 @@ test('工具表为 21 个且不存在 NOT_IMPLEMENTED', () => {
     'export_files',
     'get_bom',
     'get_project_context',
+    'get_render_stats',
     'import_cad',
     'insert_component',
     'list_components',
@@ -110,6 +112,15 @@ test('get_bom 空模型返回空数组与 note', async () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.rows, []);
   assert.equal(result.note, SIMPLE_BOM_NOTE);
+});
+
+test('get_render_stats 是只读工具；没有桌面缓存时明确返回 available=false', async () => {
+  assert.equal(READ_ONLY_TOOLS.has('get_render_stats'), true);
+  const result = await tools.call('get_render_stats', {});
+  assert.equal(result.ok, true);
+  assert.equal(result.available, false);
+  assert.equal(result.render, null);
+  assert.match(result.conclusion, /尚未收到渲染指标/);
 });
 
 test('run_interference_check 返回命中数并截断前 20 条', async () => {

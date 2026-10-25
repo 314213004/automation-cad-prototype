@@ -8,7 +8,7 @@
 main.ts  ──创建→ BrowserWindow（加载仓库根 index.html）
    │            └─ did-finish-load 后注入 dist/extension.js
    ├─ registerIpcHandlers() → ipc.ts（PackRegistry / FactoryManager / Agent 信息）
-   └─ startAgent() → ../src/agent/rpc.ts（127.0.0.1:7420）
+   └─ startAgent() → ../src/agent/rpc.ts（127.0.0.1:7420）+ cdp-forwarder.ts（0.0.0.0:9222 → 127.0.0.1:9229）
 preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻辑）
 ```
 

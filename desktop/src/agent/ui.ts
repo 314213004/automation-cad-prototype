@@ -96,6 +96,7 @@ interface AgentInfo {
   cdpPort?: number | null;
   cdpActive?: boolean;
   cdpRestartRequired?: boolean;
+  lanAddress?: string | null;
   error?: string;
 }
 
@@ -216,8 +217,11 @@ function cdpStatusText(): string {
   const active = lanState?.cdpActive ?? infoState.cdpActive ?? false;
   const port = lanState?.cdpPort ?? infoState.cdpPort;
   if (!config && !active) return 'CDP：关闭';
-  if (active) return `CDP：已监听 0.0.0.0:${port ?? CDP_PORT_TEXT}`;
-  return `CDP：已配置 ${port ?? CDP_PORT_TEXT}，需重启应用后生效`;
+  const lanAddress = lanState?.lanAddress ?? infoState.lanAddress ?? null;
+  const address = lanAddress ? `${lanAddress}:${port ?? CDP_PORT_TEXT}` : '未检测到局域网 IP';
+  if (active) return `CDP：已转发 0.0.0.0:${port ?? CDP_PORT_TEXT} → 127.0.0.1:9229 · 内网地址：${address}`;
+  if (lanState?.cdpError) return `CDP：启动失败（${lanState.cdpError}）`;
+  return `CDP：已配置 ${port ?? CDP_PORT_TEXT}，内部 9229 未就绪（请确认应用以普通模式启动）`;
 }
 
 function timeText(at: string): string {
@@ -381,6 +385,7 @@ function renderShell(): void {
       <div class="acp-row">
         <button type="button" class="acp-btn" id="agentLanTokenToggle">显示 token</button>
         <button type="button" class="acp-btn" id="agentLanTokenCopy">复制 token</button>
+        <button type="button" class="acp-btn" id="agentLanTokenRotate">重新生成 token</button>
         <span class="acp-note">token 文件：${escapeHtml(infoState.tokenFile || '—')}</span>
       </div>
     </div>
@@ -390,12 +395,13 @@ function renderShell(): void {
     </div>
     <label class="acp-switch acp-switch-block">
       <input type="checkbox" id="agentCdpEnabled" ${lanState?.config.cdpEnabled ? 'checked' : ''}>
-      允许远程调试 CDP（重启生效）
+      允许远程调试 CDP（来源走白名单）
     </label>
     <div class="acp-warning is-critical">
-      <b>CDP 高风险</b>：启用后应用会在下次启动监听 <code>0.0.0.0:${CDP_PORT_TEXT}</code>，任何能访问该端口的程序都可接管渲染进程。仅在受信局域网临时开启，用完立即关闭并重启。
+      <b>CDP 高风险</b>：启用后由本机转发器把 <code>0.0.0.0:${CDP_PORT_TEXT}</code> 转发到回环 <code>127.0.0.1:9229</code>，来源必须命中白名单。任何能访问该端口的白名单设备都可接管渲染进程，仅在受信局域网临时开启。
     </div>
     <div class="acp-note" id="agentCdpStatus">${escapeHtml(cdpStatusText())}</div>
+    <div class="acp-note" id="agentCdpAddress">内网地址：${escapeHtml(lanState?.lanAddress ?? infoState.lanAddress ?? '未检测到局域网 IP')}:${CDP_PORT_TEXT}</div>
     <div class="acp-row">
       <button type="button" class="acp-btn acp-btn-primary" id="agentLanSave">保存并重启 Agent</button>
       <span class="acp-pill" id="agentLanStatus"></span>
@@ -2173,6 +2179,41 @@ async function copyLanToken(): Promise<void> {
   }
 }
 
+async function rotateLanToken(): Promise<void> {
+  if (!window.desktop) return;
+  const confirmed = window.confirm(
+    '重新生成 token？已连接的客户端会立刻失效，必须重新分发新 token 才能继续连接。确定继续？'
+  );
+  if (!confirmed) return;
+  const button = body?.querySelector<HTMLButtonElement>('#agentLanTokenRotate');
+  if (button) button.disabled = true;
+  setStatus('agentLanStatus', '正在重新生成 token…');
+  try {
+    const result = await window.desktop.agent.lan.rotateToken();
+    lanState = result;
+    infoState = {
+      ...infoState,
+      ...(result.info.host ? { host: result.info.host } : {}),
+      ...(result.info.port !== undefined ? { port: result.info.port } : {}),
+      ...(result.info.url ? { url: result.info.url } : {}),
+      ...(result.info.tokenFile ? { tokenFile: result.info.tokenFile } : {}),
+      token: result.token,
+      lanEnabled: result.config.enabled,
+      allowlist: result.config.allowlist,
+      cdpPort: result.cdpPort,
+      cdpActive: result.cdpActive,
+      cdpRestartRequired: result.cdpRestartRequired,
+      lanAddress: result.lanAddress
+    };
+    renderShell();
+    setStatus('agentLanStatus', result.message ?? (result.ok ? 'token 已重新生成' : '重新生成失败'), !result.ok);
+  } catch (error) {
+    setStatus('agentLanStatus', `重新生成失败：${errorMessage(error)}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function saveLanAccess(): Promise<void> {
   if (!window.desktop) return;
   const enabled = body?.querySelector<HTMLInputElement>('#agentLanEnabled')?.checked === true;
@@ -2195,7 +2236,8 @@ async function saveLanAccess(): Promise<void> {
       allowlist: result.config.allowlist,
       cdpPort: result.cdpPort,
       cdpActive: result.cdpActive,
-      cdpRestartRequired: result.cdpRestartRequired
+      cdpRestartRequired: result.cdpRestartRequired,
+      lanAddress: result.lanAddress
     };
     renderShell();
     setStatus('agentLanStatus', result.message ?? (result.ok ? '已保存并重启 Agent' : '保存失败'), !result.ok);
@@ -2244,6 +2286,7 @@ function bindControls(): void {
   });
   body?.querySelector<HTMLButtonElement>('#agentLanTokenToggle')?.addEventListener('click', toggleLanToken);
   body?.querySelector<HTMLButtonElement>('#agentLanTokenCopy')?.addEventListener('click', () => { void copyLanToken(); });
+  body?.querySelector<HTMLButtonElement>('#agentLanTokenRotate')?.addEventListener('click', () => { void rotateLanToken(); });
   body?.querySelector<HTMLButtonElement>('#agentLanSave')?.addEventListener('click', () => { void saveLanAccess(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditRefresh')?.addEventListener('click', () => { void loadAudit(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditExport')?.addEventListener('click', () => { void exportAuditCsv(); });

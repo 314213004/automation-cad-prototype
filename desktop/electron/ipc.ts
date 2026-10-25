@@ -127,6 +127,8 @@ export interface AgentChatIpcContext {
   isAgentResumeEnabled(): boolean;
   getLanAccess(): AgentLanAccessView;
   saveLanAccess(patch: unknown): Promise<AgentLanAccessView>;
+  rotateToken(): Promise<AgentLanAccessView>;
+  recordRenderStats(stats: unknown): { ok: boolean; message?: string };
 }
 
 export interface AgentLanAccessView {
@@ -137,6 +139,8 @@ export interface AgentLanAccessView {
   cdpPort: number | null;
   cdpActive: boolean;
   cdpRestartRequired: boolean;
+  lanAddress: string | null;
+  cdpError?: string;
   message?: string;
 }
 
@@ -1296,6 +1300,10 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   handle('agent:llm:get', () => publicLlmConfig(readLlmConfig(context.userDataDir)));
   handle('agent:lan:get', () => context.getLanAccess());
   handle('agent:lan:save', async (_event, patch: unknown) => await context.saveLanAccess(patch));
+  handle('lan:rotate-token', async () => await context.rotateToken());
+  // 兼容 0.4.1 早期内部构建；外部契约以 lan:rotate-token 为准。
+  handle('agent:lan:rotate-token', async () => await context.rotateToken());
+  handle('render:stats', (_event, stats: unknown) => context.recordRenderStats(stats));
 
   // 当前工程机型：只读 active 指针，供渲染层启动时恢复 3D 配置。
   handle('machine:active', () => {

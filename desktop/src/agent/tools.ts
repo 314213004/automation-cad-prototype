@@ -21,6 +21,7 @@ import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import { buildClarify } from '../machine/clarify.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
 import { AGENT_TOOL_MODULES, moduleDisabledResult, moduleIsEnabled, type ModuleEnabledReader } from '../modules/tool-gates.ts';
+import { describeRenderStats, normalizeRenderStats } from '../shared/render-stats.ts';
 
 export interface AgentTool {
   name: string;
@@ -42,6 +43,8 @@ export interface AgentToolsOptions {
   loadBuiltinPricebook?: () => unknown;
   /** 主进程的可选模块状态镜像；未就绪或状态读取失败时 PLC 能力失败关闭。 */
   isModuleEnabled?: ModuleEnabledReader;
+  /** 主进程缓存的渲染指标；桌面内由 orbit 上报，独立 MCP 进程返回不可用。 */
+  getRenderStats?: () => unknown;
 }
 
 export interface AgentCommandExecutor {
@@ -820,6 +823,22 @@ export class AgentTools {
       handler: async () => {
         const result = await this.execute('get_bom');
         return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'get_render_stats',
+      description:
+        '读取当前 3D 视口的渲染指标：渲染器名称、是否软件渲染、像素比、质量档、零件/三角形数量，以及最近一次拖动的帧数、平均/最大帧时间。只读，用于定位「鼠标不跟手」是软件渲染、帧率还是装配体规模。',
+      inputSchema: EMPTY_SCHEMA,
+      handler: async () => {
+        const stats = normalizeRenderStats(this.options.getRenderStats?.());
+        return {
+          ok: true,
+          available: stats !== null,
+          render: stats,
+          conclusion: describeRenderStats(stats)
+        };
       }
     });
 

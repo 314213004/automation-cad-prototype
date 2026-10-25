@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-10-25T02:09:58.111Z",
-  "version": "0.4.0",
+  "generatedAt": "2026-10-25T03:37:16.234Z",
+  "version": "0.4.1",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 106,
+    "count": 107,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
@@ -16,6 +16,7 @@
       "export_files",
       "get_bom",
       "get_project_context",
+      "get_render_stats",
       "import_cad",
       "insert_component",
       "list_components",
@@ -51,13 +52,13 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 106,
-      "total": 106,
+      "correct": 107,
+      "total": 107,
       "rate": 1
     },
     "tools": {
-      "correct": 106,
-      "total": 106,
+      "correct": 107,
+      "total": 107,
       "rate": 1
     },
     "params": {
@@ -269,6 +270,34 @@
           "args": {
             "category": "热继电器"
           },
+          "readOnly": true,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "q09",
+      "input": "看下当前渲染状态和拖动帧率",
+      "tags": [],
+      "note": "渲染性能只读查询：返回渲染器、软件渲染标记、场景规模与拖动帧时间，不修改视口。",
+      "expectedIntent": "query",
+      "actualIntent": "query",
+      "intentOk": true,
+      "expectedTools": [
+        "get_render_stats"
+      ],
+      "actualTools": [
+        "get_render_stats"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "get_render_stats",
+          "args": {},
           "readOnly": true,
           "missing": []
         }

@@ -29,6 +29,7 @@ const LOCAL_READ_TOOLS = new Set(['list_components', 'search_components', 'searc
 const DESKTOP_REQUIRED_TOOLS = new Set([
   ...WRITE_TOOLS,
   'get_bom',
+  'get_render_stats',
   'get_project_context',
   'run_interference_check',
   'suggest_kinematics',
