@@ -12,13 +12,19 @@ ElecDocument ──runElectricalCheck()──→ ElecCheckResult
 
 | 文件 | 职责 |
 |------|------|
-| `circuit.ts` | 电路模型（元件/引脚/网络）+ ERC；相线按三极元件 i↔i+3 逐级追到电机 |
-| `machine-circuit.ts` | 机型参数 → 电路；断路器名称按型号系列（`breakerNameFor`） |
+| `design.ts` | **通用电气描述层 `ElecDesign`**（机型无关）+ 规整化（补起停按钮/电机运行输出、分配 PLC 地址、极性检查） |
+| `adapters.ts` | 适配器：①已保存工程 → ElecDesign（工艺→物理估算器注册表 + 零件名分类）；②规则引擎机型方案（config/IO 表/BOM/功率）→ ElecDesign |
+| `build.ts` | ElecDesign → `Circuit` + 版面计划 `ElecPlan`（主回路支路、安全链、起保停、IO 列、端子分配） |
+| `pages.ts` | 分页版面：主回路页 / 控制回路页 / PLC 输入页 / PLC 输出页，放不下自动开新页 |
+| `canvas.ts` | 单页画布、空间索引、文字“候选位置 + 碰撞检测”摆放、图框列号 `columnOf` |
+| `drawing.ts` | **出图唯一入口 `renderElecDrawing`**：线号、交叉引用、端子表/导线表/明细表页、逐页 + 全局自检、SVG |
+| `circuit.ts` | 电路模型（元件/引脚/网络）+ ERC；电机每相从 U/V/W 往电源侧追（多极元件 i↔i+极数、驱动器输出↔输入）；线圈驱动/停止按“拿掉该类元件后是否还能通电”判 |
+| `machine-circuit.ts` | 断路器名称按型号系列（`breakerNameFor`）；`buildMachineCircuit` 为旧单页接口（只保留给单页回归测试，应用不再调用） |
 | `protection.ts` | 由功率选断路器/接触器/热继档位 |
 | `symbols.ts` | IEC 60617 风格符号 → 几何图元 + 引脚落点 |
-| `layout.ts` | 原理图版面（主回路竖排 / 控制回路上下母线 + 竖向电流路径 / IO 分列），当场跑导线自检 |
+| `layout.ts` | 旧单页版面（只服务 `renderSheet` 单页回归测试；单页放不下报 `IO_TOO_DENSE`，多页出图走 `pages.ts`） |
 | `geometry.ts` | 图元、文字度量、相交判定、交点打点、`checkWiring` / `checkTexts` |
-| `sheet.ts` | A3 单页：图框、明细表（按位号去重）、说明、标题栏；汇总自检 → `deliverable` |
+| `sheet.ts` | 旧 A3 单页渲染（`renderSheet`），同上只保留给回归测试 |
 | `check.ts` | 纯函数规则引擎（不依赖 DOM/IPC），含 `AMPACITY_TABLE`、`BREAKER_RATINGS` |
 | `report.ts` | `renderElecCheckHtml(project, result)` 生成可打印报告，全部字段做 HTML 转义 |
 | `ui.ts` | 「电气校验」抽屉面板：入口按钮 `elecCheckEntryButton`、抽屉 `elecCheckDrawer`、脚本 API `window.__ElecCheckPanel` |
@@ -34,6 +40,68 @@ ElecDocument ──runElectricalCheck()──→ ElecCheckResult
 - `ElecDocument = { wires?, loads?, circuits?, options? }`；`ElecCheckResult = { findings, summary, counts }`。
 - 面板本身不造数据：从 `window.__ElecDocProvider()` 取文档，未注入时只提示「尚未接入电气数据源」。
 - Agent 侧同一套判定：命令 `run_electrical_check`（`src/agent/commands.ts` 里做入参解析与中文报错）+ 工具 `run_electrical_check`（`src/agent/tools.ts`，返回 `counts/summary/findings`，超过 50 条标 `truncated`）。
+
+## 出图管线（应用与 Agent 只走这一条）
+
+```
+已保存工程 ─elecDesignFromProject─┐
+机型方案(MachineDesign/config) ─elecDesignFromMachine─┤→ ElecDesign → buildElec → Circuit+ElecPlan
+                                                      → runErc → 分页版面 → 线号 → 交叉引用 → 文字摆放 → 逐页/全局自检 → 每页 SVG
+```
+
+`extension.ts` 只决定数据源（最近“打开的工程”或“应用的机型方案”，谁新用谁），然后 `renderElecDrawing(design)`；
+没有机型分支、不认零件名、不写死图号。图号由适配器按数据给（`EL-<工艺码>-<标识末段>`），页码 n/N 由分页给。
+多页经 `ElecDomain.setSchematic` 逐页送进电气域画布，画布底部的翻页条（`.cad-elec-pager`）切页；
+`window.__ElecDocProvider` 同时注入线号/负载数据，电气校验面板读的就是出图这份。
+
+### ElecDesign 字段
+
+| 字段 | 含义 |
+|------|------|
+| `project` / `drawingNo` / `source` / `notes` / `date` / `designer` | 标题栏与说明栏 |
+| `supply.mainBreakerModel?` | 总进线断路器型号（缺省按最大相电流 ×1.25 选 iC65N/NSX） |
+| `plc.model` / `psu.{model,watts}` | PLC、24V 开关电源 |
+| `motors[]` | `{id,name,purpose,starter:'dol'\|'vfd'\|'servo',powerKw,spec?,motorModel?,driveModel?,breakerModel?}`；直启=QF-KM-FR-M，变频=QF-U-M（380V），伺服=QF(1P 或 1P+N)-U-M（单相 220V，按 L1/L2/L3 轮流取相） |
+| `inputs[]` | `device`：photoelectric/proximity/pressure（三线，`output` PNP/NPN）、proximity-2w（两线）、button-no/nc（`role` start/stop/reset/other）、safety-status（`safetyOf` 'estop' 或光栅 id，接安全继电器 Y32）；`address?`/`point?` |
+| `outputs[]` | `device`：valve/lamp/buzzer/relay/motor-run（`motorId`；直启→FR 常闭+KM 线圈，变频→DI1，伺服→SON） |
+| `safety` | `estops` 个数；`curtains[]`（每套 OSSD 双通道配一只安全继电器）；`relay`：急停是否经安全继电器（有光栅自动为真） |
+| `startStop` | hardwired（起保停硬接线：1 台直启电机为经典自锁，多台用 -KA 运行继电器）/ plc（起/停按钮进 PLC，自动补）/ none（无起停按钮） |
+
+### 分页与交叉引用
+
+- 主回路页：总进线 PE/N/L1/L2/L3 → -QF0 → 母线；每路负载占一列（50 mm），每页 7 路；超出开下一页，母线在页边断开。
+- 控制回路页：+24V/0V 上下母线；第一块是 -FU1 → 急停（无安全继电器时串联）/ 各安全继电器 13-14 → 安全母线 S（线号数字），之后是起保停电流路径、安全继电器块（急停双通道 S11-S12/S21-S22、复位 S33-S34、Y32 状态）、光栅块、PLC 电源块；按宽度从左往右排，放不下开新页。
+- PLC 输入/输出页：每页 14 点（每点 24.5 mm 一列），PLC 画成片段框（每页只画本页端子），输入公共端 1M、输出组电源 3L+（取自安全母线 S，急停切断全部输出）/3M。
+- 列号 1–8、行号 A–F 画在图框边带上；交叉引用写成 `/页.列`。跨页网络在每页都留电位断点（`←/页.列` 指回上一页、`→/页.列` 指向下一页）。
+- 触点镜像：接触器/继电器线圈下方页脚列出 `主 1-6 /页.列` 与各辅助触点位置；主触点、热继、驱动器旁写线圈/常闭/控制端子的位置；安全继电器写安全输出位置。
+- 文字一律走候选位置 + 碰撞检测（`canvas.ts`）；摆不下记 `LABEL_UNPLACED`，绝不硬压。
+- 表格页：端子表（每 44 行一页）、导线表、元件明细表（含页.列位置）。
+
+### 线号规则（与 `check.ts` 线号规则同一口径）
+
+- 固定电位：进线 L1/L2/L3/N/PE、+24V 网络线号 `24V`、0V 网络 `0V`。
+- 其余每个网络一个 3~4 位数字线号，从 101 起按“页 → 列（x）→ 行（y）”阅读顺序**连续**编号，不跳号。
+- 同一网络同一线号（经端子进出柜的两侧也同号）；不同网络不同号。
+- 取舍理由：`check.ts` 是电气校验面板与 Agent `run_electrical_check` 已在用的规范；`1L1`/`U1`/`2-3` 这类写法在它那里是 `WIRE_NO_FORMAT`，按页分段编号会触发 `WIRE_NO_GAP`。所以让生成规则服从校验规则，出图结果对 `checkWireNumbers` 零发现（测试断言）。
+- 导出给校验面板的 `ElecDocument.wires` 每个网络一条（同网多根导线不重复登记，否则会报 `WIRE_NO_DUPLICATE`）；逐根导线在导线表 `wireList`。
+
+### 端子排 -X1
+
+- 凡是“柜内元件与现场元件同在一个网络”，现场元件（电机、传感器、阀、灯、按钮、急停、光栅）的**每个引脚各占一个端子**；纯现场网络（急停串联之间）不经端子；现场 PE 一律经 PE 端子。
+- 端子号按现场元件出现顺序 1…N 连续；端子在电路里是 `kind:'terminal'` 的两脚元件（i 柜内侧 / o 现场侧，同属一个网络），图上画在现场引脚旁的导线上，`checkWiring` 把端子两侧按桥接处理。
+- 明细表里 `-X1` 一行写端子总数（通用/PE），逐个端子见端子表页。
+
+### 出图自检代码（多页新增）
+
+| 代码 | 含义 |
+|------|------|
+| `LABEL_UNPLACED` | 位号/说明/线号/交叉引用找不到不压线的位置 |
+| `WIRENO_MISSING` | 某数字线号网络在某页画了导线但没有线号文字 |
+| `WIRENO_RULE` / `WIRENO_DUPLICATE` | 线号不符合 `check.ts` 规则 / 两个网络同号 |
+| `XREF_MISSING` / `XREF_DANGLING` | 跨页网络在某页没有电位断点 / 断点指不到任何别的页 |
+| `PIN_DRAWN_TWICE` | 同一引脚在图上画了两次 |
+
+其余（`PIN_NOT_DRAWN`、`NET_BROKEN`、`NET_SHORT`、`WIRE_DANGLING`、`WIRE_THROUGH_SYMBOL`、`TEXT_OVERLAP`、`SYMBOL_OVERLAP`、`BOM_NOT_DRAWN`、`BOM_NAME_MODEL`、`LADDER_TOO_LONG`）沿用单页口径，按页做（本页子电路 = 本页画出的引脚 + 电位断点伪元件）。
 
 ## 规则口径
 
@@ -59,7 +127,7 @@ ElecDocument ──runElectricalCheck()──→ ElecCheckResult
 - 连通性按几何判：线段端点落在另一线段上（端点或 T 接）才算连；十字交叉不算连、也不打点；≥3 条支路汇于一点自动打点。
 - 文字宽度按「中日韩 1em、其余 0.6em」保守估算；表格/标题栏/说明一律 `fitText` 截断。
 - 状态栏两种文字（“校验通过”/“有待处理问题”）都先排一遍做自检，保证都放得下。
-- `extension.ts` 的 `buildElecSheet` 把 `problems` 并入 `issues`（severity=error），提示条与图面一致。
+- `extension.ts` 用 `renderElecDrawing` 的 `issues`（ERC/设计层）与 `problems`（图面自检）生成提示条，与图面问题框一致。
 
 ## 坑
 
@@ -69,9 +137,10 @@ ElecDocument ──runElectricalCheck()──→ ElecCheckResult
 - 面板 PDF 走 `window.desktop.exportReport({html, projectName})`（A3 横向、输出名固定 `report.pdf`），不是浏览器 `window.print()`。
 
 - 原理图测试写几何断言（引脚坐标、线段端点、文字框与笔画相交），别写 SVG 快照；新增符号要给关键笔画打 `role`（lead/blade/hook/linkage/body/tag…），测试按 role 取图元。
-- 离线看图：`/tmp/elr/render.sh <worktree>/desktop out.png`（与测试同款 SPEC）。
+- 离线看图：`node /tmp/elr/variants.mjs [名称过滤]` 把 `test/elec/matrix.mjs` 每个方案的每一页渲染成 `/tmp/elr/out/<名称>-p<页>.png`（resvg + 文泉驿字体，脚本备份在项目 `work/elr/`）。
+- 测试矩阵 `test/elec/matrix.mjs`（输送机 3 档、规则引擎 5 类工艺 + 规则引擎输送机、极端用例）与随机化矩阵（`drawing-matrix.test.mjs` 内 12 个种子）共用同一组断言：ERC 0 error、自检 0 问题、可交付、每引脚恰画一次、线号同网同号/异网异号且 `checkWireNumbers` 零发现、混合网络现场引脚全经端子、端子号连续、分页数 = ⌈数量/容量⌉、交叉引用指向的页真有该网络、明细表位号都画在图上。
 
 ## 验证
 
-`npm test`（`test/elec/*`，其中 `sheet-geometry.test.mjs` 是原理图图面回归、`test/agent/elec-check.test.mjs`）；`npm run smoke` 打印
+`npm test`（`test/elec/*`，其中 `drawing-matrix.test.mjs` 是多页出图矩阵、`sheet-geometry.test.mjs` 是旧单页图面回归、`test/agent/elec-check.test.mjs`）；`npm run smoke` 打印
 `SMOKE_ELEC_CHECK_OK`（规则引擎）与 `SMOKE_ELEC_CHECK_UI_OK rows=… cards=9 pdf=true`（面板 + PDF）。

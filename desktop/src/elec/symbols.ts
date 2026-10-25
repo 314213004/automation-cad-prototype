@@ -71,6 +71,21 @@ export function threePoleSymbol(
   pinsIn: readonly string[],
   pinsOut: readonly string[]
 ): SymbolGeom {
+  return multiPoleSymbol(kind, owner, xs, y0, pinsIn, pinsOut);
+}
+
+/**
+ * 1~3 极开关元件（断路器/接触器主触头/热继发热元件），竖向极，顶部为进线端。
+ * 三极时与 threePoleSymbol 完全一致；单极没有联动虚线。
+ */
+export function multiPoleSymbol(
+  kind: 'breaker' | 'contactor' | 'thermal',
+  owner: string,
+  xs: readonly number[],
+  y0: number,
+  pinsIn: readonly string[],
+  pinsOut: readonly string[]
+): SymbolGeom {
   const b = builder(owner);
   const pins: Record<string, Pt> = {};
   const yb = y0 + THREE_POLE_H;
@@ -103,13 +118,17 @@ export function threePoleSymbol(
     b.line(x, y0 + 14, x - 3.5, y0 + 5.5, 'blade');
     b.line(x, y0 + 14, x, yb, 'lead');
   });
-  if (kind === 'thermal') {
-    for (let i = 0; i < 2; i += 1) b.line((xs[i] as number) + 2.5, y0 + 10, (xs[i + 1] as number) - 2.5, y0 + 10, 'linkage', DASH);
-  } else {
-    // 联动虚线穿过三片动触片的中点
-    b.line(xs[0] - 1.65, y0 + 10, xs[2] - 1.65, y0 + 10, 'linkage', DASH);
+  const first = xs[0] as number;
+  const last = xs[xs.length - 1] as number;
+  if (xs.length > 1) {
+    if (kind === 'thermal') {
+      for (let i = 0; i < xs.length - 1; i += 1) b.line((xs[i] as number) + 2.5, y0 + 10, (xs[i + 1] as number) - 2.5, y0 + 10, 'linkage', DASH);
+    } else {
+      // 联动虚线穿过各极动触片的中点
+      b.line(first - 1.65, y0 + 10, last - 1.65, y0 + 10, 'linkage', DASH);
+    }
   }
-  return { prims: b.prims, pins, box: { x: xs[0] - 5, y: y0, w: xs[2] - xs[0] + 8, h: THREE_POLE_H } };
+  return { prims: b.prims, pins, box: { x: first - 5, y: y0, w: last - first + 8, h: THREE_POLE_H } };
 }
 
 /* ============================================================ 电机 */
@@ -282,4 +301,126 @@ export function plcSymbol(owner: string, box: Box, terminals: readonly PlcTermin
   b.text(box.x + 2.5, box.y + box.h / 2 + 1.2, title, 3.8, 'start', 'tag', 'it');
   b.text(box.x + 2.5, box.y + box.h / 2 + 5, model, 2.5, 'start', 'desc');
   return { prims: b.prims, pins, box };
+}
+
+/* ============================================================ 通用框式元件 */
+
+export interface BoxTerminal {
+  pin: string;
+  /** 落点坐标：top/bottom 给 x，left/right 给 y */
+  at: number;
+  edge: 'top' | 'bottom' | 'left' | 'right';
+  /** 框内显示的端子名（缺省用 pin） */
+  label?: string;
+}
+
+/**
+ * 带端子的框（驱动器、开关电源、安全继电器、光栅、PLC 片段……）：
+ * 端子落在框边上，端子名写在框内紧贴端子处；标题/型号写在框内留白处（由调用方给坐标）。
+ */
+export function boxSymbol(
+  owner: string,
+  box: Box,
+  terminals: readonly BoxTerminal[],
+  inner: ReadonlyArray<{ x: number; y: number; value: string; size: number; anchor?: 'start' | 'middle' | 'end'; role?: string }> = []
+): SymbolGeom {
+  const b = builder(owner);
+  b.rect(box.x, box.y, box.w, box.h, 'body');
+  const pins: Record<string, Pt> = {};
+  for (const term of terminals) {
+    const label = term.label ?? term.pin;
+    if (term.edge === 'top') {
+      pins[term.pin] = [term.at, box.y];
+      b.text(term.at, box.y + 3.4, label, 2.2, 'middle', 'pin-no');
+    } else if (term.edge === 'bottom') {
+      pins[term.pin] = [term.at, box.y + box.h];
+      b.text(term.at, box.y + box.h - 1.3, label, 2.2, 'middle', 'pin-no');
+    } else if (term.edge === 'left') {
+      pins[term.pin] = [box.x, term.at];
+      b.text(box.x + 1, term.at + 0.8, label, 2.2, 'start', 'pin-no');
+    } else {
+      pins[term.pin] = [box.x + box.w, term.at];
+      b.text(box.x + box.w - 1, term.at + 0.8, label, 2.2, 'end', 'pin-no');
+    }
+  }
+  for (const item of inner) b.text(item.x, item.y, item.value, item.size, item.anchor ?? 'start', item.role ?? 'inner', item.size >= 3 ? 'it' : 'it-s');
+  return { prims: b.prims, pins, box };
+}
+
+/* ============================================================ 端子 / 现场元件 */
+
+export const TERMINAL_R = 1.1;
+
+/** 端子排上的一个端子：导线上的小圆，上下各一个落点（同一网络，自检按“桥接”处理） */
+export function terminalSymbol(owner: string, x: number, yc: number, pe = false): SymbolGeom {
+  const b = builder(owner);
+  b.circle(x, yc, TERMINAL_R, 'body');
+  if (pe) b.line(x - TERMINAL_R * 0.7, yc + TERMINAL_R * 0.7, x + TERMINAL_R * 0.7, yc - TERMINAL_R * 0.7, 'pe-mark', THIN);
+  return {
+    prims: b.prims,
+    pins: { i: [x, yc - TERMINAL_R], o: [x, yc + TERMINAL_R] },
+    box: { x: x - TERMINAL_R, y: yc - TERMINAL_R, w: 2 * TERMINAL_R, h: 2 * TERMINAL_R }
+  };
+}
+
+export const SENSOR3_W = 14;
+export const SENSOR3_H = 14;
+
+/** 三线制传感器（IO 页用）：BK(OUT) 在上接 PLC，BN(+)/BU(−) 在下接 24V 母线 */
+export function sensor3Symbol(owner: string, x: number, yTop: number): SymbolGeom {
+  const b = builder(owner);
+  b.rect(x - SENSOR3_W / 2, yTop, SENSOR3_W, SENSOR3_H, 'body');
+  const cy = yTop + SENSOR3_H / 2;
+  b.poly([[x, cy - 3], [x + 3, cy], [x, cy + 3], [x - 3, cy], [x, cy - 3]], 'element');
+  const bottom = yTop + SENSOR3_H;
+  b.text(x - 4.8, bottom + 2.8, 'BN', PIN_NO_SIZE, 'end', 'pin-no');
+  b.text(x + 4.8, bottom + 2.8, 'BU', PIN_NO_SIZE, 'start', 'pin-no');
+  b.text(x - 0.9, yTop - 1.2, 'BK', PIN_NO_SIZE, 'end', 'pin-no');
+  return {
+    prims: b.prims,
+    pins: { OUT: [x, yTop], '+': [x - 4, bottom], '-': [x + 4, bottom] },
+    box: { x: x - SENSOR3_W / 2, y: yTop, w: SENSOR3_W, h: SENSOR3_H }
+  };
+}
+
+/** 两线制接近/磁性开关：上端 BU 接 PLC 输入，下端 BN 接 +24V */
+export function sensor2Symbol(owner: string, x: number, yTop: number): SymbolGeom {
+  const b = builder(owner);
+  const w = 10;
+  const h = 12;
+  b.rect(x - w / 2, yTop, w, h, 'body');
+  const cy = yTop + h / 2;
+  b.poly([[x, cy - 2.6], [x + 2.6, cy], [x, cy + 2.6], [x - 2.6, cy], [x, cy - 2.6]], 'element');
+  b.text(x - 0.9, yTop - 1.2, 'BU', PIN_NO_SIZE, 'end', 'pin-no');
+  b.text(x - 0.9, yTop + h + 2.8, 'BN', PIN_NO_SIZE, 'end', 'pin-no');
+  return { prims: b.prims, pins: { '-': [x, yTop], '+': [x, yTop + h] }, box: { x: x - w / 2, y: yTop, w, h } };
+}
+
+/** 电磁阀线圈：方框 + 斜线（电磁操作件），竖向，pins[0] 在上 */
+export function solenoidSymbol(owner: string, x: number, yc: number, pins: readonly [string, string]): SymbolGeom {
+  const b = builder(owner);
+  const top = yc - TWO_PIN_H / 2;
+  const bot = yc + TWO_PIN_H / 2;
+  b.line(x, top, x, yc - 2.5, 'lead');
+  b.rect(x - 4, yc - 2.5, 8, 5, 'body');
+  b.line(x - 4, yc + 2.5, x + 4, yc - 2.5, 'element', THIN);
+  b.line(x, yc + 2.5, x, bot, 'lead');
+  b.text(x - 1.2, yc - 5.2, pins[0], PIN_NO_SIZE, 'end', 'pin-no');
+  b.text(x - 1.2, yc + 7.2, pins[1], PIN_NO_SIZE, 'end', 'pin-no');
+  return { prims: b.prims, pins: { [pins[0]]: [x, top], [pins[1]]: [x, bot] }, box: { x: x - 4, y: top, w: 8, h: TWO_PIN_H } };
+}
+
+/** 蜂鸣器：半圆罩 + 底边，竖向两端 */
+export function buzzerSymbol(owner: string, x: number, yc: number, pins: readonly [string, string]): SymbolGeom {
+  const b = builder(owner);
+  const top = yc - TWO_PIN_H / 2;
+  const bot = yc + TWO_PIN_H / 2;
+  const r = 3.2;
+  b.line(x, top, x, yc - r, 'lead');
+  b.path(`M${x - r} ${yc}A${r} ${r} 0 0 1 ${x + r} ${yc}Z`, { x: x - r, y: yc - r, w: 2 * r, h: r }, 'body');
+  b.line(x - r, yc, x + r, yc, 'body');
+  b.line(x, yc, x, bot, 'lead');
+  b.text(x - 1.2, yc - 5.2, pins[0], PIN_NO_SIZE, 'end', 'pin-no');
+  b.text(x - 1.2, yc + 7.2, pins[1], PIN_NO_SIZE, 'end', 'pin-no');
+  return { prims: b.prims, pins: { [pins[0]]: [x, top], [pins[1]]: [x, bot] }, box: { x: x - r, y: yc - r, w: 2 * r, h: r + 0.6 } };
 }

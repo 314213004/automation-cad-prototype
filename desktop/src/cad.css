@@ -435,3 +435,11 @@ html{zoom:var(--acad-ui-scale,1.15)}
 .cad-machine-source{font:8px/1.35 var(--font-mono,monospace);color:#89949d;word-break:break-all}
 .cad-machine-dir{font:9px/1.4 var(--font-mono,monospace);color:#9cc8ff}
 .cad-machine-dir[data-dir="输出"]{color:#f3c879}
+
+/* 电气多页图纸翻页条（挂在电气域原理图画布上，扩展自有元素） */
+.cad-elec-pager { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 4px; padding: 4px 8px; max-width: calc(100% - 32px); overflow-x: auto; background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); font-size: 12px; }
+.cad-elec-pager button { min-width: 26px; height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.cad-elec-pager button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.06); }
+.cad-elec-pager button.is-active { border-color: currentColor; font-weight: 600; }
+.cad-elec-pager button:disabled { opacity: 0.35; cursor: default; }
+.cad-elec-pager-title { margin-left: 6px; white-space: nowrap; opacity: 0.75; }

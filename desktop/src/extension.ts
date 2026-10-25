@@ -55,10 +55,8 @@ import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
-import { protectionRows, selectMotorProtection } from './elec/protection';
-import { buildMachineCircuit } from './elec/machine-circuit';
-import { renderSheet } from './elec/sheet';
-import { estimateConveyorDrive } from './machine/conveyor-synth';
+import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
+import { elecDesignFromMachine, elecDesignFromProject } from './elec/adapters';
 import {
   buildConveyorParts,
   conveyorAssembly,
@@ -304,15 +302,15 @@ function buildOverlay(): void {
         // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前工程上下文
         const project = lastOpenedProject;
         try {
-          if (project) {
-            const sheet = buildElecSheet(project);
-            (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
-              svg: sheet.svg,
-              meta: { project: project.name, drawingNo: 'EL-CV-001', generated: true, devices: [] }
-            });
-            if (!sheet.deliverable) {
-              const errors = sheet.issues.filter((issue) => issue.severity === 'error');
-              showNotice(`电气图已生成，但校验有 ${errors.length} 项问题：${errors[0]?.message ?? ''}`, true);
+          const drawing = buildElecDrawing();
+          if (drawing) {
+            showElecDrawing(drawing, 0);
+            if (!drawing.deliverable) {
+              const first = [
+                ...drawing.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message),
+                ...drawing.problems
+              ];
+              showNotice(`电气图已生成（${drawing.pages.length} 页），但校验有 ${first.length} 项问题：${first[0] ?? ''}`, true);
             }
           }
         } catch (error) {
@@ -870,6 +868,8 @@ interface ProjectMenuRecord {
   partsList?: Array<{ file: string; name: string }>;
   /** 机型参数（生成电气图用） */
   params?: Record<string, number>;
+  /** 工艺（电气图按工艺选物理估算器） */
+  process?: string;
 }
 
 /**
@@ -933,77 +933,66 @@ function toggleProjectMenu(open?: boolean): void {
 
 /** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
 /**
- * 由工程生成电气原理图数据。
- * 驱动功率来自 conveyor-synth 的真实阻力/功率估算（不是拍脑袋），
- * 传感器来自零件清单里的光电支架，IO 由 schematic.ts 统一排布。
+ * 电气图纸来源：最近一次“打开的工程”或“应用的机型方案”，谁新用谁。
+ * 这里只选数据源；工程/方案 → ElecDesign → 电路 → ERC → 分页版面 → 线号 → 自检 → SVG 全在 elec 引擎里，
+ * 没有任何机型分支，图号/页码由数据与分页给出。
  */
-/**
- * 工程 → 电路 → ERC → 版面 → SVG，全在 elec 引擎里完成。
- * 这里只负责把工程参数翻译成机型描述，不画任何一条线。
- */
-function buildElecSheet(project: ProjectMenuRecord): { svg: string; deliverable: boolean; issues: Array<{ severity: string; code: string; message: string }> } {
-  const params = {
-    lengthMm: Number(project.params?.lengthMm ?? 2000),
-    widthMm: Number(project.params?.widthMm ?? 300),
-    beltHeightMm: Number(project.params?.beltHeightMm ?? 850),
-    pulleyDiameterMm: Number(project.params?.pulleyDiameterMm ?? 50),
-    beltThicknessMm: Number(project.params?.beltThicknessMm ?? 4),
-    frameSectionMm: Number(project.params?.frameSectionMm ?? 40)
-  };
-  let powerKw = 0.04;
-  try {
-    const drive = estimateConveyorDrive(params, {});
-    powerKw = Math.max(0.04, Math.round((drive.motorW / 1000) * 100) / 100);
-  } catch (error) {
-    console.warn('[elec] 驱动估算失败，回退 0.04 kW', error);
+type ElecSource =
+  | { kind: 'project'; project: ProjectMenuRecord }
+  | { kind: 'machine'; config: MachineConfig };
+let elecSource: ElecSource | null = null;
+let lastElecDrawing: ElecDrawing | null = null;
+
+function buildElecDrawing(): ElecDrawing | null {
+  const source = elecSource ?? (lastOpenedProject ? { kind: 'project' as const, project: lastOpenedProject } : null);
+  if (!source) return null;
+  const design = source.kind === 'project'
+    ? elecDesignFromProject(source.project)
+    : elecDesignFromMachine({ config: source.config });
+  const drawing = renderElecDrawing(design, { date: new Date().toISOString().slice(0, 10) });
+  lastElecDrawing = drawing;
+  // 电气校验面板与 Agent run_electrical_check 读同一份线号/负载数据
+  (window as unknown as { __ElecDocProvider?: () => unknown }).__ElecDocProvider = () => lastElecDrawing?.document ?? null;
+  return drawing;
+}
+
+/** 把第 index 页送进电气域画布，并维护页切换条（多页图纸） */
+function showElecDrawing(drawing: ElecDrawing, index: number): void {
+  const page = drawing.pages[Math.max(0, Math.min(drawing.pages.length - 1, index))];
+  if (!page) return;
+  (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
+    svg: page.svg,
+    meta: {
+      project: drawing.project,
+      drawingNo: drawing.drawingNo,
+      page: `${page.index} / ${drawing.pages.length}`,
+      pages: drawing.pages.map((item) => ({ index: item.index, title: item.title, kind: item.kind })),
+      generated: true,
+      devices: drawing.bom.map((row) => [row.tag, row.name, String(row.qty)])
+    }
+  });
+  const stage = document.getElementById('elStageSchematic');
+  if (!stage) return;
+  let pager = stage.querySelector<HTMLElement>('.cad-elec-pager');
+  if (!pager) {
+    pager = document.createElement('div');
+    pager.className = 'cad-elec-pager';
+    pager.setAttribute('role', 'toolbar');
+    pager.setAttribute('aria-label', '电气图纸翻页');
+    stage.appendChild(pager);
+    pager.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-elec-page]');
+      if (!button || !lastElecDrawing) return;
+      showElecDrawing(lastElecDrawing, Number(button.dataset.elecPage));
+    });
   }
-  const pulleyRadiusM = Math.max(0.01, params.pulleyDiameterMm / 2 / 1000);
-  const rpm = Math.max(1, Math.round((60 * 0.2) / (2 * Math.PI * pulleyRadiusM)));
-  const ratio = Math.max(1, Math.round((1400 / rpm) * 10) / 10);
-  const protection = selectMotorProtection(powerKw);
-
-  const names = (project.partsList ?? []).map((item) => item.name);
-  const sensors: Array<{ tag: string; label: string; address: string }> = [];
-  if (names.some((name) => name.includes('进料'))) sensors.push({ tag: '-PE1', label: '进料检测', address: 'I0.3' });
-  if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', address: 'I0.4' });
-  if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', address: 'I0.3' });
-
-  const circuit = buildMachineCircuit({
-    project: project.name,
-    drive: { powerKw, rpm, ratio },
-    sensors,
-    controls: { estop: true, startStop: true, lamp: true },
-    selection: {
-      breaker: protection.breaker,
-      contactor: protection.contactor,
-      thermal: protection.thermal,
-      currentA: protection.currentA,
-      thermalSetA: protection.thermalSetA
-    },
-    drawingNo: 'EL-CV-001'
-  });
-  const sheet = renderSheet(circuit, {
-    project: project.name,
-    drawingNo: 'EL-CV-001',
-    page: '1 / 1',
-    date: new Date().toISOString().slice(0, 10),
-    notes: [
-      `线体 ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)} mm · 皮带面高 ${Math.round(params.beltHeightMm)} mm`,
-      `零件 ${project.parts} 件 · 总质量 ${project.massKg ?? '—'} kg`
-    ]
-  });
-  return {
-    svg: sheet.svg,
-    deliverable: sheet.deliverable,
-    // 图面自检（断线/压字/漏画/明细表不一致）与 ERC 同等对待：任何一项都会让 deliverable=false
-    issues: [
-      ...sheet.issues.map((issue) => ({ severity: issue.severity, code: issue.code, message: issue.message })),
-      ...sheet.problems.map((problem) => {
-        const code = /^\[([A-Z_]+)\]/.exec(problem)?.[1] ?? 'LAYOUT';
-        return { severity: 'error', code, message: problem.replace(/^\[[A-Z_]+\]\s*/, '') };
-      })
-    ]
-  };
+  const current = page.index - 1;
+  pager.innerHTML = [
+    `<button type="button" data-elec-page="${current - 1}" ${current === 0 ? 'disabled' : ''} title="上一页">‹</button>`,
+    ...drawing.pages.map((item, i) => `<button type="button" data-elec-page="${i}" class="${i === current ? 'is-active' : ''}" title="${escapeCadHtml(item.title)}">${item.index}</button>`),
+    `<button type="button" data-elec-page="${current + 1}" ${current === drawing.pages.length - 1 ? 'disabled' : ''} title="下一页">›</button>`,
+    `<span class="cad-elec-pager-title">${escapeCadHtml(page.title)}</span>`
+  ].join('');
 }
 
 /** 最近打开的工程：外壳冷启动时恢复卡片用 */
@@ -1051,8 +1040,10 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
       envelope: result.record.envelope,
       createdAt: result.record.createdAt,
       partsList: (result.record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name })),
-      params: result.record.params ?? {}
+      params: result.record.params ?? {},
+      ...(typeof result.record.process === 'string' ? { process: result.record.process } : {})
     };
+    elecSource = { kind: 'project', project: lastOpenedProject };
     return lastOpenedProject;
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), true);
@@ -1931,6 +1922,7 @@ function initAgentBridge(): void {
           : null;
         commission.setMachineConfig(source.config ? source.config as MachineConfig : null, layout);
         const config = commission.getMachineConfig();
+        if (source.config) elecSource = { kind: 'machine', config };
         return {
           ok: true,
           machine: {

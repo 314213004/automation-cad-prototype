@@ -308,6 +308,13 @@ export function checkWiring(circuit: Circuit, wires: readonly Wire[], placed: re
     }
   }
 
+  // 端子两侧同属一个网络：端子本体（小圆）在图上就是导通的
+  for (const device of circuit.devices) {
+    if (device.kind !== 'terminal') continue;
+    const comps = device.pins.map((pin) => compOf.get(PIN(device.tag, pin))).filter((seg): seg is number => seg !== undefined);
+    for (const seg of comps.slice(1)) uf.union(comps[0] as number, seg);
+  }
+
   const netsOfComp = new Map<number, Set<string>>();
   for (const net of circuit.nets) {
     const comps = new Map<number, string>();
