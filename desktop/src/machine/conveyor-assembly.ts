@@ -112,16 +112,24 @@ export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
   }
 
   // 2) 横撑（跨接两侧梁）
+  // 首尾横撑必须让开端板：端板占 x ∈ ±[halfL-8, halfL]，横撑半宽 section/2，
+  // 过去直接排到 ±halfL，端板与横撑实打实撞在一起（干涉检查 153600 mm³）。
   const crossCount = Math.max(3, Math.round(p.lengthMm / 500) + 1);
+  const crossInset = Math.max(section + 8, 80);
+  const returnBeltBottom = pulleyZ - pulleyRadius - p.beltThicknessMm;
+  const crossZ = returnBeltBottom - 4 - section / 2;
+  const crossSpan = Math.max(0, p.lengthMm - crossInset * 2);
   for (let i = 0; i < crossCount; i += 1) {
-    const x = -halfL + (p.lengthMm * i) / (crossCount - 1);
+    const x = -halfL + crossInset + (crossSpan * i) / (crossCount - 1);
     parts.push({
       id: `cross-${i + 1}`,
       name: `横撑 ${i + 1}`,
       material: 'AL6063',
       spec: `${section}×${section} × ${Math.round(p.widthMm + section * 2)}`,
       features: [box(`cross-${i + 1}-body`, '型材', section, p.widthMm + section * 2, section)],
-      transform: { x: round(x), y: 0, z: railZ, rz: 0 }
+      // 横撑要躲开回程皮带：回程带下沿在 pulleyZ - pulleyRadius - t，
+      // 过去横撑放在 railZ（与皮带同一高度），实打实穿带（干涉 64000 mm³）
+      transform: { x: round(x), y: 0, z: crossZ, rz: 0 }
     });
   }
 
