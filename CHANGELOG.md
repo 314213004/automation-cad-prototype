@@ -2,6 +2,20 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.1] - 2026-10-25
+
+### Added · 桌面可用性
+
+- **界面缩放**：智能体面板新增 6 档缩放（100%–150%），默认 **115%**（原 UI 偏小）；注入式 `html { zoom }` 实现，不改根目录原型样式；切换即生效并联动 3D 视口 resize；持久化 `userData/appearance.json`。
+- **3D 渲染质量**：`flow / standard / high` 三档（像素比上限 1.0 / 1.5 / 2.0）；拖动旋转期间固定降采样到 0.8、松手 200 ms 恢复；启用 `powerPreference: high-performance`；零件数 > 1500 自动降级为 flow。
+- **局域网联调（默认关闭）**：开关打开后 Agent JSON-RPC 绑 `0.0.0.0:7420`，来源必须先过 CIDR/单 IP 白名单再看 Bearer token，未命中返回 403 `LAN_NOT_ALLOWED` 并写审计；远程写操作仍弹本机确认框；`/health` 不返回 token。
+- **远程调试 CDP（默认关闭）**：开关打开后下次启动监听 `0.0.0.0:9222`，面板显示端口、需重启状态与高风险警告。
+- **联调探测脚本** `desktop/scripts/lan-debug-probe.mjs`：依次校验 `/health`、`tools/list` 与只读 `list_components`，成功输出 `LAN_DEBUG_OK`。
+
+### Verification
+
+- `npx tsc --noEmit` 0 错误；`npm test` **1831/1831**；`build:ext` 通过；`SMOKE_OK`（含 `SMOKE_UI_SCALE_OK` / `SMOKE_RENDER_QUALITY_OK` / `SMOKE_LAN_SWITCH_OK` / `SMOKE_LAN_ALLOWLIST_OK`）；`EVAL_AGENT_OK 1.00`。
+
 ## [0.4.0] - 2026-10-25
 
 > 已发布：GitHub Release `v0.4.0`，Windows 安装包 `AutomationCAD-Setup-0.4.0.exe`（NSIS，未签名，约 130 MB），由 `windows-build` 在 `windows-latest` 上构建（1810 单测 / 0 失败）。

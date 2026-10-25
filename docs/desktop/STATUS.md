@@ -3,7 +3,7 @@
 ## 概览
 
 - 基线：`main` 为 `f83f0fa`（v0.4.0）；本轮实现提交 `495e70f`，直接提交到 `main`，未打包、未发版、未触发 CI。
-- 版本：`desktop/package.json` → **0.4.0**；已由 `windows-build` 在 `main @ ba5787a` 上构建 NSIS 安装包。
+- 版本：`desktop/package.json` → **0.4.1**；界面缩放 / 3D 渲染质量 / 局域网联调已落地（默认关闭）。
 - 测试：`TZ=Asia/Shanghai npm test` **1831/1831 通过，0 失败、0 跳过**（基线 1810，新增 21 条）。
 - 构建与冒烟：`npm run build:ext` 通过（含 TypeScript 检查）；fake parametric sidecar 下 Electron headless smoke 最终输出 `SMOKE_OK`，新增界面缩放、渲染质量、局域网开关/白名单断言全部通过。
 - 评估：本轮重跑 `npm run eval:agent`，106/106 条通过，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
