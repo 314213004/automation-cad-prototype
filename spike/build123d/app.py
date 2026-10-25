@@ -146,7 +146,7 @@ def build_assembly(instances) -> tuple[object, list[dict]]:
     combined = shapes[0]
     for shape in shapes[1:]:
         combined = combined + shape
-    return combined, volumes
+    return combined, volumes, shapes
 
 
 def describe(shape, instances: list[dict] | None = None) -> dict:
@@ -215,8 +215,10 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError(f"不支持的导出格式：{item}")
             started = time.perf_counter()
             instances = payload.get("instances")
+            per_part = bool(payload.get("perPart"))
+            placed_shapes: list = []
             if instances is not None:
-                shape, instance_volumes = build_assembly(instances)
+                shape, instance_volumes, placed_shapes = build_assembly(instances)
             else:
                 shape, instance_volumes = build(payload.get("ops") or []), None
             built_ms = (time.perf_counter() - started) * 1000
@@ -230,6 +232,25 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     bd.export_stl(shape, path, tolerance=0.1)
                 files[fmt] = {"path": path, "bytes": os.path.getsize(path), "ms": round((time.perf_counter() - t) * 1000, 1)}
+            # 逐件导出：干涉检查/运动学/零件树都需要独立实体，合并体只有一个网格
+            if per_part and instances:
+                parts_meta = []
+                for index, (item, placed) in enumerate(zip(instances, placed_shapes)):
+                    raw_id = str(item.get("id") or f"part-{index + 1}")
+                    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in raw_id)[:40]
+                    part_path = os.path.join(outdir, f"{index + 1:02d}-{safe}.stl")
+                    bd.export_stl(placed, part_path, tolerance=0.1)
+                    bb = placed.bounding_box()
+                    parts_meta.append({
+                        "id": raw_id,
+                        "name": str(item.get("name") or raw_id),
+                        "stl": {"path": part_path, "bytes": os.path.getsize(part_path)},
+                        "volumeMm3": round(placed.volume, 1),
+                        "bbox": [round(bb.size.X, 2), round(bb.size.Y, 2), round(bb.size.Z, 2)],
+                        "bboxMin": [round(bb.min.X, 2), round(bb.min.Y, 2), round(bb.min.Z, 2)],
+                        "bboxMax": [round(bb.max.X, 2), round(bb.max.Y, 2), round(bb.max.Z, 2)]
+                    })
+                files["parts"] = parts_meta
             self._send(200, {"ok": True, "kernel": "build123d", "stats": describe(shape, instance_volumes), "buildMs": round(built_ms, 1), "files": files})
         except Exception as exc:  # noqa: BLE001
             self._send(400, {"ok": False, "error": str(exc), "trace": traceback.format_exc(limit=2)})

@@ -904,7 +904,7 @@ interface Window {
     parametric: {
       status(): Promise<DesktopParametricStatusInfo>;
       start(): Promise<DesktopParametricStartResult>;
-      build(doc: unknown): Promise<DesktopParametricBuildResult>;
+      build(doc: unknown, options?: { perPart?: boolean }): Promise<DesktopParametricBuildResult>;
       stop(): Promise<DesktopParametricStatusInfo>;
       onStatus(callback: (status: DesktopParametricStatusInfo) => void): () => void;
     };

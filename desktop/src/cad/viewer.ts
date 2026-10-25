@@ -714,6 +714,21 @@ export class CadViewer {
         };
       }),
       lights: lightSummary,
+      // 实例化批次：零件被合并进 InstancedMesh 时原始 mesh 会被隐藏，
+      // 只看到「visible=false」会误判成渲染失败，这里一并给出
+      batches: this.batchGroup.children.map((child) => {
+        const instanced = child as THREE.InstancedMesh;
+        return {
+          name: child.name,
+          instanced: Boolean(instanced.isInstancedMesh),
+          count: instanced.isInstancedMesh ? instanced.count : 0,
+          visible: child.visible,
+          triangles: instanced.isInstancedMesh
+            ? Math.floor((instanced.geometry.getIndex()?.count ?? 0) / 3) * instanced.count
+            : 0
+        };
+      }),
+      hiddenParts: this.parts.filter((part) => !part.mesh.visible).length,
       plan: this.lastPlan
         ? {
             culled: this.lastPlan.culled,

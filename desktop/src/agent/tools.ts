@@ -230,6 +230,25 @@ const DESIGN_MACHINE_SCHEMA = {
   additionalProperties: false
 };
 
+const BUILD_MACHINE_MODEL_SCHEMA = {
+  type: 'object',
+  properties: {
+    process: {
+      type: 'string',
+      description: '机型工艺；当前参数化建模支持 conveyor（皮带输送线）。其余工艺请用 apply_machine_design'
+    },
+    params: {
+      type: 'object',
+      description: '机型参数（mm）：输送机可用 lengthMm / widthMm / beltHeightMm / pulleyDiameterMm / beltThicknessMm / frameSectionMm；缺省用默认值，越界会夹紧并在 warnings 里说明',
+      additionalProperties: true
+    },
+    name: { type: 'string', description: '可选，模型显示名（写入零件树标题）' },
+    load: { type: 'boolean', description: '默认 true；false 时只构建并返回统计，不把模型装进视口' }
+  },
+  required: [],
+  additionalProperties: false
+} as const;
+
 const APPLY_MACHINE_DESIGN_SCHEMA = {
   type: 'object',
   properties: {
@@ -822,6 +841,35 @@ export class AgentTools {
       inputSchema: EMPTY_SCHEMA,
       handler: async () => {
         const result = await this.execute('get_bom');
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+
+    this.add({
+      name: 'build_machine_model',
+      description:
+        '按机型参数生成整机 3D 模型并装配进当前视口：机型经注册表分发，输送机走参数化内核（逐件实体 → 每件独立 STL），返回零件数、实体数、包络、总质量、BOM、STEP/STL 字节数。只改视口、不写工程文件；需要落盘请用 apply_machine_design。',
+      inputSchema: BUILD_MACHINE_MODEL_SCHEMA,
+      handler: async (args) => {
+        if (args.process !== undefined && (typeof args.process !== 'string' || !args.process.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'process 必须是非空字符串' };
+        }
+        if (args.params !== undefined && args.params !== null && !isRecord(args.params)) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'params 必须是对象' };
+        }
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        if (args.load !== undefined && typeof args.load !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'load 必须是布尔值' };
+        }
+        const result = await this.execute('build_machine_model', {
+          process: typeof args.process === 'string' ? args.process.trim() : 'conveyor',
+          ...(isRecord(args.params) ? { params: args.params } : {}),
+          ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+          ...(args.load === false ? { load: false } : {})
+        });
         return result ? commandSuccess(result) : this.unavailable();
       }
     });

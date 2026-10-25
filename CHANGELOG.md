@@ -4,6 +4,15 @@
 
 ## [0.4.9] - 2026-10-25
 
+### Added · 通用整机建模工具 `build_machine_model` + `MODEL_BUILDERS` 注册表
+
+- **工具与机型解耦**：智能体只有一个 `build_machine_model`，机型由 `machine/model-builders.ts` 的注册表分派；新增链板线/滚筒线/转盘机只加一条映射，不新增工具。
+- **内核逐件导出**：`/build` 新增 `perPart`，装配体按件导出 STL 并回传每件体积、包围盒（体积/质量来自内核，不估算）。2.4 m 输送线实测 29 件、STEP 917 KB、STL 747 KB。
+- **零件树**：逐件 STL 经 `parseStandardCadBuffers` 合并成一个导入结果，视口里是 29 个独立零件（可选中、可做干涉检查、可标运动学），而不是一个合并网格。
+- 参数校验：未知键回传、越界夹紧并写 `warnings`、非数字直接拒绝；没有参数化构建器的工艺显式返回 `NO_PARAMETRIC_BUILDER` 并指路 `apply_machine_design`，不伪造模型。
+- `describeScene()` 增加 `batches`（实例化批次）与 `hiddenParts`：零件被合并进 InstancedMesh 时原始 mesh 会隐藏，避免再次误判成"模型不见了"。
+- 实测（2.4 m×400 mm）：29 件 / 5 个实体 / 包络 2450×670×930 / 85.41 kg / BOM 15 行。
+
 ### Fixed · 3D 视口「模型看不见 / 只剩线框」
 
 - **视锥平面提取错误**：`viewer.ts` 的 Gribb–Hartmann 提取把近、左平面都直接写成 `row3`，远平面写成 `-row2`，没有做行加减，得到一个畸形的视锥；结果整机被判为「视锥外」，被 `applyRenderOps` 设成 `visible=false`，屏幕上只剩包围盒的青色边线，看起来就是"线框模型"。改为标准公式（left=row3+row0 … far=row3−row2），并抽成纯函数 `frustumPlanesFromClipElements` + 6 条单测（相机背后、near/far 之外、横向偏出、大球相交、平面归一化与互异）。

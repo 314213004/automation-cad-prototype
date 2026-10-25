@@ -945,14 +945,15 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     if (!manager) return { ok: false, status: 'unavailable', message: unavailableStatus.message };
     return publicStart(await manager.start());
   });
-  handle('parametric:build', async (_event, doc: unknown) => {
+  handle('parametric:build', async (_event, doc: unknown, options: unknown) => {
     if (!parametricEnabled()) return parametricModuleDisabledBuildResult();
     const manager = getParametric();
     if (!manager) return { ok: false, code: 'UNAVAILABLE', message: unavailableStatus.message };
     if (typeof doc !== 'object' || doc === null || Array.isArray(doc)) {
       return { ok: false, code: 'BUILD_FAILED', message: '特征树必须是对象' };
     }
-    return await manager.build(doc as FeatureDoc);
+    const perPart = typeof options === 'object' && options !== null && (options as { perPart?: unknown }).perPart === true;
+    return await manager.build(doc as FeatureDoc, perPart ? { perPart: true } : {});
   });
   handle('parametric:stop', async () => {
     const manager = getParametric();

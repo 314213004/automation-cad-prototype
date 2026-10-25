@@ -262,6 +262,8 @@ export const READ_ONLY_TOOLS = new Set([
 
 export const WRITE_TOOLS = new Set([
   'apply_machine_design',
+  // 会替换当前视口里的模型（虽然不写工程文件），仍需确认
+  'build_machine_model',
   'import_cad',
   'insert_component',
   'place_component',

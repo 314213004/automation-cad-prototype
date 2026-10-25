@@ -60,9 +60,10 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 22 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 23 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'apply_machine_design',
+    'build_machine_model',
     'design_machine',
     'export_cost_report',
     'export_files',

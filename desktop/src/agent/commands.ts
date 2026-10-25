@@ -1247,6 +1247,48 @@ function machineMainBreakerRating(
   return undefined;
 }
 
+
+/**
+ * 整机模型构建：机型经 MODEL_BUILDERS 注册表分发，渲染层负责生成几何与装配。
+ * 与 apply_machine_design 的区别：这里只产出"当前视口里的模型"，不写工程文件。
+ */
+function registerBuildMachineModelCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'build_machine_model',
+    async run(args, ctx) {
+      const process = optionalString(args, 'process') ?? 'conveyor';
+      const rawParams = args.params;
+      if (rawParams !== undefined && rawParams !== null && (typeof rawParams !== 'object' || Array.isArray(rawParams))) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'params 必须是对象');
+      }
+      const names = ['process', 'params', 'name', 'load'];
+      for (const key of Object.keys(args)) {
+        if (!names.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      if (args.load !== undefined && typeof args.load !== 'boolean') {
+        throw new CommandFailure('INVALID_ARGUMENT', 'load 必须是布尔值');
+      }
+      const payload = {
+        process,
+        ...(rawParams ? { params: rawParams } : {}),
+        ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+        ...(args.load === false ? { load: false } : {})
+      };
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string; code?: string }>('buildMachineModel', [payload]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure(
+          typeof result?.code === 'string' && result.code ? result.code : 'RENDERER_ERROR',
+          result?.message ?? '整机模型构建失败'
+        );
+      }
+      return { ok: true, data: result };
+    }
+  });
+}
+
 function registerMachineApplyCommand(bus: CommandBus): void {
   bus.register({
     name: 'apply_machine_design',
@@ -1849,6 +1891,7 @@ export function createAgentCommandBus(
   registerCostExportCommand(bus);
   registerPlcVerifyCommand(bus);
   registerPlcGenerateCommand(bus);
+  registerBuildMachineModelCommand(bus);
   registerMachineApplyCommand(bus);
   registerExportFilesCommand(bus);
   return bus;

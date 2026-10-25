@@ -36,6 +36,11 @@ export interface ParametricStartInfo {
   version?: string;
 }
 
+export interface ParametricBuildOptions {
+  /** 装配体逐件导出 STL（零件树、干涉检查用） */
+  perPart?: boolean;
+}
+
 export interface ParametricBuildResult {
   ok: boolean;
   code?: 'MODULE_DISABLED' | 'UNAVAILABLE' | 'TIMEOUT' | 'BUILD_FAILED';
@@ -405,17 +410,17 @@ export class ParametricManager {
     await this.stopping;
   }
 
-  build(doc: FeatureDoc | AssemblyDoc): Promise<ParametricBuildResult> {
+  build(doc: FeatureDoc | AssemblyDoc, options: ParametricBuildOptions = {}): Promise<ParametricBuildResult> {
     if (!isParametricImportEnabled(this.options.isEnabled)) return Promise.resolve(parametricModuleDisabledBuildResult());
     const run = this.buildChain.then(
-      () => this.buildOnce(doc),
-      () => this.buildOnce(doc)
+      () => this.buildOnce(doc, options),
+      () => this.buildOnce(doc, options)
     );
     this.buildChain = run.then(() => undefined, () => undefined);
     return run;
   }
 
-  private async buildOnce(doc: FeatureDoc | AssemblyDoc): Promise<ParametricBuildResult> {
+  private async buildOnce(doc: FeatureDoc | AssemblyDoc, options: ParametricBuildOptions = {}): Promise<ParametricBuildResult> {
     try {
       if (!isParametricImportEnabled(this.options.isEnabled)) return parametricModuleDisabledBuildResult();
       const errors = validateFeatures(doc);
@@ -440,7 +445,9 @@ export class ParametricManager {
             ...(isAssemblyDoc(doc)
               ? compileOps(doc)
               : { ops: compileOps(doc) }),
-            exports: ['step', 'stl']
+            exports: ['step', 'stl'],
+            // 逐件导出：零件树/干涉检查需要独立实体，合并体只有一个网格
+            ...(options.perPart === true ? { perPart: true } : {})
           }),
           signal: controller.signal
         });

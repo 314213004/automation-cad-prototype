@@ -2,7 +2,7 @@ import cadStyles from './cad.css?inline';
 import CadImportWorker from './cad/importer.worker?worker&inline';
 import wasmAssetUrl from 'occt-import-js/dist/occt-import-js.wasm?url';
 import { occtFormatForFile, parseOcctBuffer } from './cad/step';
-import { parseStandardCadBuffer } from './cad/loaders';
+import { parseStandardCadBuffer, parseStandardCadBuffers } from './cad/loaders';
 import { CadViewer } from './cad/viewer';
 import { describeSuggestions } from './cad/kinematics-auto';
 import {
@@ -63,6 +63,13 @@ import {
   MATERIAL_LABEL,
   type ConveyorParams
 } from './machine/conveyor-assembly';
+import {
+  MODEL_BUILDERS,
+  pickModelBuilder,
+  normalizeModelParams,
+  toConveyorParams,
+  RULES_ONLY_PROCESSES
+} from './machine/model-builders';
 import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
@@ -945,20 +952,48 @@ async function openDrawingPath(path: string): Promise<boolean> {
 }
 
 /**
- * 在软件里生成输送机：零件表 → 参数化装配文档 → build123d 内核出实体 → 载入视口。
- * 不做代理体、不算假体积：体积、STEP/STL 都来自内核回传。
+ * 整机模型构建入口（智能体工具 build_machine_model 与脚本 API 共用）。
+ *
+ * 机型经 MODEL_BUILDERS 注册表分发；输送机走参数化内核：28 件真实零件逐件导出 STL，
+ * 再在视口里装配成 28 个独立零件（零件树可见、干涉检查可用）。
  */
-async function buildConveyorModel(params: Partial<ConveyorParams>): Promise<Record<string, unknown>> {
-  if (!window.desktop?.parametric) return { ok: false, message: '参数化内核接口不可用' };
-  const parts = buildConveyorParts({ ...(params as ConveyorParams) });
+async function buildMachineModel(input: unknown): Promise<Record<string, unknown>> {
+  const request = (typeof input === 'object' && input !== null ? input : {}) as {
+    process?: unknown;
+    params?: unknown;
+    name?: unknown;
+    load?: unknown;
+  };
+  const process = typeof request.process === 'string' && request.process.trim() ? request.process.trim() : 'conveyor';
+  const builder = pickModelBuilder(process);
+  if (!builder) {
+    const rulesHint = RULES_ONLY_PROCESSES.includes(process as never)
+      ? '：该工艺属于「工位 + 机构」结构，请用 apply_machine_design（规则几何，秒级、带特征树）'
+      : '';
+    return {
+      ok: false,
+      code: 'NO_PARAMETRIC_BUILDER',
+      message: `「${process}」暂无参数化整机生成器${rulesHint}。可用机型：${Object.keys(MODEL_BUILDERS).join('、')}`
+    };
+  }
+  if (builder.engine !== 'parametric') {
+    return { ok: false, code: 'ENGINE_UNSUPPORTED', message: `机型「${process}」的构建器不是参数化引擎` };
+  }
+  const normalized = normalizeModelParams(builder, request.params);
+  if (!normalized.ok) return { ok: false, code: 'INVALID_ARGUMENT', message: normalized.message };
+
+  const params = toConveyorParams(normalized.params);
+  const parts = buildConveyorParts(params);
   const doc = conveyorAssembly(parts);
+
+  if (!window.desktop?.parametric) return { ok: false, code: 'UNAVAILABLE', message: '参数化内核接口不可用' };
   const status = await window.desktop.parametric.status();
   if (status.status !== 'ready') {
     const started = await window.desktop.parametric.start();
-    if (!started.ok) return { ok: false, message: `建模内核启动失败：${started.message ?? started.status}` };
+    if (!started.ok) return { ok: false, code: 'UNAVAILABLE', message: `建模内核启动失败：${started.message ?? started.status}` };
   }
-  const built = await window.desktop.parametric.build(doc);
-  if (!built.ok) return { ok: false, message: built.message ?? '建模失败', code: built.code ?? null };
+  const built = await window.desktop.parametric.build(doc, { perPart: true });
+  if (!built.ok) return { ok: false, code: 'BUILD_FAILED', message: built.message ?? '建模失败' };
 
   const instanceStats = (built.stats?.instances ?? []) as Array<{ id: string; volumeMm3: number }>;
   const volumes: Record<string, number> = {};
@@ -966,17 +1001,48 @@ async function buildConveyorModel(params: Partial<ConveyorParams>): Promise<Reco
   const bom = conveyorBom(parts, volumes);
   const massKg = Math.round(bom.reduce((sum, row) => sum + (row.massKg ?? 0) * row.qty, 0) * 100) / 100;
 
-  // 视口载入内核导出的 STL（不是自造网格）
-  const stl = built.files?.stl as { path?: string } | undefined;
-  let loaded = false;
-  if (stl?.path) {
-    const bytes = await window.desktop.readFileBuffer(stl.path);
-    await loadCadBuffer(toArrayBuffer(bytes), '皮带输送机.stl');
-    loaded = true;
+  // 逐件 STL 装配成独立零件：零件树、干涉检查、运动学都按零件工作
+  const perPart = (built.files?.parts ?? []) as Array<{ id: string; name: string; stl?: { path?: string; bytes?: number } }>;
+  let loadedParts = 0;
+  let loadMessage: string | undefined;
+  if (request.load !== false && perPart.length > 0) {
+    try {
+      const buffers: Array<{ buffer: ArrayBuffer; name: string }> = [];
+      for (const item of perPart) {
+        const path = item.stl?.path;
+        if (!path) continue;
+        const bytes = await window.desktop.readFileBuffer(path);
+        buffers.push({ buffer: toArrayBuffer(bytes), name: item.name });
+      }
+      const merged = await parseStandardCadBuffers(buffers, 'STL');
+      const modelName = typeof request.name === 'string' && request.name.trim() ? request.name.trim() : '皮带输送机';
+      const label = `${modelName}（${merged.meshes.length} 件）`;
+      // 必须走 ensureViewer()：视口是懒创建的，直接访问 viewer 变量会静默不加载
+      openOverlay();
+      ensureViewer().load(merged, label);
+      currentFileName = label;
+      displayFileInfo(label);
+      const partCount = document.getElementById('cadPartCount');
+      if (partCount) partCount.textContent = String(merged.stats.meshCount);
+      try {
+        interference?.run([]);
+      } catch (error) {
+        console.warn('[build_machine_model] 干涉检查初始化失败', error);
+      }
+      setEmptyVisible(false);
+      showNotice(`${label} 已装配 · ${merged.stats.triangleCount} 个三角面`, false);
+      loadedParts = merged.meshes.length;
+    } catch (error) {
+      loadMessage = error instanceof Error ? error.message : String(error);
+    }
   }
+
   return {
     ok: true,
+    engine: builder.engine,
+    process: builder.process,
     parts: parts.length,
+    loadedParts,
     solids: built.stats?.solids ?? null,
     volumeMm3: built.stats?.volumeMm3 ?? null,
     envelope: conveyorEnvelope(parts),
@@ -984,8 +1050,13 @@ async function buildConveyorModel(params: Partial<ConveyorParams>): Promise<Reco
     material: [...new Set(parts.map((part) => MATERIAL_LABEL[part.material]))],
     bom,
     buildMs: built.buildMs ?? null,
-    files: built.files ?? null,
-    loaded
+    files: {
+      step: (built.files?.step as { bytes?: number } | undefined)?.bytes ?? null,
+      stl: (built.files?.stl as { bytes?: number } | undefined)?.bytes ?? null,
+      partCount: perPart.length
+    },
+    ...(normalized.message ? { warnings: [normalized.message] } : {}),
+    ...(loadMessage ? { loadMessage } : {})
   };
 }
 
@@ -1985,6 +2056,7 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    buildMachineModel: async (payload: unknown) => await buildMachineModel(payload),
     importPath: async (path: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };
@@ -2358,7 +2430,8 @@ function init(): void {
   bindWindowEvents();
   Object.defineProperty(window, 'AutomationCadConveyor', {
     value: Object.freeze({
-      build: (params: Partial<ConveyorParams>) => buildConveyorModel(params)
+      // 兼容旧脚本入口；内部走通用构造器（process=conveyor）
+      build: (params: Partial<ConveyorParams>) => buildMachineModel({ process: 'conveyor', params })
     }),
     writable: false,
     configurable: false,

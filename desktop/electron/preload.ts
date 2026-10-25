@@ -112,7 +112,7 @@ const desktopApi = {
   parametric: {
     status: () => ipcRenderer.invoke('parametric:status'),
     start: () => ipcRenderer.invoke('parametric:start'),
-    build: (doc: unknown) => ipcRenderer.invoke('parametric:build', doc),
+    build: (doc: unknown, options?: { perPart?: boolean }) => ipcRenderer.invoke('parametric:build', doc, options),
     stop: () => ipcRenderer.invoke('parametric:stop'),
     onStatus: (callback: (status: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);

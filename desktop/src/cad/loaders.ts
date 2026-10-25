@@ -82,6 +82,39 @@ async function parseGltf(buffer: ArrayBuffer, name: string): Promise<THREE.Objec
   });
 }
 
+/**
+ * 把多份标准格式（STL/OBJ/GLTF）合并成一个导入结果：每份保留为独立网格，
+ * 零件树、干涉检查、运动学标注都按「零件」看待。
+ *
+ * 参数化内核逐件导出的 28 个 STL 就走这里装配成整机。
+ */
+export async function parseStandardCadBuffers(
+  items: ReadonlyArray<{ buffer: ArrayBuffer; name: string }>,
+  formatLabel = 'STL'
+): Promise<CadImportResult> {
+  const started = performance.now();
+  const meshes: CadImportResult['meshes'] = [];
+  let triangleCount = 0;
+  for (const item of items) {
+    // name 是显示名（如「侧纵梁（操作侧）」），格式判定需要带扩展名
+    const probe = /\.[a-z0-9]{1,5}$/i.test(item.name) ? item.name : `${item.name}.stl`;
+    const single = await parseStandardCadBuffer(item.buffer, probe);
+    for (const mesh of single.meshes) {
+      meshes.push({ ...mesh, name: item.name });
+    }
+    triangleCount += single.stats.triangleCount;
+  }
+  return {
+    meshes,
+    stats: {
+      meshCount: meshes.length,
+      triangleCount,
+      elapsedMs: Math.round((performance.now() - started) * 10) / 10,
+      format: formatLabel
+    }
+  };
+}
+
 export async function parseStandardCadBuffer(buffer: ArrayBuffer, fileName: string): Promise<CadImportResult> {
   const started = performance.now();
   const ext = fileName.toLowerCase().split('.').pop() || '';
