@@ -79,6 +79,7 @@ import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
 import { cadImportFailureView, parseCadImportTransaction } from './cad/import-transaction';
+import { initDesignWizard } from './design/wizard-ui.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -1871,6 +1872,10 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    getSceneParts: () => {
+      if (!agentBridgeReady()) return [];
+      try { return ensureViewer().getModelParts(); } catch { return []; }
+    },
     getBom: () => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       try {
@@ -2660,6 +2665,12 @@ function init(): void {
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();
   buildOverlay();
+  const designWizard = initDesignWizard({
+    onSaved: async () => { await refreshProjectMenu(); },
+    openProject: async (id) => { await openSavedProject(id); },
+    notify: showNotice
+  });
+  window.desktop?.onNewDesign(() => designWizard.open());
   refreshProjectArchiveControls();
   initMechUi();
   injectStressTab();

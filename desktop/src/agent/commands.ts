@@ -31,7 +31,8 @@ import { checkExportTargetPath } from './policy.ts';
 import { parseMachineBrief } from '../machine/spec.ts';
 import { synthMachine } from '../machine/synth.ts';
 import { estimatePower } from '../machine/power.ts';
-import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { estimateCost } from '../machine/cost-model.ts';
+import { readMachinePricing } from '../../electron/pricing.ts';
 import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import {
   activeMachinePath,

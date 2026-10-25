@@ -18,6 +18,10 @@ export interface ActuatorConfig {
   durationMs?: number;
   /** 场景布局偏移；相对所属工位基座中心，单位为场景单位。 */
   position?: [number, number, number];
+  /** 元件库绑定；仅向导编辑使用，旧配置可缺省。 */
+  model?: string;
+  partId?: string;
+  packId?: string;
 }
 
 export interface SensorConfig {
@@ -25,6 +29,10 @@ export interface SensorConfig {
   station: string;
   part: string;
   color?: string;
+  /** 元件库绑定；仅向导编辑使用，旧配置可缺省。 */
+  model?: string;
+  partId?: string;
+  packId?: string;
 }
 
 export interface MachineConfig {
@@ -136,6 +144,12 @@ export function validateMachineConfig(value: unknown): MachineConfig {
     if (point !== undefined) normalized.point = point;
     const position = readPosition(raw.position, `执行机构「${id}」`);
     if (position !== undefined) normalized.position = position;
+    const model = optionalString(raw, 'model', `执行机构「${id}」model`);
+    const partId = optionalString(raw, 'partId', `执行机构「${id}」partId`);
+    const packId = optionalString(raw, 'packId', `执行机构「${id}」packId`);
+    if (model !== undefined) normalized.model = model;
+    if (partId !== undefined) normalized.partId = partId;
+    if (packId !== undefined) normalized.packId = packId;
     return normalized;
   });
 
@@ -149,6 +163,12 @@ export function validateMachineConfig(value: unknown): MachineConfig {
     const color = optionalString(raw, 'color', `传感器「${point}」color`);
     const normalized: SensorConfig = { point, station, part };
     if (color !== undefined) normalized.color = color;
+    const model = optionalString(raw, 'model', `传感器「${point}」model`);
+    const partId = optionalString(raw, 'partId', `传感器「${point}」partId`);
+    const packId = optionalString(raw, 'packId', `传感器「${point}」packId`);
+    if (model !== undefined) normalized.model = model;
+    if (partId !== undefined) normalized.partId = partId;
+    if (packId !== undefined) normalized.packId = packId;
     return normalized;
   });
 

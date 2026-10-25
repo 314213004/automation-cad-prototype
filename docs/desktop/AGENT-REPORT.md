@@ -1,21 +1,21 @@
 # Agent 能力报告
 
-> 生成时间：2026-10-25T03:32:30.812Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
+> 生成时间：2026-10-25T13:44:14.522Z · 生成器：`desktop/scripts/agent-report.mjs` · 模型：deepseek-v4.1-flash
 > 口径：单轮 = 真实模型 36 条；多轮 = 真实模型 6 个场景；离线 = 规则路由固定用例。缺数据源时写「缺失：<文件>」，不做推断。
 
 ## 总览
 
 | 指标 | 数值 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 工具数 | 22 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-25T03:31:04.395Z |
-| 测试数 | 1,842 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-25T03:32:20.289Z |
+| 工具数 | 23 个 | docs/desktop/eval/latest.json#dataset.toolCoverage | 2026-10-25T13:43:24.688Z |
+| 测试数 | 1,964 条 | desktop/test/**/*.test.*（`node --test` 实测） | 2026-10-25T13:44:03.537Z |
 | 单轮准确率 | 100.0%（36/36） | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 单轮 p50 / p95 | 7,930 ms / 31,291 ms | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 单轮工具 / 确认 / 澄清 | 100.0% / 100.0% / 100.0% | docs/desktop/eval/agent-live.json | 2026-10-23T16:23:29.180Z |
 | 多轮准确率 | 100.0%（6/6） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮轮次 | 15/15（阈值 80.0%） | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
 | 多轮 p50 / p95 | 7,028 ms / 15,528 ms | docs/desktop/eval/agent-multiturn.json | 2026-10-23T14:10:28.129Z |
-| 离线意图准确率 | 100.0%（107/107） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
+| 离线意图准确率 | 100.0%（109/109） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
 | 审计条目 | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失：/root/.config/AutomationCAD/agent-audit.jsonl | 缺失 |
 
 ## 分组表现（真实模型单轮）
@@ -32,11 +32,11 @@
 
 | 指标 | 结果 | 来源文件 | 生成时间 |
 |---|---:|---|---|
-| 意图 | 100.0%（107/107） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
-| 工具 | 100.0%（107/107） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
-| 参数 | 100.0%（57/57） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
-| 超纲拒绝 | 100.0%（7/7） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
-| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-25T03:31:04.395Z |
+| 意图 | 100.0%（109/109） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
+| 工具 | 100.0%（109/109） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
+| 参数 | 100.0%（57/57） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
+| 超纲拒绝 | 100.0%（7/7） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
+| 多步 | 100.0%（5/5） | docs/desktop/eval/latest.json | 2026-10-25T13:43:24.688Z |
 
 ## 多轮场景
 
@@ -90,9 +90,9 @@
 
 ## 已知缺口（从 BACKLOG 自动摘取）
 
-- **运动学标注是启发式**：STEP 不含运动学，名称/型号/层级/几何只给建议，斜向运动、夹爪对侧手指与缩回位仍需人工确认。（来源：`docs/desktop/BACKLOG.md:38`，生成时间：2026-10-25T03:31:50.028Z）
-- **离线意图路由是关键词规则**：审计已轮转（5 MB × 5 份 × 90 天），CSV 只导当前列表；回执无 token 用量。（来源：`docs/desktop/BACKLOG.md:43`，生成时间：2026-10-25T03:31:50.028Z）
-- **真实模型拒绝/澄清类**：仓库内 6/6 已过 MT04，但仍是单模型；换措辞需重跑 `npm run eval:agent:multiturn`。（来源：`docs/desktop/BACKLOG.md:44`，生成时间：2026-10-25T03:31:50.028Z）
+- **运动学标注是启发式**：STEP 不含运动学，名称/型号/层级/几何只给建议，斜向运动、夹爪对侧手指与缩回位仍需人工确认。（来源：`docs/desktop/BACKLOG.md:35`，生成时间：2026-10-25T10:35:31.552Z）
+- **离线意图路由是关键词规则**：审计已轮转（5 MB × 5 份 × 90 天），CSV 只导当前列表；回执无 token 用量。（来源：`docs/desktop/BACKLOG.md:40`，生成时间：2026-10-25T10:35:31.552Z）
+- **真实模型拒绝/澄清类**：仓库内 6/6 已过 MT04，但仍是单模型；换措辞需重跑 `npm run eval:agent:multiturn`。（来源：`docs/desktop/BACKLOG.md:41`，生成时间：2026-10-25T10:35:31.552Z）
 
 ## 缺失数据源
 

@@ -8,9 +8,9 @@ import { estimatePower } from '../../src/machine/power.ts';
 import {
   DEFAULT_MACHINE_PRICING,
   estimateCost,
-  parseMachinePricing,
-  readMachinePricing
+  parseMachinePricing
 } from '../../src/machine/cost-model.ts';
+import { readMachinePricing } from '../../electron/pricing.ts';
 import { synthMachine } from '../../src/machine/synth.ts';
 import { parseMachineBrief } from '../../src/machine/spec.ts';
 import { mapMachineBom } from '../../src/machine/bom-map.ts';

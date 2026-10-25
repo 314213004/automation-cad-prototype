@@ -10,8 +10,10 @@
  * 只存内核真实产出的文件，不做二次建模。
  */
 
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { validateMachineDesign } from '../src/machine/store.ts';
+import { validateMachineConfig } from '../src/commission/machine-config.ts';
 
 export interface ProjectRecord {
   id: string;
@@ -27,6 +29,7 @@ export interface ProjectRecord {
   partsList: Array<{ file: string; name: string }>;
   hasStep: boolean;
   hasStl: boolean;
+  design?: unknown;
   bytes: number;
 }
 
@@ -41,6 +44,11 @@ export interface ProjectSaveInput {
   stepPath?: string | null;
   stlPath?: string | null;
   partPaths?: Array<{ name: string; path: string }>;
+  design?: unknown;
+  config?: unknown;
+  stlData?: Uint8Array;
+  partData?: Array<{ name: string; data: Uint8Array }>;
+  placements?: unknown[];
 }
 
 export interface ProjectOpenResult {
@@ -100,11 +108,30 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
   const id = sanitizeId(name);
   const dir = projectDir(userDataDir, id);
   try {
-    mkdirSync(join(dir, 'parts'), { recursive: true });
-    // 先清掉旧的逐件网格，避免参数变小后残留多余零件
-    for (const file of readdirSync(join(dir, 'parts'))) {
-      rmSync(join(dir, 'parts', file), { force: true });
+    const validatedDesign = input.design === undefined ? undefined : validateMachineDesign(input.design);
+    if (input.config !== undefined) validateMachineConfig(input.config);
+    const temporaryParts = join(dir, `.parts-${process.pid}-${Date.now()}`);
+    rmSync(temporaryParts, { recursive: true, force: true });
+    mkdirSync(temporaryParts, { recursive: true });
+    const stagedParts: Array<{ file: string; name: string }> = [];
+    const stagePart = (name: string, data: Uint8Array): void => {
+      const safe = sanitizeId(name.replace(/\.stl$/i, ''));
+      const file = `${safe}.stl`;
+      writeFileSync(join(temporaryParts, file), data);
+      stagedParts.push({ file, name });
+    };
+    for (const item of input.partPaths ?? []) {
+      if (!item?.path || !existsSync(item.path)) continue;
+      stagePart(item.name || basename(item.path), readFileSync(item.path));
     }
+    for (const item of input.partData ?? []) {
+      if (!(item.data instanceof Uint8Array) || item.data.byteLength === 0) return { ok: false, message: `零件 ${item.name} STL 数据无效` };
+      stagePart(item.name, item.data);
+    }
+    mkdirSync(join(dir, 'parts'), { recursive: true });
+    for (const file of readdirSync(join(dir, 'parts'))) rmSync(join(dir, 'parts', file), { force: true });
+    for (const item of stagedParts) renameSync(join(temporaryParts, item.file), join(dir, 'parts', item.file));
+    rmSync(temporaryParts, { recursive: true, force: true });
     const partsList: Array<{ file: string; name: string }> = [];
     for (const item of input.partPaths ?? []) {
       if (!item?.path || !existsSync(item.path)) continue;
@@ -112,6 +139,13 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
       const target = join(dir, 'parts', `${safe}.stl`);
       copyFileSync(item.path, target);
       partsList.push({ file: `${safe}.stl`, name: String(item.name ?? safe) });
+    }
+    for (const item of input.partData ?? []) {
+      if (!(item.data instanceof Uint8Array) || item.data.byteLength === 0) return { ok: false, message: `零件 ${item.name} STL 数据无效` };
+      const safe = sanitizeId(item.name);
+      const target = join(dir, 'parts', `${safe}.stl`);
+      writeFileSync(target, item.data);
+      partsList.push({ file: `${safe}.stl`, name: item.name });
     }
     let hasStep = false;
     let hasStl = false;
@@ -121,6 +155,11 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
     }
     if (input.stlPath && existsSync(input.stlPath)) {
       copyFileSync(input.stlPath, join(dir, 'model.stl'));
+      hasStl = true;
+    }
+    if (input.stlData !== undefined) {
+      if (!(input.stlData instanceof Uint8Array) || input.stlData.byteLength === 0) return { ok: false, message: '整机 STL 数据无效' };
+      writeFileSync(join(dir, 'model.stl'), input.stlData);
       hasStl = true;
     }
     const bytes = directoryBytes(dir);
@@ -137,9 +176,11 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
       partsList,
       hasStep,
       hasStl,
+      ...(validatedDesign ? { design: validatedDesign } : {}),
       bytes
     };
     writeFileSync(join(dir, 'project.json'), JSON.stringify(record, null, 2), 'utf8');
+    if (validatedDesign) writeFileSync(join(dir, 'design.json'), `${JSON.stringify({ design: validatedDesign, placements: input.placements ?? [] }, null, 2)}\n`, 'utf8');
     return { ok: true, record };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) };

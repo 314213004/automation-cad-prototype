@@ -312,6 +312,7 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
       secondsPerPiece,
       stationSeconds,
       throughputPerMin,
+      partsPerMinute: throughputPerMin,
       estimatedSecondsPerPiece: estimated,
       baseSeconds,
       slowestStation: Math.max(1, Math.trunc(optionalNumber('slowestStation') ?? 1)),

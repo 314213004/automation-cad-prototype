@@ -63,3 +63,11 @@
   `git rev-parse HEAD`、`git ls-remote origin refs/heads/main`、`git ls-remote gitee refs/heads/main`
 - Gitee 偶发 5xx 或超时：重试一次即可，不要改成只推 GitHub 了事；连续失败要在本文件记录时间与错误码
 - 凭据只存在 `~/.git-credentials`，禁止写进仓库、提交信息或日志
+
+## 整机设计向导（2026-10-25）
+
+- ✅ 五步向导落地（`desktop/src/design/`）：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核出图/保存工程；顶栏「整机设计」+ 文件菜单「新建设计」，草稿可续（`userData/design-draft.json`）。smoke：`SMOKE_DESIGN_ENTRY_OK` / `_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK`，本机 1964 单测全绿。
+- ✅ 修 UX 缺陷：第二步「下一步」按钮在草稿未同步时被 `canAdvance` 禁用，导致手填需求也点不动（改为点击后校验）。
+- ✅ 修一致性缺陷：`completeDesign` 与 `design_machine` 对同一 brief 的 assumptions 不一致（默认参数说明文案分叉），统一到 `defaultPricingAssumptions()`。
+- ⏳ 待修：保存工程并载入主视口后，视口自身零件计数正常（61），但 `__AgentBridge.getScene().parts` 仍为 0，smoke 打 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。影响 Agent 的 `get_bom` / `get_project_context` 对「已打开工程」的感知（用户机器上 get_bom 返回 0 行即此因）。
+- ⏳ 待办：`docs/desktop/DESIGN-WIZARD.md` 暂未加入离线知识索引（`KB_DOC_FILES` 已 13 份、`kb.json` 388638 B，余量仅 ~480 B，需先瘦身再纳入）。

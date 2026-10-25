@@ -51,6 +51,8 @@ export interface MachineCycleEstimate {
   stationSeconds: number;
   /** 估算产能（件/分钟）。 */
   throughputPerMin: number;
+  /** 与 throughputPerMin 同值的对外别名，供向导候选卡片直接展示。 */
+  partsPerMinute: number;
   /** 兼容旧字段：单工位单件时间；parallel 下不再是整机节拍。 */
   estimatedSecondsPerPiece: number;
   baseSeconds: number;
@@ -112,6 +114,8 @@ export interface SynthOptions {
   pricingAssumptions?: readonly string[];
   /** 供电制式；缺省沿用 brief.voltage，再缺省 380VAC。 */
   voltage?: MachineVoltage;
+  /** 强制整机形态；方案对比用，仍由 synthMachine 统一计算节拍/功率/成本。 */
+  formId?: string;
 }
 
 const PROCESS_LABEL: Record<MachineProcess, string> = {
@@ -399,6 +403,7 @@ function applyConveyorRefinement(
   const meetsTarget = throughput + 1e-9 >= targetPerMin;
   design.cycle.perMin = targetPerMin;
   design.cycle.throughputPerMin = throughput;
+  design.cycle.partsPerMinute = throughput;
   design.cycle.secondsPerPiece = round(60 / targetPerMin);
   design.cycle.stationSeconds = round(60 / throughput);
   design.cycle.estimatedSecondsPerPiece = design.cycle.stationSeconds;
@@ -464,7 +469,11 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const requestedStations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
-  const formPick = pickForm(brief, TEMPLATES, { stationCount: requestedStations, cyclePerMin });
+  const formPick = pickForm(brief, TEMPLATES, {
+    stationCount: requestedStations,
+    cyclePerMin,
+    ...(options.formId ? { formId: options.formId } : {})
+  });
   const stations = formPick.stations;
   const resolvedLayout = resolveLayout(brief, requestedStations);
   const selectedForm = formPick.form;
@@ -769,6 +778,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
       secondsPerPiece,
       stationSeconds,
       throughputPerMin,
+      partsPerMinute: throughputPerMin,
       estimatedSecondsPerPiece: stationSeconds,
       baseSeconds,
       slowestStation: bottleneckStation,

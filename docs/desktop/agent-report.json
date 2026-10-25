@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-25T03:32:30.812Z",
+  "generatedAt": "2026-10-25T13:44:14.522Z",
   "generator": "desktop/scripts/agent-report.mjs",
   "sources": {
     "live": {
@@ -20,8 +20,8 @@
     "offline": {
       "file": "docs/desktop/eval/latest.json",
       "status": "ok",
-      "generatedAt": "2026-10-25T03:31:04.395Z",
-      "version": "0.4.1",
+      "generatedAt": "2026-10-25T13:43:24.688Z",
+      "version": "0.4.9",
       "mode": "offline-rules"
     },
     "audit": {
@@ -32,27 +32,27 @@
     "backlog": {
       "file": "docs/desktop/BACKLOG.md",
       "status": "ok",
-      "generatedAt": "2026-10-25T03:31:50.028Z"
+      "generatedAt": "2026-10-25T10:35:31.552Z"
     },
     "tools": {
       "file": "desktop/src/agent/tools.ts",
       "status": "ok",
-      "registryCount": 22,
-      "coverageCount": 22,
+      "registryCount": 23,
+      "coverageCount": 23,
       "consistent": true
     }
   },
   "overview": {
     "toolCount": {
-      "value": 22,
+      "value": 23,
       "source": "docs/desktop/eval/latest.json#dataset.toolCoverage",
-      "generatedAt": "2026-10-25T03:31:04.395Z",
+      "generatedAt": "2026-10-25T13:43:24.688Z",
       "missing": false
     },
     "testCount": {
-      "value": 1842,
+      "value": 1964,
       "source": "desktop/test/**/*.test.*（`node --test` 实测）",
-      "generatedAt": "2026-10-25T03:32:20.289Z",
+      "generatedAt": "2026-10-25T13:44:03.537Z",
       "missing": false
     },
     "testPassed": false,
@@ -170,55 +170,55 @@
     },
     "offline": {
       "total": {
-        "value": 107,
+        "value": 109,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-25T03:31:04.395Z",
+        "generatedAt": "2026-10-25T13:43:24.688Z",
         "missing": false
       },
       "passed": {
         "value": 1,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-25T03:31:04.395Z",
+        "generatedAt": "2026-10-25T13:43:24.688Z",
         "missing": false
       },
       "metrics": {
         "intent": {
           "correct": {
-            "value": 107,
+            "value": 109,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "total": {
-            "value": 107,
+            "value": 109,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           }
         },
         "tools": {
           "correct": {
-            "value": 107,
+            "value": 109,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "total": {
-            "value": 107,
+            "value": 109,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           }
         },
@@ -226,19 +226,19 @@
           "correct": {
             "value": 57,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "total": {
             "value": 57,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           }
         },
@@ -246,19 +246,19 @@
           "correct": {
             "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "total": {
             "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           }
         },
@@ -266,19 +266,19 @@
           "correct": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "total": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T03:31:04.395Z",
+            "generatedAt": "2026-10-25T13:43:24.688Z",
             "missing": false
           }
         }
@@ -828,23 +828,23 @@
     {
       "text": "**运动学标注是启发式**：STEP 不含运动学，名称/型号/层级/几何只给建议，斜向运动、夹爪对侧手指与缩回位仍需人工确认。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 38,
+      "line": 35,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T03:31:50.028Z"
+      "generatedAt": "2026-10-25T10:35:31.552Z"
     },
     {
       "text": "**离线意图路由是关键词规则**：审计已轮转（5 MB × 5 份 × 90 天），CSV 只导当前列表；回执无 token 用量。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 43,
+      "line": 40,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T03:31:50.028Z"
+      "generatedAt": "2026-10-25T10:35:31.552Z"
     },
     {
       "text": "**真实模型拒绝/澄清类**：仓库内 6/6 已过 MT04，但仍是单模型；换措辞需重跑 `npm run eval:agent:multiturn`。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 44,
+      "line": 41,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T03:31:50.028Z"
+      "generatedAt": "2026-10-25T10:35:31.552Z"
     }
   ],
   "audit": {

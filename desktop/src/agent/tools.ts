@@ -13,10 +13,11 @@ import {
   MACHINE_STATIONS_MAX,
   MACHINE_STATIONS_MIN
 } from '../machine/spec.ts';
-import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
+import { summarizeMachineDesign } from '../machine/synth.ts';
 import { mapMachineBom } from '../machine/bom-map.ts';
 import { estimatePower } from '../machine/power.ts';
-import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { readMachinePricing } from '../../electron/pricing.ts';
+import { completeDesign } from '../design/synthesis.ts';
 import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import { buildClarify } from '../machine/clarify.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
@@ -713,46 +714,12 @@ export class AgentTools {
           } catch (error) {
             console.warn(`[MACHINE_COST_PRICEBOOK_FAILED]`, { site: 'desktop/src/agent/tools.ts:650' }, error);
           }
-          const design = synthMachine(brief, {
+          const design = completeDesign(brief, parts, {
             ...(stationCount !== undefined ? { stationCount } : {}),
             ...(cyclePerMin !== undefined ? { cyclePerMin } : {}),
-            parts,
-            pricing: pricingLoad.pricing,
-            pricingAssumptions: pricingLoad.assumptions,
+            pricingLoad,
             ...(builtinPricebook ? { builtinPricebook } : {})
           });
-          let mapped = false;
-          try {
-            const bomMapping = mapMachineBom(design, parts);
-            design.bomDraft = { items: bomMapping.items };
-            mapped = true;
-            if (bomMapping.pending.length > 0) {
-              design.warnings.push(...bomMapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
-            }
-            design.warnings.push(...bomMapping.notices);
-          } catch (error) {
-            // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
-            console.warn(`[MACHINE_BOM_MAPPING_FAILED]`, { site: 'desktop/src/agent/tools.ts:654' }, error);
-          }
-
-          const selectedBreakerA = mainBreakerRating(design, parts);
-          design.power = estimatePower(design, {
-            parts,
-            voltage: design.power.voltage,
-            simultaneity: pricingLoad.pricing.power.simultaneity,
-            loadFactor: pricingLoad.pricing.power.loadFactor,
-            efficiency: pricingLoad.pricing.power.efficiency,
-            cosPhi: pricingLoad.pricing.power.cosPhi,
-            ...(selectedBreakerA !== undefined ? { selectedBreakerA } : {}),
-            assumptions: pricingLoad.assumptions
-          });
-          design.cost = estimateCost(design, {
-            parts,
-            pricing: pricingLoad.pricing,
-            pricingAssumptions: pricingLoad.assumptions,
-            ...(builtinPricebook ? { builtinPricebook } : {})
-          });
-          design.assumptions.push(...pricingLoad.warnings);
           return {
             ok: true,
             design: {

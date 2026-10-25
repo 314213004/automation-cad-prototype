@@ -45,6 +45,12 @@ const desktopApi = {
     exportProject: (snapshot: unknown) => ipcRenderer.invoke('project-archive:export', snapshot),
     preview: () => ipcRenderer.invoke('project-archive:preview')
   },
+  design: {
+    settings: () => ipcRenderer.invoke('design:settings'),
+    loadDraft: () => ipcRenderer.invoke('design:draft-load'),
+    saveDraft: (draft: unknown) => ipcRenderer.invoke('design:draft-save', draft),
+    clearDraft: () => ipcRenderer.invoke('design:draft-clear')
+  },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),
@@ -190,6 +196,11 @@ const desktopApi = {
     diff: (packageId: string) => ipcRenderer.invoke('sync:diff', packageId),
     downloadCandidate: (packageId: string, machineContext?: unknown) =>
       ipcRenderer.invoke('sync:downloadCandidate', packageId, machineContext)
+  },
+  onNewDesign: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('desktop:new-design', listener);
+    return () => ipcRenderer.removeListener('desktop:new-design', listener);
   },
   onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);

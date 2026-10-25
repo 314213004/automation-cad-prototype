@@ -2356,7 +2356,7 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 22 ||
+          summaries.length !== 23 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
           !summaries.some((tool) => tool.name === 'suggest_kinematics') ||
           !summaries.some((tool) => tool.name === 'apply_machine_design') ||
@@ -2539,18 +2539,18 @@ function createWindow(): BrowserWindow {
 
         const templateCount = Object.keys(TEMPLATES).length;
         const clarify = buildClarify(parseMachineBrief('随便设计一台检测机'));
-        if (templateCount !== 5 || clarify.question === null || clarify.needs.length !== 2) {
+        if (templateCount !== 6 || clarify.question === null || clarify.needs.length !== 2) {
           console.error('SMOKE_FAIL machine_templates', JSON.stringify({ templateCount, clarify }));
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1');
+        console.log('SMOKE_MACHINE_TEMPLATES_OK templates=6 clarify=1 multi=1');
 
         const formBrief = parseMachineBrief('十二工位转盘检测机，20 件/分钟');
         const formPick = pickForm(formBrief, TEMPLATES);
         const formErrors = validateMachineForms();
         if (
-          MACHINE_FORMS.length !== 11 ||
+          MACHINE_FORMS.length !== 12 ||
           formErrors.length > 0 ||
           formPick.form.id !== 'dial-12' ||
           formPick.form.stationRange[0] > 12 ||
@@ -2562,7 +2562,7 @@ function createWindow(): BrowserWindow {
           setTimeout(() => app.exit(1), 100);
           return;
         }
-        console.log('SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1');
+        console.log('SMOKE_MACHINE_FORMS_OK forms=12 picked=dial-12 meets=1');
 
         const applied = await activeTools.call('apply_machine_design', {
           brief: '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服',
@@ -4569,6 +4569,108 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+      try {
+        const designEntry = await window.webContents.executeJavaScript(`(() => ({
+          toolbar: Boolean(document.getElementById('designWizardEntry')),
+          menu: typeof window.desktop?.onNewDesign === 'function'
+        }))()`) as { toolbar: boolean; menu: boolean };
+        if (!designEntry.toolbar || !designEntry.menu) throw new Error(`整机设计入口缺失 ${JSON.stringify(designEntry)}`);
+        console.log('SMOKE_DESIGN_ENTRY_OK');
+        const designResult = await window.webContents.executeJavaScript(`(async () => {
+          const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          await window.desktop.design.clearDraft();
+          document.getElementById('designWizardEntry').click();
+          await wait(600);
+          const root = document.getElementById('designWizard');
+          const next = () => root.querySelector('[data-action="next"]').click();
+          const set = (name, value) => {
+            const field = root.querySelector('[name="' + name + '"]');
+            field.value = value;
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          set('name', 'Smoke 整机设计');
+          set('stations', '3');
+          set('cyclePerMin', '10');
+          set('lengthMm', '2400');
+          set('widthMm', '1600');
+          next();
+          await wait(1200);
+          const candidates = root.querySelectorAll('[data-candidate]');
+          const forms = [...candidates].map((card) => card.querySelector('.design-candidate-id').textContent);
+          const throughputs = [...candidates].map((card) => card.querySelector('.design-metrics .design-good,.design-metrics .design-bad').textContent);
+          const distinct = new Set(forms).size;
+          if (candidates.length !== 3 || distinct !== 3) throw new Error('候选生成失败 cards=' + candidates.length + ' forms=' + JSON.stringify(forms) + ' 提示=' + (document.getElementById('cadNotice')?.textContent ?? '(无)'));
+          root.querySelector('[data-preview="0"]').click();
+          await wait(80);
+          root.querySelector('#designPreviewClose').click();
+          next();
+          await wait(120);
+          const steps = root.querySelectorAll('.design-steps li').length;
+          if (steps !== 5) throw new Error('向导步骤数错误 ' + steps);
+          root.querySelectorAll('[data-station]')[2].click();
+          await wait(60);
+          root.querySelector('[data-action="add-actuator"]').click();
+          await wait(60);
+          const pointInputs = [...root.querySelectorAll('[data-actuator][data-key="extendPoint"]')].map((input) => input.value);
+          const st3 = pointInputs.filter((value) => value.startsWith('ST3-EXT'));
+          if (st3.length !== 1) throw new Error('点位自动分配异常 points=' + JSON.stringify(pointInputs));
+          next();
+          await wait(120);
+          const placements = root.querySelectorAll('[data-placement]').length;
+          const overlaps = root.querySelectorAll('.design-placement.overlap').length;
+          const layoutText = root.querySelector('.design-layout-tools').textContent;
+          next();
+          await wait(100);
+          root.querySelector('[data-action="run-review"]').click();
+          await wait(150);
+          const reviewText = root.querySelector('.design-content').textContent;
+          const step5 = root.querySelector('.design-steps li.active').dataset.step;
+          const canSave = !root.querySelector('[data-action="save-project"]').disabled;
+          if (canSave) {
+            root.querySelector('[data-action="save-project"]').click();
+            await wait(2000);
+          }
+          // 保存后要解析 61 个 STL 并载入主视口，软件渲染下可能超过 2s，轮询等待
+          let sceneParts = 0;
+          for (let i = 0; i < 60 && sceneParts < 1; i += 1) {
+            await wait(250);
+            sceneParts = window.__AgentBridge.getScene().parts?.length ?? 0;
+          }
+          const saved = (await window.desktop.projects.list()).find((project) => project.name === 'Smoke 整机设计');
+          return {
+            steps, count: candidates.length, distinct, forms, throughputs,
+            placements, overlaps, layoutText, reviewText, step5, canSave,
+            saved: saved?.id || null, hasDesign: Boolean(saved?.design),
+            draft: (await window.desktop.design.loadDraft()).draft,
+            rootHidden: root.hidden,
+            scene: sceneParts,
+            partPaths: (await window.desktop.projects.open(saved.id)).partPaths?.length ?? -1,
+            bridgeReady: window.__AgentBridge.ready(),
+            notice: document.getElementById('cadNotice')?.textContent ?? '',
+            partCountText: document.getElementById('cadPartCount')?.textContent ?? ''
+          };
+        })()`) as {
+          steps: number; count: number; distinct: number; forms: string[]; throughputs: string[];
+          placements: number; overlaps: number; layoutText: string; reviewText: string; step5: string;
+          canSave: boolean; saved: string | null; hasDesign: boolean; draft: unknown; rootHidden: boolean; scene: number; partCountText: string; notice: string; partPaths: number; bridgeReady: boolean;
+        };
+        if (designResult.steps !== 5 || designResult.step5 !== '5') throw new Error(`五步 UI 未走完 ${JSON.stringify(designResult)}`);
+        console.log(`SMOKE_DESIGN_WIZARD_OK steps=${designResult.steps}`);
+        if (designResult.count !== 3 || designResult.distinct !== 3) throw new Error('候选 smoke 断言失败');
+        console.log(`SMOKE_DESIGN_CANDIDATES_OK count=${designResult.count} distinct=${designResult.distinct}`);
+        console.log(`SMOKE_DESIGN_CANDIDATE_DATA ${designResult.forms.map((form, index) => `${form}:${designResult.throughputs[index]}`).join(' ')}`);
+        if (designResult.placements < 1) throw new Error(`布局没有元素 ${JSON.stringify(designResult)}`);
+        console.log(`SMOKE_DESIGN_LAYOUT_OK placements=${designResult.placements} overlaps=${designResult.overlaps}`);
+        if (designResult.scene < 1) console.warn(`SMOKE_DESIGN_SCENE_BRIDGE_WARN bridgeScene=${designResult.scene} partCount=${designResult.partCountText}`);
+        if (!designResult.canSave || !designResult.saved || !designResult.hasDesign || designResult.draft !== null || !designResult.rootHidden || !Number(designResult.partCountText || 0)) {
+          throw new Error(`设计工程保存/重载失败 ${JSON.stringify(designResult)}`);
+        }
+        console.log(`SMOKE_DESIGN_SAVE_OK project=${designResult.saved}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL design_wizard', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }
@@ -4599,6 +4701,8 @@ function buildMenu(window: BrowserWindow): void {
     {
       label: '文件',
       submenu: [
+        { label: '新建设计', accelerator: 'CmdOrCtrl+N', click: () => send('desktop:new-design') },
+        { type: 'separator' },
         {
           label: '打开 CAD…',
           accelerator: 'CmdOrCtrl+O',

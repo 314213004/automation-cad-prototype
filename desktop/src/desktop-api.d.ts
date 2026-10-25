@@ -521,6 +521,9 @@ interface AgentBridgeApi {
   getScene(): { parts: AgentBridgeScenePart[]; source: string | null } | AgentBridgeFailure;
   getSelection(): { name: string; bbox: number[] } | AgentBridgeFailure | null;
   getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
+  getSceneParts(): import('./mech/interference').InterferencePart[];
+  appendMachineBomRows(payload: unknown): { ok: boolean; added?: number; total?: number; message?: string } | Promise<{ ok: boolean; added?: number; total?: number; message?: string }>;
+  applyMachineConfig(payload: unknown): { ok: boolean; message?: string };
   getPlcGenConfig(): import('./plcgen/types').PlcGenConfig | AgentBridgeFailure | null;
   getProjectContext(): {
     domain: string | null;
@@ -733,6 +736,41 @@ interface DesktopAgentLanAccess {
   message?: string;
 }
 
+interface DesktopDesignProjectSaveInput {
+  name: string;
+  process: string;
+  params?: Record<string, number>;
+  parts: number;
+  massKg?: number | null;
+  envelope?: [number, number, number] | null;
+  material?: string[];
+  stepPath?: string | null;
+  stlPath?: string | null;
+  partPaths?: Array<{ name: string; path: string }>;
+  design?: unknown;
+  config?: unknown;
+  stlData?: Uint8Array;
+  partData?: Array<{ name: string; data: Uint8Array }>;
+  placements?: unknown[];
+}
+
+interface DesktopDesignProjectRecord {
+  id: string;
+  name: string;
+  process: string;
+  params: Record<string, number>;
+  parts: number;
+  massKg: number | null;
+  envelope: [number, number, number] | null;
+  material: string[];
+  createdAt: string;
+  partsList: Array<{ file: string; name: string }>;
+  hasStep: boolean;
+  hasStl: boolean;
+  bytes: number;
+  design?: unknown;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -823,10 +861,16 @@ interface Window {
       remove(id: string): Promise<{ ok: boolean }>;
       listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
+    design: {
+      settings(): Promise<{ ok: boolean; message?: string; pricing?: import('./machine/cost-model').MachinePricingLoad; builtinPricebook?: import('./cost/pricebook').Pricebook }>;
+      loadDraft(): Promise<{ draft: unknown | null; recovered: boolean }>;
+      saveDraft(draft: unknown): Promise<{ ok: boolean; message?: string }>;
+      clearDraft(): Promise<{ ok: boolean }>;
+    };
     projects: {
-      list(): Promise<DesktopProjectRecord[]>;
-      save(payload: DesktopProjectSaveInput): Promise<{ ok: boolean; record?: DesktopProjectRecord; message?: string }>;
-      open(id: string): Promise<{ ok: boolean; record?: DesktopProjectRecord; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      list(): Promise<DesktopDesignProjectRecord[]>;
+      save(payload: DesktopDesignProjectSaveInput): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; message?: string }>;
+      open(id: string): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
       remove(id: string): Promise<{ ok: boolean; message?: string }>;
     };
     projectArchive: {
@@ -962,6 +1006,7 @@ interface Window {
       diff(packageId: string): Promise<DesktopSyncDiffResult>;
       downloadCandidate(packageId: string, machineContext?: unknown): Promise<DesktopSyncDownloadCandidateResult>;
     };
+    onNewDesign(callback: () => void): () => void;
     onOpenCad(callback: (payload: { path: string; source: string }) => void): () => void;
     onImportPack(callback: (payload: { path: string }) => void): () => void;
     onSetDomain(callback: (domain: 'mech' | 'elec') => void): () => void;

@@ -74,6 +74,9 @@ import {
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
 import { readActiveMachineDesign } from '../src/machine/store.ts';
 import { deleteProject, listProjects, openProject, saveProject } from './projects.ts';
+import { clearDesignDraft, readDesignDraft, writeDesignDraft } from '../src/design/draft-store.ts';
+import { validateMachineDesign } from '../src/machine/store.ts';
+import { readMachinePricing } from './pricing.ts';
 import { buildMachineIoMap } from '../src/machine/io-map.ts';
 import {
   mergePlcHistory,
@@ -643,6 +646,27 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     return await previewSelectedPortableArchive(createProjectArchiveDependencies());
   });
 
+  handle('design:settings', () => {
+    try {
+      const pricebookPath = join(context.builtinDir, 'pricebook-cn', 'pricebook.json');
+      const book = existsSync(pricebookPath) ? validatePricebook(JSON.parse(readFileSync(pricebookPath, 'utf8')) as unknown) : undefined;
+      return { ok: true, pricing: readMachinePricing(context.userDataDir), ...(book ? { builtinPricebook: book } : {}) };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
+  });
+  handle('design:draft-load', () => readDesignDraft(context.userDataDir));
+  handle('design:draft-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.version !== 1) return { ok: false, message: '设计草稿格式无效' };
+    try {
+      writeDesignDraft(context.userDataDir, payload);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  handle('design:draft-clear', () => {
+    clearDesignDraft(context.userDataDir);
+    return { ok: true };
+  });
   handle('projects:list', () => listProjects(context.userDataDir));
   handle('projects:save', (_event, payload: unknown) => {
     if (typeof payload !== 'object' || payload === null) return { ok: false, message: '工程数据必须是对象' };
