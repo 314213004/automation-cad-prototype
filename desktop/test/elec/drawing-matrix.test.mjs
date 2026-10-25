@@ -12,14 +12,15 @@ import { runErc, PIN } from '../../src/elec/circuit.ts';
 import { checkWireNumbers, runElectricalCheck } from '../../src/elec/check.ts';
 import { checkTexts } from '../../src/elec/geometry.ts';
 import { elecDesignFromMachine, elecDesignFromProject } from '../../src/elec/adapters.ts';
+import { BUS_CATEGORIES, presetScheme, templateRegex } from '../../src/elec/wireno.ts';
 import { estimateConveyorDrive } from '../../src/machine/conveyor-synth.ts';
 import { buildConveyorParts } from '../../src/machine/conveyor-assembly.ts';
 
 const SCHEMATIC = new Set(['power', 'control', 'input', 'output']);
 const tagOf = (pin) => pin.slice(0, pin.lastIndexOf(':'));
 
-/** 对一份出图结果做全部通用断言 */
-function assertDrawing(name, drawing) {
+/** 对一份出图结果做全部通用断言；scheme 缺省为“数字连续”（现行规则，断言逐字保留） */
+function assertDrawing(name, drawing, scheme) {
   const errors = drawing.issues.filter((i) => i.severity === 'error');
   assert.deepEqual(errors, [], `${name}: ERC error`);
   assert.deepEqual(drawing.problems, [], `${name}: 图面自检问题\n${drawing.problems.join('\n')}`);
@@ -54,21 +55,54 @@ function assertDrawing(name, drawing) {
   const numbers = Object.entries(drawing.wireNumbers);
   assert.equal(new Set(numbers.map(([, no]) => no)).size, numbers.length, `${name}: 线号重复`);
   assert.equal(numbers.length, circuit.nets.length);
-  assert.deepEqual(checkWireNumbers(drawing.document.wires), [], `${name}: 线号规则`);
-  assert.equal(runElectricalCheck(drawing.document).counts.error, 0, `${name}: 电气校验 error`);
-  for (const [net, no] of numbers) {
-    const label = circuit.nets.find((item) => item.id === net)?.label;
-    if (label) assert.equal(no, label === '+24V' ? '24V' : label);
-    else assert.match(no, /^\d{3,4}$/);
+  assert.equal(new Set(numbers.map(([, no]) => no.toUpperCase())).size, numbers.length, `${name}: 线号大小写重复`);
+  if (!scheme) {
+    assert.deepEqual(checkWireNumbers(drawing.document.wires), [], `${name}: 线号规则`);
+    assert.equal(runElectricalCheck(drawing.document).counts.error, 0, `${name}: 电气校验 error`);
+    for (const [net, no] of numbers) {
+      const label = circuit.nets.find((item) => item.id === net)?.label;
+      if (label) assert.equal(no, label === '+24V' ? '24V' : label);
+      else assert.match(no, /^\d{3,4}$/);
+    }
+  } else {
+    // 方案即规则：出图结果对该方案的 checkWireNumbers 零发现；校验面板/Agent 读到的文档带同一方案
+    assert.deepEqual(drawing.wireScheme, scheme, `${name}: 图纸方案`);
+    assert.deepEqual(drawing.document.wireScheme, scheme, `${name}: 文档方案`);
+    assert.deepEqual(checkWireNumbers(drawing.document.wires, scheme), [], `${name}: 线号规则（${scheme.preset}）`);
+    assert.equal(runElectricalCheck(drawing.document).counts.error, 0, `${name}: 电气校验 error`);
+    assert.equal(runElectricalCheck(drawing.document).findings.filter((f) => f.code.startsWith('WIRE_NO')).length, 0, `${name}: 电气校验线号发现`);
+    // 预设不靠去重后缀
+    assert.deepEqual(drawing.wireNoAdjusted, [], `${name}: 预设 ${scheme.preset} 产生了重号`);
+    for (const [net, no] of numbers) {
+      const category = drawing.wireCategories[net];
+      assert.ok(category, `${name}: ${net} 无类别`);
+      assert.match(no, templateRegex(scheme.templates[category], scheme), `${name}: ${net}(${category}) 线号 ${no} 不符合模板 ${scheme.templates[category]}`);
+      const wire = drawing.document.wires.find((w) => w.net === net);
+      assert.equal(wire?.no, no);
+      assert.equal(wire?.category, category);
+    }
   }
-  // 每张原理图页上出现的每个数字线号网络，本页都有它的线号文字
+  // 每张原理图页上出现的每个非母线网络，本页都有它的线号文字（数字连续方案下即每个数字线号网络）
+  const busNets = new Set(Object.entries(drawing.wireCategories).filter(([, c]) => BUS_CATEGORIES.has(c)).map(([net]) => net));
   for (const canvas of canvases.filter((c) => SCHEMATIC.has(c.kind))) {
     const texts = new Set(canvas.prims.filter((p) => p.t === 'text' && p.role === 'wire-no').map((p) => `${p.owner}|${p.value}`));
     for (const net of new Set(canvas.wires.map((w) => w.net))) {
       const no = drawing.wireNumbers[net];
-      if (!/^\d+$/.test(no)) continue;
+      // 画了母线但电路里没有元件接它（如无电机时的 PE 母线）：不是网络，没有线号
+      if (no === undefined) {
+        assert.ok(!circuit.nets.some((item) => item.id === net), `${name}: ${net} 缺线号`);
+        continue;
+      }
+      if (!scheme) assert.equal(busNets.has(net), !/^\d+$/.test(no), `${name}: ${net} 母线判定`);
+      if (busNets.has(net)) continue;
       assert.ok(texts.has(`${net}|${no}`), `${name} 第 ${canvas.index} 页缺线号 ${no}`);
     }
+  }
+  // 导线表、端子表的线号与图面同一份
+  for (const row of drawing.wireList) assert.equal(row.no, drawing.wireNumbers[row.net], `${name}: 导线表 ${row.net}`);
+  for (const row of drawing.terminals) {
+    const net = circuit.nets.find((item) => item.pins.includes(`${row.strip}-${row.no}:i`));
+    if (net) assert.equal(row.wireNo, drawing.wireNumbers[net.id], `${name}: 端子 ${row.no} 线号`);
   }
   // 导线表的每一行线号都存在
   const valid = new Set(numbers.map(([, no]) => no));
@@ -165,11 +199,85 @@ function randomDesign(seed) {
   };
 }
 
-for (const seed of [1, 7, 42, 99, 123, 256, 777, 1024, 2026, 31337, 65535, 90210]) {
+const SEEDS = [1, 7, 42, 99, 123, 256, 777, 1024, 2026, 31337, 65535, 90210];
+for (const seed of SEEDS) {
   test(`随机化矩阵：种子 ${seed} —— 可交付且各项断言成立`, () => {
     assertDrawing(`seed ${seed}`, renderElecDrawing(randomDesign(seed), { date: '2026-10-25' }));
   });
 }
+
+/* ------------------------------------------------------------------ 线号预设 × 矩阵 */
+
+for (const preset of ['digital', 'potential', 'pagecol']) {
+  test(`线号预设「${preset}」× 机型矩阵 + 随机种子 —— 全部可交付、自检 0 问题、同网同号/异网异号、按方案校验零发现`, () => {
+    const scheme = presetScheme(preset);
+    for (const [name, make] of Object.entries(MATRIX)) {
+      assertDrawing(`${preset}/${name}`, renderElecDrawing(make(), { date: '2026-10-25', wireScheme: scheme }), scheme);
+    }
+    for (const seed of SEEDS) {
+      assertDrawing(`${preset}/seed ${seed}`, renderElecDrawing(randomDesign(seed), { date: '2026-10-25', wireScheme: scheme }), scheme);
+    }
+  });
+}
+
+test('线号预设「数字连续」与不传方案逐字一致（默认不改已有输出）', () => {
+  for (const [name, make] of Object.entries(MATRIX)) {
+    const a = renderElecDrawing(make(), { date: '2026-10-25' });
+    const b = renderElecDrawing(make(), { date: '2026-10-25', wireScheme: presetScheme('digital') });
+    assert.deepEqual(b.wireNumbers, a.wireNumbers, name);
+    assert.deepEqual(b.pages.map((p) => p.svg), a.pages.map((p) => p.svg), name);
+  }
+});
+
+test('线号预设「电位-类别」：六工位锁螺丝 —— L1/L11/2L1/N1/+24V/1U/DI1…/DO1…/COM/S1 按类别给号', () => {
+  const drawing = renderElecDrawing(MATRIX['screw-6st'](), { date: '2026-10-25', wireScheme: presetScheme('potential') });
+  const n = drawing.wireNumbers;
+  const { plan } = drawing.build;
+  assert.equal(n.L1, 'L1');
+  assert.equal(n['BUS-L1'], 'L11');
+  assert.equal(n['BUS-L3'], 'L31');
+  assert.equal(n.N, 'N');
+  assert.equal(n['+24V'], '+24V');
+  assert.equal(n['0V'], '0V');
+  // 支路：断路器号 + 所取相
+  const b1 = plan.branches[1];
+  assert.equal(n['B1-L'], `${b1.breaker.replace(/\D/g, '')}L${b1.phase.slice(1)}`);
+  assert.equal(n['B0-N'], `N${plan.branches[0].breaker.replace(/\D/g, '')}`);
+  // 电机出线 1U/1V/1W
+  const motor = plan.branches[1].motor.replace(/\D/g, '');
+  assert.deepEqual(['U', 'V', 'W'].map((p) => n[`B1-${p}`]), ['U', 'V', 'W'].map((p) => `${motor}${p}`));
+  // PLC 输入/输出按地址顺序：第 k 个点 = DIk / DOk
+  plan.inputs.forEach((item, i) => assert.equal(n[`IN-${item.address}`], `DI${i + 1}`, item.address));
+  plan.outputs.forEach((item, i) => assert.equal(n[`OUT-${item.address}`], `DO${i + 1}`, item.address));
+  // 安全母线 S24 接 PLC 输出组电源 3L+ → 公共端 COM
+  assert.equal(n.S24, 'COM');
+  assert.equal(drawing.wireCategories.S24, 'plcCommon');
+  assert.ok(Object.entries(drawing.wireCategories).some(([net, c]) => c === 'safety' && /^S\d+$/.test(n[net])));
+  // 导线表/端子表同号
+  assert.ok(drawing.wireList.some((row) => row.no === 'DI1'));
+  assert.ok(drawing.terminals.some((row) => row.wireNo === 'DI1'));
+});
+
+test('线号预设「页.列」：每个非母线网络 = 首次出现的 页.列（同页同列多网络 .序号）', () => {
+  const drawing = renderElecDrawing(MATRIX['screw-6st'](), { date: '2026-10-25', wireScheme: presetScheme('pagecol') });
+  const groups = new Map();
+  for (const [net, no] of Object.entries(drawing.wireNumbers)) {
+    if (BUS_CATEGORIES.has(drawing.wireCategories[net])) continue;
+    const m = /^(\d+)\.(\d)(?:\.(\d+))?$/.exec(no);
+    assert.ok(m, `${net} ${no}`);
+    const key = `${m[1]}.${m[2]}`;
+    groups.set(key, [...(groups.get(key) ?? []), m[3]]);
+    // 页.列确是该网络首次画出的页与列
+    const canvas = drawing.canvases[Number(m[1]) - 1];
+    assert.ok(canvas.wires.some((w) => w.net === net), `${net} 不在第 ${m[1]} 页`);
+    const earlier = drawing.canvases.slice(0, Number(m[1]) - 1).some((c) => c.wires.some((w) => w.net === net));
+    assert.equal(earlier, false, `${net} 更早页已出现`);
+  }
+  for (const [key, subs] of groups) {
+    if (subs.length === 1) assert.equal(subs[0], undefined, `${key} 只有一个网络不应加序号`);
+    else assert.deepEqual(subs.map(Number), subs.map((_, i) => i + 1), `${key} 序号`);
+  }
+});
 
 /* ------------------------------------------------------------------ 定向用例 */
 

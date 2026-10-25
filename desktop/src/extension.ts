@@ -57,6 +57,8 @@ import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
 import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
 import { ElecSourceTracker } from './elec/source';
+import { loadStoredWireScheme, openWireSchemeDialog, storeWireScheme } from './elec/wireno-ui';
+import { schemeLabel } from './elec/wireno';
 import {
   buildConveyorParts,
   conveyorAssembly,
@@ -983,7 +985,48 @@ function elecSourceChanged(): void {
   if (elecDomainActive()) refreshElecView();
 }
 
+/** 线号格式：读已保存的方案（localStorage），出图与校验同用这一份 */
+function initElecWireScheme(): void {
+  let storage: Storage | null = null;
+  try {
+    storage = window.localStorage;
+  } catch {
+    storage = null;
+  }
+  const loaded = loadStoredWireScheme(storage);
+  elecSources.setWireScheme(loaded.scheme);
+  if (loaded.warning) console.warn('[cad]', loaded.warning);
+}
+
+/** 翻页条「线号格式」：改方案 → 保存 → 停在当前页重画（导线表/端子表/校验数据同一份） */
+function openElecWireSchemeDialog(): void {
+  openWireSchemeDialog({
+    current: elecSources.wireScheme(),
+    onSave: (scheme) => {
+      try {
+        storeWireScheme(window.localStorage, scheme);
+      } catch (error) {
+        showNotice(`线号方案已应用，但保存到本机失败：${error instanceof Error ? error.message : String(error)}`, true);
+      }
+      const pageIndex = Number(document.querySelector<HTMLElement>('#elStageSchematic .cad-elec-pager [data-elec-page].is-active')?.dataset.elecPage ?? 0);
+      elecSources.setWireScheme(scheme);
+      let drawing: ElecDrawing | null = null;
+      try {
+        drawing = buildElecDrawing();
+      } catch (error) {
+        console.warn('[cad] 按新线号方案生成电气图失败', error);
+      }
+      if (!drawing) return;
+      showElecDrawing(drawing, pageIndex);
+      const suffixed = drawing.issues.find((issue) => issue.code === 'WIRENO_SUFFIXED');
+      if (!drawing.deliverable) showNotice(`已按新线号方案重画，但校验有问题：${drawing.problems[0] ?? ''}`, true);
+      else if (suffixed) showNotice(suffixed.message, true);
+    }
+  });
+}
+
 function initElecSourceWiring(): void {
+  initElecWireScheme();
   (window as unknown as { __ElecDocProvider?: () => unknown }).__ElecDocProvider = () => {
     try {
       return buildElecDrawing()?.document ?? null;
@@ -1026,6 +1069,10 @@ function showElecDrawing(drawing: ElecDrawing, index: number): void {
     pager.setAttribute('aria-label', '电气图纸翻页');
     stage.appendChild(pager);
     pager.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('[data-elec-wireno]')) {
+        openElecWireSchemeDialog();
+        return;
+      }
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-elec-page]');
       if (!button || !lastElecDrawing) return;
       showElecDrawing(lastElecDrawing, Number(button.dataset.elecPage));
@@ -1036,7 +1083,8 @@ function showElecDrawing(drawing: ElecDrawing, index: number): void {
     `<button type="button" data-elec-page="${current - 1}" ${current === 0 ? 'disabled' : ''} title="上一页">‹</button>`,
     ...drawing.pages.map((item, i) => `<button type="button" data-elec-page="${i}" class="${i === current ? 'is-active' : ''}" title="${escapeCadHtml(item.title)}">${item.index}</button>`),
     `<button type="button" data-elec-page="${current + 1}" ${current === drawing.pages.length - 1 ? 'disabled' : ''} title="下一页">›</button>`,
-    `<span class="cad-elec-pager-title">${escapeCadHtml(page.title)}</span>`
+    `<span class="cad-elec-pager-title">${escapeCadHtml(page.title)}</span>`,
+    `<button type="button" class="cad-elec-wireno-btn" data-elec-wireno title="线号格式（当前：${escapeCadHtml(schemeLabel(elecSources.wireScheme()))}）">线号格式</button>`
   ].join('');
 }
 

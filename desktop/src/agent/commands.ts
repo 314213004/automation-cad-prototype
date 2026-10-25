@@ -13,6 +13,7 @@ import {
   type PowerOptions,
   type Wire
 } from '../elec/check.ts';
+import { isWireNoCategory, validateWireNoScheme, type WireNoScheme } from '../elec/wireno.ts';
 import { runCostTool, CostToolError } from '../cost/agent.ts';
 import type { Issue, PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
@@ -743,7 +744,8 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
       from: textOf(item.from),
       to: textOf(item.to),
       ...(section !== undefined ? { sectionMm2: section } : {}),
-      ...(current !== undefined ? { currentA: current } : {})
+      ...(current !== undefined ? { currentA: current } : {}),
+      ...(isWireNoCategory(item.category) ? { category: item.category } : {})
     };
   });
 
@@ -806,11 +808,20 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
     throw new CommandFailure('INVALID_ARGUMENT', 'options 必须是对象');
   }
 
+  // 线号方案：当前电气图纸带上它（getElecDocument），校验按该图的方案判断线号格式；不合法整体拒绝
+  let wireScheme: WireNoScheme | undefined;
+  if (args.wireScheme !== undefined && args.wireScheme !== null) {
+    const checked = validateWireNoScheme(args.wireScheme);
+    if (!checked.ok) throw new CommandFailure('INVALID_ARGUMENT', `wireScheme 不合法：${checked.errors.join('；')}`);
+    wireScheme = checked.scheme;
+  }
+
   return {
     wires,
     loads,
     circuits,
-    ...(options !== undefined ? { options } : {})
+    ...(options !== undefined ? { options } : {}),
+    ...(wireScheme !== undefined ? { wireScheme } : {})
   };
 }
 

@@ -443,3 +443,22 @@ html{zoom:var(--acad-ui-scale,1.15)}
 .cad-elec-pager button.is-active { border-color: currentColor; font-weight: 600; }
 .cad-elec-pager button:disabled { opacity: 0.35; cursor: default; }
 .cad-elec-pager-title { margin-left: 6px; white-space: nowrap; opacity: 0.75; }
+.cad-elec-wireno-btn { margin-left: 6px; border-color: rgba(0, 0, 0, 0.18) !important; white-space: nowrap; }
+.cad-wireno-dialog { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.28); font-size: 12px; }
+.cad-wireno-card { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 12px 16px; background: #fff; color: #222; border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25); }
+.cad-wireno-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 14px; }
+.cad-wireno-head button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
+.cad-wireno-row { display: flex; gap: 12px; align-items: center; margin: 6px 0; }
+.cad-wireno-row select, .cad-wireno-row input { margin-left: 4px; }
+.cad-wireno-desc { margin: 4px 0 8px; opacity: 0.75; }
+.cad-wireno-table { width: 100%; border-collapse: collapse; }
+.cad-wireno-table th, .cad-wireno-table td { padding: 3px 4px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); text-align: left; }
+.cad-wireno-table input { width: 100%; box-sizing: border-box; font-family: ui-monospace, Consolas, monospace; }
+.cad-wireno-table tr.is-invalid input { border-color: #c62828; background: #fff3f3; }
+.cad-wireno-preview { font-family: ui-monospace, Consolas, monospace; white-space: nowrap; color: #555; }
+.cad-wireno-help ul { margin: 4px 0; padding-left: 18px; }
+.cad-wireno-errors { color: #c62828; margin: 6px 0; }
+.cad-wireno-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.cad-wireno-actions button { padding: 4px 12px; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 6px; background: #fff; cursor: pointer; }
+.cad-wireno-actions button.is-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.cad-wireno-actions button:disabled { opacity: 0.45; cursor: default; }

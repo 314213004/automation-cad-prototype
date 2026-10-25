@@ -14,6 +14,7 @@ import { ercSummary, PIN, runErc } from './circuit.ts';
 import type { ElecDesign } from './design.ts';
 import { boxesOverlap, checkTexts, checkWiring, fitText, junctionPoints, P, textWidth, type Prim, type Pt, type TextPrim } from './geometry.ts';
 import { breakerNameMismatch } from './machine-circuit.ts';
+import { assignWireNoScheme, BUS_CATEGORIES, classifyNets, DEFAULT_WIRE_NO_SCHEME, describeScheme, type NetPlacement, type WireNoAdjustment, type WireNoCategory, type WireNoScheme } from './wireno.ts';
 import { layoutControlPages, layoutInputPages, layoutOutputPages, layoutPowerPages, makeContext, type LayoutContext } from './pages.ts';
 
 export interface WireRow {
@@ -67,6 +68,12 @@ export interface ElecDrawing {
   deliverable: boolean;
   /** 网络 id → 线号 */
   wireNumbers: Record<string, string>;
+  /** 网络 id → 线号类别 */
+  wireCategories: Record<string, WireNoCategory>;
+  /** 本图使用的线号方案 */
+  wireScheme: WireNoScheme;
+  /** 模板产生重号、被自动加了区分后缀的网络（同时以 WIRENO_SUFFIXED 警告报告） */
+  wireNoAdjusted: WireNoAdjustment[];
   wireList: WireRow[];
   terminals: TerminalRow[];
   bom: DrawingBomRow[];
@@ -78,42 +85,40 @@ export interface ElecDrawing {
 }
 
 export const STATUS = { ok: '校验通过', fail: '有待处理问题' } as const;
-const FIXED: Record<string, string> = { L1: 'L1', L2: 'L2', L3: 'L3', N: 'N', PE: 'PE', '+24V': '24V', '0V': '0V' };
 
 /* ------------------------------------------------------------------ 线号 */
 
-/**
- * 线号规则（与 check.ts 的线号合规规则同一口径）：
- *  - 进线与电源电位固定：L1/L2/L3/N/PE、24V、0V；
- *  - 其余每个网络一个 3~4 位数字线号，从 101 起按“页 → 列（x）→ 行（y）”阅读顺序连续编号，不跳号；
- *  - 同一网络（含经端子进出柜的两侧）同一线号，不同网络不同线号。
- */
-export function assignWireNumbers(pages: readonly PageCanvas[], circuit: Circuit): Record<string, string> {
-  const numbers: Record<string, string> = {};
-  for (const net of circuit.nets) {
-    const fixed = FIXED[net.label ?? ''];
-    if (fixed) numbers[net.id] = fixed;
-  }
-  let next = 101;
+/** 图框行号 A–F */
+export function rowOf(y: number): string {
+  const i = Math.min(GRID_ROWS.length - 1, Math.max(0, Math.floor((y - FRAME.y) / (FRAME.h / GRID_ROWS.length))));
+  return GRID_ROWS[i] as string;
+}
+
+/** 网络首次出现位置，按“页 → 列（x）→ 行（y）”阅读顺序；没画出来的网络不在里面 */
+export function netReadingOrder(pages: readonly PageCanvas[], circuit: Circuit): NetPlacement[] {
+  const known = new Set(circuit.nets.map((net) => net.id));
+  const seen = new Set<string>();
+  const out: NetPlacement[] = [];
   for (const page of pages) {
     const order = page.wires
       .map((wire) => ({ net: wire.net, x: Math.min(...wire.points.map((p) => p[0])), y: Math.min(...wire.points.map((p) => p[1])) }))
       .sort((a, b) => a.x - b.x || a.y - b.y);
     for (const item of order) {
-      if (numbers[item.net]) continue;
-      if (!circuit.nets.some((net) => net.id === item.net)) continue;
-      numbers[item.net] = String(next);
-      next += 1;
+      if (seen.has(item.net) || !known.has(item.net)) continue;
+      seen.add(item.net);
+      out.push({ net: item.net, page: page.index, col: columnOf(item.x), row: rowOf(item.y) });
     }
   }
-  // 没画出来的网络也给号（自检会另报没画）
-  for (const net of circuit.nets) {
-    if (!numbers[net.id]) {
-      numbers[net.id] = String(next);
-      next += 1;
-    }
-  }
-  return numbers;
+  return out;
+}
+
+/**
+ * 线号分配（规则见 wireno.ts 的线号方案；check.ts 按同一方案校验）：
+ *  - 缺省方案“数字连续”：L1/L2/L3/N/PE、24V、0V 固定，其余网络 101 起按“页 → 列 → 行”阅读顺序连续编号；
+ *  - 同一网络（含经端子进出柜的两侧）同一线号；不同网络若模板产生重号，后出现的自动加区分后缀并报告。
+ */
+export function assignWireNumbers(pages: readonly PageCanvas[], build: Pick<ElecBuild, 'circuit' | 'plan'>, scheme: WireNoScheme = DEFAULT_WIRE_NO_SCHEME): ReturnType<typeof assignWireNoScheme> {
+  return assignWireNoScheme(build.circuit, classifyNets(build.circuit, build.plan), netReadingOrder(pages, build.circuit), scheme);
 }
 
 /** 沿导线找线号位置：竖线写在右/左侧，横线写在上/下方，优先线段中部 */
@@ -154,7 +159,25 @@ function wireNoCandidates(points: readonly Pt[], value: string, net: string): Te
     }
     void len;
   }
-  return out.sort((p, q) => p.d - q.d).slice(0, 60).map((item) => [item.t]);
+  const flat = out.sort((p, q) => p.d - q.d).slice(0, 60).map((item) => [item.t]);
+  // 兜底：水平写放不下的长线号（如 1.3.4、2L2），沿竖线竖写（自下而上），排在所有水平候选之后
+  const rotated: Array<{ d: number; t: TextPrim }> = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i] as Pt;
+    const b = points[i + 1] as Pt;
+    if (Math.abs(a[0] - b[0]) > 1e-6) continue;
+    const y1 = Math.min(a[1], b[1]);
+    const y2 = Math.max(a[1], b[1]);
+    const mid = (y1 + y2) / 2;
+    const ys = y2 - y1 >= w + 1.2 ? Array.from({ length: Math.floor((y2 - y1 - w - 1.2) / 1.2) + 1 }, (_, k) => y1 + 0.6 + w / 2 + k * 1.2) : [mid];
+    for (const y of ys) {
+      const d = Math.abs(y - mid);
+      const right = { ...P.text(a[0] + 0.5 + 0.8 * size, y, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
+      const left = { ...P.text(a[0] - 0.5 - 0.22 * size, y, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
+      rotated.push({ d, t: right }, { d: d + 0.5, t: left });
+    }
+  }
+  return [...flat, ...rotated.sort((p, q) => p.d - q.d).slice(0, 40).map((item) => [item.t])];
 }
 
 /* ------------------------------------------------------------------ 图框 */
@@ -331,7 +354,7 @@ function primSvg(p: Prim): string {
     case 'path':
       return `<path class="${p.cls}" d="${p.d}"/>`;
     case 'text':
-      return `<text class="${p.cls}" x="${n(p.x)}" y="${n(p.y)}" text-anchor="${p.anchor}" style="font-size:${n(p.size)}px">${esc(p.value)}</text>`;
+      return `<text class="${p.cls}" x="${n(p.x)}" y="${n(p.y)}" text-anchor="${p.anchor}"${p.rot === 90 ? ` transform="rotate(-90 ${n(p.x)} ${n(p.y)})"` : ''} style="font-size:${n(p.size)}px">${esc(p.value)}</text>`;
     default:
       return '';
   }
@@ -342,6 +365,8 @@ function primSvg(p: Prim): string {
 export interface DrawingOptions {
   date?: string;
   designer?: string;
+  /** 线号方案；缺省“数字连续” */
+  wireScheme?: WireNoScheme;
 }
 
 const tagOf = (pin: string): string => pin.slice(0, pin.lastIndexOf(':'));
@@ -365,7 +390,19 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
   const deviceByTag = new Map(circuit.devices.map((device) => [device.tag, device]));
 
   /* ---------- 线号 ---------- */
-  const wireNumbers = assignWireNumbers(schematic, circuit);
+  const wireScheme = options.wireScheme ?? DEFAULT_WIRE_NO_SCHEME;
+  const assignment = assignWireNumbers(schematic, build, wireScheme);
+  const wireNumbers = assignment.numbers;
+  const wireCategories = assignment.categories;
+  const busNets = new Set(Object.entries(wireCategories).filter(([, category]) => BUS_CATEGORIES.has(category)).map(([net]) => net));
+  if (assignment.adjusted.length > 0) {
+    const sample = assignment.adjusted.slice(0, 6).map((item) => `${item.base}→${item.no}`).join('、');
+    issues.push({
+      severity: 'warning',
+      code: 'WIRENO_SUFFIXED',
+      message: `线号模板产生重号 ${assignment.adjusted.length} 处，已自动加区分后缀：${sample}${assignment.adjusted.length > 6 ? '…' : ''}`
+    });
+  }
 
   /* ---------- 引脚位置（全局） ---------- */
   const pinAt = new Map<string, { page: number; pt: Pt }>();
@@ -397,7 +434,7 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
     const seen = new Set<string>();
     for (const wire of page.wires) {
       const no = wireNumbers[wire.net];
-      if (!no || FIXED[circuit.nets.find((net) => net.id === wire.net)?.label ?? '']) continue;
+      if (!no || busNets.has(wire.net)) continue;
       seen.add(wire.net);
       page.label({ candidates: wireNoCandidates(wire.points, no, wire.net), what: `线号 ${no}`, optional: true });
     }
@@ -433,7 +470,7 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
   const designDate = options.date ?? build.design.date ?? '';
   const designer = options.designer ?? build.design.designer ?? '软件自动生成';
   const terminals = buildTerminalRows(circuit, wireNumbers, plan.terminalOf, refOfPin);
-  const wireList = buildWireList(circuit, wireNumbers, pinAt, refOfPin, plan.terminalOf);
+  const wireList = buildWireList(circuit, wireNumbers, pinAt, refOfPin, plan.terminalOf, assignment.rank);
   const pinName = (pin: string): string => {
     const device = deviceByTag.get(tagOf(pin));
     if (device?.terminal) return `${device.terminal.strip}:${device.terminal.no}`;
@@ -476,7 +513,7 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
   const { project, drawingNo } = build.design;
   const notes = [
     `数据来源：${build.design.source}`,
-    '线号：L1/L2/L3/N/PE、24V/0V 为固定电位，其余网络 101 起按页→列连续编号，同网同号',
+    `线号：${describeScheme(wireScheme)}`,
     '交叉引用“/页.列”；端子 -X1 按现场元件顺序自动编号；型号为估算初选，订货前核对样本',
     ...build.design.notes
   ];
@@ -494,7 +531,7 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
     const textProblems = checkTexts([...page.statics, ...frame, ...probe, ...wirePrims(page), ...page.prims], { x: 6, y: 6, w: PAGE_W - 12, h: PAGE_H - 12 });
     page.problems.push(...textProblems);
     if (page.kind === 'power' || page.kind === 'control' || page.kind === 'input' || page.kind === 'output') {
-      page.problems.push(...checkPage(page, circuit, wireNumbers));
+      page.problems.push(...checkPage(page, circuit, wireNumbers, busNets));
     }
     problems.push(...page.problems.map((problem) => `第 ${page.index} 页 ${problem}`));
   }
@@ -523,15 +560,16 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
     const why = breakerNameMismatch(device.name, device.model);
     if (why) problems.push(`[BOM_NAME_MODEL] ${device.tag} ${why}`);
   }
-  const document = buildDocument(build, wireNumbers, pinAt);
-  for (const finding of checkWireNumbers(document.wires ?? [])) {
+  const document = buildDocument(build, wireNumbers, pinAt, wireCategories, wireScheme);
+  for (const finding of checkWireNumbers(document.wires ?? [], wireScheme)) {
     problems.push(`[WIRENO_RULE] ${finding.code} ${finding.message}`);
   }
   const uniq = new Map<string, string>();
   for (const [net, no] of Object.entries(wireNumbers)) {
-    const other = uniq.get(no);
+    const key = no.toUpperCase();
+    const other = uniq.get(key);
     if (other) problems.push(`[WIRENO_DUPLICATE] 线号 ${no} 同时用于 ${other} 与 ${net}`);
-    else uniq.set(no, net);
+    else uniq.set(key, net);
   }
 
   const summary = ercSummary(issues);
@@ -561,6 +599,9 @@ export function renderElecDrawing(design: ElecDesign, options: DrawingOptions = 
     problems,
     deliverable,
     wireNumbers,
+    wireCategories,
+    wireScheme,
+    wireNoAdjusted: assignment.adjusted,
     wireList,
     terminals,
     bom,
@@ -583,7 +624,14 @@ function wirePrims(page: PageCanvas): Prim[] {
 }
 
 /** 单页导线/符号自检：本页子电路（本页画出的引脚 + 电位断点）对本页导线 */
-export function checkPage(page: PageCanvas, circuit: Circuit, wireNumbers: Record<string, string>): string[] {
+const BUS_LABELS = new Set(['L1', 'L2', 'L3', 'N', 'PE', '+24V', '0V']);
+
+export function checkPage(
+  page: PageCanvas,
+  circuit: Circuit,
+  wireNumbers: Record<string, string>,
+  busNets: ReadonlySet<string> = new Set(circuit.nets.filter((net) => BUS_LABELS.has(net.label ?? '')).map((net) => net.id))
+): string[] {
   const problems: string[] = [];
   const devices: CircuitDevice[] = [];
   for (const device of circuit.devices) {
@@ -619,11 +667,10 @@ export function checkPage(page: PageCanvas, circuit: Circuit, wireNumbers: Recor
       problems.push(`[SYMBOL_OUT_OF_FRAME] 符号超出绘图区：${a.tag}`);
     }
   }
-  // 每个数字线号网络在本页至少标一次线号
+  // 每个非母线网络在本页至少标一次线号
   const labelled = new Set(page.prims.filter((p) => p.t === 'text' && p.role === 'wire-no').map((p) => p.owner));
-  const fixed = new Set(circuit.nets.filter((net) => FIXED[net.label ?? '']).map((net) => net.id));
   for (const net of new Set(page.wires.map((wire) => wire.net))) {
-    if (fixed.has(net) || labelled.has(net)) continue;
+    if (busNets.has(net) || labelled.has(net)) continue;
     problems.push(`[WIRENO_MISSING] 网络 ${wireNumbers[net] ?? net} 在本页没有线号标注`);
   }
   return [...new Set(problems)];
@@ -648,7 +695,8 @@ function buildWireList(
   numbers: Record<string, string>,
   pinAt: Map<string, { page: number; pt: Pt }>,
   refOfPin: (pin: string) => string,
-  terminalOf: Record<string, string>
+  terminalOf: Record<string, string>,
+  rank: Record<string, number>
 ): WireRow[] {
   const rows: WireRow[] = [];
   const deviceByTag = new Map(circuit.devices.map((device) => [device.tag, device]));
@@ -692,12 +740,8 @@ function buildWireList(
       for (let i = 0; i < sorted.length - 1; i += 1) push(sorted[i] as string, sorted[i + 1] as string);
     }
   }
-  return rows.sort((a, b) => wireNoOrder(a.no) - wireNoOrder(b.no));
-}
-
-function wireNoOrder(no: string): number {
-  const fixed = ['L1', 'L2', 'L3', 'N', 'PE', '24V', '0V'].indexOf(no);
-  return fixed >= 0 ? fixed : 100 + Number(no);
+  // 线号分配顺序：母线在前，其余按阅读顺序（数字连续方案下即线号从小到大）
+  return rows.sort((a, b) => (rank[a.net] ?? 1e9) - (rank[b.net] ?? 1e9));
 }
 
 function buildTerminalRows(
@@ -766,7 +810,13 @@ function buildBom(circuit: Circuit, ctx: LayoutContext): DrawingBomRow[] {
   return [...rows.values()];
 }
 
-function buildDocument(build: ElecBuild, numbers: Record<string, string>, pinAt: Map<string, { page: number; pt: Pt }>): ElecDocument {
+function buildDocument(
+  build: ElecBuild,
+  numbers: Record<string, string>,
+  pinAt: Map<string, { page: number; pt: Pt }>,
+  categories: Record<string, WireNoCategory>,
+  wireScheme: WireNoScheme
+): ElecDocument {
   const { circuit, design } = build;
   const wires: CheckWire[] = circuit.nets.map((net) => {
     const sorted = [...net.pins].sort((a, b) => (pinAt.get(a)?.page ?? 99) - (pinAt.get(b)?.page ?? 99));
@@ -775,7 +825,8 @@ function buildDocument(build: ElecBuild, numbers: Record<string, string>, pinAt:
       net: net.id,
       potential: category(circuit, net.id).potential,
       from: sorted[0] ?? net.id,
-      to: sorted.length > 1 ? (sorted[sorted.length - 1] as string) : (sorted[0] ?? net.id)
+      to: sorted.length > 1 ? (sorted[sorted.length - 1] as string) : (sorted[0] ?? net.id),
+      ...(categories[net.id] ? { category: categories[net.id] as WireNoCategory } : {})
     };
   });
   const loads: Load[] = [];
@@ -787,7 +838,7 @@ function buildDocument(build: ElecBuild, numbers: Record<string, string>, pinAt:
     loads.push({ tag: branch.motor, powerKw: kw, phase: branch.kind === 'servo' ? (branch.phase ?? 'L1') : '3P' });
   }
   if (design.psu.watts) loads.push({ tag: '-G1', powerKw: design.psu.watts / 1000, phase: 'L1' });
-  return { wires, loads, options: { ...(design.psu.watts ? { psuRatedA: Math.round((design.psu.watts / 24) * 10) / 10 } : {}) } };
+  return { wires, loads, wireScheme, options: { ...(design.psu.watts ? { psuRatedA: Math.round((design.psu.watts / 24) * 10) / 10 } : {}) } };
 }
 
 export { textWidth };

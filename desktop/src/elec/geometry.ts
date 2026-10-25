@@ -36,7 +36,8 @@ export interface LinePrim extends PrimBase { t: 'line'; x1: number; y1: number; 
 export interface RectPrim extends PrimBase { t: 'rect'; x: number; y: number; w: number; h: number; fill?: string }
 export interface CirclePrim extends PrimBase { t: 'circle'; cx: number; cy: number; r: number; filled?: boolean }
 export interface PathPrim extends PrimBase { t: 'path'; d: string; box: Box }
-export interface TextPrim extends PrimBase { t: 'text'; x: number; y: number; value: string; size: number; anchor: Anchor }
+/** rot=90：文字绕 (x,y) 逆时针转 90°，自下而上沿竖线书写（长线号贴竖线写） */
+export interface TextPrim extends PrimBase { t: 'text'; x: number; y: number; value: string; size: number; anchor: Anchor; rot?: 90 }
 export type Prim = LinePrim | RectPrim | CirclePrim | PathPrim | TextPrim;
 
 export interface Wire {
@@ -82,9 +83,14 @@ export function textWidth(value: string, size: number): number {
   return em * size;
 }
 
-export function textBox(t: Pick<TextPrim, 'x' | 'y' | 'value' | 'size' | 'anchor'>): Box {
+export function textBox(t: Pick<TextPrim, 'x' | 'y' | 'value' | 'size' | 'anchor'> & { rot?: 90 | undefined }): Box {
   const w = textWidth(t.value, t.size);
   const x = t.anchor === 'middle' ? t.x - w / 2 : t.anchor === 'end' ? t.x - w : t.x;
+  if (t.rot === 90) {
+    // 局部点 (x+dx, y+dy) 转到 (x+dy, y-dx)
+    const dx0 = x - t.x;
+    return { x: t.x - 0.8 * t.size, y: t.y - dx0 - w, w: 1.02 * t.size, h: w };
+  }
   return { x, y: t.y - 0.8 * t.size, w, h: 1.02 * t.size };
 }
 

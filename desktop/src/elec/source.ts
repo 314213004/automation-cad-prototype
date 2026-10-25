@@ -12,6 +12,7 @@ import { elecDesignFromMachine, elecDesignFromProject, type MachineDesignLike, t
 import type { DrawingOptions, ElecDrawing } from './drawing.ts';
 import type { ElecDesign } from './design.ts';
 import type { MachineConfig } from '../commission/machine-config.ts';
+import { DEFAULT_WIRE_NO_SCHEME, type WireNoScheme } from './wireno.ts';
 
 export const MACHINE_CONFIG_ONLY_NOTE = '机型方案未携带 BOM/功率估算（只有 config）：电机功率与型号按缺省出图，需以方案 BOM 核对';
 
@@ -87,6 +88,7 @@ export class ElecSourceTracker {
   private cache: { version: number; date: string; drawing: ElecDrawing | null } | null = null;
   private readonly render: (design: ElecDesign, options: DrawingOptions) => ElecDrawing;
   private readonly today: () => string;
+  private scheme: WireNoScheme = DEFAULT_WIRE_NO_SCHEME;
 
   /** render 由调用方注入（renderElecDrawing），本模块只管选源与缓存 */
   constructor(
@@ -107,6 +109,18 @@ export class ElecSourceTracker {
 
   label(): ElecSourceLabel | null {
     return sourceLabel(this.source);
+  }
+
+  /** 当前线号方案（出图与校验同一份） */
+  wireScheme(): WireNoScheme {
+    return this.scheme;
+  }
+
+  /** 换线号方案：缓存作废，下次 drawing() 按新方案重画（数据源不变） */
+  setWireScheme(scheme: WireNoScheme): void {
+    this.scheme = scheme;
+    this.versionValue += 1;
+    this.cache = null;
   }
 
   /** 打开/生成了工程：工程成为最新数据源 */
@@ -135,7 +149,7 @@ export class ElecSourceTracker {
   drawing(): ElecDrawing | null {
     const date = this.today();
     if (this.cache && this.cache.version === this.versionValue && this.cache.date === date) return this.cache.drawing;
-    const drawing = this.source ? this.render(elecDesignFromSource(this.source, { date }), { date }) : null;
+    const drawing = this.source ? this.render(elecDesignFromSource(this.source, { date }), { date, wireScheme: this.scheme }) : null;
     this.cache = { version: this.versionValue, date, drawing };
     return drawing;
   }
