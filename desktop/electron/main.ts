@@ -4482,6 +4482,7 @@ function createWindow(): BrowserWindow {
           dragFrames: 4,
           dragAvgFrameMs: 42,
           dragMaxFrameMs: 58,
+          dragDroppedFrames: 0,
           lastDragAt: new Date().toISOString()
         };
         const posted = await window.webContents.executeJavaScript(

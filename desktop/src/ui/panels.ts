@@ -1,4 +1,5 @@
 import panelStyles from './panels.css?inline';
+import { drawerIdForEntry } from './drawer-ids.ts';
 
 let stylesInjected = false;
 let toastTimer = 0;
@@ -15,6 +16,26 @@ export function ensurePanelStyles(): void {
   stylesInjected = true;
 }
 
+function closeDrawerElement(element: HTMLElement): void {
+  element.hidden = true;
+  element.classList.remove('is-open');
+}
+
+/**
+ * 收起除 keep 之外所有已打开的抽屉。
+ * 所有抽屉停靠在同一个位置，同时打开只会互相遮挡，所以打开新的必须先收起旧的。
+ * 返回被收起的数量，便于调用方与测试断言。
+ */
+export function closeOtherDrawers(keep: HTMLElement | null = null): number {
+  let closed = 0;
+  document.querySelectorAll<HTMLElement>('.acp-drawer').forEach((element) => {
+    if (element === keep || element.hidden) return;
+    closeDrawerElement(element);
+    closed += 1;
+  });
+  return closed;
+}
+
 export function buildEntryButton(id: string, label: string, icon: string, onClick: () => void): HTMLButtonElement | null {
   const existing = document.getElementById(id);
   if (existing instanceof HTMLButtonElement) return existing;
@@ -29,6 +50,13 @@ export function buildEntryButton(id: string, label: string, icon: string, onClic
   button.addEventListener('click', (event) => {
     event.preventDefault();
     event.stopPropagation();
+    // 同一个入口再点一次 = 收起当前抽屉（切换标签时上一个必须缩回，而不是层层叠加）。
+    const drawerId = drawerIdForEntry(id);
+    const openDrawer = drawerId ? document.getElementById(drawerId) : null;
+    if (openDrawer instanceof HTMLElement && !openDrawer.hidden) {
+      closeDrawerElement(openDrawer);
+      return;
+    }
     onClick();
   });
   target.appendChild(button);
@@ -91,6 +119,7 @@ export function createDrawer(id: string, title: string, subtitle: string): Drawe
     body,
     footer,
     open(): void {
+      closeOtherDrawers(root);
       root.hidden = false;
       root.classList.add('is-open');
     },

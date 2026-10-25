@@ -2,6 +2,29 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.3] - 2026-10-25
+
+### Fixed · 拖动交互"不跟手"（真机反馈）
+
+- **拖动状态永久卡死**：`endDrag()` 把 `dragging = false` 放在 200 ms 定时器里，pointerup 一旦没落到当前 canvas（拖动中重建渲染器就会换掉 canvas），状态永不落地 —— 表现为**按住拖动没反应、松手后画面才跟着走**，且像素比永久停在 0.8 拖动档（实测 `drawingBuffer/CSS = 0.799` 长期不变）。现在 `endDrag()` 同步落下状态，定时器只负责质量回升。
+- **指针抬起兜底**：新增 window 级 `pointerup` / `pointercancel` / `blur` 监听与 `setPointerCapture`，画布外抬起、系统取消、窗口失焦都能正常结束拖动；`beginDrag()` 遇到上一次未收敛的状态先自愈。
+- **拖动中不再重建渲染器**：`rebuildRenderer()` 在拖动期间直接返回，避免换 canvas 丢掉 OrbitControls 的指针状态。
+- **渲染队列看门狗**：页面被遮挡/最小化时 rAF 不触发，`renderQueued` 会永久为 true，之后所有渲染请求被丢弃（画面像卡住）。超过 500 ms 视为失效帧，允许后续请求重新排队。
+
+### Fixed · 渲染指标可信度
+
+- 拖动帧统计只在**窗口可见且间隔 ≤250 ms** 时计入，遮挡/最小化/系统挂起造成的数秒空档单独记 `dragDroppedFrames`；`<5` 帧时明确输出「样本不足，不下帧率结论」。此前会把正常画面报成「平均 7813.9 ms/帧，拖动会明显不跟手」。
+
+### Fixed · 顶部入口抽屉
+
+- 工厂 / 联调 / 数据包 / 成本估算 / 模块设置等入口原先**可同时打开并全部叠在同一位置**（实测 4 个同时可见，且点同一入口不会关闭）。现在抽屉互斥打开，同一入口再点一次收起。
+
+### Verification
+
+- `npx tsc --noEmit` 0 错误；`TZ=Asia/Shanghai npm test` **1847 总计 / 1843 通过 / 0 失败 / 4 跳过**（`0600` 权限断言，Windows 无 POSIX 位）。
+- 抽屉行为在 dev 实例经 CDP 实测：连续切换 8 次，每次都只保留 1 个抽屉。
+- `npm run smoke:win`：`SMOKE_OK`，退出码 0。
+
 ## [0.4.2] - 2026-10-25
 
 ### Fixed · 联机调试与渲染可观测性

@@ -36,8 +36,14 @@ import {
   resolveEffectiveQuality,
   type RenderQuality
 } from './quality.ts';
-import { isSoftwareRenderer, type RenderStats } from '../shared/render-stats.ts';
+import { isCredibleFrameSample, isSoftwareRenderer, type RenderStats } from '../shared/render-stats.ts';
 import { clientPointToNdc } from './pointer.ts';
+
+/**
+ * 排队中的渲染帧最大等待时长。页面被遮挡/最小化时 rAF 不触发，超过这个窗口就认为该帧已失效，
+ * 否则 renderQueued 会永久为 true，后续所有 requestRender 都被丢弃（画面像卡死，松手才跳一下）。
+ */
+const RENDER_QUEUE_WATCHDOG_MS = 500;
 
 export type Projection = 'perspective' | 'orthographic';
 
@@ -124,6 +130,8 @@ export class OrbitView {
   private dragFrames = 0;
   private dragTotalFrameMs = 0;
   private dragMaxFrameMs = 0;
+  private dragDroppedFrames = 0;
+  private renderQueuedAt = 0;
   private lastDragAt: string | null = null;
   private glRenderer = '';
   private softwareRendering = false;
@@ -213,6 +221,11 @@ export class OrbitView {
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    // 兜底：指针在画布外抬起、系统取消、窗口失焦时，canvas 收不到 pointerup，
+    // OrbitControls 也就不会发 'end'，拖动状态会永久卡住。
+    window.addEventListener('pointerup', this.onGlobalPointerEnd, true);
+    window.addEventListener('pointercancel', this.onGlobalPointerEnd, true);
+    window.addEventListener('blur', this.onWindowBlur);
     // 不让原型的舞台框选 / 点击委托吃到画布上的拖拽。
     ['pointerdown', 'pointermove', 'pointerup', 'click', 'dblclick'].forEach((type) => {
       this.canvas.addEventListener(type, (event) => event.stopPropagation());
@@ -346,6 +359,8 @@ export class OrbitView {
 
   /** antialias 是构造参数：跨 MSAA 边界时重建 renderer，场景和相机对象保持不变。 */
   private rebuildRenderer(): void {
+    // 拖动中重建会换掉 canvas，OrbitControls 拿不到 pointerup → 拖动状态永久卡住。
+    if (this.dragging) return;
     const target = this.controls.target.clone();
     this.controls.dispose();
     this.renderer.dispose();
@@ -357,22 +372,29 @@ export class OrbitView {
   }
 
   private beginDrag(): void {
+    // 上一次没收到 end（例如指针在画布外抬起）时先收敛，避免状态叠加。
+    if (this.dragging) this.endDrag();
     this.dragging = true;
     this.dragPrevFrameAt = performance.now();
     this.dragFrames = 0;
     this.dragTotalFrameMs = 0;
     this.dragMaxFrameMs = 0;
+    this.dragDroppedFrames = 0;
     window.clearTimeout(this.dragRestoreTimer);
     this.renderer.setPixelRatio(DRAG_PIXEL_RATIO);
     this.requestRender();
   }
 
   private endDrag(): void {
+    // 状态必须同步落下：像素比、帧统计、质量回升都读 dragging。
+    // 以前把 dragging=false 放进 200ms 定时器，pointerup 一旦没落到当前 canvas（拖动中重建过
+    // 渲染器就是这种情况），定时器里的状态就永远不生效 —— 表现为松手后一直停在 0.8 拖动档。
+    this.dragging = false;
+    this.dragPrevFrameAt = 0;
     this.lastDragAt = new Date().toISOString();
     this.options.onDragEnd?.(this.renderStats());
     window.clearTimeout(this.dragRestoreTimer);
     this.dragRestoreTimer = window.setTimeout(() => {
-      this.dragging = false;
       this.applyRenderQuality();
       this.requestRender();
     }, 200);
@@ -528,8 +550,14 @@ export class OrbitView {
   }
 
   requestRender(): void {
-    if (this.renderQueued || this.disposed) return;
+    // 页面被遮挡/最小化时 rAF 不触发，renderQueued 会一直为 true，之后所有渲染请求都被丢掉
+    // （表现为「拖动时画面不动、松手后才跳一下」）。超过一个看门狗窗口就认为那帧已经失效。
+    if (this.renderQueued) {
+      if (performance.now() - this.renderQueuedAt < RENDER_QUEUE_WATCHDOG_MS) return;
+      this.renderQueued = false;
+    }
     this.renderQueued = true;
+    this.renderQueuedAt = performance.now();
     requestAnimationFrame(() => {
       this.renderQueued = false;
       this.renderNow();
@@ -551,10 +579,14 @@ export class OrbitView {
     const frameAt = performance.now();
     if (this.dragging && this.dragPrevFrameAt > 0) {
       const delta = frameAt - this.dragPrevFrameAt;
-      if (Number.isFinite(delta) && delta >= 0) {
+      // 只有「窗口可见 + 间隔落在单帧预算内」才算一帧。按需渲染下两次 renderNow 之间
+      // 可能夹着遮挡/最小化/CPU 挂起造成的数秒空档，那不是帧时间，计入会得出「平均 7 秒一帧」的假结论。
+      if (isCredibleFrameSample(delta, document.visibilityState)) {
         this.dragFrames += 1;
         this.dragTotalFrameMs += delta;
         this.dragMaxFrameMs = Math.max(this.dragMaxFrameMs, delta);
+      } else {
+        this.dragDroppedFrames += 1;
       }
     }
     if (this.dragging) this.dragPrevFrameAt = frameAt;
@@ -580,6 +612,7 @@ export class OrbitView {
       dragFrames: this.dragFrames,
       dragAvgFrameMs: this.dragFrames > 0 ? Math.round((this.dragTotalFrameMs / this.dragFrames) * 100) / 100 : 0,
       dragMaxFrameMs: Math.round(this.dragMaxFrameMs * 100) / 100,
+      dragDroppedFrames: this.dragDroppedFrames,
       lastDragAt: this.lastDragAt
     };
   }
@@ -608,6 +641,9 @@ export class OrbitView {
     window.clearTimeout(this.dragRestoreTimer);
     this.resizeObserver.disconnect();
     this.host.removeEventListener('pointerdown', this.onMarqueeDown, true);
+    window.removeEventListener('pointerup', this.onGlobalPointerEnd, true);
+    window.removeEventListener('pointercancel', this.onGlobalPointerEnd, true);
+    window.removeEventListener('blur', this.onWindowBlur);
     this.endMarquee();
     this.controls.dispose();
     if (this.assemblyRoot) disposeObject(this.assemblyRoot);
@@ -714,6 +750,21 @@ export class OrbitView {
 
   private readonly onPointerDown = (event: PointerEvent): void => {
     this.down = { x: event.clientX, y: event.clientY, button: event.button };
+    try {
+      // 捕获指针，保证画布外抬起也能收到 pointerup。
+      this.canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // 部分合成事件没有可捕获的 pointerId，忽略即可。
+    }
+  };
+
+  private readonly onGlobalPointerEnd = (): void => {
+    if (this.dragging) this.endDrag();
+    this.down = null;
+  };
+
+  private readonly onWindowBlur = (): void => {
+    if (this.dragging) this.endDrag();
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {

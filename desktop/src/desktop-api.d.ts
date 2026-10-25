@@ -260,6 +260,7 @@ interface DesktopRenderStats {
   dragFrames: number;
   dragAvgFrameMs: number;
   dragMaxFrameMs: number;
+  dragDroppedFrames: number;
   lastDragAt: string | null;
 }
 

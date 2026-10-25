@@ -13,8 +13,25 @@ export interface RenderStats {
   dragFrames: number;
   dragAvgFrameMs: number;
   dragMaxFrameMs: number;
+  /** 采样期内被丢弃的间隔数：窗口不可见或间隔超出单帧上限（遮挡、最小化、系统挂起），不计入帧统计。 */
+  dragDroppedFrames: number;
   /** 最近一次拖动结束时间（ISO 8601）；尚未拖动过为 null。 */
   lastDragAt: string | null;
+}
+
+/**
+ * 单帧间隔上限。按需渲染下两次 renderNow 之间可能夹着遮挡/最小化/CPU 挂起造成的数秒空档，
+ * 超过这个上限的间隔不是「帧时间」，计入会把正常画面算成「平均几秒一帧」。
+ */
+export const MAX_CREDIBLE_FRAME_MS = 250;
+
+/** 一次拖动采样是否可信：窗口可见，且间隔落在单帧预算内。 */
+export function isCredibleFrameSample(deltaMs: unknown, visibility: string | null | undefined): boolean {
+  return typeof deltaMs === 'number'
+    && Number.isFinite(deltaMs)
+    && deltaMs >= 0
+    && deltaMs <= MAX_CREDIBLE_FRAME_MS
+    && visibility === 'visible';
 }
 
 const SOFTWARE_RENDERER_PATTERN = /swiftshader|llvmpipe|software/i;
@@ -38,6 +55,7 @@ export function normalizeRenderStats(value: unknown): RenderStats | null {
     ? source.lastDragAt.slice(0, 64)
     : null;
   const dragFrames = Math.min(1_000_000, Math.trunc(finiteNonNegative(source.dragFrames)));
+  const dragDroppedFrames = Math.min(1_000_000, Math.trunc(finiteNonNegative(source.dragDroppedFrames)));
   const dragAvgFrameMs = Math.min(60_000, finiteNonNegative(source.dragAvgFrameMs));
   const dragMaxFrameMs = Math.min(60_000, finiteNonNegative(source.dragMaxFrameMs));
   return {
@@ -50,6 +68,7 @@ export function normalizeRenderStats(value: unknown): RenderStats | null {
     dragFrames,
     dragAvgFrameMs: Math.round(dragAvgFrameMs * 100) / 100,
     dragMaxFrameMs: Math.round(dragMaxFrameMs * 100) / 100,
+    dragDroppedFrames,
     lastDragAt
   };
 }
@@ -61,7 +80,13 @@ export function describeRenderStats(stats: RenderStats | null): string {
     return `检测到软件渲染 ${stats.glRenderer || '(未知渲染器)'}，已降级 flow。`;
   }
   if (stats.dragFrames === 0) {
+    if (stats.dragDroppedFrames > 0) {
+      return `拖动期没有采到可信帧（${stats.dragDroppedFrames} 次间隔因窗口不可见或超出单帧上限被丢弃）；当前 ${stats.quality} 档、${stats.partCount} 个零件、${stats.triangleCount} 个三角形。请保持窗口可见后重新拖动。`;
+    }
     return `尚未采集到拖动帧；当前 ${stats.quality} 档、${stats.partCount} 个零件、${stats.triangleCount} 个三角形。`;
+  }
+  if (stats.dragFrames < 5) {
+    return `仅采到 ${stats.dragFrames} 帧（丢弃 ${stats.dragDroppedFrames} 次不可信间隔），样本不足，不下帧率结论。`;
   }
   const average = stats.dragAvgFrameMs;
   if (average > 33.34) {
