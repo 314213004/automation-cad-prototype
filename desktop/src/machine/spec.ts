@@ -8,6 +8,8 @@ export type MachineProcess =
   | 'assembly'
   | 'inspection'
   | 'packaging'
+  /** 输送：单条皮带/链条线，节拍由线速与工件间距决定，不受工位机构限制。 */
+  | 'conveyor'
   | 'unknown';
 
 export type MachineActuatorKind = 'cylinder' | 'gripper' | 'rotary';
@@ -25,11 +27,24 @@ export type MachineVoltage = '220VAC' | '380VAC' | '24VDC';
  */
 export type MachineLayout = 'single' | 'linear' | 'dial' | 'parallel' | 'cell' | 'line' | 'auto';
 
+/** 输送机的机械参数；没写到的字段为 null，由合成器给典型值并在 assumptions 里说明。 */
+export interface ConveyorSpec {
+  /** 线体总长（mm） */
+  lengthMm: number | null;
+  /** 皮带有效宽度（mm） */
+  widthMm: number | null;
+  /** 线速度（m/s） */
+  speedMps: number | null;
+  /** 单件重量（kg） */
+  loadKg: number | null;
+}
+
 export interface MachineBrief {
   process: MachineProcess;
   stations: number;
   cyclePerMin: number | null;
   layout: MachineLayout;
+  conveyor?: ConveyorSpec;
   /** 需求中显式列出的工序名，按出现顺序去重。 */
   processes?: string[];
   actuators: { kind: MachineActuatorKind; count: number }[];
@@ -54,7 +69,9 @@ const PROCESS_RULES: Array<{ process: Exclude<MachineProcess, 'unknown'>; patter
   { process: 'dispense', pattern: /点胶|涂胶|灌胶|滴胶|胶机/ },
   { process: 'assembly', pattern: /装配|组装|压装|压合|组装线/ },
   { process: 'inspection', pattern: /检测|检查|检验|视觉|测量|AOI/i },
-  { process: 'packaging', pattern: /包装|装箱|装盒|封箱|贴标|码垛/ }
+  { process: 'packaging', pattern: /包装|装箱|装盒|封箱|贴标|码垛/ },
+  // 输送放最后：只有没提到其他工艺时才判为输送线，避免「装配线配输送」被抢走工艺类型。
+  { process: 'conveyor', pattern: /输送机|输送线|皮带线|传送带|皮带输送|链条输送|流水线输送|输送段/ }
 ];
 
 /**
@@ -208,6 +225,32 @@ function countToken(value: string | undefined): number | null {
 
 function normalized(text: string): string {
   return (text ?? '').normalize('NFKC');
+}
+
+/**
+ * 输送机机械参数：总长 / 带宽 / 线速 / 单件重量。
+ * 只认显式写出的数字，缺的留 null（由合成器给典型值并写进 assumptions），不猜。
+ */
+export function detectConveyorSpec(text: string): ConveyorSpec | null {
+  const length = /(?:总长|线体长|长度|长)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(mm|毫米|米|m)/i.exec(text);
+  const width = /(?:带宽|皮带宽|有效宽|宽度|宽)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(mm|毫米)/i.exec(text);
+  const speed = /(?:线速|速度|线速度)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(m\/s|米\/秒|mm\/s)/i.exec(text);
+  const load = /(?:工件|负载|载重|单件)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克)/i.exec(text);
+  if (!length && !width && !speed && !load) return null;
+  const toMm = (value: string, unit: string): number => {
+    const number = Number(value);
+    return /^(米|m)$/i.test(unit) ? number * 1000 : number;
+  };
+  const toMps = (value: string, unit: string): number => {
+    const number = Number(value);
+    return /mm/i.test(unit) ? number / 1000 : number;
+  };
+  return {
+    lengthMm: length ? toMm(length[1] ?? '0', length[2] ?? 'mm') : null,
+    widthMm: width ? Number(width[1]) : null,
+    speedMps: speed ? toMps(speed[1] ?? '0', speed[2] ?? 'm/s') : null,
+    loadKg: load ? Number(load[1]) : null
+  };
 }
 
 function detectProcess(text: string): MachineProcess {
@@ -496,7 +539,10 @@ export function parseMachineBrief(text: string): MachineBrief {
 
   const stationMatch = detectStations(source);
   let stations = MACHINE_DEFAULT_STATIONS;
-  if (stationMatch === null) {
+  if (process === 'conveyor' && stationMatch === null) {
+    // 输送线只有一条线体，不存在「工位」概念；不要套用默认 3 工位
+    stations = 1;
+  } else if (stationMatch === null) {
     notes.push(DEFAULT_NOTE_STATIONS);
   } else if (stationMatch < MACHINE_STATIONS_MIN) {
     notes.push(`工位数 ${stationMatch} 无效：按 ${MACHINE_STATIONS_MIN} 工位合成`);
@@ -528,11 +574,14 @@ export function parseMachineBrief(text: string): MachineBrief {
     notes.push(`布局推断：${inferred.inferred}`);
   }
 
+  const conveyor = process === 'conveyor' ? detectConveyorSpec(source) : null;
+
   return {
     process,
     stations,
     cyclePerMin,
     layout: inferred.layout,
+    ...(conveyor ? { conveyor } : {}),
     ...(processNames.length > 0 ? { processes: processNames } : {}),
     actuators,
     sensors,

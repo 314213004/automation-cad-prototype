@@ -1,7 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { recordDiagnosticError } from '../src/shared/diagnostics.ts';
 import { randomBytes } from 'node:crypto';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { trackedClearTimeout, trackedSetTimeout } from '../src/shared/resources.ts';
 import { delimiter, extname, isAbsolute, join, resolve } from 'node:path';
@@ -127,6 +127,104 @@ function electronResourcesPath(): string {
 }
 
 /** 优先显式环境变量，其次打包内置 Python，最后 PATH 中的 python3/python。 */
+
+/**
+ * Python 解释器候选：PATH 里的 python3/python/py + 常见 venv 位置。
+ *
+ * 背景：打包版默认只用 PATH 里的 python，而 build123d 通常装在 venv 里
+ * （实测 PATH 上的 python 报 `No module named 'build123d'`，内核直接起不来）。
+ */
+export function pythonCandidates(env: NodeJS.ProcessEnv = process.env): string[] {
+  const list: string[] = [];
+  for (const name of ['python3', 'python', 'py']) {
+    const found = findExecutable(name, env);
+    if (found) list.push(found);
+  }
+  const home = env.USERPROFILE || env.HOME || '';
+  const roots: string[] = [];
+  if (env.VIRTUAL_ENV) roots.push(env.VIRTUAL_ENV);
+  if (home) {
+    roots.push(join(home, 'venvs'));
+    roots.push(join(home, '.venvs'));
+    roots.push(join(home, '.virtualenvs'));
+  }
+  for (const root of roots) {
+    if (!root || !existsSync(root)) continue;
+    // VIRTUAL_ENV 本身就是一个 venv；venvs/ 下则是多个 venv 的父目录
+    const direct = pythonInVenv(root);
+    if (direct) list.push(direct);
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(root);
+    } catch {
+      entries = [];
+    }
+    for (const entry of entries) {
+      const candidate = pythonInVenv(join(root, entry));
+      if (candidate) list.push(candidate);
+    }
+  }
+  return [...new Set(list)];
+}
+
+function pythonInVenv(dir: string): string | null {
+  const candidates = process.platform === 'win32'
+    ? [join(dir, 'Scripts', 'python.exe'), join(dir, 'python.exe')]
+    : [join(dir, 'bin', 'python3'), join(dir, 'bin', 'python')];
+  for (const candidate of candidates) {
+    if (existsSync(candidate) && isExecutableFile(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * 检查解释器能否 import build123d 且工作正常：看 sys.prefix 下的 site-packages，
+ * 不实际 import（import 一次要 6~7 秒，只用于启动时选路）。
+ */
+export function hasBuild123d(python: string): boolean {
+  try {
+    const probe = spawnSync(python, ['-c', 'import sys;print(sys.prefix)'], { encoding: 'utf8', timeout: 15000 });
+    if (probe.status !== 0) return false;
+    const prefix = (probe.stdout || '').trim();
+    if (!prefix) return false;
+    if (existsSync(join(prefix, 'Lib', 'site-packages', 'build123d'))) return true;
+    const libDir = join(prefix, 'lib');
+    if (!existsSync(libDir)) return false;
+    for (const entry of readdirSync(libDir)) {
+      if (existsSync(join(libDir, entry, 'site-packages', 'build123d'))) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 解释器能否真正 import build123d。
+ *
+ * 只看 site-packages 不够：实测有个 venv 明明装了 build123d，但它的 Pillow 坏了，
+ * import 时崩在 `cannot import name '_imaging' from 'PIL'`，内核照样起不来。
+ * 这里实际跑一次 import（首次 6~7 秒），失败就换下一个候选。
+ */
+export function canImportBuild123d(python: string): boolean {
+  try {
+    const probe = spawnSync(python, ['-c', 'import build123d'], { encoding: 'utf8', timeout: 90_000 });
+    return probe.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** 选一个真能 import build123d 的解释器；都不行则回退到第一个可用解释器（错误信息仍可读）。 */
+export function selectKernelPython(candidates: readonly string[]): string | null {
+  for (const candidate of candidates) {
+    // 先做便宜的目录检查，避免为明显没装的解释器付 7 秒 import 代价
+    if (!hasBuild123d(candidate)) continue;
+    if (canImportBuild123d(candidate)) return candidate;
+  }
+  return candidates[0] ?? null;
+}
+
 export function resolvePython(env: NodeJS.ProcessEnv = process.env, options: {
   isPackaged?: boolean;
   resourcesPath?: string;
@@ -147,7 +245,8 @@ export function resolvePython(env: NodeJS.ProcessEnv = process.env, options: {
     }
   }
 
-  return findExecutable('python3', env) ?? findExecutable('python', env);
+  // 没有显式配置、也没有随包 python：在 PATH 与常见 venv 里挑一个装了 build123d 的
+  return selectKernelPython(pythonCandidates(env));
 }
 
 /** 开发态使用仓库内 spike 脚本，打包态使用 resources/parametric/app.py。 */

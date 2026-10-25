@@ -9,7 +9,7 @@ import type { FlowEvaluation, FlowModel, FlowOp, MachineLayout } from './flow.ts
 import { evaluateFlow } from './flow.ts';
 import { templateFor, templateKinds, type MachineTemplate } from './templates.ts';
 
-export type MachineFormGeometryKind = 'dial' | 'linear' | 'gantry' | 'dual' | 'hybrid' | 'cell';
+export type MachineFormGeometryKind = 'dial' | 'linear' | 'gantry' | 'dual' | 'hybrid' | 'cell' | 'conveyor';
 
 export interface MachineFormGeometry {
   /** 交给 geometry.ts 的几何布局种类。 */
@@ -97,6 +97,8 @@ export const PROCESS_BASE_SECONDS: Record<MachineProcess, number> = {
   assembly: 1.8,
   inspection: 1.5,
   packaging: 1.8,
+  // 输送线没有工位机构动作，节拍由线速与工件间距决定，这里的基数只用于兜底估算
+  conveyor: 1.2,
   unknown: 2
 };
 
@@ -151,6 +153,18 @@ const FORM_SEEDS: readonly MachineFormSeed[] = [
     suits: ['screw', 'dispense', 'assembly', 'inspection', 'packaging'],
     rationale: '直线四工位结构简单、输送短，工序能一一落位，适合中等节拍且换型不频繁的单机。',
     geometry: { kind: 'linear', conveyor: 'belt' }
+  },
+  {
+    id: 'belt-line',
+    name: '皮带输送线',
+    layout: 'linear',
+    minStations: 1,
+    defaultStations: 1,
+    maxStations: 1,
+    footprintScale: 0.55,
+    suits: ['conveyor'],
+    rationale: '单条皮带线：两端滚筒、尾部滑座张紧，没有工序分工，节拍由线速与工件间距决定；几何由参数化内核按长度/带宽生成真实实体。',
+    geometry: { kind: 'conveyor', conveyor: 'belt' }
   },
   {
     id: 'linear-8',
@@ -275,6 +289,7 @@ const PROCESSES: ReadonlySet<MachineProcess> = new Set([
   'assembly',
   'inspection',
   'packaging',
+  'conveyor',
   'unknown'
 ]);
 const GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set([
@@ -283,7 +298,8 @@ const GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set([
   'gantry',
   'dual',
   'hybrid',
-  'cell'
+  'cell',
+  'conveyor'
 ]);
 const CELL_GEOMETRY_KINDS: ReadonlySet<MachineFormGeometryKind> = new Set(['dual', 'hybrid', 'cell']);
 
@@ -348,8 +364,9 @@ export function validateMachineForm(form: MachineForm): string[] {
     if (form.layout === 'dial' && form.geometry.kind !== 'dial') {
       errors.push(`${form.id || '?'}：dial 布局必须使用 dial 几何`);
     }
-    if (form.layout === 'linear' && form.geometry.kind !== 'linear') {
-      errors.push(`${form.id || '?'}：linear 布局必须使用 linear 几何`);
+    // 输送线用 linear 布局 + conveyor 几何：线体沿 X 排布，但零件由参数化内核生成
+    if (form.layout === 'linear' && form.geometry.kind !== 'linear' && form.geometry.kind !== 'conveyor') {
+      errors.push(`${form.id || '?'}：linear 布局必须使用 linear 或 conveyor 几何`);
     }
     if (form.layout === 'parallel' && form.geometry.kind === 'dial') {
       errors.push(`${form.id || '?'}：parallel 布局不能使用 dial 几何`);
@@ -442,6 +459,7 @@ function processLabel(process: MachineProcess): string {
     assembly: '装配',
     inspection: '检测',
     packaging: '包装',
+    conveyor: '输送',
     unknown: '通用工艺'
   };
   return labels[process];

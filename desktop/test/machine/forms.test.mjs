@@ -18,25 +18,25 @@ import { generateMachineGeometry } from '../../src/machine/geometry.ts';
 import { AgentTools } from '../../src/agent/tools.ts';
 
 const FLOW_LAYOUTS = new Set(['single', 'linear', 'dial', 'parallel', 'cell']);
-const PROCESSES = new Set(['screw', 'dispense', 'assembly', 'inspection', 'packaging', 'unknown']);
+const PROCESSES = new Set(['screw', 'dispense', 'assembly', 'inspection', 'packaging', 'conveyor', 'unknown']);
 
 function pick(text, options = {}) {
   return pickForm(parseMachineBrief(text), TEMPLATES, options);
 }
 
-test('形态库恰好 11 种，id 唯一且字段合法', () => {
-  assert.equal(MACHINE_FORMS.length, 11);
-  assert.equal(new Set(MACHINE_FORMS.map((form) => form.id)).size, 11);
+test('形态库恰好 12 种，id 唯一且字段合法', () => {
+  assert.equal(MACHINE_FORMS.length, 12);
+  assert.equal(new Set(MACHINE_FORMS.map((form) => form.id)).size, 12);
   assert.deepEqual(validateMachineForms(), []);
 });
 
-test('11 种形态的 layout 都与 flow.ts 对齐', () => {
+test('12 种形态的 layout 都与 flow.ts 对齐', () => {
   for (const form of MACHINE_FORMS) {
     assert.ok(FLOW_LAYOUTS.has(form.layout), form.id);
   }
 });
 
-test('11 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
+test('12 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
   for (const form of MACHINE_FORMS) {
     const [min, max] = form.stationRange;
     assert.ok(Number.isInteger(min) && Number.isInteger(max), form.id);
@@ -44,7 +44,7 @@ test('11 种形态的 stationRange 都是 1–12 内自洽整数区间', () => {
   }
 });
 
-test('11 种形态的占地系数、工艺适配与理由都不为空', () => {
+test('12 种形态的占地系数、工艺适配与理由都不为空', () => {
   for (const form of MACHINE_FORMS) {
     assert.ok(form.footprintScale > 0, form.id);
     assert.ok(form.suits.length > 0, form.id);
@@ -76,7 +76,8 @@ test('geometry.kind 与 layout 映射正确', () => {
     'hybrid-dial-linear': 'hybrid',
     'cell-4': 'cell',
     'linear-12': 'linear',
-    'dial-12': 'dial'
+    'dial-12': 'dial',
+    'belt-line': 'conveyor'
   };
   for (const form of MACHINE_FORMS) assert.equal(form.geometry.kind, expected[form.id], form.id);
 });
@@ -276,7 +277,7 @@ test('dual-lane 工位区间 [4,6]，推荐 6，硬上限 6', () => {
   assert.equal(form.maxStations, 6);
 });
 
-test('11 种形态的 defaultStations 都在区间内，maxStations 等于区间上限', () => {
+test('12 种形态的 defaultStations 都在区间内，maxStations 等于区间上限', () => {
   assert.doesNotThrow(() => assertMachineFormsConsistent());
   for (const form of MACHINE_FORMS) {
     assert.ok(form.stationRange[0] <= form.defaultStations, form.id);

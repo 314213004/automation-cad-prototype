@@ -58,12 +58,21 @@ def build(ops: list[dict]):
             base = bd.Pos(0, 0, z) * bd.Box(L, W, H)
             shape = base if shape is None else shape + base
         elif kind == "cylinder":
-            if shape is None:
-                raise ValueError("cylinder 之前必须有实体")
+            # 圆柱可以作为零件的第一个操作（滚筒、螺杆、销轴这类本身就是回转体）
             d = _num(op.get("diameter"), "diameter")
             h = _num(op.get("height"), "height")
             x, y, z = (op.get("at") or [0, 0, 0])[:3]
-            shape = shape + (bd.Pos(float(x), float(y), float(z)) * bd.Cylinder(d / 2, h))
+            # axis：圆柱默认沿 +Z；滚筒/横轴类零件需要 x/y 方向，这里按绕轴旋转展开。
+            axis = str(op.get("axis") or "z").lower()
+            if axis not in ("x", "y", "z"):
+                raise ValueError(f"cylinder.axis 只支持 x/y/z，收到：{axis}")
+            base = bd.Cylinder(d / 2, h)
+            if axis == "x":
+                base = bd.Rot(0, 90, 0) * base
+            elif axis == "y":
+                base = bd.Rot(90, 0, 0) * base
+            placed = bd.Pos(float(x), float(y), float(z)) * base
+            shape = placed if shape is None else shape + placed
         elif kind == "holes":
             if shape is None:
                 raise ValueError("holes 之前必须有实体")

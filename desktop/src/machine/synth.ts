@@ -25,6 +25,7 @@ import {
 import { DIAL_MAX_STATIONS, DIAL_PROCESSES } from './geometry.ts';
 import { evaluateFlow, type FlowEvaluation, type FlowModel, type FlowOp, type MachineLayout } from './flow.ts';
 import { TEMPLATES, templateFor, templateKinds } from './templates.ts';
+import { refineConveyor } from './conveyor-synth.ts';
 import {
   ACTUATOR_SECONDS,
   PROCESS_BASE_SECONDS,
@@ -119,6 +120,7 @@ const PROCESS_LABEL: Record<MachineProcess, string> = {
   assembly: '装配',
   inspection: '检测',
   packaging: '包装',
+  conveyor: '输送',
   unknown: '通用'
 };
 
@@ -372,6 +374,90 @@ function buildSummary(design: MachineDesign): string {
     '说明：三维几何为按配置生成的标准件外形，功率与节拍均为估算，需人工确认。'
   ].join('\n');
   return text.length <= 600 ? text : `${text.slice(0, 597)}...`;
+}
+
+
+/**
+ * 输送机修正：通用合成器按「工位机构时间」推节拍、按执行机构功率累加，
+ * 对皮带线是错的。这里覆盖节拍（线速 ÷ 间距）、驱动选型（阻力 × 线速）与 BOM 结构件，
+ * 并把公式逐条写进 assumptions。
+ */
+function applyConveyorRefinement(
+  design: MachineDesign,
+  brief: MachineBrief,
+  warnings: string[],
+  assumptions: string[]
+): void {
+  const ref = refineConveyor({
+    ...(brief.conveyor ? { conveyor: brief.conveyor } : {}),
+    cyclePerMin: brief.cyclePerMin
+  });
+  assumptions.push(...ref.assumptions);
+
+  const targetPerMin = brief.cyclePerMin ?? ref.estimate.throughputPerMin;
+  const throughput = ref.estimate.throughputPerMin;
+  const meetsTarget = throughput + 1e-9 >= targetPerMin;
+  design.cycle.perMin = targetPerMin;
+  design.cycle.throughputPerMin = throughput;
+  design.cycle.secondsPerPiece = round(60 / targetPerMin);
+  design.cycle.stationSeconds = round(60 / throughput);
+  design.cycle.estimatedSecondsPerPiece = design.cycle.stationSeconds;
+  design.cycle.slowestStation = 0;
+  design.cycle.slowestActionSeconds = 0;
+  design.cycle.requiredParallelStations = Math.max(1, Math.ceil(targetPerMin / throughput));
+  design.cycle.requiredTotalStations = design.cycle.requiredParallelStations;
+  design.cycle.meetsTarget = meetsTarget;
+  design.cycle.mode = 'linear';
+  design.cycle.bottleneck =
+    `线速 ${ref.speedMps} m/s ÷ 工件间距 ${ref.estimate.pitchMm} mm → ${throughput} 件/分钟` +
+    `（目标 ${targetPerMin} 件/分钟${meetsTarget ? '，满足' : '，未达标'}）；输送线没有工位节拍，产能靠提速或减小间距。`;
+  if (!meetsTarget) {
+    warnings.push(
+      `产能不足：线速 ${ref.speedMps} m/s、间距 ${ref.estimate.pitchMm} mm 只有 ${throughput} 件/分钟，` +
+      `低于目标 ${targetPerMin} 件/分钟；需要把线速提到 ${round((targetPerMin * ref.estimate.pitchMm) / 60_000, 2)} m/s 或减小工件间距。`
+    );
+  }
+
+  // BOM：把「旋转轴」占位换成输送机结构件与驱动
+  const before = design.bomDraft.items.length;
+  design.bomDraft.items = design.bomDraft.items.filter((item) => item.role !== 'rotary');
+  const removed = before - design.bomDraft.items.length;
+  const params = ref.estimate.params;
+  design.bomDraft.items.push(
+    {
+      kind: 'actuator',
+      name: `皮带输送线体（L${params.lengthMm}×B${params.widthMm}）`,
+      qty: 1,
+      note: '侧梁/横撑/支腿/端板/滚筒/皮带/侧挡边，几何由参数化内核生成',
+      role: 'other'
+    },
+    {
+      kind: 'actuator',
+      name: `减速电机 ${ref.estimate.motorW} W（i=18，输出约 76 rpm）`,
+      qty: 1,
+      note: `驱动阻力 ${ref.estimate.forceN} N，滚筒扭矩 ${ref.estimate.torqueNm} N·m`,
+      role: 'other',
+      ratedW: ref.estimate.motorW
+    },
+    {
+      kind: 'actuator',
+      name: '尾部张紧滑座 + M10 调节螺杆',
+      qty: 2,
+      note: `行程 ±30 mm，按中心距 0.5%~1% 初张（约 ${Math.round(params.lengthMm * 0.005)}~${Math.round(params.lengthMm * 0.01)} mm）`,
+      role: 'other'
+    },
+    {
+      kind: 'actuator',
+      name: '可调地脚 M10',
+      qty: 4,
+      note: '机架找平与地面固定',
+      role: 'other'
+    }
+  );
+  if (removed > 0) {
+    assumptions.push(`BOM 已把通用模型的 ${removed} 行「旋转轴」替换为输送机结构件、减速电机与张紧组件。`);
+  }
+  assumptions.push(`整机几何：调用 conveyor-assembly 生成 ${28} 个真实零件的参数化装配，由 build123d 内核布尔求并并导出 STEP/STL。`);
 }
 
 export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): MachineDesign {
@@ -709,6 +795,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     cosPhi: pricing.power.cosPhi,
     ...(options.pricingAssumptions ? { assumptions: options.pricingAssumptions } : {})
   });
+  if (process === 'conveyor') applyConveyorRefinement(design, brief, warnings, assumptions);
   design.cost = estimateCost(design, {
     ...(options.parts ? { parts: options.parts } : {}),
     ...(options.pricebook ? { pricebook: options.pricebook } : {}),

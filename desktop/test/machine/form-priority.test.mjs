@@ -135,6 +135,6 @@ test('cell 的 lanes 参数只缩放节拍，不改变单工位时间', () => {
   assert.equal(twoLanes.meetsTarget, true);
 });
 
-test('形态库仍为 11 种，排序修复不引入隐式形态', () => {
-  assert.equal(MACHINE_FORMS.length, 11);
+test('形态库仍为 12 种，排序修复不引入隐式形态', () => {
+  assert.equal(MACHINE_FORMS.length, 12);
 });

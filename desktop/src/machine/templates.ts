@@ -57,6 +57,17 @@ export const TEMPLATES: Record<MachineTemplateKey, MachineTemplate> = {
     cycleRange: { minPerMin: 8, maxPerMin: 20 },
     rationale: '压装气缸提供装配行程、夹爪负责定位与保持，双接近开关分别确认压装前后位置；压装时间与零件公差影响节拍。'
   },
+  conveyor: {
+    key: 'conveyor',
+    label: '输送',
+    // 一条线体即一个工位：不做工序分工，节拍由线速决定
+    stations: 1,
+    // 驱动滚筒按旋转轴表达（减速电机输出），几何由 conveyor-assembly 走内核生成
+    actuators: [{ kind: 'rotary', count: 1 }],
+    sensors: [{ kind: 'photoelectric', count: 2 }],
+    cycleRange: { minPerMin: 20, maxPerMin: 120 },
+    rationale: '输送线只有一条主线：减速电机带动驱动滚筒（按旋转轴表达），进出料端各一个光电确认工件；节拍由线速与工件间距决定，不受工位机构动作时间限制。'
+  },
   inspection: {
     key: 'inspection',
     label: '检测',

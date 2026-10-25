@@ -55,6 +55,14 @@ import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
+import {
+  buildConveyorParts,
+  conveyorAssembly,
+  conveyorBom,
+  conveyorEnvelope,
+  MATERIAL_LABEL,
+  type ConveyorParams
+} from './machine/conveyor-assembly';
 import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
@@ -934,6 +942,51 @@ async function openDrawingPath(path: string): Promise<boolean> {
   const result = await drawingUi.open(path);
   showNotice(result.message, !result.ok);
   return true;
+}
+
+/**
+ * 在软件里生成输送机：零件表 → 参数化装配文档 → build123d 内核出实体 → 载入视口。
+ * 不做代理体、不算假体积：体积、STEP/STL 都来自内核回传。
+ */
+async function buildConveyorModel(params: Partial<ConveyorParams>): Promise<Record<string, unknown>> {
+  if (!window.desktop?.parametric) return { ok: false, message: '参数化内核接口不可用' };
+  const parts = buildConveyorParts({ ...(params as ConveyorParams) });
+  const doc = conveyorAssembly(parts);
+  const status = await window.desktop.parametric.status();
+  if (status.status !== 'ready') {
+    const started = await window.desktop.parametric.start();
+    if (!started.ok) return { ok: false, message: `建模内核启动失败：${started.message ?? started.status}` };
+  }
+  const built = await window.desktop.parametric.build(doc);
+  if (!built.ok) return { ok: false, message: built.message ?? '建模失败', code: built.code ?? null };
+
+  const instanceStats = (built.stats?.instances ?? []) as Array<{ id: string; volumeMm3: number }>;
+  const volumes: Record<string, number> = {};
+  for (const item of instanceStats) volumes[item.id] = item.volumeMm3;
+  const bom = conveyorBom(parts, volumes);
+  const massKg = Math.round(bom.reduce((sum, row) => sum + (row.massKg ?? 0) * row.qty, 0) * 100) / 100;
+
+  // 视口载入内核导出的 STL（不是自造网格）
+  const stl = built.files?.stl as { path?: string } | undefined;
+  let loaded = false;
+  if (stl?.path) {
+    const bytes = await window.desktop.readFileBuffer(stl.path);
+    await loadCadBuffer(toArrayBuffer(bytes), '皮带输送机.stl');
+    loaded = true;
+  }
+  return {
+    ok: true,
+    parts: parts.length,
+    solids: built.stats?.solids ?? null,
+    volumeMm3: built.stats?.volumeMm3 ?? null,
+    envelope: conveyorEnvelope(parts),
+    massKg,
+    material: [...new Set(parts.map((part) => MATERIAL_LABEL[part.material]))],
+    bom,
+    buildMs: built.buildMs ?? null,
+    files: built.files ?? null,
+    loaded
+  };
 }
 
 async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
@@ -2303,6 +2356,14 @@ function init(): void {
     console.warn('[drawing] 图纸面板初始化失败', error);
   }
   bindWindowEvents();
+  Object.defineProperty(window, 'AutomationCadConveyor', {
+    value: Object.freeze({
+      build: (params: Partial<ConveyorParams>) => buildConveyorModel(params)
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
   Object.defineProperty(window, 'AutomationCadKinematics', {
     value: Object.freeze({
       open: (): void => {

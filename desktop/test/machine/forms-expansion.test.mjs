@@ -65,8 +65,8 @@ test('新增 5 种形态的 stationRange / default / max 自洽', () => {
   }
 });
 
-test('新增 5 种形态均为合法形态，整库 11 种通过校验', () => {
-  assert.equal(MACHINE_FORMS.length, 11);
+test('新增 5 种形态均为合法形态，整库 12 种通过校验', () => {
+  assert.equal(MACHINE_FORMS.length, 12);
   assert.deepEqual(validateMachineForms(), []);
   for (const id of NEW_FORMS) assert.deepEqual(validateMachineForm(formById(id)), [], id);
   for (const form of MACHINE_FORMS) assert.doesNotThrow(() => assertMachineFormConsistency(form));
