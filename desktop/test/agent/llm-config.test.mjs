@@ -57,9 +57,11 @@ test('agent-llm.json 写入权限为 600 且只保存四个配置字段', { skip
     maxIterations: 3
   };
   writeLlmConfig(sandbox, config);
+  // maxToolCalls 在 43abd92 起是配置项，写入时补默认值 24
   assert.deepEqual(readLlmConfig(sandbox), {
     ...config,
-    baseUrl: 'http://127.0.0.1:9999/v1'
+    baseUrl: 'http://127.0.0.1:9999/v1',
+    maxToolCalls: 24
   });
   const file = join(sandbox, 'agent-llm.json');
   assert.equal(statSync(file).mode & 0o777, 0o600);
