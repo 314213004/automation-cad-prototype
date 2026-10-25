@@ -6,6 +6,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 import {
   DEFAULT_LLM_CONFIG,
   maskApiKey,
+  normalizeLlmConfig,
   mergeLlmConfig,
   publicLlmConfig,
   readLlmConfig,
@@ -28,7 +29,8 @@ test('模型配置缺失时返回约定的默认值', () => {
     baseUrl: 'https://api.openai.com/v1',
     apiKey: '',
     model: 'gpt-4o-mini',
-    maxIterations: 6
+    maxIterations: 6,
+    maxToolCalls: 24
   });
   assert.deepEqual(readLlmConfig(sandbox), DEFAULT_LLM_CONFIG);
 });
@@ -62,7 +64,7 @@ test('agent-llm.json 写入权限为 600 且只保存四个配置字段', { skip
   const file = join(sandbox, 'agent-llm.json');
   assert.equal(statSync(file).mode & 0o777, 0o600);
   const raw = JSON.parse(readFileSync(file, 'utf8'));
-  assert.deepEqual(Object.keys(raw).sort(), ['apiKey', 'baseUrl', 'maxIterations', 'model']);
+  assert.deepEqual(Object.keys(raw).sort(), ['apiKey', 'baseUrl', 'maxIterations', 'maxToolCalls', 'model']);
 });
 
 test('旧的远程 HTTP 模型配置仍可读取以便修正，但新写入会被拒绝', () => {
@@ -70,7 +72,8 @@ test('旧的远程 HTTP 模型配置仍可读取以便修正，但新写入会�
     baseUrl: 'http://llm.example.com/v1',
     apiKey: 'legacy-secret',
     model: 'gpt-test',
-    maxIterations: 6
+    maxIterations: 6,
+    maxToolCalls: 24
   };
   writeFileSync(join(sandbox, 'agent-llm.json'), JSON.stringify(legacy));
   assert.deepEqual(readLlmConfig(sandbox), legacy);
@@ -98,4 +101,21 @@ test('空或掩码 apiKey 保存时保留原密钥，新密钥才覆盖', () => 
   });
   assert.equal(saved.apiKey, 'old-secret');
   assert.equal(saved.maxIterations, 8);
+});
+
+test('maxToolCalls：默认 24，可配置 1~200，越界报中文错', () => {
+  const fallback = normalizeLlmConfig({});
+  assert.equal(fallback.maxToolCalls, 24, '默认值应足够跑完设计类任务');
+  assert.equal(normalizeLlmConfig({ maxToolCalls: 30 }).maxToolCalls, 30);
+  assert.equal(normalizeLlmConfig({ maxToolCalls: '40' }).maxToolCalls, 40);
+  assert.throws(() => normalizeLlmConfig({ maxToolCalls: 0 }), /maxToolCalls/);
+  assert.throws(() => normalizeLlmConfig({ maxToolCalls: 201 }), /maxToolCalls/);
+  assert.throws(() => normalizeLlmConfig({ maxToolCalls: 1.5 }), /maxToolCalls/);
+});
+
+test('publicLlmConfig 透出 maxToolCalls，密钥不外泄', () => {
+  const pub = publicLlmConfig(normalizeLlmConfig({ apiKey: 'sk-abcdefgh', maxToolCalls: 30 }));
+  assert.equal(pub.maxToolCalls, 30);
+  assert.equal(pub.hasApiKey, true);
+  assert.ok(!JSON.stringify(pub).includes('abcdefgh'));
 });

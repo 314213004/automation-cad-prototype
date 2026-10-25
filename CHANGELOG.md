@@ -10,6 +10,10 @@
 - **DXF / DWG 图纸**：顶部「图纸」入口，DXF 直读（LINE/ARC/CIRCLE/LWPOLYLINE/POLYLINE/ELLIPSE/SPLINE/INSERT 递归展开），DWG 经 LibreDWG WASM 转 DXF 后同样渲染成 Z=0 线框底图；相机 near/far 按图纸尺度放宽（默认 far=100m，公里级图纸会被裁掉）。打开对话框、拖放、agent `importPath` 三条入口都已路由。
 - **DWG 转换器随包分发**：`resources/dwg/libredwg-web`（GPL-3.0），见 `THIRD-PARTY-NOTICES.md`；没有转换器时给出 ODA / dwg2dxf / 另存 DXF 三条可执行路径。
 
+### Changed · 智能体
+
+- **单轮工具调用上限可配置**：原先硬编码 12 次，设计类任务（查库 → 核算 → BOM → 成本 → 导出）在关键步骤前就被 `TOO_MANY_TOOL_CALLS` 掐断，模型只能交半成品。现在 `agent-llm.json` 支持 `maxToolCalls`（1~200，默认 24），实测 30 次时一轮跑满 15 次调用无拒绝，只读工具去重仍生效。
+
 ### Fixed · PLC
 
 - **只读点位可写**：`manager.write` 原先不校验点位，写输入区（discrete/input）会被仿真器接受、被 Modbus 从站忽略，调用方却以为写成功。现在返回 `READ_ONLY_POINT` / `POINT_NOT_FOUND`；`force` 仍允许强制输入区（现场调试），但点位必须存在。

@@ -1299,6 +1299,8 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       llm,
       bus: agentExecutor,
       maxIterations: config.maxIterations,
+      // 单轮工具调用上限：设计类任务（查库→核算→BOM→成本→导出）12 次必然不够
+      toolCallLimit: config.maxToolCalls,
       thread,
       model: config.model,
       pricing: DEFAULT_PRICING,

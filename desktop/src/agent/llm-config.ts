@@ -7,6 +7,11 @@ export interface AgentLlmConfig {
   apiKey: string;
   model: string;
   maxIterations: number;
+  /**
+   * 单轮工具调用上限。设计类任务（查库 → 核算 → 出 BOM → 导成本）很容易超 12 次，
+   * 原来硬编码 12 会在关键步骤前把额度用光，模型只能交半成品。
+   */
+  maxToolCalls: number;
 }
 
 export interface AgentLlmPublicConfig {
@@ -14,6 +19,7 @@ export interface AgentLlmPublicConfig {
   apiKey: string;
   model: string;
   maxIterations: number;
+  maxToolCalls: number;
   hasApiKey: boolean;
 }
 
@@ -23,7 +29,8 @@ export const DEFAULT_LLM_CONFIG: AgentLlmConfig = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
-  maxIterations: 6
+  maxIterations: 6,
+  maxToolCalls: 24
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -60,6 +67,15 @@ export function isMaskedApiKey(value: string): boolean {
   return value.includes('****') || value.includes('…');
 }
 
+function parseMaxToolCalls(value: unknown, fallback: number): number {
+  if (value === undefined) return fallback;
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 200) {
+    throw new Error('maxToolCalls 必须是 1 到 200 之间的整数');
+  }
+  return number;
+}
+
 function parseMaxIterations(value: unknown, fallback: number): number {
   if (value === undefined) return fallback;
   const number = typeof value === 'number' ? value : Number(value);
@@ -82,7 +98,8 @@ export function normalizeLlmConfig(value: unknown): AgentLlmConfig {
     baseUrl,
     apiKey,
     model,
-    maxIterations: parseMaxIterations(source.maxIterations, DEFAULT_LLM_CONFIG.maxIterations)
+    maxIterations: parseMaxIterations(source.maxIterations, DEFAULT_LLM_CONFIG.maxIterations),
+    maxToolCalls: parseMaxToolCalls(source.maxToolCalls, DEFAULT_LLM_CONFIG.maxToolCalls)
   };
 }
 
@@ -92,6 +109,7 @@ export function publicLlmConfig(config: AgentLlmConfig): AgentLlmPublicConfig {
     apiKey: maskApiKey(config.apiKey),
     model: config.model,
     maxIterations: config.maxIterations,
+    maxToolCalls: config.maxToolCalls,
     hasApiKey: Boolean(config.apiKey)
   };
 }
