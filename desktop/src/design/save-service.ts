@@ -1,4 +1,5 @@
 import type { MachineDesign } from '../machine/synth.ts';
+import type { ProjectGeometryReview } from './geometry-review.ts';
 
 export interface DesignProjectPayload {
   name: string;
@@ -10,6 +11,7 @@ export interface DesignProjectPayload {
   material: string[];
   design: MachineDesign;
   config: MachineDesign['config'];
+  geometryReview?: ProjectGeometryReview;
   stlData?: Uint8Array;
   partData?: Array<{ name: string; data: Uint8Array }>;
   placements?: unknown[];

@@ -2,6 +2,14 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 整机设计向导（2026-10-25）
+
+- ✅ 五步向导落地（`desktop/src/design/`）：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核出图/保存工程；顶栏「整机设计」+ 文件菜单「新建设计」，草稿可续（`userData/design-draft.json`）。smoke：`SMOKE_DESIGN_ENTRY_OK` / `_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK`，本机 1964 单测全绿。
+- ✅ 修 UX 缺陷：第二步「下一步」按钮在草稿未同步时被 `canAdvance` 禁用，导致手填需求也点不动（改为点击后校验）。
+- ✅ 修一致性缺陷：`completeDesign` 与 `design_machine` 对同一 brief 的 assumptions 不一致（默认参数说明文案分叉），统一到 `defaultPricingAssumptions()`。
+- ⏳ 待修：保存工程并载入主视口后，视口自身零件计数正常（61），但 `__AgentBridge.getScene().parts` 仍为 0，smoke 打 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。影响 Agent 的 `get_bom` / `get_project_context` 对「已打开工程」的感知（用户机器上 get_bom 返回 0 行即此因）。
+- ⏳ 待办：`docs/desktop/DESIGN-WIZARD.md` 暂未加入离线知识索引（`KB_DOC_FILES` 已 13 份，需先瘦身再纳入）。
+
 ## 模块门控、工程安全与更新通道（2026-10-24，本轮）
 
 - 状态：✅ 本地实现与验证完成；实现提交 `eb0c830`；`TZ=UTC npm test` **1800/1800**、`npm run build:ext`、fake-sidecar Electron smoke（`SMOKE_OK`）通过。
@@ -556,3 +564,28 @@
 - 范围：CDP 回环 `9229` + 白名单 `9222` 转发，拒绝审计 `cdp_access_check`；token 启动复用/损坏重建/面板轮换；渲染器、软件渲染、场景规模与拖动帧时间进 `/health.render` 和 `get_render_stats`，软件渲染自动 `flow`。
 - 验证：`npm test` **1842/1842**；`tsc` 0 错误；`build:ext` 通过；smoke 输出 `SMOKE_RENDER_STATS_OK` 与 `SMOKE_OK`；`eval:agent` 107/107；CDP 实测 `0.0.0.0:9222` 可 `curl /json/version`。
 - 边界：普通模式内部 9229 常驻回环以支持热启停；白名单命中设备可接管渲染进程，外部 9222 默认关闭。软件渲染结论来自浏览器暴露的 renderer 字符串，驱动可能掩码。
+
+
+## 机型真实模型评测明细（2026-10-24）
+
+`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条，总计 **36 条**（原 30 + 6）；阈值不变：`toolAccuracy ≥ 0.85`、`refusalRate = 1.00`。本机 LiteLLM bridge / `deepseek-v4.1-flash` 实测 **36/36**，`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 **7.9 s** / p95 **31.3 s**；最终轮失败项 0。
+
+| 分组 | 用例 | 通过 | 准确率 | p50 | p95 |
+|---|---:|---:|---:|---:|---:|
+| 查询 | 8 | 8 | 100.0% | 6.6 s | 10.4 s |
+| 操作 | 10 | 10 | 100.0% | 6.8 s | 21.8 s |
+| 流程 | 6 | 6 | 100.0% | 11.8 s | 20.4 s |
+| 拒绝/澄清 | 6 | 6 | 100.0% | 6.5 s | 12.9 s |
+| 机型 | 6 | 6 | 100.0% | 23.9 s | 37.8 s |
+| **合计** | **36** | **36** | **100%** | **7.9 s** | **31.3 s** |
+
+机型 6 条断言：
+
+1. 三工位锁螺丝、20 件/分钟 → `design_machine`，brief 同时含「三工位/锁螺丝/20」，或 `stationCount=3` 且 `cyclePerMin=20`。
+2. 点胶两工位、3 秒/件 → `design_machine`，brief 同时含「点胶/两工位/3 秒」，或 `stationCount=2` 且 `cyclePerMin=20`。
+3. 装配四工位、汇川伺服、安全光栅 → `design_machine`，brief 同时含「装配/四工位（或四个工位）/汇川/安全光栅」，或 brief 含装配且 `stationCount=4`。
+4. 随便设计检测机 → 允许先追问一次，也允许直接按默认生成；两种路径均通过。
+5. 多轮「改成 4 工位」→ 前置一轮三工位锁螺丝方案；只评判本轮调用，要求 brief 同时含「4 工位/锁螺丝」或 brief 含锁螺丝且 `stationCount=4`。
+6. 「直接应用到工程」→ `apply_machine_design` 且必须出现确认请求，不接受「直接」绕过确认。
+
+结果文件：`docs/desktop/eval/agent-live.json`。最终轮无失败项；两轮复跑中的首轮曾出现 1 条 `O04 [operation/missing-arg]`（既有改型号用例的 `update_component` 参数形状未命中断言），第二轮 36/36。该失败未通过删除用例或降低阈值处理，最终结果文件保留可复现的工具序列与参数断言。

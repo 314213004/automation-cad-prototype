@@ -11,6 +11,14 @@ export interface LayoutReport {
   utilization: number;
 }
 
+/** 精确保留有序 placements 快照，避免碰撞哈希导致旧确认误用。 */
+export function placementSnapshotFingerprint(placements: readonly Placement[]): string {
+  return JSON.stringify(placements.map((item) => [
+    item.id, item.partId, item.model, item.x, item.y, item.w, item.h,
+    item.railId ?? null, item.tag ?? null, item.qty ?? null, item.note ?? null
+  ]));
+}
+
 export function snapRail(value: number, pitch = 35): number {
   if (!Number.isFinite(value)) throw new Error('坐标必须是有限数值');
   return Math.round(value / pitch) * pitch;
@@ -46,6 +54,12 @@ export function inspectLayout(placements: readonly Placement[], canvas: DesignCa
     outOfBounds: outOfBounds(placements, canvas),
     utilization: canvas.width > 0 && canvas.height > 0 ? Math.round(area / (canvas.width * canvas.height) * 1000) / 10 : 0
   };
+}
+
+/** 数值坐标编辑按毫米原值保存；与拖动时的导轨吸附分开。 */
+export function setPlacementCoordinate(placement: Placement, axis: 'x' | 'y', value: number): Placement {
+  if (!Number.isFinite(value)) throw new Error('坐标必须是有限数值');
+  return { ...placement, [axis]: value };
 }
 
 export function autoLayout(stations: readonly StationDraft[], canvas: DesignCanvasSize): Placement[] {

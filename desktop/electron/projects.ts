@@ -11,9 +11,14 @@
  */
 
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { validateMachineDesign } from '../src/machine/store.ts';
 import { validateMachineConfig } from '../src/commission/machine-config.ts';
+import { parseProjectLayoutPlacements } from '../src/design/project-layout.ts';
+import { buildProjectLayoutValidationView } from '../src/design/project-layout-validation.ts';
+import { isProjectGeometryReview, type ProjectGeometryReview } from '../src/design/geometry-review.ts';
+import type { Placement } from '../src/enclosure/layout.ts';
 
 export interface ProjectRecord {
   id: string;
@@ -30,6 +35,7 @@ export interface ProjectRecord {
   hasStep: boolean;
   hasStl: boolean;
   design?: unknown;
+  geometryReview?: ProjectGeometryReview;
   bytes: number;
 }
 
@@ -46,6 +52,7 @@ export interface ProjectSaveInput {
   partPaths?: Array<{ name: string; path: string }>;
   design?: unknown;
   config?: unknown;
+  geometryReview?: ProjectGeometryReview;
   stlData?: Uint8Array;
   partData?: Array<{ name: string; data: Uint8Array }>;
   placements?: unknown[];
@@ -54,6 +61,13 @@ export interface ProjectSaveInput {
 export interface ProjectOpenResult {
   ok: boolean;
   record?: ProjectRecord;
+  /** 只从 design.json 恢复的二维毫米坐标；旧工程或损坏数据返回空数组。 */
+  placements?: Placement[];
+  /** 仅当 design.json、机器设计与 placements 均有效时才允许修改。 */
+  layoutEditable?: boolean;
+  /** 原始 design.json 内容的 SHA-256；布局写回时作为并发版本令牌。 */
+  layoutFingerprint?: string;
+  layoutMessage?: string;
   /** 逐件 STL 的绝对路径，按零件序 */
   partPaths?: Array<{ name: string; path: string }>;
   stepPath?: string | null;
@@ -79,9 +93,51 @@ function readRecord(dir: string): ProjectRecord | null {
   try {
     const raw = JSON.parse(readFileSync(join(dir, 'project.json'), 'utf8')) as ProjectRecord;
     if (!raw || typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
+    if (raw.geometryReview !== undefined && !isProjectGeometryReview(raw.geometryReview)) return null;
     return raw;
   } catch {
     return null;
+  }
+}
+
+interface ProjectLayoutSnapshot {
+  content: string;
+  document: Record<string, unknown>;
+  placements: Placement[];
+  fingerprint: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function fingerprint(content: string | Uint8Array): string {
+  return createHash('sha256').update(content).digest('hex');
+}
+
+function readProjectLayoutSnapshot(dir: string): { snapshot?: ProjectLayoutSnapshot; message?: string } {
+  const path = join(dir, 'design.json');
+  if (!existsSync(path)) return { message: '该工程没有保存的二维布局（旧工程）' };
+  try {
+    const bytes = readFileSync(path);
+    const content = bytes.toString('utf8');
+    const parsed: unknown = JSON.parse(content);
+    if (!isRecord(parsed) || !Object.hasOwn(parsed, 'design')) {
+      return { message: 'design.json 结构无效，已禁用布局编辑以保护工程文件' };
+    }
+    try {
+      validateMachineDesign(parsed.design);
+    } catch {
+      return { message: 'design.json 中的机器设计数据无效，已禁用布局编辑以保护工程文件' };
+    }
+    if (!Array.isArray(parsed.placements)) {
+      return { message: 'design.json 中没有有效的二维布局数据，已禁用布局编辑以保护工程文件' };
+    }
+    const placements = parseProjectLayoutPlacements(parsed.placements);
+    if (!placements) return { message: 'design.json 中的布局数据损坏或坐标超出范围，已禁用编辑以保护工程文件' };
+    return { snapshot: { content, document: parsed, placements, fingerprint: fingerprint(bytes) } };
+  } catch {
+    return { message: 'design.json 无法读取或已损坏，已禁用布局编辑以保护工程文件' };
   }
 }
 
@@ -110,6 +166,9 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
   try {
     const validatedDesign = input.design === undefined ? undefined : validateMachineDesign(input.design);
     if (input.config !== undefined) validateMachineConfig(input.config);
+    if (input.geometryReview !== undefined && !isProjectGeometryReview(input.geometryReview)) {
+      return { ok: false, message: '3D/干涉校核状态无效，工程未保存' };
+    }
     const temporaryParts = join(dir, `.parts-${process.pid}-${Date.now()}`);
     rmSync(temporaryParts, { recursive: true, force: true });
     mkdirSync(temporaryParts, { recursive: true });
@@ -177,6 +236,7 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
       hasStep,
       hasStl,
       ...(validatedDesign ? { design: validatedDesign } : {}),
+      ...(input.geometryReview ? { geometryReview: input.geometryReview } : {}),
       bytes
     };
     writeFileSync(join(dir, 'project.json'), JSON.stringify(record, null, 2), 'utf8');
@@ -200,12 +260,98 @@ export function openProject(userDataDir: string, id: string): ProjectOpenResult 
     partPaths.push({ name: entry.name, path });
   }
   const stepPath = join(dir, 'model.step');
+  const layout = readProjectLayoutSnapshot(dir);
   return {
     ok: true,
     record,
+    placements: layout.snapshot?.placements ?? [],
+    layoutEditable: Boolean(layout.snapshot),
+    ...(layout.snapshot ? { layoutFingerprint: layout.snapshot.fingerprint } : {}),
+    ...(layout.message ? { layoutMessage: layout.message } : {}),
     partPaths,
     stepPath: existsSync(stepPath) ? stepPath : null
   };
+}
+
+export interface ProjectLayoutSaveResult {
+  ok: boolean;
+  /** fingerprint 冲突时为 true；调用方应提示用户重新载入，不可自动覆盖。 */
+  conflict?: boolean;
+  fingerprint?: string;
+  message?: string;
+}
+
+function samePlacementIdentityAndMetadata(a: Placement, b: Placement): boolean {
+  return a.id === b.id && a.partId === b.partId && a.model === b.model && a.w === b.w && a.h === b.h &&
+    a.railId === b.railId && a.tag === b.tag && a.qty === b.qty && a.note === b.note;
+}
+
+/** 仅允许改动已有 placement 的 x/y；原始 design/schema 与其它布局字段逐字保留。 */
+export function saveProjectLayout(
+  userDataDir: string,
+  id: string,
+  expectedFingerprint: string,
+  proposedPlacements: unknown
+): ProjectLayoutSaveResult {
+  if (!/^[a-f0-9]{64}$/i.test(expectedFingerprint)) return { ok: false, message: '布局版本指纹无效，请重新打开工程布局' };
+  const dir = projectDir(userDataDir, id);
+  const path = join(dir, 'design.json');
+  const current = readProjectLayoutSnapshot(dir);
+  if (!current.snapshot) {
+    try {
+      if (fingerprint(readFileSync(path)) !== expectedFingerprint) {
+        return { ok: false, conflict: true, message: '工程设计文件已变化或损坏；为避免覆盖，保存已拒绝，请重新载入最新工程' };
+      }
+    } catch {
+      return { ok: false, conflict: true, message: '工程设计文件已删除或不可读取；保存已拒绝，请重新载入工程' };
+    }
+    return { ok: false, message: current.message ?? '工程布局不可编辑' };
+  }
+  if (current.snapshot.fingerprint !== expectedFingerprint) {
+    return { ok: false, conflict: true, message: '工程布局已被其他操作修改；为避免覆盖，保存已拒绝，请重新载入最新布局' };
+  }
+  const proposed = parseProjectLayoutPlacements(proposedPlacements);
+  if (!proposed) return { ok: false, message: '布局坐标无效或超出允许范围，未保存任何修改' };
+  const saved = current.snapshot.placements;
+  if (proposed.length !== saved.length || proposed.some((item, index) => !saved[index] || !samePlacementIdentityAndMetadata(saved[index]!, item))) {
+    return { ok: false, message: '布局项目或非坐标字段已变化；仅允许编辑原有项目的 X/Y 坐标' };
+  }
+  const record = readRecord(dir);
+  const validation = buildProjectLayoutValidationView(proposed, record?.envelope);
+  if (validation.saveBlockReason === 'unknown-envelope') {
+    return { ok: false, message: '项目包络尺寸缺失或无效，无法校验边界；布局未写回' };
+  }
+  if (validation.saveBlockReason === 'out-of-bounds') {
+    return { ok: false, message: `布局有 ${validation.outOfBounds.length} 项超出项目包络，未写回` };
+  }
+
+  const originalPlacements = current.snapshot.document.placements;
+  if (!Array.isArray(originalPlacements)) return { ok: false, message: '工程布局数据无效，未保存任何修改' };
+  const placements = originalPlacements.map((raw, index) => {
+    if (!isRecord(raw)) throw new Error('工程布局数据无效');
+    return { ...raw, x: proposed[index]!.x, y: proposed[index]!.y };
+  });
+  const nextContent = `${JSON.stringify({ ...current.snapshot.document, placements }, null, 2)}\n`;
+  const temporary = join(dir, `.design-${process.pid}-${randomUUID()}.tmp`);
+  try {
+    writeFileSync(temporary, nextContent, { encoding: 'utf8', flag: 'wx' });
+    // 在原子替换之前再次校验，避免等待写临时文件期间覆盖另一个进程的更新。
+    let latestContent: Uint8Array;
+    try {
+      latestContent = readFileSync(path);
+    } catch {
+      return { ok: false, conflict: true, message: '工程设计文件已不可读取；保存已拒绝，请重新载入工程' };
+    }
+    if (fingerprint(latestContent) !== expectedFingerprint) {
+      return { ok: false, conflict: true, message: '工程布局已被其他操作修改；为避免覆盖，保存已拒绝，请重新载入最新布局' };
+    }
+    renameSync(temporary, path);
+    return { ok: true, fingerprint: fingerprint(nextContent) };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? `布局保存失败：${error.message}` : `布局保存失败：${String(error)}` };
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
 
 export function deleteProject(userDataDir: string, id: string): { ok: boolean; message?: string } {

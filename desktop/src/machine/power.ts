@@ -22,6 +22,8 @@ export type PowerVoltage = MachineVoltage;
 export interface PowerInputItem {
   role: MachinePowerRole;
   partId?: string;
+  packId?: string;
+  model?: string;
   /** 展示名，缺省用角色中文名。 */
   name?: string;
   qty: number;
@@ -147,13 +149,27 @@ export function currentForPower(powerKw: number, voltage: PowerVoltage, cosPhi: 
   return watts / 24;
 }
 
+export interface DesignPowerPartRef {
+  model?: string;
+  partId?: string;
+  packId?: string;
+  ratedW?: number;
+}
+
+export interface DesignPowerBomItem extends DesignPowerPartRef {
+  kind?: 'actuator' | 'sensor' | 'electrical';
+  role?: string;
+  name?: string;
+  qty?: number;
+}
+
 export interface DesignPowerSource {
   config: {
     name?: string;
-    actuators?: readonly { kind: MachineActuatorKind }[];
-    sensors?: readonly { point: string }[];
+    actuators?: readonly (DesignPowerPartRef & { kind: MachineActuatorKind })[];
+    sensors?: readonly (DesignPowerPartRef & { point: string })[];
   };
-  bomDraft?: { items?: readonly { name?: string; partId?: string; packId?: string }[] };
+  bomDraft?: { items?: readonly DesignPowerBomItem[] };
   power?: { byGroup?: readonly { name: string }[]; voltage?: PowerVoltage };
 }
 
@@ -210,15 +226,93 @@ function findPart(
   return parts.find((part) => part.id === id && (packId === undefined || part.packId === packId));
 }
 
+function hasPartReference(ref: DesignPowerPartRef | undefined): boolean {
+  return Boolean(ref?.partId?.trim() || ref?.model?.trim());
+}
+
+function validRatedW(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? round(value, 3) : null;
+}
+
+/** 绑定料号优先按 partId + packId 定位；缺少 partId 时才按型号定位。 */
+function findBoundPart(
+  parts: readonly ComponentPart[] | undefined,
+  ref: DesignPowerPartRef
+): ComponentPart | undefined {
+  if (!parts) return undefined;
+  if (ref.partId) {
+    const byId = parts.filter((part) =>
+      part.id === ref.partId && (ref.packId === undefined || part.packId === ref.packId)
+    );
+    if (byId.length === 1) return byId[0];
+    if (ref.model) {
+      const byIdAndModel = byId.filter((part) => part.model === ref.model);
+      if (byIdAndModel.length === 1) return byIdAndModel[0];
+    }
+    return undefined;
+  }
+  if (!ref.model) return undefined;
+  const byModel = parts.filter((part) =>
+    part.model === ref.model && (ref.packId === undefined || part.packId === ref.packId)
+  );
+  return byModel.length === 1 ? byModel[0] : undefined;
+}
+
+function bomRowsForRole(
+  design: DesignPowerSource,
+  kind: 'actuator' | 'sensor' | 'electrical',
+  roles: readonly string[]
+): DesignPowerBomItem[] {
+  return (design.bomDraft?.items ?? []).filter((item) =>
+    (!item.kind || item.kind === kind) && roles.includes(item.role ?? '') &&
+    (hasPartReference(item) || validRatedW(item.ratedW) !== null)
+  );
+}
+
+function samePartReference(left: DesignPowerPartRef, right: DesignPowerPartRef): boolean {
+  const samePack = left.packId === undefined || right.packId === undefined || left.packId === right.packId;
+  if (left.partId && right.partId) return left.partId === right.partId && samePack;
+  return Boolean(left.model && right.model && left.model === right.model && samePack);
+}
+
+function bomSourceAtIndex(
+  rows: readonly (DesignPowerPartRef & { qty?: number })[],
+  index: number
+): DesignPowerPartRef | undefined {
+  let offset = 0;
+  for (const row of rows) {
+    const qty = typeof row.qty === 'number' && Number.isInteger(row.qty) && row.qty > 0 ? row.qty : 1;
+    if (index < offset + qty) return row;
+    offset += qty;
+  }
+  return undefined;
+}
+
+function sourceForConfiguredDevice(
+  configured: DesignPowerPartRef,
+  rows: readonly (DesignPowerPartRef & { qty?: number })[],
+  index: number
+): DesignPowerPartRef {
+  if (hasPartReference(configured)) {
+    const matchingBom = rows.find((row) => samePartReference(configured, row));
+    const ratedW = validRatedW(matchingBom?.ratedW) ?? validRatedW(configured.ratedW);
+    return { ...configured, ...(ratedW !== null ? { ratedW } : {}) };
+  }
+  return bomSourceAtIndex(rows, index) ?? configured;
+}
+
+function rotaryBomRows(design: DesignPowerSource): ReturnType<typeof bomRowsForRole> {
+  const rows = bomRowsForRole(design, 'actuator', ['rotary', 'servo']);
+  const notDriveRows = rows.filter((row) => !/伺服驱动器/.test(row.name ?? ''));
+  const motorRows = notDriveRows.filter((row) => /伺服电机/.test(row.name ?? ''));
+  return motorRows.length > 0 ? motorRows : notDriveRows.length > 0 ? notDriveRows : rows;
+}
+
 function sensorKind(point: string): MachineSensorKind {
   if (point.includes('-SAFE-')) return 'safety';
   if (point.includes('-PRS-')) return 'pressure';
   if (point.includes('-PHT-')) return 'photoelectric';
   return 'proximity';
-}
-
-function countActuators(design: DesignPowerSource, kind: MachineActuatorKind): number {
-  return design.config.actuators?.filter((actuator) => actuator.kind === kind).length ?? 0;
 }
 
 function detectServo(design: DesignPowerSource, explicit: boolean | undefined): boolean {
@@ -237,14 +331,28 @@ export function powerInputFromDesign(
   const parts = options.parts;
   const items: PowerInputItem[] = [];
   const servo = detectServo(design, options.servo);
-  const push = (role: MachinePowerRole, qty: number, name: string, partId?: string, part?: ComponentPart): void => {
+  const push = (
+    role: MachinePowerRole,
+    qty: number,
+    name: string,
+    ref: DesignPowerPartRef = {},
+    fallbackPart?: ComponentPart
+  ): void => {
     if (qty <= 0) return;
-    const rated = ratedPowerFromPart(part);
+    const hasBinding = hasPartReference(ref);
+    const selectedPart = hasBinding ? findBoundPart(parts, ref) : undefined;
+    const part = hasBinding ? selectedPart : fallbackPart;
+    const rated = ratedPowerFromPart(selectedPart) ?? validRatedW(ref.ratedW) ??
+      (hasBinding ? null : ratedPowerFromPart(fallbackPart));
+    const partId = ref.partId ?? part?.id;
+    const packId = ref.packId ?? part?.packId;
     items.push({
       role,
       qty,
       name,
       ...(partId ? { partId } : {}),
+      ...(packId ? { packId } : {}),
+      ...(ref.model ? { model: ref.model } : {}),
       ...(rated !== null ? { ratedW: rated } : {})
     });
   };
@@ -258,25 +366,58 @@ export function powerInputFromDesign(
   const safety = findPart(parts, 'F3SG-4SRA0640-14', 'iec-cn');
   const psu = findPart(parts, 'LRS-350-24', 'iec-cn');
 
-  const cylinderCount = countActuators(design, 'cylinder');
-  const gripperCount = countActuators(design, 'gripper');
-  const rotaryCount = countActuators(design, 'rotary');
+  const cylinderActuators = design.config.actuators?.filter((actuator) => actuator.kind === 'cylinder') ?? [];
+  const gripperActuators = design.config.actuators?.filter((actuator) => actuator.kind === 'gripper') ?? [];
+  const rotaryActuators = design.config.actuators?.filter((actuator) => actuator.kind === 'rotary') ?? [];
+  const cylinderCount = cylinderActuators.length;
+  const gripperCount = gripperActuators.length;
+  const rotaryCount = rotaryActuators.length;
   const sensors = design.config.sensors ?? [];
-  const ordinarySensors = sensors.filter((sensor) => sensorKind(sensor.point) !== 'safety').length;
-  const safetyCount = sensors.filter((sensor) => sensorKind(sensor.point) === 'safety').length;
+  const ordinarySensorConfigs = sensors.filter((sensor) => sensorKind(sensor.point) !== 'safety');
+  const safetySensorConfigs = sensors.filter((sensor) => sensorKind(sensor.point) === 'safety');
+  const addConfiguredDevices = (
+    role: MachinePowerRole,
+    name: string,
+    configured: readonly DesignPowerPartRef[],
+    count: number,
+    rows: readonly (DesignPowerPartRef & { qty?: number })[],
+    fallbackPart?: ComponentPart
+  ): void => {
+    if (configured.length === 0) {
+      push(role, count, name, {}, fallbackPart);
+      return;
+    }
+    configured.forEach((device, index) => {
+      push(role, 1, name, sourceForConfiguredDevice(device, rows, index), fallbackPart);
+    });
+  };
 
-  push('cylinder', cylinderCount, '气缸');
-  push('gripper', gripperCount, '夹爪', gripper?.id, gripper);
-  if (servo) {
-    push('servo', rotaryCount, '伺服轴', servoDrive?.id ?? servoMotor?.id, servoDrive ?? servoMotor);
-  } else {
-    push('rotary', rotaryCount, '旋转轴');
-  }
-  push('sensor', ordinarySensors, '传感器', proximity?.id, proximity);
-  push('safety', safetyCount, '安全光栅', safety?.id, safety);
-  push('valve', gripperCount, '电磁阀', valve?.id, valve);
-  push('plc', 1, 'PLC', plc?.id, plc);
-  push('psu', 1, '24V 电源', psu?.id, psu);
+  addConfiguredDevices(
+    'cylinder', '气缸', cylinderActuators, cylinderCount,
+    bomRowsForRole(design, 'actuator', ['cylinder'])
+  );
+  addConfiguredDevices(
+    'gripper', '夹爪', gripperActuators, gripperCount,
+    bomRowsForRole(design, 'actuator', ['gripper']), gripper
+  );
+  addConfiguredDevices(
+    servo ? 'servo' : 'rotary', servo ? '伺服轴' : '旋转轴', rotaryActuators, rotaryCount,
+    rotaryBomRows(design), servo ? (servoDrive ?? servoMotor) : undefined
+  );
+  addConfiguredDevices(
+    'sensor', '传感器', ordinarySensorConfigs, ordinarySensorConfigs.length,
+    bomRowsForRole(design, 'sensor', ['sensor']), proximity
+  );
+  addConfiguredDevices(
+    'safety', '安全光栅', safetySensorConfigs, safetySensorConfigs.length,
+    bomRowsForRole(design, 'sensor', ['safety']), safety
+  );
+  const valveRows = bomRowsForRole(design, 'actuator', ['valve']);
+  const plcRows = bomRowsForRole(design, 'electrical', ['plc']);
+  const psuRows = bomRowsForRole(design, 'electrical', ['psu']);
+  push('valve', gripperCount, '电磁阀', bomSourceAtIndex(valveRows, 0) ?? {}, valve);
+  push('plc', 1, 'PLC', bomSourceAtIndex(plcRows, 0) ?? {}, plc);
+  push('psu', 1, '24V 电源', bomSourceAtIndex(psuRows, 0) ?? {}, psu);
 
   return {
     items,
@@ -335,8 +476,11 @@ function estimatePowerInput(input: PowerInput): PowerResult {
       record.count += item.qty;
       record.missing += item.qty;
       defaultsUsed.set(item.role, record);
+      const reference = item.partId
+        ? `${item.packId ? `${item.packId}:` : ''}${item.partId}`
+        : item.model ?? '无 partId/型号';
       warnings.push(
-        `${item.name ?? POWER_ROLE_LABEL[item.role]}缺少额定功率（${item.partId ?? '无 partId'} × ${item.qty}），` +
+        `${item.name ?? POWER_ROLE_LABEL[item.role]}缺少额定功率（${reference} × ${item.qty}），` +
         `按类别默认 ${rated} W/件估算。`
       );
     }

@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { AgentTools } from '../../src/agent/tools.ts';
 import { createAgentCommandBus } from '../../src/agent/commands.ts';
+import { generateMachineGeometry } from '../../src/machine/geometry.ts';
+import { geometryToStl } from '../../src/machine/geometry-export.ts';
+import { parseMachineBrief } from '../../src/machine/spec.ts';
 import { machineGeometryPaths } from '../../src/machine/store.ts';
+import { synthMachine } from '../../src/machine/synth.ts';
+import { applyStationGeometryLayout } from '../../src/machine/station-layout.ts';
 import { validateFeatures } from '../../src/parametric/features.ts';
 
 const BRIEF = '设计一台三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服';
@@ -58,6 +63,31 @@ test('apply 默认生成参数化几何：geometry.json / model.stl / model.gltf
   assert.equal(sidecar.chunks.length, geometry.sidecarChunks);
   for (const chunk of sidecar.chunks) assert.deepEqual(validateFeatures(chunk), []);
   assert.equal(geometry.solids, undefined);
+});
+
+test('Agent apply 的偏移 MachineDesign 按稳定身份导出相同的 JSON 与 STL 几何', async () => {
+  const { root, bus } = setup();
+  const design = synthMachine(parseMachineBrief(BRIEF));
+  const identities = design.config.stations.map((_station, index) => `station:agent-offset-${index + 1}`);
+  design.stationIdentities = identities;
+  design.stationGeometryLayout = {
+    schemaVersion: 2,
+    offsets: [{ stationIdentity: identities[1], stationName: design.config.stations[1], xMm: 125, yMm: -80 }]
+  };
+  const result = await bus.execute('apply_machine_design', { design });
+  assert.equal(result.ok, true);
+  const paths = machineGeometryPaths(root, design.config.id);
+  const stored = JSON.parse(readFileSync(paths.json, 'utf8'));
+  const expected = applyStationGeometryLayout(
+    generateMachineGeometry(design),
+    design.stationGeometryLayout,
+    identities
+  );
+  assert.deepEqual(stored, expected);
+  assert.equal(Buffer.compare(readFileSync(paths.stl), Buffer.from(geometryToStl(expected))), 0);
+  const shiftedPlate = stored.parts.find((part) => part.stationId === 'st2' && part.role === 'plate');
+  const baselinePlate = generateMachineGeometry(design).parts.find((part) => part.stationId === 'st2' && part.role === 'plate');
+  assert.deepEqual(shiftedPlate.center, [baselinePlate.center[0] + 125, baselinePlate.center[1] - 80, baselinePlate.center[2]]);
 });
 
 test('apply 撤销：几何产物随方案一起删除；覆盖时恢复旧几何', async () => {

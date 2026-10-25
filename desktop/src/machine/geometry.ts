@@ -13,6 +13,7 @@
 // 工位与输送线/转盘之间的上下料机构不建模。
 
 import type { ActuatorConfig, MachineConfig, SensorConfig } from '../commission/machine-config.ts';
+import { DEFAULT_ACTUATOR_TRAVEL_MM, DEFAULT_ROTATION_RANGE_DEG } from '../commission/machine-config.ts';
 import { validateMachineConfig } from '../commission/machine-config.ts';
 import type { MachineProcess, MachineSensorKind } from './spec.ts';
 
@@ -55,6 +56,8 @@ export interface GeomPart {
   color: string;
   material: string;
   bomGroup: GeomBomGroup;
+  /** 当前整机生成器输出的概念占位体，不是型号级制造几何。 */
+  estimated?: true;
   stationId?: string;
   actuatorId?: string;
   sensorPoint?: string;
@@ -117,6 +120,8 @@ export interface MachineGeometry {
   name: string;
   units: 'mm';
   upAxis: 'z';
+  /** 几何精度口径；当前生成器只输出概念估算占位体。 */
+  geometryFidelity: 'conceptual-estimate';
   process: MachineProcess;
   layout: GeomLayout;
   /** 外形包络（mm）：X 长 × Y 宽 × Z 高。 */
@@ -387,7 +392,7 @@ interface StationBuild {
 }
 
 function strokeOf(actuator: ActuatorConfig): number {
-  return Math.max(1, actuator.travelMm ?? 40);
+  return actuator.travelMm ?? DEFAULT_ACTUATOR_TRAVEL_MM;
 }
 
 function buildStation(
@@ -697,7 +702,7 @@ function buildStation(
         axisLocal: [0, 0, 1],
         pivotLocal: [x, 0, baseH],
         strokeMm: 0,
-        rangeDeg: 90,
+        rangeDeg: actuator.rotationRangeDeg ?? DEFAULT_ROTATION_RANGE_DEG,
         home: 'zero',
         durationMs,
         points: actuator.point ? { point: actuator.point } : {}
@@ -1034,10 +1039,58 @@ export function generateMachineGeometry(
   const usedIds = new Set<string>();
   const warnings: string[] = [];
   const assumptions: string[] = [
-    '几何为按规则摆放的标准件外形（典型尺寸），不含强度、刚度、干涉求解与紧固件/钣金细节。',
+    'CAD 几何精度：概念估算占位体（所有输出零件均标记 estimated），不是型号级 STEP/制造几何；不可作为安装、干涉定论或加工依据。',
+    '元件库 dims 仅定义本体外形 w×h×d（mm），未定义本生成器所需的安装基准、朝向、孔位与运动件拆分；本次不把该外形框冒充装配几何，也未载入 asset。',
+    '机架、工位结构、执行机构与传感器按规则摆放的典型尺寸估算，不含强度、刚度、精确干涉求解与紧固件/钣金细节。',
     `台面高度 ${D.tableHeight} mm；工位底板 ${D.stationPlateThickness} mm 厚、深 ${D.stationPlateDepth} mm，宽度按执行机构槽位累加（最小 ${D.stationPlateMinWidth} mm）。`,
     `气缸按缸径 Ø${D.cylinderBore}、竖直下压、缩回位建模；夹爪按张开位建模；旋转台按 0° 位建模。`
   ];
+  warnings.push('三维模型为估算占位几何；请勿据此确认型号包络、安装空间、运动干涉或制造尺寸。');
+  const strokeDescription = (actuator: ActuatorConfig): string =>
+    `${actuator.station}·${actuator.name} ${actuator.travelMm ?? DEFAULT_ACTUATOR_TRAVEL_MM} mm`;
+  const engineerStrokes = config.actuators.filter((actuator) =>
+    actuator.kind !== 'rotary' && actuator.travelSource === 'engineer-input');
+  const estimatedStrokes = config.actuators.filter((actuator) =>
+    actuator.kind !== 'rotary' && actuator.travelSource !== 'engineer-input');
+  const rotaryDescription = (actuator: ActuatorConfig): string =>
+    `${actuator.station}·${actuator.name} ${actuator.rotationRangeDeg ?? DEFAULT_ROTATION_RANGE_DEG}°`;
+  const engineerRotations = config.actuators.filter((actuator) =>
+    actuator.kind === 'rotary' && actuator.rotationRangeSource === 'engineer-input');
+  const estimatedRotations = config.actuators.filter((actuator) =>
+    actuator.kind === 'rotary' && actuator.rotationRangeSource !== 'engineer-input');
+  if (estimatedStrokes.length > 0) {
+    const values = estimatedStrokes.map(strokeDescription).join('；');
+    assumptions.push(`直线行程（方案/系统估算）：${values}。已用于概念占位几何与运动轴；选型和实物行程待核验。`);
+    warnings.push(`直线行程为方案/系统估算值（待核验）：${values}；仅驱动概念估算占位几何与运动预览，不代表型号级制造数据。`);
+  }
+  if (engineerStrokes.length > 0) {
+    const values = engineerStrokes.map(strokeDescription).join('；');
+    assumptions.push(`直线行程（工程师输入·待复核）：${values}。输入值已用于概念占位几何与运动轴，不代表具体型号或制造几何。`);
+    warnings.push(`工程师输入的直线行程尚待复核：${values}；请按工艺、厂商样本与实际安装基准确认，概念占位体仍非型号级制造模型。`);
+  }
+  if (estimatedRotations.length > 0) {
+    const values = estimatedRotations.map(rotaryDescription).join('；');
+    assumptions.push(`旋转轴分度角（方案/系统估算）：${values}。未填写时默认 90°；仅驱动概念估算占位体的旋转运动预览，不代表具体旋转台型号、安装或制造数据。`);
+    warnings.push(`旋转轴分度角为方案/系统估算值（待核验）：${values}；请按机构工艺与选定型号复核；整机仍为概念估算占位体，不代表旋转台型号、安装或制造数据。`);
+  }
+  if (engineerRotations.length > 0) {
+    const values = engineerRotations.map(rotaryDescription).join('；');
+    assumptions.push(`旋转轴分度角（工程师输入·待复核）：${values}。输入值已用于 GeomMovingAxis.rangeDeg 与概念占位体的运动预览，不代表具体旋转台型号、安装或制造数据。`);
+    warnings.push(`工程师输入的旋转轴分度角尚待复核：${values}；请按工艺、厂商样本与实际安装基准确认；整机仍为概念估算占位体，不代表旋转台型号、安装或制造数据。`);
+  }
+  const selectedModelLabels = [
+    ...config.actuators
+      .filter((item) => item.model || item.partId || item.packId)
+      .map((item) => `${item.station}·${item.name}=${item.model ?? item.partId ?? '型号待确认'}`),
+    ...config.sensors
+      .filter((item) => item.model || item.partId || item.packId)
+      .map((item) => `${item.station}·传感器 ${item.point}=${item.model ?? item.partId ?? '型号待确认'}`)
+  ];
+  if (selectedModelLabels.length > 0) {
+    const shown = selectedModelLabels.slice(0, 5).join('；');
+    const remainder = selectedModelLabels.length > 5 ? `；另有 ${selectedModelLabels.length - 5} 个绑定` : '';
+    warnings.push(`型号绑定未联动到 CAD 几何：${shown}${remainder}。当前仍使用通用典型占位尺寸，未读取元件库尺寸或模型文件；请按厂商样本/实际模型复核。`);
+  }
   // 预占整机级 id，避免与工位件冲突。
   for (const id of ['frame-top', 'conveyor-frame', 'conveyor-belt', 'conveyor-motor', 'dial-indexer', 'dial-plate']) usedIds.add(id);
 
@@ -1649,7 +1702,7 @@ export function generateMachineGeometry(
       bomGroup: 'structure'
     });
   }
-  const allParts = [...frameParts, ...parts];
+  const allParts = [...frameParts, ...parts].map((part) => ({ ...part, estimated: true as const }));
 
   const boundsMin: Vec3 = [Infinity, Infinity, Infinity];
   const boundsMax: Vec3 = [-Infinity, -Infinity, -Infinity];
@@ -1676,6 +1729,7 @@ export function generateMachineGeometry(
     name: config.name,
     units: 'mm',
     upAxis: 'z',
+    geometryFidelity: 'conceptual-estimate',
     process,
     layout,
     envelope: roundVec([boundsMax[0] - boundsMin[0], boundsMax[1] - boundsMin[1], boundsMax[2] - boundsMin[2]]),

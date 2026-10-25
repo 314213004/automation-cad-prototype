@@ -73,7 +73,7 @@ import {
 } from '../src/project-archive/desktop.ts';
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
 import { readActiveMachineDesign } from '../src/machine/store.ts';
-import { deleteProject, listProjects, openProject, saveProject } from './projects.ts';
+import { deleteProject, listProjects, openProject, saveProject, saveProjectLayout } from './projects.ts';
 import { clearDesignDraft, readDesignDraft, writeDesignDraft } from '../src/design/draft-store.ts';
 import { validateMachineDesign } from '../src/machine/store.ts';
 import { readMachinePricing } from './pricing.ts';
@@ -675,6 +675,13 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   handle('projects:open', (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
     return openProject(context.userDataDir, id);
+  });
+  handle('projects:layout-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.id !== 'string' || !payload.id.trim() ||
+        typeof payload.fingerprint !== 'string' || !Array.isArray(payload.placements)) {
+      return { ok: false, message: '布局保存参数无效' };
+    }
+    return saveProjectLayout(context.userDataDir, payload.id, payload.fingerprint, payload.placements);
   });
   handle('projects:delete', (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
