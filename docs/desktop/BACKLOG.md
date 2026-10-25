@@ -71,3 +71,10 @@
 - ✅ 修一致性缺陷：`completeDesign` 与 `design_machine` 对同一 brief 的 assumptions 不一致（默认参数说明文案分叉），统一到 `defaultPricingAssumptions()`。
 - ✅ 已修：保存工程后 `__AgentBridge.getScene().parts` 为 0。根因是**降级/软件渲染路径只建 `modelParts`、不建 three 网格**，`CadViewer.getSceneParts()` 只看 `parts` 就返回空数组；改为 `parts` 为空且 `modelParts` 非空时按 `modelParts` 返回（`triangles: 0` + 真实 bbox），新增 `test/cad/scene-parts.test.mjs` 三条用例。smoke 不再出现 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。
 - ⏳ 待办：`docs/desktop/DESIGN-WIZARD.md` 暂未加入离线知识索引（`KB_DOC_FILES` 13 份）。本轮把 `MODULES.md` 的迭代明细压成能力目录后，`kb.json` 从 390185 B 降到约 383 KB（93.6%，余量 ~6 KB）；再塞一份 5 KB 的文档会跌破 5% 余量，需继续瘦身 HISTORY 类内容后才纳入。
+
+## 无限画布工作台（2026-10-26）
+
+- 📄 归档：`docs/desktop/mockups/canvas-workbench.html`（老王给的交互原型，Tailwind CDN + three r128，106 KB）；配套架构评审原文 `docs/desktop/reviews/2026-10-25-architecture-review.md`。
+- 📐 方案：`docs/desktop/CANVAS-WORKBENCH.md` —— 模板 → 现有模块映射、数据契约（MountPort/CanvasNode/Edge）、5 处必须纠正的偏差（CDN 依赖、CT 串行口径、写死价格、端口只比字符串、假 B-Rep 干涉）、P1–P4 分期与验收。
+- ⏳ P1（核心纯函数 + 单测）：`src/canvas/graph.ts`（端口兼容 / 插转接板 / 删节点）、`metrics.ts`（CT 走 `evaluateFlow`、伺服选型）、`export.ts`（build123d 脚本 / ST / Graph JSON）。
+- ⏳ P2（三视图 UI + smoke）、P3（接真实候选/元件库/价格簿）、P4（3D PiP 联动）按方案推进，未开工。

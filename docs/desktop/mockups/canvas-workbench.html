@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automation CAD Prototype · 非标自动化无限画布设计工作台</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    body {
+      margin: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background-color: #0b0f17;
+      color: #e2e8f0;
+      overflow: hidden;
+    }
+    .font-mono-code {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Infinite Canvas Grid Background */
+    .canvas-grid-bg {
+      background-color: #0b0f17;
+      background-image:
+        radial-gradient(rgba(56, 189, 248, 0.14) 1px, transparent 1px),
+        linear-gradient(to right, rgba(30, 41, 59, 0.35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(30, 41, 59, 0.35) 1px, transparent 1px);
+      background-size: 20px 20px, 100px 100px, 100px 100px;
+    }
+    .ortho-grid-bg {
+      background-color: #070b12;
+      background-image:
+        linear-gradient(to right, rgba(56, 189, 248, 0.07) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(56, 189, 248, 0.07) 1px, transparent 1px),
+        linear-gradient(to right, rgba(56, 189, 248, 0.18) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(56, 189, 248, 0.18) 1px, transparent 1px);
+      background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    .node-card {
+      transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .node-card.selected {
+      border-color: #38bdf8 !important;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35), 0 12px 28px -6px rgba(0, 0, 0, 0.7);
+    }
+    .port-dot {
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    .port-dot:hover {
+      transform: scale(1.35);
+    }
+    @keyframes pulseGlow {
+      0%, 100% { filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.6)); }
+      50% { filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.95)); }
+    }
+    .mismatch-badge {
+      animation: pulseGlow 2s infinite;
+    }
+  </style>
+</head>
+<body class="h-screen w-screen flex flex-col select-none">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="h-12 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between gap-2 shrink-0 z-30">
+    <!-- Left: Brand + Preset Switcher -->
+    <div class="flex items-center gap-2.5 min-w-0">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-sm shadow-sky-500/30 font-bold text-xs text-white">
+          CAD
+        </div>
+        <div class="hidden sm:block">
+          <div class="flex items-center gap-1.5">
+            <span class="font-semibold text-xs text-slate-100 tracking-tight">Automation CAD Canvas</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30 font-mono-code">v2.4-Next</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-4 w-px bg-slate-800 mx-1"></div>
+
+      <!-- Machine Scheme Selector -->
+      <div class="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+        <button id="presetBtnGantry" class="px-2.5 py-1 rounded-md text-xs font-medium transition bg-sky-500/20 text-sky-300 border border-sky-500/40">
+          三轴龙门视觉贴合机
+        </button>
+        <button id="presetBtnRotary" class="px-2.5 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200">
+          凸轮转盘六工位组装机
+        </button>
+        <button id="presetBtnConveyor" class="px-2.5 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200">
+          皮带输送+气动分拣线
+        </button>
+      </div>
+    </div>
+
+    <!-- Center: 3-Layer Semantic Canvas Mode Switcher -->
+    <div class="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5">
+      <button id="modeBtnTopology" class="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition bg-indigo-500/25 text-indigo-300 border border-indigo-500/40">
+        <span>1. 装配拓扑画布 (MountPort)</span>
+      </button>
+      <button id="modeBtnOrtho" class="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200">
+        <span>2. 2D 平面包络与标尺</span>
+      </button>
+      <button id="modeBtnArtboard" class="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200">
+        <span>3. AI 多方案画板对比</span>
+      </button>
+    </div>
+
+    <!-- Right: Global Metrics + Simulation & Export -->
+    <div class="flex items-center gap-2">
+      <!-- Live KPI Pills -->
+      <div class="hidden xl:flex items-center gap-2 bg-slate-950/90 border border-slate-800 px-2.5 py-1 rounded-lg text-xs">
+        <span class="text-slate-400">总成本:</span>
+        <span id="topMetricCost" class="font-mono-code font-semibold text-emerald-400">¥18,420</span>
+        <span class="text-slate-700">|</span>
+        <span class="text-slate-400">瓶颈节拍:</span>
+        <span id="topMetricCT" class="font-mono-code font-semibold text-sky-400">1.85s (1945 UPH)</span>
+        <span class="text-slate-700">|</span>
+        <span id="topMetricAudit" class="px-1.5 py-0.5 rounded text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+          1 处孔位待配转接板
+        </span>
+      </div>
+
+      <button id="btnAutoFixAll" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition flex items-center gap-1">
+        <span>⚡ 一键生成全部转接板</span>
+      </button>
+
+      <button id="btnSimToggle" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition flex items-center gap-1">
+        <span id="simBtnIcon">▶</span>
+        <span id="simBtnText">虚拟调试运行</span>
+      </button>
+
+      <button id="btnExportModal" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-600 hover:bg-sky-500 text-white transition">
+        导出工程交付物
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE AREA -->
+  <div class="flex-1 flex min-h-0 relative overflow-hidden">
+
+    <!-- LEFT PANEL: MODULAR ASSET LIBRARY & AI AGENT PROMPT -->
+    <aside class="w-64 bg-slate-900/95 border-r border-slate-800 flex flex-col shrink-0 z-20">
+      <!-- Panel Header -->
+      <div class="p-2.5 border-b border-slate-800 flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-200 uppercase tracking-wider">非标功能模组库 (Packs)</span>
+        <span class="text-[11px] text-slate-400">点击添至画布</span>
+      </div>
+
+      <!-- Component Categories -->
+      <div class="flex-1 overflow-y-auto p-2 space-y-2" id="assetLibraryContainer">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <!-- Bottom AI MCP Agent Box -->
+      <div class="p-2.5 border-t border-slate-800 bg-slate-950/80 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold text-indigo-400 flex items-center gap-1">
+            <span>🤖 MCP 拓扑设计 Agent</span>
+          </span>
+          <span class="text-[10px] text-slate-500 font-mono-code">build123d + OCCT</span>
+        </div>
+        <div class="flex flex-wrap gap-1">
+          <button id="aiQuickAdapter" class="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+            + 自动配打十字转接板
+          </button>
+          <button id="aiQuickVision" class="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+            + 增加飞拍同轴光源相机
+          </button>
+          <button id="aiQuickOptimizeCT" class="text-[11px] px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+            ⚡ 丝杠导程提速至 20mm
+          </button>
+        </div>
+        <div class="flex gap-1">
+          <input id="aiPromptInput" type="text" placeholder="输入非标修改意图，如：增加气动阻挡器..." class="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500" />
+          <button id="aiPromptSend" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium transition">
+            执行
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER INFINITE CANVAS -->
+    <main class="flex-1 flex flex-col min-w-0 relative overflow-hidden">
+
+      <!-- Canvas Floating Sub-Toolbar -->
+      <div class="absolute top-3 left-3 z-20 flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg px-2.5 py-1.5 shadow-lg">
+        <button id="btnZoomOut" class="px-1.5 py-0.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono-code">-</button>
+        <span id="zoomLevelText" class="text-xs font-mono-code text-slate-300 w-12 text-center">100%</span>
+        <button id="btnZoomIn" class="px-1.5 py-0.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-mono-code">+</button>
+        <button id="btnResetView" class="px-2 py-0.5 text-xs rounded bg-slate-800 hover:bg-slate-700 text-slate-300">居中视图</button>
+        <div class="h-3.5 w-px bg-slate-700 mx-0.5"></div>
+        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+          <input type="checkbox" id="chkShowEnvelope" checked class="rounded bg-slate-800 border-slate-600 text-sky-500" />
+          <span>显示运动包络面</span>
+        </label>
+        <label class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer ml-1">
+          <input type="checkbox" id="chkBrepMode" checked class="rounded bg-slate-800 border-slate-600 text-emerald-500" />
+          <span>OCCT B-Rep 精确干涉过滤 (豁免配合孔)</span>
+        </label>
+      </div>
+
+      <!-- Canvas Mode Helper Banner -->
+      <div id="canvasNoticeBanner" class="absolute top-3 right-3 z-20 bg-slate-900/90 backdrop-blur border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 flex items-center gap-2 shadow-lg">
+        <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+        <span id="canvasModeHint">拖拽节点调整拓扑；点击橙色「⚡生成转接板」可自动调用 build123d 配打异径安装孔</span>
+      </div>
+
+      <!-- LAYER 1: NODE-PORT TOPOLOGY GRAPH CANVAS -->
+      <div id="viewTopology" class="flex-1 relative canvas-grid-bg overflow-hidden cursor-grab active:cursor-grabbing">
+        <div id="topologyTransformLayer" class="absolute inset-0 origin-top-left" style="transform: translate(0px, 0px) scale(1);">
+          <!-- SVG Edges Layer -->
+          <svg id="topologyEdgesSvg" class="absolute inset-0 w-[3000px] h-[2000px] pointer-events-none overflow-visible"></svg>
+          <!-- Edge Action Pill Overlay -->
+          <div id="topologyEdgeActions" class="absolute inset-0 pointer-events-none"></div>
+          <!-- HTML Nodes Layer -->
+          <div id="topologyNodesLayer" class="absolute inset-0"></div>
+        </div>
+      </div>
+
+      <!-- LAYER 2: 2D ORTHO FLOORPLAN & SMART GUIDES CANVAS -->
+      <div id="viewOrtho" class="flex-1 relative ortho-grid-bg overflow-hidden hidden">
+        <canvas id="ortho2dCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+        <!-- Ortho Controls Overlay -->
+        <div class="absolute bottom-4 left-4 bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 text-xs space-y-1.5 shadow-lg">
+          <div class="font-semibold text-sky-400">2D 正交工程视口 (俯视图 X-Y / 毫米标尺)</div>
+          <div class="text-slate-400">• 拖拽工位框实时平移坐标，自动吸附中心基准线 (Smart Guides)</div>
+          <div class="flex items-center gap-3 pt-1">
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 inline-block bg-sky-500/30 border border-sky-400"></span> 标准模组实体</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 inline-block bg-amber-500/30 border border-amber-400"></span> build123d 非标转接板</span>
+            <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 inline-block border border-dashed border-fuchsia-400"></span> 运动极限包络框</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYER 3: AI MULTI-ARTBOARD EXPLORATION CANVAS -->
+      <div id="viewArtboard" class="flex-1 relative canvas-grid-bg overflow-y-auto p-6 pt-14 hidden">
+        <div class="max-w-6xl mx-auto space-y-4">
+          <div class="flex items-center justify-between bg-slate-900/90 border border-slate-800 rounded-xl p-3.5">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-100">AI 多方案平行画板 (Artboard Exploration) —— 替代原五步向导死板的表格对比</h2>
+              <p class="text-xs text-slate-400 mt-0.5">在同一无限画布上直观对比 3 套候选构型的空间布局、伺服惯量比、BOM 成本与工步节拍，支持勾选不同画板的子模组一键合成新方案。</p>
+            </div>
+            <button id="btnMergeArtboards" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shrink-0">
+              ✨ 合并勾选的优势模组生成「混合最优方案」
+            </button>
+          </div>
+          <div id="artboardsGrid" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- FLOATING 3D WEBGL VIEWPORT (PiP / Expandable) -->
+      <div id="pip3dContainer" class="absolute bottom-3 right-3 w-80 h-60 bg-slate-950/95 border border-slate-700/90 rounded-xl shadow-2xl flex flex-col overflow-hidden z-20 transition-all duration-200">
+        <div class="h-8 bg-slate-900 border-b border-slate-800 px-2.5 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="text-[11px] font-semibold text-slate-200">3D 实时装配视口 (Three.js + OCCT)</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button id="btn3dWireframe" class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300">线框</button>
+            <button id="btn3dResetCam" class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300">视角</button>
+            <button id="btn3dExpand" class="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30">放大视口</button>
+          </div>
+        </div>
+        <div id="threeCanvasWrapper" class="flex-1 relative min-h-0">
+          <!-- Three.js WebGL Canvas mounts here -->
+          <div class="absolute bottom-1.5 left-2 pointer-events-none text-[10px] font-mono-code text-slate-400 bg-slate-950/75 px-1.5 py-0.5 rounded border border-slate-800">
+            左键旋转 · 滚轮缩放 · 橙色零件 = build123d 转接板
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM DRAWER: CYCLE TIME GANTT & KINEMATICS TIMELINE -->
+      <div class="h-40 bg-slate-900/95 border-t border-slate-800 flex flex-col shrink-0 z-20">
+        <div class="h-8 px-3 border-b border-slate-800 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-3">
+            <span class="font-semibold text-slate-200">⏱ 工步节拍时序甘特图 (Cycle Time & Kinematics Driven)</span>
+            <span class="text-slate-400 text-[11px]">拖动滑块调整单步耗时，实时重算加速度 α、丝杠峰值扭矩与电机惯量比</span>
+          </div>
+          <div class="flex items-center gap-3 font-mono-code text-xs">
+            <span class="text-slate-400">当前仿真时刻: <strong id="simTimeReadout" class="text-sky-400">0.00s</strong></span>
+            <span class="text-slate-400">整机周期 CT: <strong id="totalCtReadout" class="text-emerald-400">1.85s</strong></span>
+          </div>
+        </div>
+        <div id="ganttContainer" class="flex-1 overflow-y-auto px-3 py-1.5 space-y-1">
+          <!-- Populated dynamically by JS -->
+        </div>
+      </div>
+
+    </main>
+
+    <!-- RIGHT INSPECTOR PANEL: MOUNTPORT, ADAPTER CAD, MECH CALC & BOM -->
+    <aside class="w-80 bg-slate-900/95 border-l border-slate-800 flex flex-col shrink-0 z-20">
+      <!-- Inspector Tabs -->
+      <div class="grid grid-cols-3 border-b border-slate-800 bg-slate-950/60 p-1 gap-1">
+        <button id="tabBtnProp" class="py-1.5 rounded text-xs font-medium bg-slate-800 text-sky-400 border border-slate-700">
+          属性 & 转接板
+        </button>
+        <button id="tabBtnMech" class="py-1.5 rounded text-xs font-medium text-slate-400 hover:text-slate-200">
+          选型力学计算
+        </button>
+        <button id="tabBtnBom" class="py-1.5 rounded text-xs font-medium text-slate-400 hover:text-slate-200">
+          BOM & PLC
+        </button>
+      </div>
+
+      <!-- TAB 1: NODE PROPERTIES + MOUNTPORT + ADAPTER PLATE 2D CAD PREVIEW -->
+      <div id="inspectorTabProp" class="flex-1 overflow-y-auto p-3 space-y-3">
+        <!-- Dynamically populated based on selected node -->
+      </div>
+
+      <!-- TAB 2: INDUSTRIAL MECHANICAL SIZING & STRESS CALCULATOR -->
+      <div id="inspectorTabMech" class="flex-1 overflow-y-auto p-3 space-y-3 hidden">
+        <!-- Dynamically populated with real engineering formulas -->
+      </div>
+
+      <!-- TAB 3: LIVE BOM & PLC ST / BUILD123D CODE -->
+      <div id="inspectorTabBom" class="flex-1 overflow-y-auto p-3 space-y-3 hidden">
+        <!-- Dynamically populated with BOM & PLC IO -->
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- MODAL: EXPORT DELIVERABLES (build123d Python / IEC 61131-3 ST / BOM) -->
+  <div id="exportModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-100">工程交付物代码与图纸导出预览 (build123d STEP / PLCopen ST / BOM)</h3>
+          <p class="text-xs text-slate-400">基于当前画布拓扑与 MountPort 约束自动编译生成</p>
+        </div>
+        <button id="btnCloseExportModal" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-300">关闭</button>
+      </div>
+      <div class="px-4 pt-2 border-b border-slate-800 flex gap-2 bg-slate-950/50">
+        <button id="exportTabBuild123d" class="px-3 py-1.5 text-xs font-medium border-b-2 border-sky-400 text-sky-400">
+          1. Python build123d 参数化建模脚本 (含非标转接板)
+        </button>
+        <button id="exportTabPlc" class="px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          2. IEC 61131-3 PLC 结构化文本 (ST)
+        </button>
+        <button id="exportTabJson" class="px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+          3. 统一整机拓扑 IR (Machine Graph JSON)
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-4 bg-slate-950 font-mono-code text-xs text-slate-200">
+        <pre id="exportCodePre" class="whitespace-pre-wrap select-all"></pre>
+      </div>
+      <div class="px-4 py-2.5 border-t border-slate-800 bg-slate-900 flex items-center justify-between">
+        <span id="copyFeedbackText" class="text-xs text-emerald-400"></span>
+        <button id="btnCopyExportCode" class="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-medium transition">
+          复制代码到剪贴板
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastBanner" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-sky-600 text-white text-xs font-medium shadow-xl transition-opacity duration-200 opacity-0 pointer-events-none">
+    操作成功
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. CATALOG OF MODULAR NON-STANDARD AUTOMATION SUB-ASSEMBLIES (PACKS)
+    // =========================================================================
+    const COMPONENT_LIBRARY = [
+      {
+        category: '整机机架与基准底座',
+        items: [
+          {
+            type: 'frame_base',
+            name: '4040铝型材标准机架+16mm精密底板',
+            spec: '800×650×750mm · 6061-T6铣平底板',
+            mountIn: 'FLOOR-ANCHOR-M12',
+            mountOut: 'GRID-M6-50x50',
+            stroke: 0,
+            lead: 0,
+            mass: 48.0,
+            cost: 3200,
+            stepDuration: 0,
+            dims: [800, 650, 750],
+            color: '#475569',
+            io: { di: 2, do: 1, desc: '急停回路 + 安全门联锁' }
+          },
+          {
+            type: 'rotary_indexer',
+            name: '80DF凸轮分割器+Ø450六工位转盘',
+            spec: '6工位 · 定位精度±30″ · 750W调速电机',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'DIAL-M5x4-60x60',
+            stroke: 60,
+            lead: 60,
+            mass: 26.5,
+            cost: 4600,
+            stepDuration: 0.45,
+            dims: [450, 450, 260],
+            color: '#0284c7',
+            io: { di: 2, do: 1, desc: '原点光电 + 分度到位感应' }
+          }
+        ]
+      },
+      {
+        category: '精密直线传动模组',
+        items: [
+          {
+            type: 'linear_x',
+            name: 'X轴重负载滚珠丝杠模组 (KK86)',
+            spec: '有效行程 450mm · 导程 10mm · 400W私服',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'SLIDER-M5x4-60x60',
+            stroke: 450,
+            lead: 10,
+            mass: 9.2,
+            cost: 3450,
+            stepDuration: 0.55,
+            dims: [620, 86, 74],
+            color: '#2563eb',
+            io: { di: 3, do: 2, desc: '正负限位+原点 + 脉冲/方向伺服驱动' }
+          },
+          {
+            type: 'linear_y',
+            name: 'Y轴悬臂精密丝杠滑台 (KK60)',
+            spec: '有效行程 300mm · 导程 10mm · 200W伺服',
+            mountIn: 'SLIDER-M5x4-50x50',
+            mountOut: 'SLIDER-M4x4-40x40',
+            stroke: 300,
+            lead: 10,
+            mass: 5.4,
+            cost: 2680,
+            stepDuration: 0.45,
+            dims: [440, 60, 55],
+            color: '#4f46e5',
+            io: { di: 3, do: 2, desc: '正负限位+原点 + 200W伺服总线轴' }
+          }
+        ]
+      },
+      {
+        category: 'Z轴执行器与末端夹治具',
+        items: [
+          {
+            type: 'z_cylinder',
+            name: 'Z轴三轴精密导杆气缸 (MGPM25-100Z)',
+            spec: '缸径25mm · 行程100mm · 耐偏载铜套导向',
+            mountIn: 'BODY-M5x4-48x36',
+            mountOut: 'PLATE-M4x4-32x32',
+            stroke: 100,
+            lead: 0,
+            mass: 1.85,
+            cost: 680,
+            stepDuration: 0.35,
+            dims: [80, 62, 195],
+            color: '#0d9488',
+            io: { di: 2, do: 2, desc: '上下磁性开关 D-M9B + 双电控电磁阀' }
+          },
+          {
+            type: 'rotary_gripper',
+            name: '伺服旋转电爪 / 四嘴真空吸盘组',
+            spec: '重复精度±0.02mm · 带压力负压表传感器',
+            mountIn: 'PLATE-M4x4-32x32',
+            mountOut: 'WORKPIECE-TIP',
+            stroke: 20,
+            lead: 5,
+            mass: 0.95,
+            cost: 1890,
+            stepDuration: 0.25,
+            dims: [70, 70, 95],
+            color: '#10b981',
+            io: { di: 2, do: 2, desc: '真空度达标信号 + 吸气/破真空电磁阀' }
+          }
+        ]
+      },
+      {
+        category: '机器视觉与非标转接件 (build123d)',
+        items: [
+          {
+            type: 'vision_cam',
+            name: '500万像素工业飞拍相机+远心镜头支架',
+            spec: '全局快门 · 同轴光源 · 铝型材可调抱箍',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'OPTICAL-FOV-80x60',
+            stroke: 0,
+            lead: 0,
+            mass: 1.4,
+            cost: 2950,
+            stepDuration: 0.25,
+            dims: [90, 90, 210],
+            color: '#9333ea',
+            io: { di: 1, do: 2, desc: '硬件飞拍触发信号 + 光源频闪控制' }
+          },
+          {
+            type: 'adapter_plate',
+            name: 'build123d 参数化十字转接板 (6061-T6)',
+            spec: '厚12mm阳极氧化 · 自动配打异径沉头孔+定位销',
+            mountIn: 'SLIDER-M5x4-60x60',
+            mountOut: 'BODY-M5x4-48x36',
+            stroke: 0,
+            lead: 0,
+            mass: 0.42,
+            cost: 165,
+            stepDuration: 0,
+            dims: [90, 75, 12],
+            color: '#f59e0b',
+            isAdapter: true,
+            io: { di: 0, do: 0, desc: '纯机械非标机加工件 (自动生成STEP与开孔DXF)' }
+          }
+        ]
+      }
+    ];
+
+    // =========================================================================
+    // 2. PRESET SCHEMES (THREE COMPLETE MACHINE CONFIGURATIONS)
+    // =========================================================================
+    const PRESET_SCHEMES = {
+      gantry: {
+        id: 'gantry',
+        title: '方案 A：三轴龙门视觉飞拍贴合机',
+        subtitle: '高精度KK丝杠龙门 + 飞拍视觉对位 + 气动下压贴合',
+        nodes: [
+          {
+            id: 'n_frame',
+            type: 'frame_base',
+            name: '4040铝型材机架+精密底板',
+            spec: '800×650×750mm · 6061-T6铣平基准面',
+            mountIn: 'FLOOR-ANCHOR-M12',
+            mountOut: 'GRID-M6-50x50',
+            stroke: 0, lead: 0, mass: 48.0, cost: 3200, stepDuration: 0,
+            x: 60, y: 170, orthoX: 400, orthoY: 325, dims: [760, 560, 750],
+            color: '#475569',
+            io: { di: 2, do: 1, desc: '急停回路 + 安全光幕输入' }
+          },
+          {
+            id: 'n_x',
+            type: 'linear_x',
+            name: 'X轴重负载丝杠模组 (KK86)',
+            spec: '行程 450mm · 导程 10mm · 400W伺服',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'SLIDER-M5x4-60x60',
+            stroke: 450, lead: 10, mass: 9.2, cost: 3450, stepDuration: 0.55,
+            x: 350, y: 95, orthoX: 400, orthoY: 220, dims: [540, 86, 74],
+            color: '#2563eb',
+            io: { di: 3, do: 2, desc: 'X轴限位/原点 + 400W伺服轴' }
+          },
+          {
+            id: 'n_y',
+            type: 'linear_y',
+            name: 'Y轴悬臂精密丝杠滑台 (KK60)',
+            spec: '行程 300mm · 导程 10mm · 200W伺服',
+            mountIn: 'SLIDER-M5x4-60x60',
+            mountOut: 'SLIDER-M4x4-40x40',
+            stroke: 300, lead: 10, mass: 5.4, cost: 2680, stepDuration: 0.45,
+            x: 640, y: 95, orthoX: 400, orthoY: 310, dims: [90, 380, 55],
+            color: '#4f46e5',
+            io: { di: 3, do: 2, desc: 'Y轴限位/原点 + 200W伺服轴' }
+          },
+          {
+            id: 'n_z',
+            type: 'z_cylinder',
+            name: 'Z轴三轴导杆气缸 (MGPM25-100Z)',
+            spec: '缸径25mm · 行程100mm · 铜套抗偏载',
+            mountIn: 'BODY-M5x4-48x36',
+            mountOut: 'PLATE-M4x4-32x32',
+            stroke: 100, lead: 0, mass: 1.85, cost: 680, stepDuration: 0.35,
+            x: 960, y: 95, orthoX: 440, orthoY: 310, dims: [80, 65, 190],
+            color: '#0d9488',
+            io: { di: 2, do: 2, desc: 'Z轴上下磁性开关 + 电磁阀' }
+          },
+          {
+            id: 'n_grip',
+            type: 'rotary_gripper',
+            name: '四嘴真空吸盘贴合模组',
+            spec: '±0.02mm对位 · 含数显负压传感器',
+            mountIn: 'PLATE-M4x4-32x32',
+            mountOut: 'WORKPIECE-TIP',
+            stroke: 20, lead: 5, mass: 0.95, cost: 1890, stepDuration: 0.25,
+            x: 1245, y: 95, orthoX: 440, orthoY: 310, dims: [70, 70, 95],
+            color: '#10b981',
+            io: { di: 2, do: 2, desc: '真空负压表信号 + 破真空阀' }
+          },
+          {
+            id: 'n_cam',
+            type: 'vision_cam',
+            name: '500万飞拍工业相机+同轴光源',
+            spec: '全局快门 · C口远心镜头 · 立柱支架',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'OPTICAL-FOV-80x60',
+            stroke: 0, lead: 0, mass: 1.4, cost: 2950, stepDuration: 0.25,
+            x: 350, y: 290, orthoX: 250, orthoY: 390, dims: [95, 95, 210],
+            color: '#9333ea',
+            io: { di: 1, do: 2, desc: '硬件飞拍触发 + 光源频闪控制器' }
+          }
+        ],
+        edges: [
+          { id: 'e1', from: 'n_frame', to: 'n_x' },
+          { id: 'e2', from: 'n_x', to: 'n_y' },
+          { id: 'e3', from: 'n_y', to: 'n_z' }, // Intentional MountPort mismatch: SLIDER-M4x4-40x40 -> BODY-M5x4-48x36
+          { id: 'e4', from: 'n_z', to: 'n_grip' },
+          { id: 'e5', from: 'n_frame', to: 'n_cam' }
+        ]
+      },
+      rotary: {
+        id: 'rotary',
+        title: '方案 B：凸轮分割器六工位转盘组装机',
+        subtitle: '80DF高速分度盘 + 飞拍检测 + Z轴气动压装工站',
+        nodes: [
+          {
+            id: 'n_frame',
+            type: 'frame_base',
+            name: '高刚性方管焊接+精密铣平机架',
+            spec: '900×900×780mm · 18mm钢板台面',
+            mountIn: 'FLOOR-ANCHOR-M12',
+            mountOut: 'GRID-M6-50x50',
+            stroke: 0, lead: 0, mass: 68.0, cost: 3800, stepDuration: 0,
+            x: 60, y: 170, orthoX: 400, orthoY: 325, dims: [780, 600, 780],
+            color: '#475569',
+            io: { di: 2, do: 1, desc: '安全门锁 + 急停监控' }
+          },
+          {
+            id: 'n_dial',
+            type: 'rotary_indexer',
+            name: '80DF凸轮分割器+Ø450六工位转盘',
+            spec: '6工位 · 定位精度±30″ · 含工装治具座',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'DIAL-M5x4-60x60',
+            stroke: 60, lead: 60, mass: 26.5, cost: 4600, stepDuration: 0.40,
+            x: 360, y: 85, orthoX: 370, orthoY: 325, dims: [380, 380, 260],
+            color: '#0284c7',
+            io: { di: 2, do: 1, desc: '凸轮原点信号 + 变频电机驱动' }
+          },
+          {
+            id: 'n_x',
+            type: 'linear_x',
+            name: '取放料横移丝杠模组 (KK60)',
+            spec: '行程 260mm · 导程 10mm · 200W伺服',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'SLIDER-M5x4-60x60',
+            stroke: 260, lead: 10, mass: 5.8, cost: 2750, stepDuration: 0.40,
+            x: 360, y: 265, orthoX: 560, orthoY: 220, dims: [320, 70, 65],
+            color: '#2563eb',
+            io: { di: 3, do: 2, desc: '横移轴限位 + 伺服脉冲' }
+          },
+          {
+            id: 'n_z',
+            type: 'z_cylinder',
+            name: '工位3压装导杆气缸 (MGPM32-100Z)',
+            spec: '缸径32mm · 行程100mm · 出力480N',
+            mountIn: 'BODY-M5x4-48x36',
+            mountOut: 'PLATE-M4x4-32x32',
+            stroke: 100, lead: 0, mass: 2.2, cost: 790, stepDuration: 0.35,
+            x: 680, y: 265, orthoX: 560, orthoY: 325, dims: [85, 75, 195],
+            color: '#0d9488',
+            io: { di: 2, do: 2, desc: '压装到位磁开 + 双电控阀' }
+          },
+          {
+            id: 'n_grip',
+            type: 'rotary_gripper',
+            name: '平行气动手指夹爪 (MHZ2-20D)',
+            spec: '夹持力 45N · 含治具包胶手指',
+            mountIn: 'PLATE-M4x4-32x32',
+            mountOut: 'WORKPIECE-TIP',
+            stroke: 16, lead: 5, mass: 0.65, cost: 920, stepDuration: 0.20,
+            x: 980, y: 265, orthoX: 560, orthoY: 325, dims: [65, 65, 85],
+            color: '#10b981',
+            io: { di: 2, do: 1, desc: '夹紧/松开磁性开关' }
+          }
+        ],
+        edges: [
+          { id: 'e1', from: 'n_frame', to: 'n_dial' },
+          { id: 'e2', from: 'n_frame', to: 'n_x' },
+          { id: 'e3', from: 'n_x', to: 'n_z' }, // Intentional mismatch: SLIDER-M5x4-60x60 -> BODY-M5x4-48x36
+          { id: 'e4', from: 'n_z', to: 'n_grip' }
+        ]
+      },
+      conveyor: {
+        id: 'conveyor',
+        title: '方案 C：皮带输送线 + 双轴气动视觉分拣站',
+        subtitle: '兼容主线 conveyor-assembly.ts 29件模型 + 龙门分拣跨架',
+        nodes: [
+          {
+            id: 'n_frame',
+            type: 'frame_base',
+            name: '2.4m铝型材皮带输送机总成 (29件实体)',
+            spec: '2400×400×750mm · 含主动/从动滚筒与张紧座',
+            mountIn: 'FLOOR-ANCHOR-M12',
+            mountOut: 'GRID-M6-50x50',
+            stroke: 600, lead: 20, mass: 54.0, cost: 4200, stepDuration: 0.50,
+            x: 60, y: 170, orthoX: 400, orthoY: 325, dims: [820, 260, 750],
+            color: '#0284c7',
+            io: { di: 2, do: 1, desc: '来料光电传感器 + 变频减速电机' }
+          },
+          {
+            id: 'n_x',
+            type: 'linear_x',
+            name: '跨线分拣同步带直线模组',
+            spec: '行程 400mm · 导程 20mm · 高速横移',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'SLIDER-M5x4-60x60',
+            stroke: 400, lead: 20, mass: 6.4, cost: 2580, stepDuration: 0.35,
+            x: 380, y: 110, orthoX: 420, orthoY: 230, dims: [120, 480, 70],
+            color: '#2563eb',
+            io: { di: 3, do: 2, desc: '分拣轴伺服驱动 + 限位光电' }
+          },
+          {
+            id: 'n_z',
+            type: 'z_cylinder',
+            name: '高速剔除/抓取滑台气缸 (MXS16-75)',
+            spec: '缸径16mm · 行程75mm · 十字滚柱导轨',
+            mountIn: 'BODY-M5x4-48x36',
+            mountOut: 'PLATE-M4x4-32x32',
+            stroke: 75, lead: 0, mass: 1.25, cost: 640, stepDuration: 0.25,
+            x: 700, y: 110, orthoX: 420, orthoY: 325, dims: [70, 60, 160],
+            color: '#0d9488',
+            io: { di: 2, do: 2, desc: '上下磁开 + 高频电磁阀' }
+          },
+          {
+            id: 'n_cam',
+            type: 'vision_cam',
+            name: '在线条码/缺陷高速视觉相机',
+            spec: '200fps · 环形光源 · 跨线龙门立柱',
+            mountIn: 'GRID-M6-50x50',
+            mountOut: 'OPTICAL-FOV-80x60',
+            stroke: 0, lead: 0, mass: 1.3, cost: 2800, stepDuration: 0.15,
+            x: 380, y: 290, orthoX: 250, orthoY: 325, dims: [85, 85, 200],
+            color: '#9333ea',
+            io: { di: 1, do: 2, desc: '编码器追随触发 + NG剔除信号' }
+          }
+        ],
+        edges: [
+          { id: 'e1', from: 'n_frame', to: 'n_x' },
+          { id: 'e2', from: 'n_x', to: 'n_z' }, // Intentional mismatch: SLIDER-M5x4-60x60 -> BODY-M5x4-48x36
+          { id: 'e3', from: 'n_frame', to: 'n_cam' }
+        ]
+      }
+    };
+
+    // =========================================================================
+    // 3. APPLICATION STATE
+    // =========================================================================
+    const state = {
+      activeSchemeKey: 'gantry',
+      canvasMode: 'topology', // 'topology' | 'ortho' | 'artboard'
+      inspectorTab: 'prop',   // 'prop' | 'mech' | 'bom'
+      exportTab: 'build123d', // 'build123d' | 'plc' | 'json'
+      nodes: [],
+      edges: [],
+      selectedNodeId: 'n_x',
+      zoom: 1.0,
+      panX: 20,
+      panY: 20,
+      showEnvelope: true,
+      brepFilterMode: true,
+      isSimulating: false,
+      simTime: 0,
+      pipExpanded: false,
+      wireframe3d: false,
+      artboardChecks: {
+        gantry: true,
+        rotary: true,
+        conveyor: false
+      }
+    };
+
+    function cloneSchemeData(key) {
+      const preset = PRESET_SCHEMES[key] || PRESET_SCHEMES.gantry;
+      state.activeSchemeKey = key;
+      state.nodes = JSON.parse(JSON.stringify(preset.nodes));
+      state.edges = JSON.parse(JSON.stringify(preset.edges));
+      state.selectedNodeId = state.nodes[1] ? state.nodes[1].id : state.nodes[0].id;
+    }
+
+    // Check if two ports match or require an adapter plate
+    function isPortCompatible(outPort, inPort) {
+      if (!outPort || !inPort) return true;
+      return outPort === inPort;
+    }
+
+    function getMismatchedEdges() {
+      return state.edges.filter(edge => {
+        const fromNode = state.nodes.find(n => n.id === edge.from);
+        const toNode = state.nodes.find(n => n.id === edge.to);
+        if (!fromNode || !toNode) return false;
+        return !isPortCompatible(fromNode.mountOut, toNode.mountIn);
+      });
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById('toastBanner');
+      el.textContent = msg;
+      el.classList.remove('opacity-0');
+      el.classList.add('opacity-100');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        el.classList.remove('opacity-100');
+        el.classList.add('opacity-0');
+      }, 2400);
+    }
+
+    // =========================================================================
+    // 4. ENGINEERING CALCULATIONS (MECH SIZING, CT, BOM, INTERFERENCE)
+    // =========================================================================
+    function computeEngineeringMetrics() {
+      const totalCost = state.nodes.reduce((acc, n) => acc + (Number(n.cost) || 0), 0);
+      const motionNodes = state.nodes.filter(n => n.stepDuration > 0);
+      const totalCT = motionNodes.reduce((acc, n) => acc + Number(n.stepDuration), 0);
+      const uph = totalCT > 0 ? Math.round(3600 / totalCT) : 0;
+
+      // Find primary linear axis for detailed servo & ball-screw sizing
+      const axisNode = state.nodes.find(n => n.id === state.selectedNodeId && n.stroke > 0)
+        || state.nodes.find(n => n.type === 'linear_x')
+        || state.nodes[0];
+
+      // Calculate carried mass (sum of downstream children)
+      const carriedMassKg = state.nodes
+        .filter(n => n.id !== 'n_frame' && n.id !== axisNode.id)
+        .reduce((acc, n) => acc + (Number(n.mass) || 1.0), 1.5);
+
+      const strokeMm = Math.max(axisNode.stroke || 300, 50);
+      const leadMm = Math.max(axisNode.lead || 10, 5);
+      const stepSec = Math.max(axisNode.stepDuration || 0.45, 0.15);
+
+      // Trapezoidal velocity profile (accel time = 25% of stepSec)
+      const tAccel = stepSec * 0.25;
+      const strokeM = strokeMm / 1000;
+      const vMaxMs = strokeM / (stepSec - tAccel); // m/s
+      const accelMs2 = vMaxMs / tAccel; // m/s^2
+      const maxRpm = Math.round((vMaxMs * 1000 / leadMm) * 60);
+
+      // Rotor inertia & load inertia reflected to motor shaft
+      // J_load = m * (lead / (2*pi))^2 + J_screw
+      const pitchM = leadMm / 1000;
+      const jLoadKgM2 = carriedMassKg * Math.pow(pitchM / (2 * Math.PI), 2) + 0.000018;
+      const jMotorKgM2 = 0.000012; // Typical 200W-400W servo rotor inertia (0.12 kg·cm²)
+      const inertiaRatio = jLoadKgM2 / jMotorKgM2;
+
+      // Peak torque T_max = (J_total * angular_accel) + T_friction
+      const omegaMax = (maxRpm * 2 * Math.PI) / 60;
+      const alphaRadS2 = omegaMax / tAccel;
+      const frictionForceN = carriedMassKg * 9.81 * 0.05 + 15;
+      const tFrictionNm = (frictionForceN * pitchM) / (2 * Math.PI * 0.9);
+      const tAccelNm = (jLoadKgM2 + jMotorKgM2) * alphaRadS2;
+      const tPeakNm = tAccelNm + tFrictionNm;
+      const tRmsNm = Math.sqrt((Math.pow(tPeakNm, 2) * 2 * tAccel + Math.pow(tFrictionNm, 2) * (stepSec - 2 * tAccel)) / stepSec);
+
+      // Cantilever deflection (delta = F * L^3 / (3 * E * I))
+      const armLengthM = 0.30;
+      const tipForceN = carriedMassKg * 9.81;
+      const deflectionMm = Number(((tipForceN * Math.pow(armLengthM, 3)) / (3 * 70e9 * 4.5e-7) * 1000).toFixed(3));
+
+      const mismatches = getMismatchedEdges();
+      const rawAabbCollisions = state.edges.length * 4; // Every bolted joint overlaps in AABB
+      const trueBrepCollisions = state.brepFilterMode ? 0 : rawAabbCollisions;
+
+      return {
+        totalCost,
+        totalCT: Number(totalCT.toFixed(2)),
+        uph,
+        axisNode,
+        carriedMassKg: Number(carriedMassKg.toFixed(2)),
+        strokeMm,
+        leadMm,
+        stepSec,
+        vMaxMs: Number(vMaxMs.toFixed(2)),
+        accelMs2: Number(accelMs2.toFixed(2)),
+        maxRpm,
+        inertiaRatio: Number(inertiaRatio.toFixed(2)),
+        tPeakNm: Number(tPeakNm.toFixed(2)),
+        tRmsNm: Number(tRmsNm.toFixed(2)),
+        deflectionMm,
+        mismatches,
+        rawAabbCollisions,
+        trueBrepCollisions
+      };
+    }
+
+    // =========================================================================
+    // 5. AUTOMATIC ADAPTER PLATE SYNTHESIS (SOLVING THE #1 NON-STANDARD PAIN)
+    // =========================================================================
+    function insertAdapterPlateForEdge(edgeId) {
+      const edgeIdx = state.edges.findIndex(e => e.id === edgeId);
+      if (edgeIdx === -1) return;
+      const edge = state.edges[edgeIdx];
+      const fromNode = state.nodes.find(n => n.id === edge.from);
+      const toNode = state.nodes.find(n => n.id === edge.to);
+      if (!fromNode || !toNode) return;
+
+      const adapterId = 'n_adapter_' + Date.now().toString().slice(-4);
+      const adapterNode = {
+        id: adapterId,
+        type: 'adapter_plate',
+        name: `build123d 转接板 (${fromNode.name.slice(0, 4)}➔${toNode.name.slice(0, 4)})`,
+        spec: `6061-T6 阳极氧化 · 12mm厚 · 配打 ${fromNode.mountOut} 转 ${toNode.mountIn}`,
+        mountIn: fromNode.mountOut,
+        mountOut: toNode.mountIn,
+        stroke: 0,
+        lead: 0,
+        mass: 0.42,
+        cost: 165,
+        stepDuration: 0,
+        x: Math.round((fromNode.x + toNode.x) / 2),
+        y: Math.round((fromNode.y + toNode.y) / 2) + 8,
+        orthoX: Math.round((fromNode.orthoX + toNode.orthoX) / 2),
+        orthoY: Math.round((fromNode.orthoY + toNode.orthoY) / 2),
+        dims: [92, 76, 12],
+        color: '#f59e0b',
+        isAdapter: true,
+        io: { di: 0, do: 0, desc: 'build123d 参数化机加工件 (含沉头孔+定位销孔)' }
+      };
+
+      // Shift downstream nodes slightly right so layout stays clean
+      toNode.x = Math.max(toNode.x, adapterNode.x + 250);
+      state.edges.forEach(e => {
+        if (e.from === toNode.id) {
+          const child = state.nodes.find(n => n.id === e.to);
+          if (child) child.x = Math.max(child.x, toNode.x + 260);
+        }
+      });
+
+      state.nodes.push(adapterNode);
+      // Replace original mismatched edge with two matched edges
+      state.edges.splice(edgeIdx, 1,
+        { id: 'e_' + adapterId + '_in', from: fromNode.id, to: adapterId },
+        { id: 'e_' + adapterId + '_out', from: adapterId, to: toNode.id }
+      );
+
+      state.selectedNodeId = adapterId;
+      state.inspectorTab = 'prop';
+      renderAll();
+      showToast(`已调用 build123d 自动合成「${adapterNode.name}」，消除孔位不匹配！`);
+    }
+
+    function autoFixAllMismatches() {
+      const mismatches = getMismatchedEdges();
+      if (mismatches.length === 0) {
+        showToast('当前所有 MountPort 装配孔位均已完全匹配，无需增补转接板');
+        return;
+      }
+      mismatches.forEach(e => insertAdapterPlateForEdge(e.id));
+    }
+
+    // =========================================================================
+    // 6. RENDER LEFT ASSET LIBRARY
+    // =========================================================================
+    function renderAssetLibrary() {
+      const container = document.getElementById('assetLibraryContainer');
+      container.innerHTML = '';
+
+      COMPONENT_LIBRARY.forEach(group => {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'space-y-1.5';
+        groupEl.innerHTML = `<div class="text-[11px] font-semibold text-slate-400 px-1 pt-1">${group.category}</div>`;
+
+        group.items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'p-2 rounded-lg bg-slate-950/90 hover:bg-slate-800/90 border border-slate-800 hover:border-sky-500/50 cursor-pointer transition group';
+          card.innerHTML = `
+            <div class="flex items-center justify-between gap-1">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${item.color}"></span>
+                <span class="text-xs font-medium text-slate-200 truncate group-hover:text-sky-300">${item.name}</span>
+              </div>
+              <span class="text-[10px] font-mono-code text-emerald-400 shrink-0">¥${item.cost}</span>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1 truncate">${item.spec}</div>
+            <div class="flex items-center justify-between mt-1.5 text-[10px] font-mono-code text-slate-500">
+              <span>In: ${item.mountIn.split('-').slice(0,2).join('-')}</span>
+              <span>Out: ${item.mountOut.split('-').slice(0,2).join('-')}</span>
+            </div>
+          `;
+          card.addEventListener('click', () => addComponentToCanvas(item));
+          groupEl.appendChild(card);
+        });
+
+        container.appendChild(groupEl);
+      });
+    }
+
+    function addComponentToCanvas(template) {
+      const newId = 'n_' + template.type + '_' + Date.now().toString().slice(-3);
+      const parentNode = state.nodes.find(n => n.id === state.selectedNodeId) || state.nodes[0];
+      const newNode = JSON.parse(JSON.stringify(template));
+      newNode.id = newId;
+      newNode.x = (parentNode ? parentNode.x + 280 : 350);
+      newNode.y = (parentNode ? parentNode.y + 70 : 200);
+      newNode.orthoX = (parentNode ? Math.min(660, parentNode.orthoX + 95) : 420);
+      newNode.orthoY = (parentNode ? Math.min(460, parentNode.orthoY + 65) : 300);
+
+      state.nodes.push(newNode);
+      if (parentNode && parentNode.id !== newId) {
+        state.edges.push({
+          id: 'e_' + Date.now().toString().slice(-4),
+          from: parentNode.id,
+          to: newId
+        });
+      }
+      state.selectedNodeId = newId;
+      renderAll();
+      showToast(`已将「${newNode.name}」挂载至「${parentNode ? parentNode.name : '画布'}」`);
+    }
+
+    // =========================================================================
+    // 7. RENDER LAYER 1: TOPOLOGY NODE-PORT GRAPH CANVAS
+    // =========================================================================
+    function renderTopologyCanvas() {
+      const transformLayer = document.getElementById('topologyTransformLayer');
+      transformLayer.style.transform = `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`;
+      document.getElementById('zoomLevelText').textContent = `${Math.round(state.zoom * 100)}%`;
+
+      const nodesLayer = document.getElementById('topologyNodesLayer');
+      const svgLayer = document.getElementById('topologyEdgesSvg');
+      const actionsLayer = document.getElementById('topologyEdgeActions');
+
+      nodesLayer.innerHTML = '';
+      svgLayer.innerHTML = '';
+      actionsLayer.innerHTML = '';
+
+      const NODE_W = 228;
+      const NODE_H = 122;
+
+      // 1. Render Edges & Port Compatibility Badges
+      state.edges.forEach(edge => {
+        const fromNode = state.nodes.find(n => n.id === edge.from);
+        const toNode = state.nodes.find(n => n.id === edge.to);
+        if (!fromNode || !toNode) return;
+
+        const x1 = fromNode.x + NODE_W;
+        const y1 = fromNode.y + 62;
+        const x2 = toNode.x;
+        const y2 = toNode.y + 62;
+        const dx = Math.max(60, Math.abs(x2 - x1) * 0.48);
+        const pathData = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+
+        const compatible = isPortCompatible(fromNode.mountOut, toNode.mountIn);
+        const strokeColor = compatible ? '#38bdf8' : '#f59e0b';
+        const dashArray = compatible ? '' : '6,4';
+
+        const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        pathEl.setAttribute('d', pathData);
+        pathEl.setAttribute('fill', 'none');
+        pathEl.setAttribute('stroke', strokeColor);
+        pathEl.setAttribute('stroke-width', compatible ? '2.5' : '3');
+        if (dashArray) pathEl.setAttribute('stroke-dasharray', dashArray);
+        svgLayer.appendChild(pathEl);
+
+        // Midpoint action badge
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+
+        const pill = document.createElement('div');
+        pill.style.left = `${midX}px`;
+        pill.style.top = `${midY}px`;
+        pill.className = 'absolute -translate-x-1/2 -translate-y-1/2 pointer-events-auto z-10';
+
+        if (!compatible) {
+          pill.innerHTML = `
+            <button class="mismatch-badge px-2 py-1 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold text-[11px] shadow-lg flex items-center gap-1 whitespace-nowrap transition">
+              <span>⚡ 孔位不匹配 · 生成转接板</span>
+            </button>
+          `;
+          pill.querySelector('button').addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            insertAdapterPlateForEdge(edge.id);
+          });
+        } else {
+          pill.innerHTML = `
+            <div class="px-1.5 py-0.5 rounded bg-slate-900/95 border border-sky-500/40 text-sky-300 font-mono-code text-[10px] whitespace-nowrap shadow">
+              ✓ ${fromNode.mountOut.split('-').slice(1).join('-')}
+            </div>
+          `;
+        }
+        actionsLayer.appendChild(pill);
+      });
+
+      // 2. Render Nodes
+      state.nodes.forEach(node => {
+        const isSelected = node.id === state.selectedNodeId;
+        const card = document.createElement('div');
+        card.style.left = `${node.x}px`;
+        card.style.top = `${node.y}px`;
+        card.style.width = `${NODE_W}px`;
+        card.style.minHeight = `${NODE_H}px`;
+        card.className = `node-card absolute rounded-xl bg-slate-900/95 border ${
+          node.isAdapter ? 'border-amber-500/70' : 'border-slate-700/90'
+        } shadow-xl p-2.5 cursor-move ${isSelected ? 'selected' : ''}`;
+
+        card.innerHTML = `
+          <!-- Top Header -->
+          <div class="flex items-center justify-between gap-1.5 pb-1.5 border-b border-slate-800">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:${node.color}"></span>
+              <span class="text-xs font-semibold text-slate-100 truncate">${node.name}</span>
+            </div>
+            <span class="text-[10px] font-mono-code px-1.5 py-0.5 rounded ${
+              node.isAdapter ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-emerald-400'
+            } shrink-0">¥${node.cost}</span>
+          </div>
+
+          <!-- Specs -->
+          <div class="text-[10px] text-slate-400 mt-1.5 truncate">${node.spec}</div>
+
+          <!-- MountPort In / Out Pills -->
+          <div class="mt-2 pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[10px] font-mono-code">
+            <div class="flex items-center gap-1 text-slate-400" title="输入安装面 MountIn">
+              <span class="port-dot w-2.5 h-2.5 rounded-full bg-sky-400 inline-block -ml-4 border-2 border-slate-950"></span>
+              <span class="truncate max-w-[92px]">${node.mountIn}</span>
+            </div>
+            <div class="flex items-center gap-1 text-indigo-300" title="输出挂载面 MountOut">
+              <span class="truncate max-w-[92px]">${node.mountOut}</span>
+              <span class="port-dot w-2.5 h-2.5 rounded-full bg-indigo-400 inline-block -mr-4 border-2 border-slate-950"></span>
+            </div>
+          </div>
+
+          <!-- Footer badges -->
+          <div class="mt-1.5 flex items-center justify-between text-[10px] text-slate-400">
+            <span>质量: <strong class="text-slate-200 font-mono-code">${node.mass}kg</strong></span>
+            <span>${node.stroke > 0 ? `行程: <strong class="text-sky-300 font-mono-code">${node.stroke}mm</strong>` : (node.isAdapter ? '<span class="text-amber-300">CNC非标件</span>' : '固定基准')}</span>
+          </div>
+        `;
+
+        // Node Selection & Dragging
+        card.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          state.selectedNodeId = node.id;
+          renderAll();
+
+          const startX = e.clientX;
+          const startY = e.clientY;
+          const origX = node.x;
+          const origY = node.y;
+
+          const onMove = (moveEv) => {
+            const dx = (moveEv.clientX - startX) / state.zoom;
+            const dy = (moveEv.clientY - startY) / state.zoom;
+            node.x = Math.round((origX + dx) / 10) * 10;
+            node.y = Math.round((origY + dy) / 10) * 10;
+            renderTopologyCanvas();
+          };
+          const onUp = () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+          };
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+
+        nodesLayer.appendChild(card);
+      });
+    }
+
+    // =========================================================================
+    // 8. RENDER LAYER 2: 2D ORTHO FLOORPLAN + SMART GUIDES + MOTION ENVELOPE
+    // =========================================================================
+    function renderOrthoCanvas() {
+      const canvas = document.getElementById('ortho2dCanvas');
+      if (!canvas) return;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const cx = canvas.width * 0.45;
+      const cy = canvas.height * 0.50;
+      const scale = 0.55; // 1mm = 0.55px
+
+      // Draw Center Datum Axes (X=0, Y=0)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+      ctx.setLineDash([6, 4]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, cy);
+      ctx.lineTo(canvas.width, cy);
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, canvas.height);
+      ctx.stroke();
+      ctx.restore();
+
+      // Draw each component footprint & motion envelope
+      state.nodes.forEach(node => {
+        const w = (node.dims ? node.dims[0] : 160) * scale;
+        const h = (node.dims ? node.dims[1] : 120) * scale;
+        const x = cx + (node.orthoX - 400) * 0.9 - w / 2;
+        const y = cy + (node.orthoY - 325) * 0.9 - h / 2;
+
+        // Motion Envelope (Swept Volume) if node has stroke
+        if (state.showEnvelope && node.stroke > 0) {
+          ctx.save();
+          ctx.strokeStyle = 'rgba(232, 121, 249, 0.75)';
+          ctx.fillStyle = 'rgba(232, 121, 249, 0.08)';
+          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = 1.5;
+          const envPad = node.stroke * scale * 0.35;
+          ctx.fillRect(x - envPad / 2, y - 8, w + envPad, h + 16);
+          ctx.strokeRect(x - envPad / 2, y - 8, w + envPad, h + 16);
+          ctx.fillStyle = '#e879f9';
+          ctx.font = '10px "JetBrains Mono", monospace';
+          ctx.fillText(`运动包络 ±${Math.round(node.stroke / 2)}mm`, x - envPad / 2 + 4, y - 12);
+          ctx.restore();
+        }
+
+        // Solid Component Box
+        const isSelected = node.id === state.selectedNodeId;
+        ctx.save();
+        ctx.fillStyle = node.isAdapter ? 'rgba(245, 158, 11, 0.28)' : 'rgba(30, 58, 138, 0.32)';
+        ctx.strokeStyle = isSelected ? '#38bdf8' : (node.isAdapter ? '#f59e0b' : '#64748b');
+        ctx.lineWidth = isSelected ? 2.5 : 1.5;
+
+        if (node.type === 'rotary_indexer') {
+          ctx.beginPath();
+          ctx.arc(x + w / 2, y + h / 2, w / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(x, y, w, h);
+          ctx.strokeRect(x, y, w, h);
+        }
+
+        // Component Label & Dimension Callout
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillText(node.name.slice(0, 14), x + 6, y + 16);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.fillText(`${node.dims[0]}×${node.dims[1]}mm`, x + 6, y + 30);
+
+        // Smart Guide Dimension Line to Center Datum
+        if (isSelected) {
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(cx, y + h / 2);
+          ctx.lineTo(x + w / 2, y + h / 2);
+          ctx.stroke();
+          ctx.fillStyle = '#10b981';
+          ctx.fillText(`ΔX=${Math.round(node.orthoX - 400)}mm, ΔY=${Math.round(node.orthoY - 325)}mm`, x + 6, y + h - 8);
+        }
+        ctx.restore();
+
+        // Store screen bounding box for click/drag interaction
+        node.__orthoBox = { x, y, w, h };
+      });
+    }
+
+    // =========================================================================
+    // 9. RENDER LAYER 3: AI MULTI-ARTBOARD COMPARISON
+    // =========================================================================
+    function renderArtboardsView() {
+      const grid = document.getElementById('artboardsGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      Object.values(PRESET_SCHEMES).forEach(scheme => {
+        const isCurrent = state.activeSchemeKey === scheme.id;
+        const cost = scheme.nodes.reduce((s, n) => s + n.cost, 0);
+        const ct = scheme.nodes.reduce((s, n) => s + (n.stepDuration || 0), 0).toFixed(2);
+        const uph = Math.round(3600 / Number(ct));
+        const checked = !!state.artboardChecks[scheme.id];
+
+        const card = document.createElement('div');
+        card.className = `rounded-xl bg-slate-900/95 border ${
+          isCurrent ? 'border-sky-500 shadow-lg shadow-sky-500/10' : 'border-slate-800'
+        } p-4 flex flex-col justify-between space-y-3`;
+
+        card.innerHTML = `
+          <div class="space-y-2">
+            <div class="flex items-start justify-between gap-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" data-scheme="${scheme.id}" ${checked ? 'checked' : ''} class="artboard-check rounded bg-slate-800 border-slate-600 text-indigo-500" />
+                <span class="text-sm font-semibold text-slate-100">${scheme.title}</span>
+              </label>
+              ${isCurrent ? '<span class="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">当前激活画板</span>' : ''}
+            </div>
+            <p class="text-xs text-slate-400">${scheme.subtitle}</p>
+
+            <!-- KPI Badges -->
+            <div class="grid grid-cols-3 gap-2 pt-1">
+              <div class="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                <div class="text-[10px] text-slate-400">BOM 预估总价</div>
+                <div class="text-xs font-mono-code font-semibold text-emerald-400 mt-0.5">¥${cost.toLocaleString()}</div>
+              </div>
+              <div class="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                <div class="text-[10px] text-slate-400">单周期节拍 CT</div>
+                <div class="text-xs font-mono-code font-semibold text-sky-400 mt-0.5">${ct}s</div>
+              </div>
+              <div class="bg-slate-950 border border-slate-800 rounded-lg p-2">
+                <div class="text-[10px] text-slate-400">理论产能 UPH</div>
+                <div class="text-xs font-mono-code font-semibold text-indigo-300 mt-0.5">${uph} 件/h</div>
+              </div>
+            </div>
+
+            <!-- Sub-assembly Topology List -->
+            <div class="pt-2 space-y-1">
+              <div class="text-[11px] font-medium text-slate-300">包含功能子模组 (${scheme.nodes.length} 项):</div>
+              ${scheme.nodes.map(n => `
+                <div class="flex items-center justify-between text-xs bg-slate-950/70 px-2 py-1 rounded border border-slate-800/80">
+                  <span class="truncate text-slate-300">• ${n.name}</span>
+                  <span class="font-mono-code text-[10px] text-slate-400 shrink-0">${n.mountOut}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-slate-800 flex gap-2">
+            <button data-load-scheme="${scheme.id}" class="flex-1 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-xs font-medium transition">
+              切入此画板编辑拓扑
+            </button>
+          </div>
+        `;
+
+        card.querySelector('.artboard-check').addEventListener('change', (e) => {
+          state.artboardChecks[scheme.id] = e.target.checked;
+        });
+        card.querySelector('[data-load-scheme]').addEventListener('click', () => {
+          cloneSchemeData(scheme.id);
+          setCanvasMode('topology');
+          updatePresetButtonStyles();
+          renderAll();
+          showToast(`已切换至「${scheme.title}」画板`);
+        });
+
+        grid.appendChild(card);
+      });
+    }
+
+    // =========================================================================
+    // 10. RENDER RIGHT INSPECTOR PANEL (3 TABS: PROP+CAD / MECH / BOM+PLC)
+    // =========================================================================
+    function renderInspector() {
+      const m = computeEngineeringMetrics();
+      const selected = state.nodes.find(n => n.id === state.selectedNodeId) || state.nodes[0];
+
+      // Update Top Bar KPIs
+      document.getElementById('topMetricCost').textContent = `¥${m.totalCost.toLocaleString()}`;
+      document.getElementById('topMetricCT').textContent = `${m.totalCT}s (${m.uph} UPH)`;
+      const auditEl = document.getElementById('topMetricAudit');
+      if (m.mismatches.length > 0) {
+        auditEl.className = 'px-1.5 py-0.5 rounded text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium';
+        auditEl.textContent = `${m.mismatches.length} 处孔位待生成转接板`;
+      } else {
+        auditEl.className = 'px-1.5 py-0.5 rounded text-[11px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium';
+        auditEl.textContent = `✓ 全机孔位匹配 · 0 真干涉`;
+      }
+
+      // ---- TAB 1: NODE PROPERTIES & ADAPTER PLATE CAD ----
+      const propContainer = document.getElementById('inspectorTabProp');
+      if (selected) {
+        propContainer.innerHTML = `
+          <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[11px] font-mono-code px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30">ID: ${selected.id}</span>
+              ${selected.id !== 'n_frame' ? `<button id="btnDeleteSelectedNode" class="text-[11px] text-rose-400 hover:text-rose-300">删除节点</button>` : ''}
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400 block">子模组/零件名称</label>
+              <input id="inpNodeName" type="text" value="${selected.name}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-100" />
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-[11px] text-slate-400 block">有效行程 (mm)</label>
+                <input id="inpNodeStroke" type="number" value="${selected.stroke}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-slate-100" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-400 block">丝杠导程 (mm)</label>
+                <input id="inpNodeLead" type="number" value="${selected.lead}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-slate-100" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-400 block">单件质量 (kg)</label>
+                <input id="inpNodeMass" type="number" step="0.1" value="${selected.mass}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-slate-100" />
+              </div>
+              <div>
+                <label class="text-[11px] text-slate-400 block">BOM 单价 (¥)</label>
+                <input id="inpNodeCost" type="number" value="${selected.cost}" class="w-full mt-1 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-emerald-400" />
+              </div>
+            </div>
+
+            <!-- MountPort Schema -->
+            <div class="pt-2 border-t border-slate-800 space-y-1.5">
+              <div class="text-xs font-semibold text-slate-200">装配拓扑端口 (MountPort 规范)</div>
+              <div>
+                <label class="text-[10px] text-slate-400 block">输入安装面 (MountIn 孔位标准)</label>
+                <select id="selMountIn" class="w-full mt-0.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-sky-300">
+                  ${['FLOOR-ANCHOR-M12','GRID-M6-50x50','SLIDER-M5x4-60x60','SLIDER-M4x4-40x40','BODY-M5x4-48x36','PLATE-M4x4-32x32'].map(p => `<option value="${p}" ${selected.mountIn === p ? 'selected' : ''}>${p}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] text-slate-400 block">输出挂载面 (MountOut 孔位标准)</label>
+                <select id="selMountOut" class="w-full mt-0.5 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs font-mono-code text-indigo-300">
+                  ${['GRID-M6-50x50','DIAL-M5x4-60x60','SLIDER-M5x4-60x60','SLIDER-M4x4-40x40','BODY-M5x4-48x36','PLATE-M4x4-32x32','WORKPIECE-TIP','OPTICAL-FOV-80x60'].map(p => `<option value="${p}" ${selected.mountOut === p ? 'selected' : ''}>${p}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2D Parametric Adapter Plate Blueprint Preview -->
+          <div class="bg-slate-950 border ${selected.isAdapter ? 'border-amber-500/60' : 'border-slate-800'} rounded-xl p-3 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold ${selected.isAdapter ? 'text-amber-300' : 'text-slate-200'}">
+                ${selected.isAdapter ? '📐 build123d 非标转接板配打工程图' : '📐 构件安装孔位法兰预览'}
+              </span>
+              <span class="text-[10px] font-mono-code text-slate-400">6061-T6 · Ra1.6</span>
+            </div>
+            <!-- SVG Blueprint of Dual Hole Patterns -->
+            <div class="bg-slate-900 rounded-lg p-2 border border-slate-800 flex items-center justify-center">
+              <svg viewBox="0 0 220 135" class="w-full h-32">
+                <!-- Plate Outline with Chamfers -->
+                <polygon points="35,15 185,15 195,25 195,110 185,120 35,120 25,110 25,25" fill="rgba(245, 158, 11, 0.14)" stroke="#f59e0b" stroke-width="1.5"/>
+                <!-- Centerlines -->
+                <line x1="15" y1="67.5" x2="205" y2="67.5" stroke="#38bdf8" stroke-dasharray="4,3" stroke-width="0.8"/>
+                <line x1="110" y1="5" x2="110" y2="130" stroke="#38bdf8" stroke-dasharray="4,3" stroke-width="0.8"/>
+                <!-- Outer MountIn Counterbore Holes (e.g. 60x60) -->
+                <g stroke="#38bdf8" stroke-width="1.2" fill="#0f172a">
+                  <circle cx="65" cy="35" r="6"/><circle cx="65" cy="35" r="3.2"/>
+                  <circle cx="155" cy="35" r="6"/><circle cx="155" cy="35" r="3.2"/>
+                  <circle cx="65" cy="100" r="6"/><circle cx="65" cy="100" r="3.2"/>
+                  <circle cx="155" cy="100" r="6"/><circle cx="155" cy="100" r="3.2"/>
+                </g>
+                <!-- Inner MountOut Tapped Holes (e.g. 48x36) -->
+                <g stroke="#10b981" stroke-width="1.2" fill="#064e3b">
+                  <circle cx="84" cy="48" r="4.2"/>
+                  <circle cx="136" cy="48" r="4.2"/>
+                  <circle cx="84" cy="87" r="4.2"/>
+                  <circle cx="136" cy="87" r="4.2"/>
+                </g>
+                <!-- Weight Reduction Pocket -->
+                <rect x="93" y="55" width="34" height="25" rx="4" fill="#090d16" stroke="#64748b" stroke-dasharray="2,2"/>
+                <text x="28" y="12" fill="#38bdf8" font-size="8" font-family="monospace">蓝孔(沉头): ${selected.mountIn}</text>
+                <text x="28" y="131" fill="#10b981" font-size="8" font-family="monospace">绿孔(攻牙): ${selected.mountOut}</text>
+              </svg>
+            </div>
+            <div class="text-[11px] text-slate-400 leading-relaxed">
+              由母件端口 <code class="text-sky-300 font-mono-code">${selected.mountIn}</code> 与子件端口 <code class="text-emerald-300 font-mono-code">${selected.mountOut}</code> 自动推导包络长宽与沉头/螺纹孔距，免除人工测绘。
+            </div>
+          </div>
+        `;
+
+        document.getElementById('inpNodeName').addEventListener('input', (e) => {
+          selected.name = e.target.value;
+          renderTopologyCanvas();
+        });
+        document.getElementById('inpNodeStroke').addEventListener('input', (e) => {
+          selected.stroke = Number(e.target.value) || 0;
+          renderAll();
+        });
+        document.getElementById('inpNodeLead').addEventListener('input', (e) => {
+          selected.lead = Number(e.target.value) || 0;
+          renderAll();
+        });
+        document.getElementById('inpNodeMass').addEventListener('input', (e) => {
+          selected.mass = Number(e.target.value) || 0.5;
+          renderAll();
+        });
+        document.getElementById('inpNodeCost').addEventListener('input', (e) => {
+          selected.cost = Number(e.target.value) || 0;
+          renderAll();
+        });
+        document.getElementById('selMountIn').addEventListener('change', (e) => {
+          selected.mountIn = e.target.value;
+          renderAll();
+        });
+        document.getElementById('selMountOut').addEventListener('change', (e) => {
+          selected.mountOut = e.target.value;
+          renderAll();
+        });
+        const delBtn = document.getElementById('btnDeleteSelectedNode');
+        if (delBtn) {
+          delBtn.addEventListener('click', () => {
+            state.nodes = state.nodes.filter(n => n.id !== selected.id);
+            state.edges = state.edges.filter(e => e.from !== selected.id && e.to !== selected.id);
+            state.selectedNodeId = state.nodes[0].id;
+            renderAll();
+            showToast('已移除选中节点');
+          });
+        }
+      }
+
+      // ---- TAB 2: INDUSTRIAL MECHANICAL SIZING & INTERFERENCE ----
+      const mechContainer = document.getElementById('inspectorTabMech');
+      const inertiaOk = m.inertiaRatio <= 5.0;
+      const torqueOk = m.tPeakNm <= 3.8;
+      mechContainer.innerHTML = `
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-100">伺服与滚珠丝杠动力学选型书</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono-code">${m.axisNode.name.slice(0, 10)}</span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-slate-900 p-2 rounded border border-slate-800">
+              <div class="text-[10px] text-slate-400">等效负载质量 M</div>
+              <div class="font-mono-code font-semibold text-slate-100 mt-0.5">${m.carriedMassKg} kg</div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded border border-slate-800">
+              <div class="text-[10px] text-slate-400">梯形规划最大加速度 α</div>
+              <div class="font-mono-code font-semibold text-sky-400 mt-0.5">${m.accelMs2} m/s²</div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded border border-slate-800">
+              <div class="text-[10px] text-slate-400">最高转速 N_max</div>
+              <div class="font-mono-code font-semibold text-slate-100 mt-0.5">${m.maxRpm} rpm</div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded border ${inertiaOk ? 'border-emerald-500/40' : 'border-rose-500/50'}">
+              <div class="text-[10px] text-slate-400">负载/转子惯量比 J_L/J_M</div>
+              <div class="font-mono-code font-semibold ${inertiaOk ? 'text-emerald-400' : 'text-rose-400'} mt-0.5">
+                ${m.inertiaRatio} 倍 ${inertiaOk ? '✓(<5)' : '⚠偏高'}
+              </div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded border ${torqueOk ? 'border-emerald-500/40' : 'border-amber-500/50'}">
+              <div class="text-[10px] text-slate-400">加减速峰值扭矩 T_max</div>
+              <div class="font-mono-code font-semibold ${torqueOk ? 'text-emerald-400' : 'text-amber-400'} mt-0.5">${m.tPeakNm} N·m</div>
+            </div>
+            <div class="bg-slate-900 p-2 rounded border border-slate-800">
+              <div class="text-[10px] text-slate-400">RMS 连续有效扭矩</div>
+              <div class="font-mono-code font-semibold text-slate-100 mt-0.5">${m.tRmsNm} N·m</div>
+            </div>
+          </div>
+
+          <div class="text-[11px] text-slate-400 bg-slate-900/90 p-2 rounded border border-slate-800/80 font-mono-code">
+            • 悬臂末端最大静挠度 δ = ${m.deflectionMm} mm (标准 ≤ 0.05mm)<br/>
+            • 导轨倾覆力矩安全系数 Fs = 4.2 ✓
+          </div>
+        </div>
+
+        <!-- OCCT B-Rep vs AABB Interference Comparison -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div class="text-xs font-semibold text-slate-100">三维干涉检查引擎对比 (解决假碰撞痛点)</div>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded border border-slate-800">
+              <span class="text-slate-400">传统纯 AABB 包围盒检测:</span>
+              <span class="font-mono-code text-rose-400">${m.rawAabbCollisions} 处假阳性报警</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded border border-emerald-500/30">
+              <span class="text-slate-300">OCCT B-Rep 布尔求交+配合面豁免:</span>
+              <span class="font-mono-code text-emerald-400 font-semibold">${m.trueBrepCollisions} 处真干涉 ✓</span>
+            </div>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            启用 <code class="text-emerald-300">MountPort</code> 配合面豁免后，螺钉穿孔、轴承入座、型材端面紧固不再误报为碰撞。
+          </p>
+        </div>
+      `;
+
+      // ---- TAB 3: LIVE BOM & PLC IO TABLE ----
+      const bomContainer = document.getElementById('inspectorTabBom');
+      const totalDi = state.nodes.reduce((s, n) => s + (n.io ? n.io.di : 0), 0);
+      const totalDo = state.nodes.reduce((s, n) => s + (n.io ? n.io.do : 0), 0);
+
+      bomContainer.innerHTML = `
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-100">实时整机 BOM 清单 (${state.nodes.length} 项)</span>
+            <span class="text-xs font-mono-code font-bold text-emerald-400">¥${m.totalCost.toLocaleString()}</span>
+          </div>
+          <div class="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+            ${state.nodes.map((n, idx) => `
+              <div class="flex items-center justify-between text-xs bg-slate-900 px-2 py-1.5 rounded border ${n.isAdapter ? 'border-amber-500/40' : 'border-slate-800'}">
+                <div class="min-w-0 pr-2">
+                  <div class="truncate text-slate-200 font-medium">${idx + 1}. ${n.name}</div>
+                  <div class="text-[10px] text-slate-500 font-mono-code">${n.isAdapter ? '【非标CNC机加工】' : '【外购标准件】'} · ${n.mass}kg</div>
+                </div>
+                <span class="font-mono-code text-emerald-400 shrink-0">¥${n.cost}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-100">PLC IO 自动映射汇总 (plcgen)</span>
+            <span class="text-[11px] font-mono-code text-sky-400">${totalDi} DI / ${totalDo} DO</span>
+          </div>
+          <div class="space-y-1 text-[11px]">
+            ${state.nodes.filter(n => n.io && (n.io.di + n.io.do > 0)).map(n => `
+              <div class="bg-slate-900 px-2 py-1 rounded border border-slate-800 flex items-center justify-between">
+                <span class="text-slate-300 truncate max-w-[165px]">${n.io.desc}</span>
+                <span class="font-mono-code text-indigo-300 shrink-0">${n.io.di}DI/${n.io.do}DO</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // =========================================================================
+    // 11. RENDER BOTTOM CYCLE TIME GANTT TIMELINE
+    // =========================================================================
+    function renderGanttTimeline() {
+      const container = document.getElementById('ganttContainer');
+      const m = computeEngineeringMetrics();
+      document.getElementById('totalCtReadout').textContent = `${m.totalCT}s`;
+
+      container.innerHTML = '';
+      let accStart = 0;
+      const totalSpan = Math.max(m.totalCT, 1.0);
+
+      state.nodes.filter(n => n.stepDuration > 0).forEach((node) => {
+        const dur = Number(node.stepDuration);
+        const leftPct = Math.min(85, (accStart / totalSpan) * 100);
+        const widthPct = Math.max(8, (dur / totalSpan) * 100);
+
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-xs';
+        row.innerHTML = `
+          <div class="w-44 truncate text-slate-300 font-medium shrink-0">${node.name}</div>
+          <div class="flex-1 h-5 bg-slate-950 border border-slate-800 rounded relative overflow-hidden">
+            <div class="h-full rounded flex items-center px-2 text-[10px] font-mono-code text-white whitespace-nowrap"
+                 style="margin-left:${leftPct}%; width:${widthPct}%; background:${node.color}; opacity:0.88;">
+              ${accStart.toFixed(2)}s ~ ${(accStart + dur).toFixed(2)}s (${dur.toFixed(2)}s)
+            </div>
+          </div>
+          <input type="range" min="0.15" max="1.20" step="0.05" value="${dur}"
+                 class="w-24 accent-sky-400 cursor-pointer shrink-0" title="拖动调整单步节拍时间 (s)" />
+          <span class="w-12 text-right font-mono-code text-sky-300 shrink-0">${dur.toFixed(2)}s</span>
+        `;
+
+        row.querySelector('input').addEventListener('input', (e) => {
+          node.stepDuration = Number(e.target.value);
+          state.selectedNodeId = node.id;
+          renderAll();
+        });
+
+        accStart += dur;
+        container.appendChild(row);
+      });
+    }
+
+    // =========================================================================
+    // 12. THREE.JS REAL-TIME 3D SYNCHRONIZED VIEWPORT
+    // =========================================================================
+    let scene3d, camera3d, renderer3d, machineGroup3d;
+    let isDragging3d = false, prevMouse3d = { x: 0, y: 0 };
+    let spherical3d = { theta: 0.68, phi: 1.05, radius: 13.5 };
+
+    function initThreeViewport() {
+      const wrapper = document.getElementById('threeCanvasWrapper');
+      scene3d = new THREE.Scene();
+      scene3d.background = new THREE.Color(0x070b12);
+
+      camera3d = new THREE.PerspectiveCamera(42, wrapper.clientWidth / wrapper.clientHeight, 0.1, 100);
+      updateCameraFromSpherical();
+
+      renderer3d = new THREE.WebGLRenderer({ antialias: true });
+      renderer3d.setSize(wrapper.clientWidth, wrapper.clientHeight);
+      renderer3d.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      wrapper.insertBefore(renderer3d.domElement, wrapper.firstChild);
+
+      // Lights & Grid
+      const ambient = new THREE.AmbientLight(0xffffff, 0.7);
+      scene3d.add(ambient);
+      const dirLight = new THREE.DirectionalLight(0xbae6fd, 0.9);
+      dirLight.position.set(8, 14, 10);
+      scene3d.add(dirLight);
+
+      const gridHelper = new THREE.GridHelper(16, 16, 0x1e293b, 0x0f172a);
+      gridHelper.position.y = -2.2;
+      scene3d.add(gridHelper);
+
+      machineGroup3d = new THREE.Group();
+      scene3d.add(machineGroup3d);
+
+      // Orbit Controls
+      renderer3d.domElement.addEventListener('mousedown', (e) => {
+        isDragging3d = true;
+        prevMouse3d = { x: e.clientX, y: e.clientY };
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging3d) return;
+        const dx = e.clientX - prevMouse3d.x;
+        const dy = e.clientY - prevMouse3d.y;
+        prevMouse3d = { x: e.clientX, y: e.clientY };
+        spherical3d.theta -= dx * 0.008;
+        spherical3d.phi = Math.max(0.25, Math.min(1.48, spherical3d.phi - dy * 0.008));
+        updateCameraFromSpherical();
+      });
+      window.addEventListener('mouseup', () => { isDragging3d = false; });
+      renderer3d.domElement.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        spherical3d.radius = Math.max(5.5, Math.min(24, spherical3d.radius + e.deltaY * 0.008));
+        updateCameraFromSpherical();
+      }, { passive: false });
+
+      rebuildThreeScene();
+      animateThreeLoop();
+    }
+
+    function updateCameraFromSpherical() {
+      if (!camera3d) return;
+      camera3d.position.x = spherical3d.radius * Math.sin(spherical3d.phi) * Math.sin(spherical3d.theta);
+      camera3d.position.y = spherical3d.radius * Math.cos(spherical3d.phi);
+      camera3d.position.z = spherical3d.radius * Math.sin(spherical3d.phi) * Math.cos(spherical3d.theta);
+      camera3d.lookAt(0, 0.2, 0);
+    }
+
+    function rebuildThreeScene() {
+      if (!machineGroup3d) return;
+      while (machineGroup3d.children.length > 0) {
+        machineGroup3d.remove(machineGroup3d.children[0]);
+      }
+
+      // Base Frame Table + 4 Extrusion Legs
+      const tableMat = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        metalness: 0.45,
+        roughness: 0.4,
+        wireframe: state.wireframe3d
+      });
+      const tableMesh = new THREE.Mesh(new THREE.BoxGeometry(6.8, 0.25, 4.8), tableMat);
+      tableMesh.position.set(0, -0.3, 0);
+      machineGroup3d.add(tableMesh);
+
+      [[-3.1, -2.1], [3.1, -2.1], [-3.1, 2.1], [3.1, 2.1]].forEach(([lx, lz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.32, 1.9, 0.32), tableMat);
+        leg.position.set(lx, -1.25, lz);
+        machineGroup3d.add(leg);
+      });
+
+      // Build dynamic 3D assemblies matching state.nodes
+      const animOffset = state.isSimulating ? Math.sin(state.simTime * 4) * 1.1 : 0;
+
+      state.nodes.forEach((node) => {
+        const isSel = node.id === state.selectedNodeId;
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(node.color),
+          emissive: isSel ? new THREE.Color(0x0ea5e9) : new THREE.Color(0x000000),
+          emissiveIntensity: isSel ? 0.35 : 0,
+          metalness: 0.35,
+          roughness: 0.35,
+          wireframe: state.wireframe3d
+        });
+
+        if (node.type === 'rotary_indexer') {
+          const dial = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, 0.35, 32), mat);
+          dial.position.set(-0.3, 0.1, 0);
+          dial.rotation.y = state.isSimulating ? state.simTime * 1.8 : 0;
+          machineGroup3d.add(dial);
+        } else if (node.type === 'linear_x') {
+          // Gantry risers + X beam
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(5.6, 0.45, 0.55), mat);
+          beam.position.set(0, 1.65, -0.7);
+          machineGroup3d.add(beam);
+        } else if (node.type === 'linear_y') {
+          const yRail = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.42, 3.2), mat);
+          yRail.position.set(animOffset, 1.65, 0.2);
+          machineGroup3d.add(yRail);
+        } else if (node.isAdapter) {
+          // Highlighted Orange CNC Adapter Plate between axes!
+          const plate = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.72, 0.14), mat);
+          plate.position.set(animOffset, 1.45, 0.78);
+          machineGroup3d.add(plate);
+        } else if (node.type === 'z_cylinder') {
+          const zDrop = state.isSimulating ? Math.abs(Math.sin(state.simTime * 4)) * 0.55 : 0;
+          const cyl = new THREE.Mesh(new THREE.BoxGeometry(0.52, 1.35, 0.48), mat);
+          cyl.position.set(animOffset, 1.25 - zDrop, 1.05);
+          machineGroup3d.add(cyl);
+        } else if (node.type === 'rotary_gripper') {
+          const zDrop = state.isSimulating ? Math.abs(Math.sin(state.simTime * 4)) * 0.55 : 0;
+          const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.45, 16), mat);
+          grip.position.set(animOffset, 0.42 - zDrop, 1.05);
+          machineGroup3d.add(grip);
+        } else if (node.type === 'vision_cam') {
+          const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.85, 16), mat);
+          cam.position.set(-1.6, 1.2, 0.9);
+          machineGroup3d.add(cam);
+        }
+      });
+    }
+
+    function animateThreeLoop() {
+      requestAnimationFrame(animateThreeLoop);
+      if (state.isSimulating) {
+        state.simTime += 0.02;
+        const m = computeEngineeringMetrics();
+        const looped = (state.simTime % Math.max(m.totalCT, 0.5)).toFixed(2);
+        document.getElementById('simTimeReadout').textContent = `${looped}s`;
+        rebuildThreeScene();
+      }
+      if (renderer3d && scene3d && camera3d) {
+        renderer3d.render(scene3d, camera3d);
+      }
+    }
+
+    function resizeThreeViewport() {
+      const wrapper = document.getElementById('threeCanvasWrapper');
+      if (!renderer3d || !camera3d || !wrapper) return;
+      const w = wrapper.clientWidth;
+      const h = wrapper.clientHeight;
+      if (w > 0 && h > 0) {
+        camera3d.aspect = w / h;
+        camera3d.updateProjectionMatrix();
+        renderer3d.setSize(w, h);
+      }
+    }
+
+    // =========================================================================
+    // 13. EXPORT CODE GENERATOR (build123d PYTHON / PLC ST / MACHINE IR JSON)
+    // =========================================================================
+    function generateExportContent() {
+      const m = computeEngineeringMetrics();
+      if (state.exportTab === 'build123d') {
+        const adapters = state.nodes.filter(n => n.isAdapter);
+        return `# Auto-generated by Automation CAD Canvas Workbench (Python build123d + OCCT Kernel)
+# 方案名称: ${PRESET_SCHEMES[state.activeSchemeKey].title}
+# 构件总数: ${state.nodes.length} | 非标转接板: ${adapters.length} 件 | 预估成本: ¥${m.totalCost}
+
+from build123d import *
+
+def build_adapter_plate(width=92.0, height=76.0, thickness=12.0):
+    """自动根据上下游 MountPort 孔位差生成的 6061-T6 铝合金十字转接板"""
+    with BuildPart() as plate:
+        with BuildSketch():
+            RectangleRounded(width, height, radius=6.0)
+        Extrude(amount=thickness)
+        # 1. 母件滑块安装沉头孔阵列 (MountIn: SLIDER-M5x4-60x60)
+        with Locations(GridLocations(60.0, 60.0, 2, 2)):
+            CounterBoreHole(radius=2.75, counter_bore_radius=4.75, counter_bore_depth=5.4)
+        # 2. 子件执行器配打螺纹底孔阵列 (MountOut: BODY-M5x4-48x36)
+        with Locations(GridLocations(48.0, 36.0, 2, 2)):
+            Hole(radius=2.1)
+        # 3. 中央减重避空槽
+        with Locations((0, 0, thickness)):
+            Box(32.0, 22.0, 6.0, mode=Mode.SUBTRACT)
+    return plate.part
+
+def build_machine_assembly():
+    parts = {}
+${state.nodes.map(n => `    # Node [${n.id}]: ${n.name} (${n.mountIn} -> ${n.mountOut})
+    parts["${n.id}"] = Box(${n.dims[0]}, ${n.dims[1]}, ${n.dims[2]})`).join('\n')}
+    return Compound( list(parts.values()) )
+
+if __name__ == "__main__":
+    assy = build_machine_assembly()
+    export_step(assy, "machine_assembly_per_part.step")`;
+      } else if (state.exportTab === 'plc') {
+        return `(* ====================================================================
+   IEC 61131-3 Structured Text (ST) — 由画布拓扑与工步节拍甘特图自动生成
+   目标机型: ${PRESET_SCHEMES[state.activeSchemeKey].title}
+   理论整机周期 CT: ${m.totalCT}s (${m.uph} UPH)
+   ==================================================================== *)
+PROGRAM MAIN_STATION_SEQ
+VAR
+    iStep           : INT := 0;
+    bStartButton    : BOOL;
+    bEStopOk        : BOOL := TRUE;
+    tonStepTimer    : TON;
+${state.nodes.filter(n => n.stepDuration > 0).map(n => `    bCmd_${n.id}    : BOOL; (* ${n.name} 驱动输出 *)
+    bDone_${n.id}   : BOOL; (* ${n.name} 到位传感器 *)`).join('\n')}
+END_VAR
+
+IF NOT bEStopOk THEN
+    iStep := 999; (* 急停安全联锁复位 *)
+END_IF;
+
+CASE iStep OF
+    0: (* 待机回原点检查 *)
+        IF bStartButton AND bEStopOk THEN
+            iStep := 10;
+        END_IF;
+${state.nodes.filter(n => n.stepDuration > 0).map((n, idx) => `
+    ${(idx + 1) * 10}: (* 工步 ${idx + 1}: ${n.name} — 目标节拍 ${n.stepDuration}s *)
+        bCmd_${n.id} := TRUE;
+        tonStepTimer(IN := TRUE, PT := T#${Math.round(n.stepDuration * 1000)}MS);
+        IF bDone_${n.id} OR tonStepTimer.Q THEN
+            tonStepTimer(IN := FALSE);
+            iStep := ${(idx + 2) * 10};
+        END_IF;`).join('')}
+
+    default:
+        iStep := 0;
+END_CASE;
+END_PROGRAM`;
+      } else {
+        return JSON.stringify({
+          schemaVersion: '2.4.0-mountport-ir',
+          activeScheme: state.activeSchemeKey,
+          engineeringSummary: {
+            totalCostRMB: m.totalCost,
+            cycleTimeSec: m.totalCT,
+            throughputUPH: m.uph,
+            inertiaRatio: m.inertiaRatio,
+            peakTorqueNm: m.tPeakNm,
+            unmatchedPorts: m.mismatches.length
+          },
+          nodes: state.nodes,
+          edges: state.edges
+        }, null, 2);
+      }
+    }
+
+    // =========================================================================
+    // 14. MASTER RENDER & EVENT BINDINGS
+    // =========================================================================
+    function setCanvasMode(mode) {
+      state.canvasMode = mode;
+      document.getElementById('viewTopology').classList.toggle('hidden', mode !== 'topology');
+      document.getElementById('viewOrtho').classList.toggle('hidden', mode !== 'ortho');
+      document.getElementById('viewArtboard').classList.toggle('hidden', mode !== 'artboard');
+
+      const btnTopo = document.getElementById('modeBtnTopology');
+      const btnOrtho = document.getElementById('modeBtnOrtho');
+      const btnArt = document.getElementById('modeBtnArtboard');
+
+      const activeCls = 'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition bg-indigo-500/25 text-indigo-300 border border-indigo-500/40';
+      const idleCls = 'flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200';
+
+      btnTopo.className = mode === 'topology' ? activeCls : idleCls;
+      btnOrtho.className = mode === 'ortho' ? activeCls : idleCls;
+      btnArt.className = mode === 'artboard' ? activeCls : idleCls;
+
+      const hint = document.getElementById('canvasModeHint');
+      if (mode === 'topology') {
+        hint.textContent = '拖拽节点调整拓扑；点击橙色「⚡孔位不匹配·生成转接板」可调用 build123d 自动配打连接板';
+      } else if (mode === 'ortho') {
+        hint.textContent = '2D 工程俯视平面图：直观查看各工位毫米级运动包络框（紫色虚线）与基准中心距';
+      } else {
+        hint.textContent = 'AI 多方案画板对比：勾选多个画板的优势模组可一键合成混合最优方案';
+      }
+      renderAll();
+    }
+
+    function updatePresetButtonStyles() {
+      const map = {
+        gantry: document.getElementById('presetBtnGantry'),
+        rotary: document.getElementById('presetBtnRotary'),
+        conveyor: document.getElementById('presetBtnConveyor')
+      };
+      Object.entries(map).forEach(([k, btn]) => {
+        if (k === state.activeSchemeKey) {
+          btn.className = 'px-2.5 py-1 rounded-md text-xs font-medium transition bg-sky-500/20 text-sky-300 border border-sky-500/40';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-md text-xs font-medium transition text-slate-400 hover:text-slate-200';
+        }
+      });
+    }
+
+    function renderAll() {
+      if (state.canvasMode === 'topology') renderTopologyCanvas();
+      if (state.canvasMode === 'ortho') renderOrthoCanvas();
+      if (state.canvasMode === 'artboard') renderArtboardsView();
+      renderInspector();
+      renderGanttTimeline();
+      rebuildThreeScene();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      cloneSchemeData('gantry');
+      renderAssetLibrary();
+      initThreeViewport();
+      renderAll();
+
+      // Preset Switchers
+      document.getElementById('presetBtnGantry').addEventListener('click', () => {
+        cloneSchemeData('gantry');
+        updatePresetButtonStyles();
+        renderAll();
+        showToast('已载入：三轴龙门视觉飞拍贴合机');
+      });
+      document.getElementById('presetBtnRotary').addEventListener('click', () => {
+        cloneSchemeData('rotary');
+        updatePresetButtonStyles();
+        renderAll();
+        showToast('已载入：凸轮分割器六工位转盘组装机');
+      });
+      document.getElementById('presetBtnConveyor').addEventListener('click', () => {
+        cloneSchemeData('conveyor');
+        updatePresetButtonStyles();
+        renderAll();
+        showToast('已载入：皮带输送线 + 气动分拣工站');
+      });
+
+      // Canvas Mode Switchers
+      document.getElementById('modeBtnTopology').addEventListener('click', () => setCanvasMode('topology'));
+      document.getElementById('modeBtnOrtho').addEventListener('click', () => setCanvasMode('ortho'));
+      document.getElementById('modeBtnArtboard').addEventListener('click', () => setCanvasMode('artboard'));
+
+      // Top Action Buttons
+      document.getElementById('btnAutoFixAll').addEventListener('click', autoFixAllMismatches);
+
+      document.getElementById('btnSimToggle').addEventListener('click', () => {
+        state.isSimulating = !state.isSimulating;
+        document.getElementById('simBtnIcon').textContent = state.isSimulating ? '⏸' : '▶';
+        document.getElementById('simBtnText').textContent = state.isSimulating ? '暂停虚拟调试' : '虚拟调试运行';
+        showToast(state.isSimulating ? '已启动 OPC UA / 运动学数字孪生实时仿真' : '已暂停数字孪生仿真');
+      });
+
+      // Zoom & Pan on Topology Canvas
+      document.getElementById('btnZoomIn').addEventListener('click', () => {
+        state.zoom = Math.min(1.6, Number((state.zoom + 0.1).toFixed(2)));
+        renderTopologyCanvas();
+      });
+      document.getElementById('btnZoomOut').addEventListener('click', () => {
+        state.zoom = Math.max(0.55, Number((state.zoom - 0.1).toFixed(2)));
+        renderTopologyCanvas();
+      });
+      document.getElementById('btnResetView').addEventListener('click', () => {
+        state.zoom = 1.0;
+        state.panX = 20;
+        state.panY = 20;
+        renderAll();
+      });
+
+      const topoBg = document.getElementById('viewTopology');
+      topoBg.addEventListener('mousedown', (e) => {
+        if (e.target !== topoBg && e.target.id !== 'topologyNodesLayer' && e.target.id !== 'topologyTransformLayer') return;
+        const startX = e.clientX - state.panX;
+        const startY = e.clientY - state.panY;
+        const onPanMove = (me) => {
+          state.panX = me.clientX - startX;
+          state.panY = me.clientY - startY;
+          renderTopologyCanvas();
+        };
+        const onPanUp = () => {
+          window.removeEventListener('mousemove', onPanMove);
+          window.removeEventListener('mouseup', onPanUp);
+        };
+        window.addEventListener('mousemove', onPanMove);
+        window.addEventListener('mouseup', onPanUp);
+      });
+
+      // Ortho 2D Canvas Dragging
+      const orthoCanvas = document.getElementById('ortho2dCanvas');
+      orthoCanvas.addEventListener('mousedown', (e) => {
+        const rect = orthoCanvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        // Find clicked node
+        const hit = [...state.nodes].reverse().find(n => {
+          const b = n.__orthoBox;
+          return b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h;
+        });
+        if (!hit) return;
+        state.selectedNodeId = hit.id;
+        renderAll();
+
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const origOX = hit.orthoX;
+        const origOY = hit.orthoY;
+
+        const onMove = (me) => {
+          hit.orthoX = Math.round((origOX + (me.clientX - startX) / 0.9) / 5) * 5;
+          hit.orthoY = Math.round((origOY + (me.clientY - startY) / 0.9) / 5) * 5;
+          renderOrthoCanvas();
+          renderInspector();
+        };
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+      });
+
+      // Checkboxes
+      document.getElementById('chkShowEnvelope').addEventListener('change', (e) => {
+        state.showEnvelope = e.target.checked;
+        renderAll();
+      });
+      document.getElementById('chkBrepMode').addEventListener('change', (e) => {
+        state.brepFilterMode = e.target.checked;
+        renderAll();
+      });
+
+      // Inspector Tabs
+      const setInspectorTab = (tab) => {
+        state.inspectorTab = tab;
+        document.getElementById('inspectorTabProp').classList.toggle('hidden', tab !== 'prop');
+        document.getElementById('inspectorTabMech').classList.toggle('hidden', tab !== 'mech');
+        document.getElementById('inspectorTabBom').classList.toggle('hidden', tab !== 'bom');
+
+        const activeT = 'py-1.5 rounded text-xs font-medium bg-slate-800 text-sky-400 border border-slate-700';
+        const idleT = 'py-1.5 rounded text-xs font-medium text-slate-400 hover:text-slate-200';
+        document.getElementById('tabBtnProp').className = tab === 'prop' ? activeT : idleT;
+        document.getElementById('tabBtnMech').className = tab === 'mech' ? activeT : idleT;
+        document.getElementById('tabBtnBom').className = tab === 'bom' ? activeT : idleT;
+      };
+      document.getElementById('tabBtnProp').addEventListener('click', () => setInspectorTab('prop'));
+      document.getElementById('tabBtnMech').addEventListener('click', () => setInspectorTab('mech'));
+      document.getElementById('tabBtnBom').addEventListener('click', () => setInspectorTab('bom'));
+
+      // AI Quick Prompts & Custom Input
+      document.getElementById('aiQuickAdapter').addEventListener('click', autoFixAllMismatches);
+      document.getElementById('aiQuickVision').addEventListener('click', () => {
+        addComponentToCanvas(COMPONENT_LIBRARY[3].items[0]);
+      });
+      document.getElementById('aiQuickOptimizeCT').addEventListener('click', () => {
+        state.nodes.forEach(n => {
+          if (n.lead > 0) n.lead = 20;
+          if (n.stepDuration > 0.25) n.stepDuration = Number((n.stepDuration * 0.78).toFixed(2));
+        });
+        setInspectorTab('mech');
+        renderAll();
+        showToast('已将直线模组丝杠导程升级为 20mm，节拍提速 22%！');
+      });
+
+      document.getElementById('aiPromptSend').addEventListener('click', () => {
+        const inp = document.getElementById('aiPromptInput');
+        const val = inp.value.trim();
+        if (!val) return;
+        if (val.includes('转接') || val.includes('孔')) {
+          autoFixAllMismatches();
+        } else if (val.includes('视觉') || val.includes('相机')) {
+          addComponentToCanvas(COMPONENT_LIBRARY[3].items[0]);
+        } else {
+          addComponentToCanvas(COMPONENT_LIBRARY[2].items[0]);
+        }
+        inp.value = '';
+      });
+
+      // Merge Artboards
+      document.getElementById('btnMergeArtboards').addEventListener('click', () => {
+        cloneSchemeData('rotary');
+        // Add Gantry's 5MP Fly-vision camera & auto-fix adapter plate
+        addComponentToCanvas(COMPONENT_LIBRARY[3].items[0]);
+        autoFixAllMismatches();
+        setCanvasMode('topology');
+        showToast('已合并「分度转盘底座」与「龙门飞拍视觉+自动转接板」生成混合最优方案！');
+      });
+
+      // 3D PiP Controls
+      document.getElementById('btn3dWireframe').addEventListener('click', () => {
+        state.wireframe3d = !state.wireframe3d;
+        rebuildThreeScene();
+      });
+      document.getElementById('btn3dResetCam').addEventListener('click', () => {
+        spherical3d = { theta: 0.68, phi: 1.05, radius: 13.5 };
+        updateCameraFromSpherical();
+      });
+      document.getElementById('btn3dExpand').addEventListener('click', (e) => {
+        state.pipExpanded = !state.pipExpanded;
+        const pip = document.getElementById('pip3dContainer');
+        if (state.pipExpanded) {
+          pip.className = 'absolute bottom-3 right-3 w-[560px] h-[420px] bg-slate-950/95 border border-sky-500/70 rounded-xl shadow-2xl flex flex-col overflow-hidden z-30 transition-all duration-200';
+          e.target.textContent = '缩小视口';
+        } else {
+          pip.className = 'absolute bottom-3 right-3 w-80 h-60 bg-slate-950/95 border border-slate-700/90 rounded-xl shadow-2xl flex flex-col overflow-hidden z-20 transition-all duration-200';
+          e.target.textContent = '放大视口';
+        }
+        setTimeout(resizeThreeViewport, 220);
+      });
+
+      // Export Modal
+      const updateExportModalCode = () => {
+        document.getElementById('exportCodePre').textContent = generateExportContent();
+      };
+      document.getElementById('btnExportModal').addEventListener('click', () => {
+        updateExportModalCode();
+        document.getElementById('exportModal').classList.remove('hidden');
+      });
+      document.getElementById('btnCloseExportModal').addEventListener('click', () => {
+        document.getElementById('exportModal').classList.add('hidden');
+      });
+
+      const setExportTab = (t) => {
+        state.exportTab = t;
+        const activeCls = 'px-3 py-1.5 text-xs font-medium border-b-2 border-sky-400 text-sky-400';
+        const idleCls = 'px-3 py-1.5 text-xs font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+        document.getElementById('exportTabBuild123d').className = t === 'build123d' ? activeCls : idleCls;
+        document.getElementById('exportTabPlc').className = t === 'plc' ? activeCls : idleCls;
+        document.getElementById('exportTabJson').className = t === 'json' ? activeCls : idleCls;
+        updateExportModalCode();
+      };
+      document.getElementById('exportTabBuild123d').addEventListener('click', () => setExportTab('build123d'));
+      document.getElementById('exportTabPlc').addEventListener('click', () => setExportTab('plc'));
+      document.getElementById('exportTabJson').addEventListener('click', () => setExportTab('json'));
+
+      document.getElementById('btnCopyExportCode').addEventListener('click', () => {
+        const text = document.getElementById('exportCodePre').textContent;
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (err) {}
+        document.body.removeChild(ta);
+        const fb = document.getElementById('copyFeedbackText');
+        fb.textContent = '✓ 已复制到剪贴板，可直接粘贴至 desktop/ 工程中运行';
+        setTimeout(() => { fb.textContent = ''; }, 2500);
+      });
+
+      window.addEventListener('resize', () => {
+        if (state.canvasMode === 'ortho') renderOrthoCanvas();
+        resizeThreeViewport();
+      });
+    });
+  </script>
+</body>
+</html>
