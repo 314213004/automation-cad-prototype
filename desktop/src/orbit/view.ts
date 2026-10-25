@@ -234,8 +234,13 @@ export class OrbitView {
     window.addEventListener('pointercancel', this.onGlobalPointerEnd, true);
     window.addEventListener('blur', this.onWindowBlur);
     window.addEventListener('pointermove', this.onGlobalPointerMove, true);
-    // 不让原型的舞台框选 / 点击委托吃到画布上的拖拽。
-    ['pointerdown', 'pointermove', 'pointerup', 'click', 'dblclick'].forEach((type) => {
+    // 只拦 click / dblclick，避免原型的舞台点击委托抢走 3D 选中。
+    //
+    // pointer* 一律不拦：OrbitControls 在拖动期间是把 pointermove / pointerup 绑在
+    // document 上的，画布上 stopPropagation 会让事件冒泡不到 document —— 表现就是
+    // 「画布内按住拖动不转、移到画布外才转」，并且它收不到 pointerup，状态永久停在
+    // ROTATE（滚轮失效、不按键也跟动）。原型的框选已在 app.js 里跳过 .orbit-canvas。
+    ['click', 'dblclick'].forEach((type) => {
       this.canvas.addEventListener(type, (event) => event.stopPropagation());
     });
     this.canvas.addEventListener('webglcontextlost', (event) => {
