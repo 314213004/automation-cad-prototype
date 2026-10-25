@@ -2432,7 +2432,10 @@ function init(): void {
     enumerable: false
   });
   window.AutomationCadViewer = {
-    open: openOverlay,
+      /** 渲染诊断：线框开关、材质、光照、相机（排查"看不见实体"用） */
+      describeScene: () => ensureViewer().describeScene(),
+      toggleWireframe: () => ensureViewer().toggleWireframe(),
+      open: openOverlay,
     close: closeOverlay,
     importPath,
     inspectPath,

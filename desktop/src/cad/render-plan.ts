@@ -266,6 +266,48 @@ export function lodTriangleCount(triangleCount: number, lod: LodLevel, config: L
 }
 
 /** 包围球 vs 视锥：只要有一个平面把球完全挡在外面就剔除 */
+/**
+ * 从「投影 × 视图」矩阵提取 6 个视锥平面（Gribb–Hartmann）。
+ *
+ * 正确公式是对矩阵行的加/减，不是单取某一行：
+ *   left = row3 + row0, right = row3 - row0,
+ *   bottom = row3 + row1, top = row3 - row1,
+ *   near = row3 + row2, far = row3 - row2
+ *
+ * 过去的实现里近/左都直接用了 row3、远用 -row2，视锥是畸形的，
+ * 结果整机被判定「视锥外」而隐藏（describeScene 里能看到 hidden）。
+ * 平面法向约定：n·p + c ≥ 0 为视锥内。
+ */
+export function frustumPlanesFromClipElements(elements: readonly number[]): FrustumPlane[] {
+  const at = (index: number): number => elements[index] ?? 0;
+  const row = (index: number): [number, number, number, number] => [
+    at(index),
+    at(index + 4),
+    at(index + 8),
+    at(index + 12)
+  ];
+  const row0 = row(0);
+  const row1 = row(1);
+  const row2 = row(2);
+  const row3 = row(3);
+  const combine = (a: number[], b: number[], signB: number): FrustumPlane => {
+    const nx = (a[0] ?? 0) + (b[0] ?? 0) * signB;
+    const ny = (a[1] ?? 0) + (b[1] ?? 0) * signB;
+    const nz = (a[2] ?? 0) + (b[2] ?? 0) * signB;
+    const c = (a[3] ?? 0) + (b[3] ?? 0) * signB;
+    const length = Math.hypot(nx, ny, nz) || 1;
+    return { normal: { x: nx / length, y: ny / length, z: nz / length }, constant: c / length };
+  };
+  return [
+    combine(row3, row0, 1), // left
+    combine(row3, row0, -1), // right
+    combine(row3, row1, 1), // bottom
+    combine(row3, row1, -1), // top
+    combine(row3, row2, 1), // near
+    combine(row3, row2, -1) // far
+  ];
+}
+
 export function isSphereVisible(planes: readonly FrustumPlane[] | null | undefined, center: Vec3, radius: number): boolean {
   if (!planes || planes.length === 0) return true;
   for (const plane of planes) {

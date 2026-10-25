@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { CadImportResult, CadMeshData } from '../shared/types.ts';
 import { boundsFromPositions, type InterferencePart } from '../mech/interference.ts';
 import { probeWebGL } from './webgl.ts';
-import { buildPartMeta, planFrame, type FrustumPlane, type LodLevel, type PartMeta } from './render-plan.ts';
+import { buildPartMeta, frustumPlanesFromClipElements, planFrame, type FrustumPlane, type LodLevel, type PartMeta } from './render-plan.ts';
 import {
   boxProxyGeometry,
   buildRenderOps,
@@ -106,6 +106,8 @@ export class CadViewer {
   private instanceGeometries = new Map<string, THREE.BufferGeometry>();
   private planDirty = false;
   private lastPlanMs = 0;
+  /** 最近一帧的渲染计划，供 describeScene 诊断剔除原因。 */
+  private lastPlan: ReturnType<typeof planFrame> | null = null;
   private planCount = 0;
   private readonly selectionBox = new THREE.Box3();
   private selectionHelper: THREE.Box3Helper | null = null;
@@ -492,42 +494,19 @@ export class CadViewer {
       fovDeg: this.camera.fov,
       planes: this.frustumPlanes()
     });
+    this.lastPlan = plan;
     const ops = buildRenderOps(plan, this.metas);
     this.renderOps = ops;
     this.applyRenderOps(ops);
     this.refreshInstanceMatrices();
   }
 
-  /** 从相机投影矩阵提取 6 个视锥平面（Gribb–Hartmann），避免引入额外依赖 */
+  /** 从相机投影矩阵提取 6 个视锥平面（Gribb–Hartmann，实现在 render-plan 里以便单测） */
   private frustumPlanes(): FrustumPlane[] {
     this.camera.updateMatrixWorld();
+    this.camera.updateProjectionMatrix();
     const matrix = new THREE.Matrix4().multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
-    const e = matrix.elements;
-    const rows: number[][] = [
-      [e[0] ?? 0, e[4] ?? 0, e[8] ?? 0, e[12] ?? 0],
-      [e[1] ?? 0, e[5] ?? 0, e[9] ?? 0, e[13] ?? 0],
-      [e[2] ?? 0, e[6] ?? 0, e[10] ?? 0, e[14] ?? 0],
-      [e[3] ?? 0, e[7] ?? 0, e[11] ?? 0, e[15] ?? 0]
-    ];
-    const planeAt = (row: number[] | undefined, sign: number): FrustumPlane => {
-      const r = row ?? [0, 0, 1, 0];
-      const nx = (r[0] ?? 0) * sign;
-      const ny = (r[1] ?? 0) * sign;
-      const nz = (r[2] ?? 0) * sign;
-      const length = Math.hypot(nx, ny, nz) || 1;
-      return {
-        normal: { x: nx / length, y: ny / length, z: nz / length },
-        constant: ((r[3] ?? 0) * sign) / length
-      };
-    };
-    return [
-      planeAt(rows[3], 1), // 近
-      planeAt(rows[3], -1), // 远
-      planeAt(rows[0], 1), // 左
-      planeAt(rows[0], -1), // 右
-      planeAt(rows[1], 1), // 下
-      planeAt(rows[1], -1) // 上
-    ];
+    return frustumPlanesFromClipElements(matrix.elements);
   }
 
   private applyRenderOps(ops: RenderOps): void {
@@ -700,6 +679,67 @@ export class CadViewer {
       material.needsUpdate = true;
     }
     return this.wireframe;
+  }
+
+  /**
+   * 渲染诊断：把「看起来是线框/看不见实体」这类问题的真实状态读出来。
+   * 返回相机、线框开关、每个零件的材质参数与光照，避免靠截图猜。
+   */
+  describeScene(): Record<string, unknown> {
+    const cameras = this.controls?.object;
+    const lightSummary = this.scene.children
+      .filter((child) => (child as THREE.Light).isLight)
+      .map((child) => {
+        const light = child as THREE.Light;
+        return { type: light.type, intensity: light.intensity };
+      });
+    return {
+      degraded: this.degraded,
+      wireframe: this.wireframe,
+      parts: this.parts.map((part) => {
+        const material = part.mesh.material as THREE.MeshStandardMaterial;
+        return {
+          name: part.mesh.name,
+          triangles: part.triangleCount,
+          visible: part.mesh.visible,
+          wireframe: material.wireframe,
+          color: material.color?.getHexString?.() ?? null,
+          opacity: material.opacity,
+          transparent: material.transparent,
+          side: material.side,
+          metalness: material.metalness,
+          roughness: material.roughness,
+          hasNormal: Boolean(part.mesh.geometry.getAttribute('normal')),
+          childLines: part.mesh.children.filter((child) => (child as THREE.LineSegments).isLineSegments).length
+        };
+      }),
+      lights: lightSummary,
+      plan: this.lastPlan
+        ? {
+            culled: this.lastPlan.culled,
+            visible: this.lastPlan.parts.map((part) => ({
+              index: part.index,
+              coverage: Number(part.coverage.toFixed(4)),
+              lod: part.lod,
+              triangles: part.triangles
+            })),
+            metas: this.metas.map((meta) => ({
+              index: meta.index,
+              name: meta.name,
+              triangles: meta.triangleCount,
+              radius: Number(meta.radius.toFixed(1)),
+              center: [Math.round(meta.center.x), Math.round(meta.center.y), Math.round(meta.center.z)]
+            }))
+          }
+        : null,
+      camera: cameras
+        ? {
+            position: [cameras.position.x, cameras.position.y, cameras.position.z],
+            near: (cameras as THREE.PerspectiveCamera).near,
+            far: (cameras as THREE.PerspectiveCamera).far
+          }
+        : null
+    };
   }
 
   getModelParts(): InterferencePart[] {

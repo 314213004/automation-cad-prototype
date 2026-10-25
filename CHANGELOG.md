@@ -2,6 +2,14 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.9] - 2026-10-25
+
+### Fixed · 3D 视口「模型看不见 / 只剩线框」
+
+- **视锥平面提取错误**：`viewer.ts` 的 Gribb–Hartmann 提取把近、左平面都直接写成 `row3`，远平面写成 `-row2`，没有做行加减，得到一个畸形的视锥；结果整机被判为「视锥外」，被 `applyRenderOps` 设成 `visible=false`，屏幕上只剩包围盒的青色边线，看起来就是"线框模型"。改为标准公式（left=row3+row0 … far=row3−row2），并抽成纯函数 `frustumPlanesFromClipElements` + 6 条单测（相机背后、near/far 之外、横向偏出、大球相交、平面归一化与互异）。
+- 修复后同一台 2 m 皮带输送机：覆盖率 0.729、LOD0、14,904 三角面全部进入渲染计划，实体正常着色显示。
+- **新增渲染诊断** `window.AutomationCadViewer.describeScene()`：返回线框开关、材质（color/opacity/金属度/法向）、光照、相机、以及**最近一帧渲染计划**（哪些零件被剔除、覆盖率、LOD、包围球），以后这类"看不见"的问题不用再靠截图猜。同时暴露 `toggleWireframe()`。
+
 ## [0.4.8] - 2026-10-25
 
 ### Added · 输送机（工艺 + 真实几何）
