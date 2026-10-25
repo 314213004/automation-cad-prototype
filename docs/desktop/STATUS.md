@@ -2,9 +2,9 @@
 
 ## 概览
 
-- 基线：`main` 在 v0.4.1 后继续修 CDP 内网可达、token 生命周期与渲染性能可观测性；直接提交到 `main`，未打包、未发版、未触发 CI。
-- 版本：`desktop/package.json` → **0.4.1**；界面缩放 / 3D 渲染质量 / 局域网联调保持默认关闭。
-- 测试：`TZ=Asia/Shanghai npm test` **1842/1842 通过，0 失败、0 跳过**。
+- 基线：`main` 已发布面到 **v0.4.2**（CDP 内网可达、token 生命周期、渲染性能可观测性 + Windows 本地 smoke 入口）；0.4.2 安装包在 Windows 开发机（192.168.2.117）本地构建，未走 CI、未打 tag。
+- 版本：`desktop/package.json` → **0.4.2**；界面缩放 / 3D 渲染质量 / 局域网联调 / CDP 保持默认关闭。
+- 测试：`TZ=Asia/Shanghai npm test` **1842 总计 / 1838 通过 / 0 失败 / 4 跳过**（Windows 无 POSIX 位，`0600` 权限断言跳过；Linux 上 1842/1842）。
 - 构建与冒烟：`npm run build:ext` 通过；fake-sidecar smoke 输出 `SMOKE_OK` 与 `SMOKE_RENDER_STATS_OK`，渲染指标经 IPC → 主进程缓存 → `/health.render` → `get_render_stats` 全链路验证。
 - 评估：`npm run eval:agent` **107/107 通过**，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
 - 最近发布：`v0.4.0` NSIS `AutomationCAD-Setup-0.4.0.exe`（约 130 MB，未签名）；上一版 `v0.3.0`。更新通道代码已随模块门控落地，但未做真实签名与跨版本升级验收。
@@ -13,12 +13,13 @@
 
 | 命令 | 结果 |
 |------|------|
-| `TZ=Asia/Shanghai npm test` | 1842 pass / 0 fail / 0 skipped |
+| `TZ=Asia/Shanghai npm test`（Windows 192.168.2.117） | 1838 pass / 0 fail / 4 skipped（`0600` 权限断言） |
 | `npx tsc --noEmit` | 0 错误 |
 | `npm run build:ext` | 通过（`tsc --noEmit`、Vite 扩展、Electron main/preload、MCP） |
 | `AUTOMATIONCAD_PARAMETRIC_CMD="node $PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke` | 通过；`SMOKE_RENDER_STATS_OK gl="…SwiftShader…" parts=11 triangles=4832 quality=flow`、最终 `SMOKE_OK`；退出码 0 |
 | `npm run eval:agent` | 107/107；`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
 | `node scripts/lan-debug-probe.mjs` | 在 `test/agent/lan-rpc.test.mjs` 的临时真实 HTTP 服务上完成 health / tools/list / `list_components`，输出 `LAN_DEBUG_OK` |
+| `npm run smoke:win`（Windows） | 通过；85 条 `SMOKE_*_OK` + `SMOKE_OK`，退出码 0（`--disable-gpu` 走 SwiftShader，覆盖无 WebGL 降级面板） |
 | `git diff --check` | 通过（提交前复核） |
 
 **跨平台行尾修复（2026-10-24）**：Windows 的 `core.autocrlf=true` 把 `packs/builtin/*/parts.json` 检出为 CRLF，`partsSha256` 按 LF 算 → `PACK_INTEGRITY_FAILED`，内置包全挂（CI 18 红）。修复：`assertPartsIntegrity`、`scripts/pack-stats.mjs` 统一 `CRLF→LF` 后取 SHA-256，加 `.gitattributes` 强制 `eol=lf`；回归用例见 `test/packs/lifecycle.test.mjs`。
@@ -97,7 +98,8 @@ cd desktop
 npx tsc --noEmit                    # 类型检查
 npm test                            # 1842 条单测/集成测试
 npm run build:ext                   # tsc + Vite + Electron main/preload + MCP
-npm run smoke                       # xvfb + Electron headless（无 WebGL）
+npm run smoke                       # xvfb + Electron headless（无 WebGL，Linux）
+npm run smoke:win                   # Windows headless（关 GPU 走 SwiftShader）
 AUTOMATIONCAD_PARAMETRIC_CMD="node $PWD/scripts/fake-parametric-sidecar.mjs" npm run smoke
 npm run eval:agent                  # 107 条中文 Agent 评估集
 npm run sync:e2e                    # 本地临时 DB 的设计同步端到端

@@ -2,6 +2,23 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.2] - 2026-10-25
+
+### Fixed · 联机调试与渲染可观测性
+
+- **CDP 内网可达**：Electron 会忽略 `--remote-debugging-address=0.0.0.0`，实际只绑回环。改为普通启动常驻 `127.0.0.1:9229`，白名单开关命中来源后再由 `cdp-forwarder` 转发到 `0.0.0.0:9222`；未命中来源返回拒绝并写审计 `cdp_access_check`。支持运行中热启停，不必重启进程。
+- **token 生命周期**：启动复用已有 token（原实现每次启动重写，重启一次就得重新取 token）；文件损坏时重建；面板提供显式「重新生成」，旧 token 立即失效。
+- **渲染指标**：新增 `get_render_stats` 只读工具（工具数 21 → 22），暴露渲染器字符串、是否软件渲染、像素比、质量档、零件/三角面数与拖动帧时间（均值/峰值/时间戳），同一份数据进 `/health.render`；检测到 SwiftShader 等软件渲染时自动降到 `flow` 档。
+
+### Added · 跨平台验证
+
+- `npm run smoke:win` / `npm run diagnose:win`：Windows 本地 headless 入口（关闭 GPU 走 SwiftShader），使「无 WebGL 降级面板」这条断言在 Windows 开发机上也能被真实覆盖；README 补对应说明。
+
+### Verification
+
+- `npx tsc --noEmit` 0 错误；`TZ=Asia/Shanghai npm test` **1842 总计 / 1838 通过 / 0 失败 / 4 跳过**（4 条是 `0600` 文件权限断言，Windows 无 POSIX 位；Linux 上为 1842/1842）；`build:ext` 通过。
+- Windows 实跑 `npm run smoke:win`：**85 条 `SMOKE_*_OK` + `SMOKE_OK`**，退出码 0；`SMOKE_RENDER_STATS_OK gl="ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)))" parts=11 triangles=4832 quality=flow`，拖动平均 42 ms/帧。
+
 ## [0.4.1] - 2026-10-25
 
 ### Added · 桌面可用性
