@@ -4,12 +4,12 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## 模块门控、工程安全与更新通道（2026-10-24，本轮）
+## 界面缩放、渲染质量与局域网联调（2026-10-25，本轮）
 
-- 状态：✅ 本地实现与验证完成；实现提交 `eb0c830`；`TZ=UTC npm test` **1800/1800**、`npm run build:ext`、fake-sidecar Electron smoke（`SMOKE_OK`）通过。
-- 范围：内置可选模块注册/依赖/能力检查和多入口门控；Agent 跨重启 checkpoint；CAD 导入/候选加载事务；可移植工程档案严格预览；PLC 值范围/空序列校验、联调兼容检查与 PLC 设计包扩展；stable/beta 手动应用更新和签名发布预检。
-- 边界：关闭模块是功能门控，不是代码卸载；工程档案尚不应用/恢复状态；PLC 扩展尚未接入外部服务端验收；更新通道尚未做真实 Windows 签名/安装验收。
-- 详情与验证边界见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md) 本轮归档、[STATUS.md](STATUS.md) 和 [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md)。
+- 状态：✅ 实现与验证完成；实现提交 `495e70f`，直接提交 `main`；未打包、未发版、未触发 CI。
+- 范围：设置中新增 100%–150% 界面缩放（默认 115%，注入 CSS `zoom`，不改根样式）；3D 渲染质量三档、拖动降到 0.8 pixelRatio、大于 1500 零件自动降流畅；局域网 Agent 开关（默认关闭）、IPv4 CIDR/单 IP 白名单、热重启、远程审计字段、CDP 重启开关与风险提示；新增真实 HTTP 探测脚本。
+- 验证：`TZ=Asia/Shanghai npm test` **1831/1831**（基线 1810，+21）；`npx tsc --noEmit` 0 错误；`npm run build:ext` 通过；fake-sidecar smoke 输出四项新断言与 `SMOKE_OK`；`npm run eval:agent` 106/106，`accuracy=1.00`；探测脚本在临时真实服务上输出 `LAN_DEBUG_OK`。
+- 边界：局域网与 CDP 默认关闭；CDP 仅下次启动生效，未做真实外部设备联调；远程写操作仍强制本机确认。未执行 Windows 打包与真实局域网现场验收。
 
 ## 待办（按优先级）
 

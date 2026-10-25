@@ -2,6 +2,12 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 模块门控、工程安全与更新通道（2026-10-24，本轮）
+
+- 状态：✅ 本地实现与验证完成；实现提交 `eb0c830`；`TZ=UTC npm test` **1800/1800**、`npm run build:ext`、fake-sidecar Electron smoke（`SMOKE_OK`）通过。
+- 范围：内置可选模块注册/依赖/能力检查和多入口门控；Agent 跨重启 checkpoint；CAD 导入/候选加载事务；可移植工程档案严格预览；PLC 值范围/空序列校验、联调兼容检查与 PLC 设计包扩展；stable/beta 手动应用更新和签名发布预检。
+- 边界：关闭模块是功能门控，不是代码卸载；工程档案尚不应用/恢复状态；PLC 扩展尚未接入外部服务端验收；更新通道尚未做真实 Windows 签名/安装验收。
+- 详情与验证边界见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md) 本轮归档、[STATUS.md](STATUS.md) 和 [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md)。
 ## 可选模块、工程导入安全与应用更新（2026-10-24，本轮）
 
 - 状态：✅ 本地实现完成；实现提交 `eb0c830`。最新 `main` 基线 `0d69dc0` 上 `TZ=UTC npm test` **1800/1800**、`npm run build:ext` 和 fake-sidecar Electron headless smoke 全绿（最终 `SMOKE_OK`）。

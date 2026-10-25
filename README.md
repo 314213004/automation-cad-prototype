@@ -5,7 +5,7 @@
 - 当前版本：**v0.4.0**（模块门控、工程档案、更新通道；Windows NSIS 安装包由 `windows-build` 手动触发构建）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
-- 质量基线：**1810 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
+- 质量基线：**1831 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
 
 ![AutomationCAD 主界面](docs/desktop/screenshots/01-home.png)
 
@@ -165,6 +165,9 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 运动学标注 | 任意装配体：动件 → 轴 / 行程 / 方向 / 缩回位 / 点位；校验 + 姿态解算 + 滑块预览 | ✅ |
 | 无 WebGL 降级 | 渲染不可用时退化为解析统计面板，不白屏；标注仍可编辑 | ✅ |
 | 数据包 | 10 个内置 manifest + 用户 ZIP 导入、路径穿越防护、启停；manifest-only 启动、按需加载/卸载、跨包去重、alias 解析与全局索引；全包 schema/重复 id/依赖/`partsSha256` 校验、版本迁移与统计报表 | ✅ |
+| 界面缩放 | 注入 CSS `zoom`，100% / 110% / 115% / 125% / 140% / 150%，默认 115%；立即生效并持久化到 `userData/appearance.json`，不改根样式文件 | ✅ 桌面 |
+| 3D 渲染质量 | 流畅 / 标准 / 高清三档；拖动时临时降到 0.8 pixelRatio；大于 1500 零件的装配体自动降为流畅并标注原因 | ✅ 桌面 |
+| 局域网联调（默认关闭） | 默认仅监听 `127.0.0.1`；按需开启 `0.0.0.0`，IPv4 CIDR / 单 IP 白名单、Bearer token、远程审计；CDP 默认关闭且需重启生效 | ✅ 桌面 |
 
 ### PLC / 联调 / 工厂
 
@@ -184,7 +187,7 @@ STEP/IGES/BREP 本身不含运动学信息，因此右侧新增**运动学标注
 | 能力 | 内容 | 状态 |
 |------|------|------|
 | 工具集 | `list_components` / `search_components` / `search_docs` / `design_machine` / `apply_machine_design` / `import_cad` / `get_bom` / `get_project_context` / `run_interference_check` / `suggest_kinematics` / `insert_component` / `place_component` / `update_component` / `remove_component` / `run_electrical_check` / `run_cost_report` / `verify_plc_program` / `run_plc_generate` / `export_files` / `export_cost_report` / `undo_last`（21 个：只读 11 + 写 10；写操作走二次确认） | ✅ |
-| JSON-RPC | `127.0.0.1:7420`，Bearer token（userData 下 `agent-token`），仅监听本机 | ✅ |
+| JSON-RPC | 默认 `127.0.0.1:7420`；可选局域网监听 `0.0.0.0` + CIDR 白名单（默认关闭）。Bearer token 位于 userData 下 `agent-token`，远程来源写审计 | ✅ |
 | MCP stdio | 复用同一工具注册表；写工具经桌面 RPC 代理，桌面未启动时明确返回 `DESKTOP_NOT_RUNNING` | ✅ |
 | 应用内对话 | OpenAI 兼容接口、工具调用循环、写操作二次确认、密钥仅本机进程 | ✅ |
 | 离线规则路由 | 无模型/断网时按关键词规则判 7 类意图并只执行只读工具（写操作明确拒绝） | ✅ |
@@ -288,7 +291,7 @@ npm start
 │   │   ├── agent/                            # JSON-RPC、MCP、应用内对话
 │   │   ├── ui/                               # 注入方式与面板壳
 │   │   └── shared/                           # 共享类型
-│   ├── test/                                 # node:test 单测与集成测试（1800 个）
+│   ├── test/                                 # node:test 单测与集成测试（1831 个）
 │   ├── build/                                # 应用图标
 │   ├── scripts/                              # esbuild 打包 main / preload / MCP
 │   └── release/                              # 本地产物（不入库）
@@ -316,7 +319,7 @@ npm start
 
 ```bash
 cd desktop
-npm test          # 1800 个单测（node:test）
+npm test          # 1831 个单测（node:test）
 npm run diagnose  # 输出环境/WebGL/userData/数据包（加载指标+统计摘要）/KB/审计/最近 20 条错误（不含密钥）
 npm run packs:validate # 校验全部内置包（manifest/parts/重复 id/依赖/partsSha256）
 npm run packs:stats    # 生成 docs/desktop/PACK-STATS.md 与 pack-stats.json

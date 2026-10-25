@@ -78,7 +78,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 ## 当前总体进度（2026-10-24）
 
 - ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 最新 `main` 基线上 `TZ=UTC npm test` 1800/1800、`npm run build:ext` 及 fake-sidecar Electron headless smoke 全部通过（最终 `SMOKE_OK`）；本轮详细记录见 [STATUS.md](./STATUS.md)。
+- ✅ 最新 `main` 基线上 `TZ=Asia/Shanghai npm test` 1831/1831、`npm run build:ext` 及 fake-sidecar Electron headless smoke 全部通过（最终 `SMOKE_OK`）；本轮详细记录见 [STATUS.md](./STATUS.md)。
 - ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
 - ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；`npm run packs:stats` 产出 `PACK-STATS.md` / `pack-stats.json`（617 条 / 612 实型号 / 612 唯一型号 / 55 分类，尺寸 55.9%、价格 7.2%）
 - ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
@@ -135,6 +135,40 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 | `desktop/electron/crash-report.ts` | `userData/diagnostics/last-crash.json` | 原子写（tmp + rename）、权限 600、只含堆栈/版本/操作类型，不含用户输入 |
 | `desktop/electron/perf-smoke.ts` | headless smoke 性能 workload | 仅在 `--headless-smoke` 动态加载，普通启动不静态引入 three.js |
 | `desktop/scripts/perf-baseline.mjs` | 200/1000/3000 件性能基线 | 冷/热构建、场景构建、300 tick、堆峰值；结果写 JSON，分析见 [PERF.md](PERF.md) |
+
+## 界面缩放
+
+- 配置：`desktop/src/shared/appearance.ts` 的 `AppearanceConfig.uiScale` 只接受 `1.0 / 1.1 / 1.15 / 1.25 / 1.4 / 1.5`，缺失或非法值回落 **1.15**；持久化到 `userData/appearance.json`，临时文件 + `rename` 原子写、0600。
+- 注入：不改根 `styles.css`；扩展在 `desktop/src/cad.css` 注入 `html { zoom: var(--acad-ui-scale, 1.15) }`，配置经 `appearance:get` / `appearance:set` 下发。
+- 入口：智能体面板「界面与渲染」下拉（100%–150%）。变更立即应用并持久化，重启后恢复。
+- 布局：`desktop/src/ui/appearance.ts` 写 CSS 变量后调用 `AutomationCadOrbit.resize()` 并派发原型 `resize`，下一帧补一次。
+
+## 3D 渲染质量
+
+- 档位：`desktop/src/orbit/quality.ts` 定义 `flow | standard | high`。`flow` 像素比上限 1.0 且关闭 MSAA；`standard`（默认）上限 1.5；`high` 上限 2.0；后两者开启 MSAA。
+- 构造边界：`antialias` 只能在构造 `WebGLRenderer` 时决定。`view.ts` 跨 MSAA 边界时重建 renderer，保留 scene/相机/装配体；同侧仅 `setPixelRatio`。renderer 使用 `powerPreference:'high-performance'`。
+- 拖动降级：OrbitControls `start` 把 pixelRatio 设为 **0.8**，`end` 后 200 ms 恢复并重绘；保留 `down` hover raycast 保护。
+- 大装配体：零件数 **> 1500** 自动改用 `flow`，诊断返回 `autoDowngraded:true`。
+- 配置：`renderQuality` 与 `uiScale` 共用 `appearance.json`；面板显示当前档位、像素比、拖动像素比、抗锯齿与降级原因。
+
+## 局域网联调
+
+- 入口：智能体面板「局域网联调」。默认关闭，仅监听 `127.0.0.1:7420`；开启后监听 `0.0.0.0:7420`，保存后热重启并显示结果。
+- 白名单：`desktop/src/shared/lan-access.ts` 支持 IPv4 CIDR（`10.0.0.0/8`、`172.16.0.0/12`、`192.168.0.0/16`）、单 IP（`192.168.2.117`）与 `::1`，逗号/换行分隔。回环永远放行；非白名单返回 `403 { ok:false, error:'LAN_NOT_ALLOWED' }` 并审计。非法 CIDR 中文报错且不落盘。
+- 配置：默认 `{ enabled:false, allowlist:['192.168.0.0/16'], cdpEnabled:false }`，写入 `userData/lan-access.json`（0600、原子）。Bearer token 保留；token 在 `<userData>/agent-token`，面板可显示/复制。
+- 审计：`agent-audit.jsonl` 增加 `remoteAddress` 与 `origin`（`local | lan`）。写工具仍须桌面本机确认，远程不能静默写。
+- 健康检查：`GET /health` 返回 `{ ok, version, toolCount, host, port, lanEnabled, allowlist, cdpPort }`，不含 token。端口冲突返回中文错误。
+- CDP：`cdpEnabled=true` 时下次启动监听 `0.0.0.0:9222`；面板显示端口与「需重启」及高风险警告。能访问该端口的程序可接管渲染进程。
+- 探测脚本：`desktop/scripts/lan-debug-probe.mjs`，`--token-file` 优先于 `--token`：
+
+```bash
+cd desktop
+node scripts/lan-debug-probe.mjs \
+  --url http://192.168.2.10:7420 \
+  --token-file "$HOME/.config/AutomationCAD/agent-token"
+```
+
+脚本请求 `/health`、`tools/list` 与只读 `list_components`（`limit:3`），成功输出 `LAN_DEBUG_OK`；失败中文报错并返回非 0。集成测试会启动临时服务真实执行。
 
 ## 维护约定
 
