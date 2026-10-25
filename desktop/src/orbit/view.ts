@@ -37,7 +37,7 @@ import {
   type RenderQuality
 } from './quality.ts';
 import { isCredibleFrameSample, isSoftwareRenderer, type RenderStats } from '../shared/render-stats.ts';
-import { clientPointToNdc } from './pointer.ts';
+import { clientPointToNdc, isClickSelect, isStaleDrag } from './pointer.ts';
 
 /**
  * 排队中的渲染帧最大等待时长。页面被遮挡/最小化时 rAF 不触发，超过这个窗口就认为该帧已失效，
@@ -226,6 +226,7 @@ export class OrbitView {
     window.addEventListener('pointerup', this.onGlobalPointerEnd, true);
     window.addEventListener('pointercancel', this.onGlobalPointerEnd, true);
     window.addEventListener('blur', this.onWindowBlur);
+    window.addEventListener('pointermove', this.onGlobalPointerMove, true);
     // 不让原型的舞台框选 / 点击委托吃到画布上的拖拽。
     ['pointerdown', 'pointermove', 'pointerup', 'click', 'dblclick'].forEach((type) => {
       this.canvas.addEventListener(type, (event) => event.stopPropagation());
@@ -644,6 +645,7 @@ export class OrbitView {
     window.removeEventListener('pointerup', this.onGlobalPointerEnd, true);
     window.removeEventListener('pointercancel', this.onGlobalPointerEnd, true);
     window.removeEventListener('blur', this.onWindowBlur);
+    window.removeEventListener('pointermove', this.onGlobalPointerMove, true);
     this.endMarquee();
     this.controls.dispose();
     if (this.assemblyRoot) disposeObject(this.assemblyRoot);
@@ -758,25 +760,66 @@ export class OrbitView {
     }
   };
 
-  private readonly onGlobalPointerEnd = (): void => {
-    if (this.dragging) this.endDrag();
-    this.down = null;
+  /**
+   * 重建控制器以清掉 OrbitControls 的内部交互状态。
+   *
+   * OrbitControls 把「正在拖动」记在私有 state 里：`onMouseWheel` 第一行就是 `state !== NONE → return`，
+   * 所以一旦漏掉一次 pointerup，滚轮缩放会整体失效，鼠标移动还会继续转。它没有公开的重置手段，
+   * 重建实例是唯一干净的做法（相机与 target 保持不变）。
+   */
+  private resetControlsState(): void {
+    if (!this.controls || this.dragging) return;
+    const target = this.controls.target.clone();
+    this.controls.dispose();
+    this.createControls(target);
+    this.requestRender();
+  }
+
+  /**
+   * 自愈：拖动标记还在但已经没有按下的指针时，结束拖动并重建控制器。
+   * 重建是唯一能清掉 OrbitControls 私有状态的公开手段（它是事件处理期间丢帧/丢 pointerup 的唯一后果）。
+   */
+  private healStaleDrag(): void {
+    if (!isStaleDrag(this.dragging, this.down !== null)) return;
+    this.endDrag();
+    this.resetControlsState();
+  }
+
+  private readonly onGlobalPointerEnd = (event: PointerEvent): void => {
+    // 画布内（含指针捕获后重定向到画布）的抬起由 onPointerUp 处理：它要用 this.down 判断
+    // 是「点击选中」还是「拖拽旋转」。在 window 捕获阶段抢先清空会让点击选中彻底失效。
+    if (event.target !== this.canvas) this.down = null;
+    // 这个监听在捕获阶段、早于 OrbitControls 自己的 pointerup 处理，此刻还看不出它有没有收到。
+    // 推迟到本轮事件派发结束后再判：若 dragging 仍为 true，说明 OrbitControls 漏掉了这次抬起，
+    // 内部 state 停在 ROTATE（滚轮失效、不按键也跟动），结束拖动并重建控制器把它清掉。
+    window.setTimeout(() => {
+      if (!this.dragging) return;
+      this.endDrag();
+      this.resetControlsState();
+    }, 0);
   };
 
   private readonly onWindowBlur = (): void => {
     if (this.dragging) this.endDrag();
+    this.down = null;
+    this.resetControlsState();
+  };
+
+  private readonly onGlobalPointerMove = (): void => {
+    // 指针在画布外移动时也要检查：僵死状态下画面会"不按键也跟动"，必须在任意一次移动时自愈。
+    this.healStaleDrag();
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
     const down = this.down;
     this.down = null;
-    if (!down || down.button !== 0) return;
-    if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > 4) return;
+    if (!isClickSelect(down, event)) return;
     this.options.onPick?.(this.pick(event.clientX, event.clientY), event);
   };
 
   private hoverFrame = 0;
   private readonly onPointerMove = (event: PointerEvent): void => {
+    this.healStaleDrag();
     if (this.down || this.hoverFrame) return;
     const { clientX, clientY } = event;
     this.hoverFrame = requestAnimationFrame(() => {

@@ -1765,6 +1765,10 @@ function bindMarquee(stage, box) {
   stage.addEventListener('pointerdown', e => {
     if (e.button !== 0) return;
     if (e.target.closest('.vp-tools, .vp-hud, .vp-hint, .vp-axis, .vp-callout')) return;
+    // 3D 视口有自己的 OrbitControls 与框选：这里再 setPointerCapture 会把指针从画布抢到 stage 上，
+    // 画布再也收不到 pointerup，OrbitControls 内部状态永久停在 ROTATE（按住没反应 / 滚轮失效 /
+    // 不按键也跟动）。所以 3D 画布及其内部元素一律不接管。
+    if (e.target.closest('.orbit-canvas') || e.target.tagName === 'CANVAS') return;
     start = { x: e.clientX, y: e.clientY };
     active = false;
     try { stage.setPointerCapture(e.pointerId); } catch (_) {}

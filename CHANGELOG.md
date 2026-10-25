@@ -2,6 +2,19 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.6] - 2026-10-25
+
+### Fixed · 3D 视口交互（真机连续反馈）
+
+- **点击选中失效**：0.4.3 引入的 window 级 `pointerup` 兜底在捕获阶段先清掉了按下状态，画布自身的抬起处理拿不到，点击判定直接 return（悬停高亮走 `pointermove`，所以只有点击坏）。改为只清理画布外的残留状态。
+- **点击后滚轮失效 / 不按键也跟动**：OrbitControls 把"正在拖动"记在私有 state，`onMouseWheel` 与 `onPointerDown` 遇到 `state !== NONE` 都直接 return。一旦漏掉一次 `pointerup`，滚轮缩放与新的按下全部失效、移动鼠标却继续旋转。现在在每轮抬起事件派发结束后检查：若仍处于拖动中即判定漏事件，结束拖动并重建控制器（相机与 target 保持不变）；窗口失焦、指针在画布外移动时同样自愈。
+- **3D 画布不再被外部框选抢指针**：原型的框选绑定会在父元素 `#stageAssembly` 上 `setPointerCapture`，与画布上的 OrbitControls 争抢同一个指针；现在 3D 画布及其内部元素一律不接管。
+
+### Verification
+
+- `npx tsc --noEmit` 0 错误；`TZ=Asia/Shanghai npm test` **1849 总计 / 1845 通过 / 0 失败 / 4 跳过**。
+- 点击选中在 dev 实例经 CDP 实测：点击不同位置分别选中 `CYL-032-050` / `CAR-32` / `BASE-01`。
+
 ## [0.4.3] - 2026-10-25
 
 ### Fixed · 拖动交互"不跟手"（真机反馈）

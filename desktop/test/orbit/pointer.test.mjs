@@ -1,7 +1,27 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { clientPointToNdc } from '../../src/orbit/pointer.ts';
+import { CLICK_SELECT_MAX_DISTANCE, clientPointToNdc, isClickSelect, isStaleDrag } from '../../src/orbit/pointer.ts';
+
+test('僵死拖动判定：标记在拖动但无按下指针时需要自愈', () => {
+  assert.equal(isStaleDrag(true, false), true);
+  assert.equal(isStaleDrag(true, true), false);
+  assert.equal(isStaleDrag(false, false), false);
+  assert.equal(isStaleDrag(false, true), false);
+});
+
+test('点击选中判定：按下状态缺失或位移过大都不算点击', () => {
+  const down = { x: 100, y: 100, button: 0 };
+  assert.equal(isClickSelect(down, { clientX: 100, clientY: 100, button: 0 }), true);
+  assert.equal(isClickSelect(down, { clientX: 102, clientY: 103, button: 0 }), true);
+  // 超过阈值按拖拽处理，不选中
+  assert.equal(isClickSelect(down, { clientX: 100 + CLICK_SELECT_MAX_DISTANCE + 1, clientY: 100, button: 0 }), false);
+  // 回归：窗口级兜底监听曾把 down 提前清空 → 点击选中整体失效，而悬停高亮仍正常
+  assert.equal(isClickSelect(null, { clientX: 100, clientY: 100, button: 0 }), false);
+  // 非左键不选中
+  assert.equal(isClickSelect({ x: 0, y: 0, button: 2 }, { clientX: 0, clientY: 0, button: 2 }), false);
+  assert.equal(isClickSelect(down, { clientX: 100, clientY: 100, button: 2 }), false);
+});
 
 test('zoom=1.15：点击 getBoundingClientRect 中心仍命中视口中心的零件', () => {
   // 布局尺寸 800×600，CSS zoom 1.15 后 rect 是 920×690，不能用 clientWidth 直接除。
