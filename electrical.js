@@ -50,7 +50,8 @@
 
   /* ------------------------------------------------------------
      机型参数：默认值就是 EL-001（滑台气缸控制柜）的样本值。
-     由工程生成时 applyMachine() 覆盖，图纸仍是同一套符号与版式。
+     工程图纸由 desktop/src/elec 引擎整页生成后经 setSchematic() 注入，
+     这里保留示例值供演示页使用。
      ------------------------------------------------------------ */
   const MACHINE_DEFAULT = {
     kind: 'sample',
@@ -546,169 +547,9 @@
     return s + '</g>';
   }
 
-  /* ---- 控制回路 ---- */
+  /* ---- 控制回路（示例图纸；工程图纸由 elec 引擎整页生成后注入） ---- */
   function controlCircuitSVG() {
-    return MACHINE && MACHINE.kind === 'conveyor' ? conveyorControlSVG() : controlCircuitSampleSVG();
-  }
-
-  /**
-   * 输送线控制回路：24V → SB1 急停(NC) → SB3 停止(NC) → [SB2 启动 ∥ KA1 自锁] → KM1 线圈 → 0V
-   * 用 EL-001 的同一套符号与线宽；PLC 只接光电输入与运行指示输出。
-   */
-  function conveyorControlSVG() {
-    let s = '<g class="circuit">';
-    const xL = 204, xR = 400;
-    const y = 74;              /* 主支路高度 */
-    s += `<text class="it-t" x="${xL}" y="32" style="font-size:4.2px">控制回路 ·  DC 24V</text>`;
-    s += `<line class="ic ic-t" x1="${xL}" y1="35" x2="${xR}" y2="35" style="opacity:.55"/>`;
-    s += `<line class="ic ic-b" x1="${xL}" y1="60" x2="${xL}" y2="196"/>`;
-    s += `<line class="ic ic-b" x1="${xR}" y1="60" x2="${xR}" y2="196"/>`;
-    s += `<text class="it" x="${xL}" y="56" text-anchor="middle" style="font-size:4.4px">+24V</text>`;
-    s += `<text class="it" x="${xR}" y="56" text-anchor="middle" style="font-size:4.4px">0V</text>`;
-
-    /* ---------- 主支路：FU1 → SB1 → SB3 → [SB2 ∥ KM1 辅助] → FR1(95/96) → KM1 线圈 ---------- */
-    s += `<line class="ic" x1="${xL}" y1="${y}" x2="210" y2="${y}"/><circle class="if" cx="${xL}" cy="${y}" r="1"/>`;
-
-    /* FU1 熔断器 */
-    let fu = `<rect class="ic" x="210" y="${y - 4}" width="8" height="8"/>`;
-    fu += `<line class="ic" x1="214" y1="${y - 4}" x2="214" y2="${y + 4}"/>`;
-    fu += `<text class="it" x="214" y="${y - 7}" text-anchor="middle" style="font-size:4.6px">-FU1</text>`;
-    fu += `<text class="it-s" x="214" y="${y + 11.4}" text-anchor="middle">6A</text>`;
-    s += sym('fu1', [208, y - 6, 12, 12], SYMDEF.fu1 || SYMDEF.sb1, fu);
-    s += `<line class="ic" x1="218" y1="${y}" x2="228" y2="${y}"/>`;
-
-    /* 急停（常闭 13/14） */
-    s += sym('sb1', [224, y - 14, 18, 22], SYMDEF.sb1, ncBlock('sb1', MACHINE.estop.tag, '急停', 228, y));
-    s += `<line class="ic" x1="237.6" y1="${y}" x2="246" y2="${y}"/>`;
-    /* 停止（常闭 21/22） */
-    s += sym('sb3', [242, y - 14, 18, 22], SYMDEF.sb1, ncBlock('sb3', MACHINE.stop.tag, '停止', 246, y));
-    s += `<line class="ic" x1="255.6" y1="${y}" x2="266" y2="${y}"/><circle class="if" cx="266" cy="${y}" r="1"/>`;
-
-    /* 并联：启动按钮（NO 13/14） ∥ KM1 辅助常开（13/14） —— 自锁用接触器自身辅助触点，不用 KA1 */
-    s += `<line class="ic" x1="266" y1="${y}" x2="266" y2="${y - 16}"/><line class="ic" x1="266" y1="${y}" x2="266" y2="${y + 16}"/>`;
-    s += `<line class="ic" x1="266" y1="${y - 16}" x2="276" y2="${y - 16}"/>`;
-    s += noBlock('sb2', MACHINE.start.tag, '启动', 276, y - 16);
-    s += `<line class="ic" x1="285.6" y1="${y - 16}" x2="298" y2="${y - 16}"/>`;
-    s += `<line class="ic" x1="266" y1="${y + 16}" x2="276" y2="${y + 16}"/>`;
-    s += noBlock('km1a', MACHINE.coil.tag, '自锁', 276, y + 16);
-    s += `<line class="ic" x1="285.6" y1="${y + 16}" x2="298" y2="${y + 16}"/>`;
-    s += `<line class="ic" x1="298" y1="${y - 16}" x2="298" y2="${y + 16}"/><circle class="if" cx="298" cy="${y}" r="1"/>`;
-
-    /* FR1 常闭 95/96：热继动作必须能切断线圈 */
-    s += `<line class="ic" x1="298" y1="${y}" x2="306" y2="${y}"/>`;
-    let fr = `<line class="ic" x1="306" y1="${y - 4.6}" x2="306" y2="${y + 4.6}"/>`;
-    fr += `<line class="ic" x1="315.6" y1="${y + 1.6}" x2="306.4" y2="${y - 0.8}"/>`;
-    fr += `<text class="it" x="310.8" y="${y - 7}" text-anchor="middle" style="font-size:4.4px">${MACHINE.thermal.tag}</text>`;
-    fr += `<text class="it-s" x="306" y="${y + 8.4}" style="font-size:2.8px">95</text><text class="it-s" x="313.4" y="${y + 8.4}" style="font-size:2.8px">96</text>`;
-    s += sym('fr1n', [304, y - 6, 14, 12], SYMDEF.fr1, fr);
-    s += `<line class="ic" x1="315.6" y1="${y}" x2="326" y2="${y}"/>`;
-
-    /* KM1 线圈 A1/A2 */
-    let km = `<line class="ic" x1="326" y1="${y}" x2="330" y2="${y}"/>`;
-    km += `<rect class="ic" x="330" y="${y - 6}" width="22" height="12"/>`;
-    km += `<line class="ic ic-t" x1="330" y1="${y}" x2="352" y2="${y}"/>`;
-    km += `<line class="ic" x1="352" y1="${y}" x2="${xR}" y2="${y}"/><circle class="if" cx="${xR}" cy="${y}" r="1"/>`;
-    km += `<text class="it" x="341" y="${y - 9}" text-anchor="middle" style="font-size:4.6px">${MACHINE.coil.tag}</text>`;
-    km += `<text class="it-s" x="331.6" y="${y - 1.2}" style="font-size:2.8px">A1</text>`;
-    km += `<text class="it-s" x="350.4" y="${y + 4.6}" text-anchor="end" style="font-size:2.8px">A2</text>`;
-    s += sym('km1c', [328, y - 8, 26, 16], SYMDEF.km1c, km);
-
-    /* ---------- PLC：L+/M 供电 + 光电输入 + 运行指示输出 ---------- */
-    const px0 = 204, py0 = 112, pw = 84, ph = 80;
-    let a = `<rect class="ic" x="${px0}" y="${py0}" width="${pw}" height="${ph}"/>`;
-    a += `<text class="it" x="${px0 + 4}" y="${py0 + 9}" style="font-size:5px">-A1</text>`;
-    a += `<text class="it-s" x="${px0 + 4}" y="${py0 + 14}" style="font-size:3px">PLC · CPU 1214C DC/DC/DC</text>`;
-    a += `<line class="ic ic-t" x1="${px0}" y1="${py0 + 18}" x2="${px0 + pw}" y2="${py0 + 18}"/>`;
-    /* L+ 从 +24V 母线上取电（母线上打点） */
-    a += `<line class="ic" x1="${px0}" y1="${py0 + 26}" x2="${px0 + 8}" y2="${py0 + 26}"/><circle class="if" cx="${px0}" cy="${py0 + 26}" r="1"/>`;
-    a += `<text class="it-s" x="${px0 + 10}" y="${py0 + 24.4}" style="font-size:2.9px">L+ 24V</text>`;
-    a += `<text class="it-s" x="${px0 + 10}" y="${py0 + 33}" style="font-size:2.9px">M（下引至 0V）</text>`;
-    let diY = py0 + 46;
-    for (const sensor of MACHINE.sensors) {
-      a += `<text class="it-s" x="${px0 + 8}" y="${diY + 1.4}" style="font-size:2.9px">${sensor.address} ${sensor.tag}</text>`;
-      a += `<rect class="ic ic-t" x="${px0 + 72}" y="${diY - 3.4}" width="7" height="6.8"/>`;
-      diY += 16;
-    }
-    a += `<text class="it-s" x="${px0 + 8}" y="${diY + 1.4}" style="font-size:2.9px">${MACHINE.lamp.address} ${MACHINE.lamp.tag}</text>`;
-    a += `<rect class="ic ic-t" x="${px0 + 72}" y="${diY - 3.4}" width="7" height="6.8"/>`;
-    const lampPinY = diY;
-    let pinY = py0 + 46;
-    for (const sensor of MACHINE.sensors) {
-      a += pin(px0 + 76, pinY, sensor.address, 'r');
-      pinY += 16;
-    }
-    a += pin(px0 + 76, lampPinY, MACHINE.lamp.address, 'r');
-    s += sym('a1', [px0, py0, pw, ph], SYMDEF.a1, a);
-    /* M 端到 0V */
-    s += `<line class="ic" x1="${px0 + 40}" y1="${py0 + ph}" x2="${px0 + 40}" y2="192"/>`;
-    s += `<line class="ic" x1="${px0 + 40}" y1="192" x2="${xR}" y2="192"/><circle class="if" cx="${xR}" cy="192" r="1"/>`;
-
-    /* 光电：三线制（棕 +24V / 蓝 0V / 黑 → DI），供电用中断点引到局部母线，避免全图拉线 */
-    let sx = 300;
-    let sy = py0 + 46 - 6;
-    for (const sensor of MACHINE.sensors) {
-      let g = `<rect class="ic" x="${sx}" y="${sy}" width="30" height="12"/>`;
-      g += `<text class="it" x="${sx + 3}" y="${sy + 6}" style="font-size:4.4px">${sensor.tag}</text>`;
-      g += `<text class="it-s" x="${sx + 3}" y="${sy + 11.4}" style="font-size:2.9px">${sensor.label}</text>`;
-      /* 黑线 → PLC DI */
-      g += `<line class="ic" x1="${sx - 20}" y1="${sy + 6}" x2="${sx}" y2="${sy + 6}"/>`;
-      g += `<circle class="if" cx="${sx}" cy="${sy + 6}" r="0.8"/>`;
-      /* 棕/蓝：短引线 + 电位标记 */
-      g += `<line class="ic ic-t" x1="${sx + 10}" y1="${sy}" x2="${sx + 10}" y2="${sy - 5}"/>`;
-      g += `<text class="it-s" x="${sx + 12}" y="${sy - 2.4}" style="font-size:2.6px">+24V</text>`;
-      g += `<line class="ic ic-t" x1="${sx + 22}" y1="${sy + 12}" x2="${sx + 22}" y2="${sy + 17}"/>`;
-      g += `<text class="it-s" x="${sx + 24}" y="${sy + 15.6}" style="font-size:2.6px">0V</text>`;
-      s += sym('pe' + sensor.tag.replace(/[^0-9]/g, ''), [sx - 2, sy - 2, 34, 20], { tag: sensor.tag, pot: 'DC24V' }, g);
-      sy += 16;
-    }
-
-    /* 运行指示灯 HL1：Q 输出 → 灯 → 0V */
-    const hy = py0 + 46 + MACHINE.sensors.length * 16;
-    const hx = sx + 44;
-    let hl = `<line class="ic" x1="${px0 + 76}" y1="${hy}" x2="${hx - 6}" y2="${hy}"/>`;
-    hl += `<circle class="ic" cx="${hx}" cy="${hy}" r="5"/>`;
-    hl += `<line class="ic ic-t" x1="${hx - 3.4}" y1="${hy - 3.4}" x2="${hx + 3.4}" y2="${hy + 3.4}"/>`;
-    hl += `<line class="ic ic-t" x1="${hx + 3.4}" y1="${hy - 3.4}" x2="${hx - 3.4}" y2="${hy + 3.4}"/>`;
-    hl += `<line class="ic" x1="${hx + 5}" y1="${hy}" x2="${xR}" y2="${hy}"/><circle class="if" cx="${xR}" cy="${hy}" r="1"/>`;
-    hl += `<text class="it" x="${hx}" y="${hy - 8}" text-anchor="middle" style="font-size:4.4px">${MACHINE.lamp.tag}</text>`;
-    s += sym('hl1', [hx - 6, hy - 8, 20, 16], { tag: MACHINE.lamp.tag, pot: '24V DC' }, hl);
-
-    /* 技术要求 */
-    s += `<g><text class="it-t" x="186" y="236" style="font-size:4px;font-weight:600">技术要求</text>`;
-    s += `<line class="ic ic-t" x1="186" y1="238.2" x2="284" y2="238.2" style="opacity:.5"/>`;
-    s += `<text class="it-s" x="186" y="243.4" style="font-size:2.9px">1. 急停 -SB1 用常闭 13/14 串入线圈回路；安全等级按 EN ISO 13850 类别 0。</text>`;
-    s += `<text class="it-s" x="186" y="248" style="font-size:2.9px">2. 自锁采用 -KM1 自身辅助常开 13/14，不依赖中继。</text>`;
-    s += `<text class="it-s" x="186" y="252.6" style="font-size:2.9px">3. -FR1 的 95/96 常闭已串入线圈回路，过载即切断。</text>`;
-    s += `<text class="it-s" x="186" y="257.2" style="font-size:2.9px">4. 24V 回路配 -FU1 6A；光电为三线制（棕 +24V / 蓝 0V / 黑 DI）。</text>`;
-    s += `<text class="it-s" x="186" y="261.8" style="font-size:2.9px">5. 导线按相序分色：L1 黄 / L2 绿 / L3 红 / N 蓝 / PE 黄绿；线号见 ${MACHINE.drawingNo}-T。</text></g>`;
-
-    return s + '</g>';
-  }
-
-  /** 常闭触点（急停蘑菇头 / 停止按钮），带 13/14 端子号 */
-  function ncBlock(key, tag, label, x0, y) {
-    let g = `<line class="ic" x1="${x0}" y1="${y - 4.6}" x2="${x0}" y2="${y + 4.6}"/>`;
-    g += `<line class="ic" x1="${x0 + 9.6}" y1="${y + 1.6}" x2="${x0 + 0.4}" y2="${y - 0.8}"/>`;
-    g += `<line class="ic" x1="${x0 + 5}" y1="${y - 9.4}" x2="${x0 + 5}" y2="${y - 2.6}"/>`;
-    g += `<line class="ic" x1="${x0 + 1.2}" y1="${y - 9.4}" x2="${x0 + 8.8}" y2="${y - 9.4}"/>`;
-    g += `<path class="ic" d="M${x0 + 0.6} ${y - 9.4}a4.4 3.8 0 018.8 0"/>`;
-    g += `<text class="it" x="${x0 + 5}" y="${y - 13.6}" text-anchor="middle" style="font-size:5px">${tag}</text>`;
-    g += `<text class="it-s" x="${x0 + 11.4}" y="${y - 4.4}">${label}</text>`;
-    g += pin(x0, y, '13', 'r') + pin(x0 + 9.6, y, '14', 'l');
-    void key;
-    return g;
-  }
-
-  /** 常开触点（启动按钮 / 辅助自锁），带 13/14 端子号 */
-  function noBlock(key, tag, label, x0, y) {
-    let g = `<line class="ic" x1="${x0}" y1="${y - 4.6}" x2="${x0}" y2="${y + 4.6}"/>`;
-    g += `<line class="ic" x1="${x0}" y1="${y + 4.6}" x2="${x0 + 8.2}" y2="${y - 1.6}"/>`;
-    g += `<line class="ic" x1="${x0 + 9.6}" y1="${y - 4.6}" x2="${x0 + 9.6}" y2="${y + 4.6}"/>`;
-    g += `<text class="it" x="${x0 + 5}" y="${y - 7.4}" text-anchor="middle" style="font-size:4.6px">${tag}</text>`;
-    g += `<text class="it-s" x="${x0 + 12}" y="${y + 1}" style="font-size:2.9px">${label}</text>`;
-    g += pin(x0, y, '13', 'r') + pin(x0 + 9.6, y, '14', 'l');
-    void key;
-    return g;
+    return controlCircuitSampleSVG();
   }
 
   function controlCircuitSampleSVG() {
@@ -2621,28 +2462,8 @@
     if (r) r.innerHTML = schematicRightHTML();
   }
 
-  /**
-   * 按工程参数出图：只换数据，符号/版式/技术要求仍是 EL-001 那套。
-   * model = { project, drawingNo, page, breaker, contactor, thermal, motor,
-   *           estop, stop, start, latch, coil, lamp, sensors:[{tag,label,address}], devices }
-   */
-  function applyMachine(model) {
-    const base = Object.assign({}, MACHINE_DEFAULT, model || {}, { kind: 'conveyor' });
-    base.sensors = (model && model.sensors) || [];
-    base.devices = (model && model.devices) || MACHINE_DEFAULT.devices;
-    MACHINE = base;
-    ES.machine = base;
-    renderSheet();
-    const ctxPage = $('#elCtxPage');
-    if (ctxPage) ctxPage.textContent = 'A3 420×297 · 1:1 · 页 ' + base.page;
-    renderMachinePageTree({ drawingNo: base.drawingNo, devices: base.devices, project: base.project });
-    ensureSheetsRerendered();
-    return true;
-  }
-
   window.ElecDomain = {
     setDomain: setDomain,
-    applyMachine: applyMachine,
     setSchematic: setSchematic,
     hasMachineSheet: () => !!(ES.machine && ES.machine.generated),
     show: showElecView,

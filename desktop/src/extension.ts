@@ -56,6 +56,8 @@ import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
 import { protectionRows, selectMotorProtection } from './elec/protection';
+import { buildMachineCircuit } from './elec/machine-circuit';
+import { renderSheet } from './elec/sheet';
 import { estimateConveyorDrive } from './machine/conveyor-synth';
 import {
   buildConveyorParts,
@@ -303,8 +305,15 @@ function buildOverlay(): void {
         const project = lastOpenedProject;
         try {
           if (project) {
-            const machine = buildElecMachineModel(project);
-            (window as unknown as { ElecDomain?: { applyMachine?: (model: unknown) => boolean } }).ElecDomain?.applyMachine?.(machine);
+            const sheet = buildElecSheet(project);
+            (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
+              svg: sheet.svg,
+              meta: { project: project.name, drawingNo: 'EL-CV-001', generated: true, devices: [] }
+            });
+            if (!sheet.deliverable) {
+              const errors = sheet.issues.filter((issue) => issue.severity === 'error');
+              showNotice(`电气图已生成，但校验有 ${errors.length} 项问题：${errors[0]?.message ?? ''}`, true);
+            }
           }
         } catch (error) {
           console.warn('[cad] 生成电气图失败', error);
@@ -928,7 +937,11 @@ function toggleProjectMenu(open?: boolean): void {
  * 驱动功率来自 conveyor-synth 的真实阻力/功率估算（不是拍脑袋），
  * 传感器来自零件清单里的光电支架，IO 由 schematic.ts 统一排布。
  */
-function buildElecMachineModel(project: ProjectMenuRecord): Record<string, unknown> {
+/**
+ * 工程 → 电路 → ERC → 版面 → SVG，全在 elec 引擎里完成。
+ * 这里只负责把工程参数翻译成机型描述，不画任何一条线。
+ */
+function buildElecSheet(project: ProjectMenuRecord): { svg: string; deliverable: boolean; issues: Array<{ severity: string; code: string; message: string }> } {
   const params = {
     lengthMm: Number(project.params?.lengthMm ?? 2000),
     widthMm: Number(project.params?.widthMm ?? 300),
@@ -937,7 +950,6 @@ function buildElecMachineModel(project: ProjectMenuRecord): Record<string, unkno
     beltThicknessMm: Number(project.params?.beltThicknessMm ?? 4),
     frameSectionMm: Number(project.params?.frameSectionMm ?? 40)
   };
-  // 功率/转速来自同一套估算：v = 0.2 m/s，n = 60v/(πD)
   let powerKw = 0.04;
   try {
     const drive = estimateConveyorDrive(params, {});
@@ -956,21 +968,34 @@ function buildElecMachineModel(project: ProjectMenuRecord): Record<string, unkno
   if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', address: 'I0.4' });
   if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', address: 'I0.3' });
 
-  return {
+  const circuit = buildMachineCircuit({
+    project: project.name,
+    drive: { powerKw, rpm, ratio },
+    sensors,
+    controls: { estop: true, startStop: true, lamp: true },
+    selection: {
+      breaker: protection.breaker,
+      contactor: protection.contactor,
+      thermal: protection.thermal,
+      currentA: protection.currentA,
+      thermalSetA: protection.thermalSetA
+    },
+    drawingNo: 'EL-CV-001'
+  });
+  const sheet = renderSheet(circuit, {
     project: project.name,
     drawingNo: 'EL-CV-001',
     page: '1 / 1',
-    breaker: { tag: '-QF1', model: protection.breaker, spec: `${protection.currentA}A` },
-    contactor: { tag: '-KM1', model: protection.contactor, spec: `${protection.currentA}A` },
-    thermal: { tag: '-FR1', model: protection.thermal, spec: `整定 ${protection.thermalSetA}A` },
-    motor: { tag: '-M1', model: '减速电机', power: `${powerKw}kW · ${rpm}rpm · i=${ratio}` },
-    estop: { tag: '-SB1' },
-    stop: { tag: '-SB3' },
-    start: { tag: '-SB2' },
-    coil: { tag: '-KM1' },
-    lamp: { tag: '-HL1', address: 'Q0.0' },
-    sensors,
-    devices: protectionRows(protection, { sensors: sensors.length })
+    date: new Date().toISOString().slice(0, 10),
+    notes: [
+      `线体 ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)} mm · 皮带面高 ${Math.round(params.beltHeightMm)} mm`,
+      `零件 ${project.parts} 件 · 总质量 ${project.massKg ?? '—'} kg`
+    ]
+  });
+  return {
+    svg: sheet.svg,
+    deliverable: sheet.deliverable,
+    issues: sheet.issues.map((issue) => ({ severity: issue.severity, code: issue.code, message: issue.message }))
   };
 }
 
