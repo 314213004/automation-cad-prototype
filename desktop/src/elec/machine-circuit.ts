@@ -25,9 +25,27 @@ function device(
   model: string,
   spec: string,
   pins: string[],
-  extra: { displayTag?: string; estimated?: boolean } = {}
+  extra: { displayTag?: string; estimated?: boolean; purpose?: string } = {}
 ): CircuitDevice {
   return { tag, kind, name, model, spec, pins, ...extra };
+}
+
+/**
+ * 断路器名称按型号系列定，不能“型号是微断、名称写电机保护断路器”。
+ * iC65/C65/DZ47/S20x 是微型断路器（MCB）；GV2/GV3/3RV/MS 是电机保护断路器（MPCB）。
+ */
+export function breakerNameFor(model: string): string {
+  if (/^(GV\d|3RV|MS1\d\d|MS\d)/i.test(model.trim())) return '电机保护断路器';
+  if (/^(iC65|C65|DZ47|S20\d|NXB|iK60)/i.test(model.trim())) return '微型断路器';
+  return '断路器';
+}
+
+/** 名称与型号系列不符时给出原因，供出图自检 */
+export function breakerNameMismatch(name: string, model: string): string | null {
+  const expected = breakerNameFor(model);
+  if (expected === '断路器') return null;
+  if (name.includes(expected)) return null;
+  return `名称“${name}”与型号 ${model}（${expected}）不符`;
 }
 
 export function buildMachineCircuit(spec: MachineElecSpec): Circuit {
@@ -40,22 +58,22 @@ export function buildMachineCircuit(spec: MachineElecSpec): Circuit {
   const { currentA, thermalSetA, breaker, contactor, thermal } = spec.selection;
 
   /* ---------------- 元件 ---------------- */
-  devices.push(device('-QF1', 'breaker', '电机保护断路器', breaker, `${currentA} A`, ['1', '3', '5', '2', '4', '6'], { estimated: true }));
-  devices.push(device('-KM1', 'contactor', '交流接触器', contactor, `${currentA} A`, ['1', '3', '5', '2', '4', '6'], { estimated: true }));
+  devices.push(device('-QF1', 'breaker', breakerNameFor(breaker), breaker, `计算电流 ${currentA} A`, ['1', '3', '5', '2', '4', '6'], { estimated: true }));
+  devices.push(device('-KM1', 'contactor', '交流接触器', contactor, `计算电流 ${currentA} A`, ['1', '3', '5', '2', '4', '6'], { estimated: true }));
   devices.push(device('-FR1', 'thermal', '热过载继电器', thermal, `整定 ${thermalSetA} A`, ['1', '3', '5', '2', '4', '6'], { estimated: true }));
   devices.push(device('-M1', 'motor', '减速电机', '三相异步', `${spec.drive.powerKw} kW · ${spec.drive.rpm} rpm · i=${spec.drive.ratio}`, ['U', 'V', 'W', 'PE']));
 
   devices.push(device('-FU1', 'fuse', '熔断器', 'RT18-32', '6 A', ['1', '2'], { estimated: true }));
-  devices.push(device('-PLC', 'plc', 'PLC', 'CPU 1214C DC/DC/DC', 'DI 8 / DO 6', ['L+', 'M', ...spec.sensors.map((sensor) => sensor.address), 'Q0.0']));
+  devices.push(device('-PLC', 'plc', 'PLC', 'CPU 1214C DC/DC/DC', 'DI 8 / DO 6', ['L+', 'M', ...spec.sensors.map((sensor) => sensor.address), ...(spec.controls.lamp ? ['Q0.0'] : [])]));
   for (const sensor of spec.sensors) {
-    devices.push(device(sensor.tag, 'sensor', '光电传感器', 'E3Z-D61', 'NPN · 24V DC', ['+', '-', 'OUT']));
+    devices.push(device(sensor.tag, 'sensor', '光电传感器', 'E3Z-D61', 'NPN · 24V DC', ['+', '-', 'OUT'], sensor.label ? { purpose: sensor.label } : {}));
   }
   devices.push(device('-KM1A', 'no', '接触器辅助触点', contactor, '13/14 NO', ['13', '14'], { displayTag: '-KM1' }));
   devices.push(device('-KM1K', 'coil', '接触器线圈', contactor, '24V DC · A1/A2', ['A1', 'A2'], { displayTag: '-KM1' }));
   devices.push(device('-FR1NC', 'nc', '热继常闭触点', thermal, '95/96', ['95', '96'], { displayTag: '-FR1' }));
-  if (spec.controls.estop) devices.push(device('-SB1', 'nc', '急停按钮（常闭）', 'XB2-BS542C', '蘑菇头 · 旋转复位', ['13', '14']));
+  if (spec.controls.estop) devices.push(device('-SB1', 'nc', '急停按钮（常闭）', 'XB2-BS542C', '蘑菇头 · 旋转复位', ['11', '12']));
   if (spec.controls.startStop) {
-    devices.push(device('-SB3', 'nc', '停止按钮（常闭）', 'XB2-BA42C', '红色', ['13', '14']));
+    devices.push(device('-SB3', 'nc', '停止按钮（常闭）', 'XB2-BA42C', '红色', ['11', '12']));
     devices.push(device('-SB2', 'no', '启动按钮（常开）', 'XB2-BA31C', '绿色', ['13', '14']));
   }
   if (spec.controls.lamp) devices.push(device('-HL1', 'lamp', '运行指示灯', 'XB2-BVM3LC', '24V DC', ['1', '2']));
@@ -89,11 +107,14 @@ export function buildMachineCircuit(spec: MachineElecSpec): Circuit {
   if (spec.controls.estop) seriesTags.push('-SB1');
   if (spec.controls.startStop) seriesTags.push('-SB3');
   const firstTag = seriesTags[0] ?? '-SB2';
-  addNet('N-CTRL-FUSE', undefined, [PIN('-FU1', '2'), PIN(firstTag, '13')]);
+  // IEC 60947-5-1 端子号：常闭 11/12，常开 13/14
+  const pinIn = (tag: string) => (tag === '-SB2' ? '13' : '11');
+  const pinOut = '12';
+  addNet('N-CTRL-FUSE', undefined, [PIN('-FU1', '2'), PIN(firstTag, pinIn(firstTag))]);
   seriesTags.forEach((tag, index) => {
-    const pins: string[] = [PIN(tag, '14')];
+    const pins: string[] = [PIN(tag, pinOut)];
     const next = seriesTags[index + 1];
-    if (next) pins.push(PIN(next, '13'));
+    if (next) pins.push(PIN(next, pinIn(next)));
     else pins.push(PIN('-SB2', '13'), PIN('-KM1A', '13'));
     addNet(`N-CTRL-S${index + 1}`, undefined, pins);
   });
