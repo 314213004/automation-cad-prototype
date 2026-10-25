@@ -549,3 +549,10 @@
 - 实测（P7-F）：`npm test` **766/766**（745 → 766，新增 21 条）；`eval:agent` 全 1.00；`npm run smoke` → `SMOKE_AGENT_UX_OK steps=3 audit=3 cancel=1`
 - 下一步：联调/同步工具注册后把 `tool: null` 用例替换为真实工具；单步模型工具调用仍使用一次性确认，逐步确认 UI 可在后续补齐
 - 验收（A/B/C 期）：`SMOKE_AGENT_NL_OK intents=7 tools=11 audit=3 ctx=2028` + `SMOKE_AGENT_READONLY_UI_OK` + `SMOKE_AGENT_PLACE_OK placed=1 undo=1` + `SMOKE_AGENT_PLAN_OK steps=3 confirm=1`，误写率 0（写计划不进入离线通道、预览不执行、拒绝确认不执行，均有单测/冒烟钉住）
+
+## CDP 内网转发 / token 轮换 / 渲染指标（2026-10-25）
+
+- 状态：✅ 实现与验证完成（`bfdaa37`，随 0.4.2 发版）。
+- 范围：CDP 回环 `9229` + 白名单 `9222` 转发，拒绝审计 `cdp_access_check`；token 启动复用/损坏重建/面板轮换；渲染器、软件渲染、场景规模与拖动帧时间进 `/health.render` 和 `get_render_stats`，软件渲染自动 `flow`。
+- 验证：`npm test` **1842/1842**；`tsc` 0 错误；`build:ext` 通过；smoke 输出 `SMOKE_RENDER_STATS_OK` 与 `SMOKE_OK`；`eval:agent` 107/107；CDP 实测 `0.0.0.0:9222` 可 `curl /json/version`。
+- 边界：普通模式内部 9229 常驻回环以支持热启停；白名单命中设备可接管渲染进程，外部 9222 默认关闭。软件渲染结论来自浏览器暴露的 renderer 字符串，驱动可能掩码。

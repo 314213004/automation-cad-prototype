@@ -4,12 +4,9 @@
 维护规则：完成一项把状态改为 ✅ 并写提交号；新问题追加到「已知问题」，不要删除历史。
 历史归档：只保留最近一轮的迭代记录；更早的完整记录按原文移入 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)（不进入离线知识索引，避免挤占 400 KB 上限）。
 
-## CDP 内网转发 / token 轮换 / 渲染指标（2026-10-25，本轮）
+## 上一轮（已归档）
 
-- 状态：✅ 实现与验证完成；直接提交 `main`，未打包、未发版、未触发 CI。
-- 范围：CDP 回环 `9229` + 白名单 `9222` 转发，拒绝审计 `cdp_access_check`；token 启动复用/损坏重建/面板轮换；渲染器、软件渲染、场景规模与拖动帧时间进 `/health.render` 和 `get_render_stats`，软件渲染自动 `flow`。
-- 验证：`npm test` **1842/1842**；`tsc` 0 错误；`build:ext` 通过；smoke 输出 `SMOKE_RENDER_STATS_OK` 与 `SMOKE_OK`；`eval:agent` 107/107；CDP 实测 `0.0.0.0:9222` 可 `curl /json/version`。
-- 边界：普通模式内部 9229 常驻回环以支持热启停；白名单命中设备可接管渲染进程，外部 9222 默认关闭。软件渲染结论来自浏览器暴露的 renderer 字符串，驱动可能掩码。
+- 0.4.2（`bfdaa37`）：CDP 内网转发 / token 生命周期 / 渲染指标，原文见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 
 ## 待办（按优先级）
 

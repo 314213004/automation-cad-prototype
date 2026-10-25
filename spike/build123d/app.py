@@ -4,13 +4,34 @@
 """
 from __future__ import annotations
 
-import argparse, json, math, os, secrets, tempfile, time, traceback
+import argparse, json, math, os, secrets, tempfile, threading, time, traceback
+from typing import Any
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-import build123d as bd
-
+# 内核导入要 6~7 秒（OCCT + 大量 Python 依赖）。导入放在后台线程里完成，
+# 先把 HTTP 端口绑上并回答 /health，否则调用方的健康检查（3 秒）必然超时。
+bd: Any = None
+VERSION = "unavailable"
 TOKEN = ""
-VERSION = bd.__version__
+_KERNEL_LOCK = threading.Lock()
+_KERNEL_ERROR = ""
+
+
+def load_kernel(wait: bool = True) -> bool:
+    """导入 build123d；wait=False 时只尝试一次，失败不抛。返回是否可用。"""
+    global bd, VERSION, _KERNEL_ERROR
+    with _KERNEL_LOCK:
+        if bd is not None:
+            return True
+        try:
+            import build123d as _bd
+        except Exception as exc:  # noqa: BLE001
+            _KERNEL_ERROR = str(exc)
+            return False
+        bd = _bd
+        VERSION = getattr(_bd, "__version__", "unknown")
+        _KERNEL_ERROR = ""
+        return True
 MAX_INSTANCES = 50
 
 
@@ -152,7 +173,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/health":
-            self._send(200, {"ok": True, "kernel": "build123d", "version": VERSION, "pid": os.getpid()})
+            ready = bd is not None
+            self._send(200, {
+                "ok": True,
+                "kernel": "build123d",
+                "kernelState": "ready" if ready else ("failed" if _KERNEL_ERROR else "loading"),
+                "version": VERSION,
+                "error": _KERNEL_ERROR or None,
+                "pid": os.getpid()
+            })
         else:
             self._send(404, {"ok": False, "error": "not found"})
 
@@ -167,6 +196,9 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             if length <= 0 or length > 1_000_000:
                 raise ValueError("请求体为空或超过 1 MB")
+            if not load_kernel():
+                self._send(503, {"ok": False, "error": f"建模内核加载失败：{_KERNEL_ERROR}"})
+                return
             payload = json.loads(self.rfile.read(length))
             wants = payload.get("exports") or ["step"]
             for item in wants:
@@ -202,7 +234,9 @@ def main() -> None:
     args = ap.parse_args()
     TOKEN = args.token or secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    # 先监听端口：调用方的健康检查只有 3 秒，而内核导入需要 6~7 秒。
     print(json.dumps({"ok": True, "port": args.port, "token": TOKEN, "kernel": "build123d", "version": VERSION}), flush=True)
+    threading.Thread(target=load_kernel, daemon=True).start()
     server.serve_forever()
 
 

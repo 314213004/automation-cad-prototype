@@ -642,3 +642,18 @@ kbd{display:inline-flex; align-items:center; justify-content:center; min-width:1
 .cc-item.is-ignored{opacity:.48; background:transparent}
 .cc-item.is-ignored .cc-name,.cc-item.is-ignored .cc-detail{color:var(--text-3)}
 .cc-btn:disabled{cursor:default; opacity:.72}
+
+/* 上下文工具条里尚未实现的占位按钮：灰掉并禁用，避免"能点但没反应"。 */
+.tool:disabled,
+.tool[aria-disabled="true"] {
+  opacity: .38;
+  cursor: not-allowed;
+}
+.tool:disabled:hover {
+  background: transparent;
+  border-color: transparent;
+}
+.switch input:disabled + span {
+  opacity: .45;
+  cursor: not-allowed;
+}
