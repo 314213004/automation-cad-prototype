@@ -1245,6 +1245,88 @@ function statusMsg(text) {
 }
 
 let toastTimer;
+/* ============ 工程下拉 ============ */
+const FILE_MENU_ICON = '<svg viewBox="0 0 16 16" class="ico" style="width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.2"><path d="M2.5 4.5A1 1 0 013.5 3.5h3l1.3 1.6h4.7a1 1 0 011 1v6.4a1 1 0 01-1 1H3.5a1 1 0 01-1-1z"/></svg>';
+
+function fmtProjectTime(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function renderFileMenu(records) {
+  const menu = $('#fileMenu');
+  if (!menu) return;
+  const list = Array.isArray(records) ? records : [];
+  const head = `<div class="file-menu-section">已保存工程 · ${list.length}</div>`;
+  const body = list.length === 0
+    ? `<div class="file-menu-empty">还没有工程。<br>用智能体 <code>build_machine_model</code> 生成整机，或让我导出 .acproj。</div>`
+    : list.map((r) => {
+        const meta = [
+          r.parts + ' 件',
+          r.massKg != null ? r.massKg + ' kg' : null,
+          r.envelope ? `${Math.round(r.envelope[0])}×${Math.round(r.envelope[1])}×${Math.round(r.envelope[2])}` : null,
+          fmtProjectTime(r.createdAt)
+        ].filter(Boolean).join(' · ');
+        return `<div class="file-menu-item" role="menuitem" tabindex="0" data-project-open="${attr(r.id)}">
+          <span class="nm">${FILE_MENU_ICON} ${esc(r.name)}</span>
+          <span class="mt">${esc(meta)}</span>
+          <button type="button" class="del" data-project-delete="${attr(r.id)}" title="删除该工程">×</button>
+        </div>`;
+      }).join('');
+  menu.innerHTML = head + body;
+}
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function attr(v) { return esc(v).replace(/`/g, ''); }
+
+function refreshFileMenu() {
+  const api = window.AutomationCadProjects;
+  if (!api) { renderFileMenu([]); return; }
+  Promise.resolve(api.list()).then((records) => renderFileMenu(records)).catch(() => renderFileMenu([]));
+}
+
+function toggleFileMenu() {
+  const menu = $('#fileMenu');
+  const btn = $('#fileBtn');
+  if (!menu || !btn) return;
+  const open = menu.hidden;
+  menu.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  if (open) { syncFileName(); refreshFileMenu(); statusMsg('工程列表'); }
+}
+
+function closeFileMenu() {
+  const menu = $('#fileMenu');
+  const btn = $('#fileBtn');
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+/** 顶栏文件名跟随当前打开的工程 */
+function syncFileName() {
+  const api = window.AutomationCadProjects;
+  const name = $('#fileCurrentName');
+  const ext = $('#fileCurrentExt');
+  if (!name || !api) return;
+  const current = String(api.current() || '');
+  if (!current) return;
+  const clean = current.replace(/（\d+ 件）$/, '');
+  name.textContent = clean;
+  const dot = clean.lastIndexOf('.');
+  if (ext) ext.textContent = dot > 0 ? clean.slice(dot) : '.asm';
+  if (dot > 0) name.textContent = clean.slice(0, dot);
+}
+
+// 原型页与测试沙箱都会加载本文件：事件绑定前先确认是真实 DOM 环境
+if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+  document.addEventListener('DOMContentLoaded', () => syncFileName());
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFileMenu(); });
+}
+
 function toast(msg, tone) {
   const t = $('#toast');
   t.dataset.tone = tone || '';
@@ -1952,12 +2034,31 @@ function bind() {
     const act = t.closest('[data-act]');
     if (act) { handleAct(act.dataset.act); return; }
 
-    /* 文件名菜单 */
+    /* 文件名菜单 → 工程列表（userData/projects，由 CAD 覆盖层的 AutomationCadProjects 提供） */
   if (t.closest('#fileBtn')) {
-    toast('文件：新建 / 打开 / 另存为 / 导出');
-    statusMsg('文件菜单');
+    toggleFileMenu();
     return;
   }
+  const projItem = t.closest('[data-project-open]');
+  if (projItem) {
+    const id = projItem.dataset.projectOpen;
+    closeFileMenu();
+    const api = window.AutomationCadProjects;
+    if (!api) { toast('工程接口未就绪', 'warn'); return; }
+    Promise.resolve(api.open(id))
+      .then(() => { syncFileName(); statusMsg('已打开工程：' + id); })
+      .catch((error) => toast('打开工程失败：' + (error && error.message ? error.message : error), 'warn'));
+    return;
+  }
+  const projDel = t.closest('[data-project-delete]');
+  if (projDel) {
+    const id = projDel.dataset.projectDelete;
+    const api = window.AutomationCadProjects;
+    if (!api) return;
+    Promise.resolve(api.remove(id)).then(() => { renderFileMenu(); statusMsg('已删除工程：' + id); });
+    return;
+  }
+  if (!t.closest('.file-menu-wrap')) closeFileMenu();
 
   /* 顶部右侧按钮 */
     const tbtn = t.closest('.tbtn');

@@ -211,7 +211,11 @@ function buildOverlay(): void {
         <button type="button" class="cad-btn" data-cad-action="close">${ICONS.close}<span>关闭</span></button>
       </div>
       <div class="cad-spacer"></div>
-      <div class="cad-file-info" id="cadFileInfo">未打开文件</div>
+      <div class="cad-file-wrap">
+        <div class="cad-file-info" id="cadFileInfo">未打开文件</div>
+        <button type="button" class="cad-file-caret" data-project-menu-toggle aria-haspopup="listbox" aria-expanded="false" title="工程列表">▾</button>
+        <div class="cad-project-menu" id="cadProjectMenu" role="listbox" hidden></div>
+      </div>
     </header>
     <main class="cad-main">
       <aside class="cad-sidebar">
@@ -286,6 +290,30 @@ function buildOverlay(): void {
       preview?.close();
       return;
     }
+    const projectToggle = (event.target as HTMLElement).closest<HTMLElement>('[data-project-menu-toggle]');
+    if (projectToggle) {
+      toggleProjectMenu();
+      return;
+    }
+    const projectDelete = (event.target as HTMLElement).closest<HTMLElement>('[data-project-delete]');
+    if (projectDelete) {
+      event.preventDefault();
+      const id = projectDelete.dataset.projectDelete ?? '';
+      if (id && window.desktop?.projects) {
+        void window.desktop.projects.remove(id).then((removed) => {
+          if (!removed.ok) showNotice(removed.message ?? '删除失败', true);
+          return refreshProjectMenu();
+        });
+      }
+      return;
+    }
+    const projectOpen = (event.target as HTMLElement).closest<HTMLElement>('[data-project-open]');
+    if (projectOpen) {
+      const id = projectOpen.dataset.projectOpen ?? '';
+      if (id) void openSavedProject(id);
+      return;
+    }
+    if (!(event.target as HTMLElement).closest('.cad-file-wrap')) toggleProjectMenu(false);
     const archiveAction = (event.target as HTMLElement).closest<HTMLElement>('[data-project-archive]');
     if (archiveAction) {
       toggleExportMenu(false);
@@ -733,6 +761,8 @@ function openOverlay(): void {
   overlayOpen = true;
   root.hidden = false;
   initMechUi();
+  // 顶栏工程列表：打开覆盖层时预热，点 ▾ 立刻有内容
+  void refreshProjectMenu();
   ensureViewer().setActive(true);
   if (parametric?.isOpen()) kinematics?.close();
   else ensureKinematicsUi().open();
@@ -787,6 +817,139 @@ function fileNameFromPath(path: string): string {
 function displayFileInfo(name: string): void {
   const info = document.getElementById('cadFileInfo');
   if (info) info.textContent = name;
+}
+
+
+/** 工程库条目（与主进程 electron/projects.ts 的 ProjectRecord 对齐） */
+interface ProjectMenuRecord {
+  id: string;
+  name: string;
+  parts: number;
+  massKg: number | null;
+  envelope: [number, number, number] | null;
+  createdAt: string;
+}
+
+/**
+ * 工程库（顶栏文件名右侧 ▾）：列出已保存的整机工程，点击重新装配。
+ * 数据源是主进程 userData/projects（每个工程一个目录：project.json + STEP/STL + 逐件 STL）。
+ */
+async function refreshProjectMenu(): Promise<void> {
+  const menu = document.getElementById('cadProjectMenu');
+  const toggle = document.querySelector<HTMLElement>('[data-project-menu-toggle]');
+  if (!menu) return;
+  if (!window.desktop?.projects) {
+    if (toggle) toggle.hidden = true;
+    return;
+  }
+  let records: ProjectMenuRecord[] = [];
+  try {
+    records = await window.desktop.projects.list();
+  } catch (error) {
+    console.warn('[projects] 读取工程列表失败', error);
+  }
+  if (records.length === 0) {
+    menu.innerHTML = '<div class="cad-project-empty">还没有保存的工程 · 用智能体 build_machine_model 生成，或导出 .acproj</div>';
+    return;
+  }
+  menu.innerHTML = records
+    .map((record) => {
+      const meta = [
+        `${record.parts} 件`,
+        record.massKg !== null ? `${record.massKg} kg` : null,
+        record.envelope ? `${Math.round(record.envelope[0])}×${Math.round(record.envelope[1])}×${Math.round(record.envelope[2])}` : null,
+        formatProjectTime(record.createdAt)
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      // 用 div+role 而不是 button：里面还要放删除按钮，嵌套 button 会被解析器拆开
+      return `<div class="cad-project-item" data-project-open="${escapeCadHtml(record.id)}" role="option" tabindex="0">
+        <span class="cad-project-name">${escapeCadHtml(record.name)}</span>
+        <span class="cad-project-meta">${escapeCadHtml(meta)}</span>
+        <button type="button" class="cad-project-del" data-project-delete="${escapeCadHtml(record.id)}" title="删除该工程">×</button>
+      </div>`;
+    })
+    .join('');
+}
+
+function formatProjectTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function toggleProjectMenu(open?: boolean): void {
+  const menu = document.getElementById('cadProjectMenu');
+  const toggle = document.querySelector<HTMLElement>('[data-project-menu-toggle]');
+  if (!menu) return;
+  const next = open ?? menu.hidden;
+  menu.hidden = !next;
+  if (toggle) toggle.setAttribute('aria-expanded', String(next));
+  if (next) void refreshProjectMenu();
+}
+
+/** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
+async function openSavedProject(id: string): Promise<void> {
+  if (!window.desktop?.projects) return;
+  const result = await window.desktop.projects.open(id);
+  if (!result.ok || !result.record) {
+    showNotice(result.message ?? '打开工程失败', true);
+    return;
+  }
+  const items = result.partPaths ?? [];
+  if (items.length === 0) {
+    showNotice('工程里没有零件网格，可能只保存了 STEP', true);
+    return;
+  }
+  try {
+    const buffers: Array<{ buffer: ArrayBuffer; name: string }> = [];
+    for (const item of items) {
+      const bytes = await window.desktop.readFileBuffer(item.path);
+      buffers.push({ buffer: toArrayBuffer(bytes), name: item.name });
+    }
+    const merged = await parseStandardCadBuffers(buffers, 'STL');
+    const label = `${result.record.name}（${merged.meshes.length} 件）`;
+    openOverlay();
+    ensureViewer().load(merged, label);
+    currentFileName = label;
+    displayFileInfo(label);
+    const partCount = document.getElementById('cadPartCount');
+    if (partCount) partCount.textContent = String(merged.stats.meshCount);
+    try {
+      interference?.run([]);
+    } catch (error) {
+      console.warn('[projects] 干涉检查初始化失败', error);
+    }
+    setEmptyVisible(false);
+    toggleProjectMenu(false);
+    showNotice(`${label} 已载入 · ${merged.stats.triangleCount} 个三角面`, false);
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+/** 把生成结果存成工程目录（同名覆盖），让它出现在下拉里、下次能直接打开。 */
+async function saveProjectToLibrary(input: {
+  name: string;
+  process: string;
+  params: Record<string, number>;
+  parts: number;
+  massKg: number | null;
+  envelope: [number, number, number] | null;
+  material: string[];
+  stepPath: string | null;
+  stlPath: string | null;
+  partPaths: Array<{ name: string; path: string }>;
+}): Promise<{ ok: boolean; message?: string }> {
+  if (!window.desktop?.projects) return { ok: false, message: '工程库接口不可用' };
+  try {
+    const saved = await window.desktop.projects.save(input);
+    await refreshProjectMenu();
+    return { ok: saved.ok, ...(saved.message ? { message: saved.message } : {}) };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function setEmptyVisible(visible: boolean): void {
@@ -995,6 +1158,9 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
   const built = await window.desktop.parametric.build(doc, { perPart: true });
   if (!built.ok) return { ok: false, code: 'BUILD_FAILED', message: built.message ?? '建模失败' };
 
+  const modelLabel = typeof request.name === 'string' && request.name.trim()
+    ? request.name.trim()
+    : `${builder.label.split('（')[0] ?? '整机'} ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)}`;
   const instanceStats = (built.stats?.instances ?? []) as Array<{ id: string; volumeMm3: number }>;
   const volumes: Record<string, number> = {};
   for (const item of instanceStats) volumes[item.id] = item.volumeMm3;
@@ -1015,8 +1181,7 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
         buffers.push({ buffer: toArrayBuffer(bytes), name: item.name });
       }
       const merged = await parseStandardCadBuffers(buffers, 'STL');
-      const modelName = typeof request.name === 'string' && request.name.trim() ? request.name.trim() : '皮带输送机';
-      const label = `${modelName}（${merged.meshes.length} 件）`;
+      const label = `${modelLabel}（${merged.meshes.length} 件）`;
       // 必须走 ensureViewer()：视口是懒创建的，直接访问 viewer 变量会静默不加载
       openOverlay();
       ensureViewer().load(merged, label);
@@ -1037,10 +1202,27 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
     }
   }
 
+  // 存成工程：出现在顶栏 ▾ 里，下次可直接打开（同名覆盖，参数变了不会堆一堆副本）
+  const savedProject = await saveProjectToLibrary({
+    name: modelLabel,
+    process: builder.process,
+    params: normalized.params,
+    parts: parts.length,
+    massKg,
+    envelope: conveyorEnvelope(parts) as [number, number, number],
+    material: [...new Set(parts.map((part) => MATERIAL_LABEL[part.material]))],
+    stepPath: (built.files?.step as { path?: string } | undefined)?.path ?? null,
+    stlPath: (built.files?.stl as { path?: string } | undefined)?.path ?? null,
+    partPaths: perPart
+      .map((item) => ({ name: item.name, path: item.stl?.path ?? '' }))
+      .filter((item) => item.path.length > 0)
+  });
+
   return {
     ok: true,
     engine: builder.engine,
     process: builder.process,
+    project: savedProject.ok ? { name: modelLabel, saved: true } : { name: modelLabel, saved: false, message: savedProject.message },
     parts: parts.length,
     loadedParts,
     solids: built.stats?.solids ?? null,
@@ -2428,6 +2610,19 @@ function init(): void {
     console.warn('[drawing] 图纸面板初始化失败', error);
   }
   bindWindowEvents();
+  // 外壳文件的「文件菜单」用它列工程/重新打开：app.js → AutomationCadProjects
+  Object.defineProperty(window, 'AutomationCadProjects', {
+    value: Object.freeze({
+      list: () => window.desktop?.projects?.list() ?? Promise.resolve([]),
+      open: (id: string) => openSavedProject(id),
+      remove: (id: string) => window.desktop?.projects?.remove(id) ?? Promise.resolve({ ok: false }),
+      current: () => currentFileName
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+
   Object.defineProperty(window, 'AutomationCadConveyor', {
     value: Object.freeze({
       // 兼容旧脚本入口；内部走通用构造器（process=conveyor）

@@ -17,10 +17,13 @@
       <span class="logo" aria-hidden="true">
         <svg viewBox="0 0 20 20" class="ico ico-logo"><path d="M10 2.2l6.4 3.7v8.2L10 17.8 3.6 14.1V5.9z"/><path d="M10 6.4l3.2 1.9v3.8L10 14l-3.2-1.9V8.3z"/></svg>
       </span>
-      <button class="file-btn" type="button" id="fileBtn" title="文件菜单">
-        <span class="file-name">滑台气缸装配体</span><span class="file-ext">.asm</span>
-        <svg viewBox="0 0 16 16" class="ico"><path d="M4 6.5l4 4 4-4"/></svg>
-      </button>
+      <div class="file-menu-wrap">
+        <button class="file-btn" type="button" id="fileBtn" title="工程列表" aria-haspopup="menu" aria-expanded="false">
+          <span class="file-name" id="fileCurrentName">滑台气缸装配体</span><span class="file-ext" id="fileCurrentExt">.asm</span>
+          <svg viewBox="0 0 16 16" class="ico"><path d="M4 6.5l4 4 4-4"/></svg>
+        </button>
+        <div class="file-menu" id="fileMenu" role="menu" hidden></div>
+      </div>
     </div>
 
     <nav class="modes" id="modes" role="tablist" aria-label="工作模式">

@@ -4,6 +4,14 @@
 
 ## [0.4.9] - 2026-10-25
 
+### Added · 工程库：顶栏「文件」下拉列出已保存整机，生成即可重开
+
+- 主进程新增 `electron/projects.ts`：一个工程 = `userData/projects/<id>/`（`project.json` + `model.step` + `model.stl` + `parts/NN-*.stl`），同名覆盖不堆副本，名字里的路径字符会被清理，损坏的 `project.json` 不会冒充工程。
+- IPC 与 preload 暴露 `projects.list/save/open/remove`（4 个未签名接口不进智能体工具面）。
+- **`build_machine_model` 生成后自动存成工程**：整机出现在外壳顶栏文件名右侧的下拉里（`已保存工程 · N`，带零件数/质量/包络/时间），点一下就用逐件 STL 重新装配回视口，零件树与干涉检查照旧可用。
+- 外壳 `app.js` 的 `#fileBtn` 原本只弹一句 `toast('文件：新建 / 打开 / 另存为 / 导出')`，现在接成真实菜单；CAD 覆盖层顶栏也加了同一个下拉。
+- 测试 +8（工程库：保存/覆盖/清理残留/重新打开/名字逃逸/损坏文件/倒序/删除），全量 1930/1926/0/4。
+
 ### Added · 通用整机建模工具 `build_machine_model` + `MODEL_BUILDERS` 注册表
 
 - **工具与机型解耦**：智能体只有一个 `build_machine_model`，机型由 `machine/model-builders.ts` 的注册表分派；新增链板线/滚筒线/转盘机只加一条映射，不新增工具。

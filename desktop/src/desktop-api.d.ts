@@ -823,6 +823,12 @@ interface Window {
       remove(id: string): Promise<{ ok: boolean }>;
       listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
+    projects: {
+      list(): Promise<DesktopProjectRecord[]>;
+      save(payload: DesktopProjectSaveInput): Promise<{ ok: boolean; record?: DesktopProjectRecord; message?: string }>;
+      open(id: string): Promise<{ ok: boolean; record?: DesktopProjectRecord; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      remove(id: string): Promise<{ ok: boolean; message?: string }>;
+    };
     projectArchive: {
       exportProject(snapshot: DesktopProjectExportSnapshot): Promise<DesktopProjectArchiveResult<{
         path: string;

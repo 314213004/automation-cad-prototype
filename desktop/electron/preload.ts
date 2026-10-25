@@ -45,6 +45,12 @@ const desktopApi = {
     exportProject: (snapshot: unknown) => ipcRenderer.invoke('project-archive:export', snapshot),
     preview: () => ipcRenderer.invoke('project-archive:preview')
   },
+  projects: {
+    list: () => ipcRenderer.invoke('projects:list'),
+    save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),
+    open: (id: string) => ipcRenderer.invoke('projects:open', id),
+    remove: (id: string) => ipcRenderer.invoke('projects:delete', id)
+  },
   exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),
   exportCostFile: (payload: {
     format: 'pdf' | 'csv';

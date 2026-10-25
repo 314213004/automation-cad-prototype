@@ -73,6 +73,7 @@ import {
 } from '../src/project-archive/desktop.ts';
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
 import { readActiveMachineDesign } from '../src/machine/store.ts';
+import { deleteProject, listProjects, openProject, saveProject } from './projects.ts';
 import { buildMachineIoMap } from '../src/machine/io-map.ts';
 import {
   mergePlcHistory,
@@ -640,6 +641,20 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     );
     if (!trustedWindow) return { ok: false, code: 'FAILED', message: '拒绝非应用窗口的工程档案请求。' };
     return await previewSelectedPortableArchive(createProjectArchiveDependencies());
+  });
+
+  handle('projects:list', () => listProjects(context.userDataDir));
+  handle('projects:save', (_event, payload: unknown) => {
+    if (typeof payload !== 'object' || payload === null) return { ok: false, message: '工程数据必须是对象' };
+    return saveProject(context.userDataDir, payload as Parameters<typeof saveProject>[1]);
+  });
+  handle('projects:open', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
+    return openProject(context.userDataDir, id);
+  });
+  handle('projects:delete', (_event, id: unknown) => {
+    if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
+    return deleteProject(context.userDataDir, id);
   });
 
   handle('export:report', async (_event, payload: unknown) => await exportReport(payload));
