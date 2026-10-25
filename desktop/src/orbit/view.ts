@@ -45,6 +45,9 @@ import { clientPointToNdc, isClickSelect, isStaleDrag } from './pointer.ts';
  */
 const RENDER_QUEUE_WATCHDOG_MS = 500;
 
+/** 控制器重建的最小间隔：重建会丢弃控制器内部的拖动状态，短时间反复重建会让视口完全失去响应。 */
+const CONTROLS_REBUILD_MIN_INTERVAL_MS = 1500;
+
 export type Projection = 'perspective' | 'orthographic';
 
 export interface OrbitViewOptions {
@@ -132,6 +135,9 @@ export class OrbitView {
   private dragMaxFrameMs = 0;
   private dragDroppedFrames = 0;
   private renderQueuedAt = 0;
+  private readonly inputCounters = { pointerDowns: 0, pointerUps: 0, pointerMoves: 0, wheels: 0 };
+  private controlsRebuilds = 0;
+  private lastControlsRebuildAt = 0;
   private lastDragAt: string | null = null;
   private glRenderer = '';
   private softwareRendering = false;
@@ -221,6 +227,7 @@ export class OrbitView {
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.addEventListener('wheel', this.onWheelCount, { passive: true });
     // 兜底：指针在画布外抬起、系统取消、窗口失焦时，canvas 收不到 pointerup，
     // OrbitControls 也就不会发 'end'，拖动状态会永久卡住。
     window.addEventListener('pointerup', this.onGlobalPointerEnd, true);
@@ -614,7 +621,13 @@ export class OrbitView {
       dragAvgFrameMs: this.dragFrames > 0 ? Math.round((this.dragTotalFrameMs / this.dragFrames) * 100) / 100 : 0,
       dragMaxFrameMs: Math.round(this.dragMaxFrameMs * 100) / 100,
       dragDroppedFrames: this.dragDroppedFrames,
-      lastDragAt: this.lastDragAt
+      lastDragAt: this.lastDragAt,
+      input: {
+        ...this.inputCounters,
+        controlsRebuilds: this.controlsRebuilds,
+        dragging: this.dragging,
+        camera: `${this.camera.position.x.toFixed(2)},${this.camera.position.y.toFixed(2)},${this.camera.position.z.toFixed(2)}`
+      }
     };
   }
 
@@ -751,6 +764,7 @@ export class OrbitView {
   }
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    this.inputCounters.pointerDowns += 1;
     this.down = { x: event.clientX, y: event.clientY, button: event.button };
     try {
       // 捕获指针，保证画布外抬起也能收到 pointerup。
@@ -769,6 +783,10 @@ export class OrbitView {
    */
   private resetControlsState(): void {
     if (!this.controls || this.dragging) return;
+    // 节流：重建会打断进行中的拖动，短时间反复重建反而让视口更"死"。
+    if (performance.now() - this.lastControlsRebuildAt < CONTROLS_REBUILD_MIN_INTERVAL_MS) return;
+    this.lastControlsRebuildAt = performance.now();
+    this.controlsRebuilds += 1;
     const target = this.controls.target.clone();
     this.controls.dispose();
     this.createControls(target);
@@ -802,7 +820,6 @@ export class OrbitView {
   private readonly onWindowBlur = (): void => {
     if (this.dragging) this.endDrag();
     this.down = null;
-    this.resetControlsState();
   };
 
   private readonly onGlobalPointerMove = (): void => {
@@ -811,6 +828,7 @@ export class OrbitView {
   };
 
   private readonly onPointerUp = (event: PointerEvent): void => {
+    this.inputCounters.pointerUps += 1;
     const down = this.down;
     this.down = null;
     if (!isClickSelect(down, event)) return;
@@ -819,6 +837,7 @@ export class OrbitView {
 
   private hoverFrame = 0;
   private readonly onPointerMove = (event: PointerEvent): void => {
+    this.inputCounters.pointerMoves += 1;
     this.healStaleDrag();
     if (this.down || this.hoverFrame) return;
     const { clientX, clientY } = event;
@@ -829,6 +848,10 @@ export class OrbitView {
       this.lastHover = id;
       this.options.onHover?.(id);
     });
+  };
+
+  private readonly onWheelCount = (): void => {
+    this.inputCounters.wheels += 1;
   };
 
   private readonly onPointerLeave = (): void => {

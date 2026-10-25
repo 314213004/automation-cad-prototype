@@ -17,6 +17,19 @@ export interface RenderStats {
   dragDroppedFrames: number;
   /** 最近一次拖动结束时间（ISO 8601）；尚未拖动过为 null。 */
   lastDragAt: string | null;
+  /** 交互诊断：画布收到的指针事件计数，用来定位"事件到了但相机没动"这类问题。 */
+  input: {
+    pointerDowns: number;
+    pointerUps: number;
+    pointerMoves: number;
+    wheels: number;
+    /** 控制器被重建的次数（每次自愈都会 +1）。 */
+    controlsRebuilds: number;
+    /** 是否仍处于拖动标记。 */
+    dragging: boolean;
+    /** 当前相机位置，旋转/缩放后必变。 */
+    camera: string;
+  };
 }
 
 /**
@@ -58,8 +71,19 @@ export function normalizeRenderStats(value: unknown): RenderStats | null {
   const dragDroppedFrames = Math.min(1_000_000, Math.trunc(finiteNonNegative(source.dragDroppedFrames)));
   const dragAvgFrameMs = Math.min(60_000, finiteNonNegative(source.dragAvgFrameMs));
   const dragMaxFrameMs = Math.min(60_000, finiteNonNegative(source.dragMaxFrameMs));
+  const rawInput = (typeof source.input === 'object' && source.input !== null ? source.input : {}) as Record<string, unknown>;
+  const count = (value: unknown): number => Math.min(1_000_000_000, Math.trunc(finiteNonNegative(value)));
   return {
     glRenderer,
+    input: {
+      pointerDowns: count(rawInput.pointerDowns),
+      pointerUps: count(rawInput.pointerUps),
+      pointerMoves: count(rawInput.pointerMoves),
+      wheels: count(rawInput.wheels),
+      controlsRebuilds: count(rawInput.controlsRebuilds),
+      dragging: rawInput.dragging === true,
+      camera: typeof rawInput.camera === 'string' ? rawInput.camera.slice(0, 80) : ''
+    },
     isSoftware: source.isSoftware === true || isSoftwareRenderer(glRenderer),
     pixelRatio: Math.min(16, finiteNonNegative(source.pixelRatio)),
     quality,

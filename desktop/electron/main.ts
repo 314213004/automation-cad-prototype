@@ -4483,7 +4483,11 @@ function createWindow(): BrowserWindow {
           dragAvgFrameMs: 42,
           dragMaxFrameMs: 58,
           dragDroppedFrames: 0,
-          lastDragAt: new Date().toISOString()
+          lastDragAt: new Date().toISOString(),
+          input: {
+            pointerDowns: 3, pointerUps: 3, pointerMoves: 12, wheels: 2,
+            controlsRebuilds: 0, dragging: false, camera: '0.00,0.00,120.00'
+          }
         };
         const posted = await window.webContents.executeJavaScript(
           `window.desktop.render.stats(${JSON.stringify(sampleRenderStats)})`

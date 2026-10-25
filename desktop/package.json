@@ -18,6 +18,7 @@
     "bench:render": "node scripts/bench-render-plan.mjs",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
     "smoke:win": "electron . --headless-smoke --disable-gpu --disable-gpu-compositing --disable-software-rasterizer",
+    "update:installed": "node scripts/update-installed.mjs",
     "diagnose": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --diagnose",
     "diagnose:win": "electron . --diagnose --disable-gpu --disable-gpu-compositing --disable-software-rasterizer",
     "packs:validate": "node ../scripts/pack-validate.mjs",
