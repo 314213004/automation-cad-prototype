@@ -115,7 +115,8 @@ export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
   // 首尾横撑必须让开端板：端板占 x ∈ ±[halfL-8, halfL]，横撑半宽 section/2，
   // 过去直接排到 ±halfL，端板与横撑实打实撞在一起（干涉检查 153600 mm³）。
   const crossCount = Math.max(3, Math.round(p.lengthMm / 500) + 1);
-  const crossInset = Math.max(section + 8, 80);
+  // 还要躲开尾部张紧滑座（|x| ∈ [halfL-110, halfL-40]），否则横撑 1 顶住滑座
+  const crossInset = Math.max(section + 8, 130);
   const returnBeltBottom = pulleyZ - pulleyRadius - p.beltThicknessMm;
   const crossZ = returnBeltBottom - 4 - section / 2;
   const crossSpan = Math.max(0, p.lengthMm - crossInset * 2);
@@ -204,7 +205,9 @@ export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
       ],
       // 真实滚筒是空心筒体 + 轴，实心代理体会重一倍以上，按样本质量给
       massOverrideKg: 3.2,
-      transform: { x: sign * halfL, y: 0, z: pulleyZ, rz: 0 }
+      // 筒体必须让开端板：端板占 x ∈ ±[halfL-8, halfL]，滚筒半径 25，
+      // 放在 ±halfL 时筒体整段穿过端板（干涉 47985 mm³）
+      transform: { x: sign * (halfL - 10 - pulleyRadius), y: 0, z: pulleyZ, rz: 0 }
     });
   }
 
@@ -247,7 +250,9 @@ export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
       box('gearmotor-body', '电机+减速箱', 160, 120, 140),
       cylinder('gearmotor-shaft', '输出轴', 25, 80, 'y', [0, -60, 0])
     ],
-    transform: { x: halfL - 120, y: -outerY - 60, z: pulleyZ, rz: 0 }
+    // 电机箱外挂在纵梁外侧：过去中心只在纵梁外 60、箱体深 120，
+    // 有一半压进纵梁（干涉 128000 mm³），现在留 5 mm 安装面间隙
+    transform: { x: halfL - 120, y: -(outerY + section / 2 + 65), z: pulleyZ, rz: 0 }
   });
 
   // 8) 尾部张紧滑座 + 螺杆（两侧各一套）

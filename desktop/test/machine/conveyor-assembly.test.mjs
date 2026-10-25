@@ -72,10 +72,11 @@ test('BOM：传入内核体积时按密度算质量', () => {
   assert.equal(belt?.massKg, 1.4, 'PVC 1400 kg/m³ × 1 L = 1.4 kg');
 });
 
-test('包络按零件实际外形求并集（电机会撑宽，不是公式估的）', () => {
+test('包络按零件实际外形求并集（电机外挂会撑宽，不是公式估的）', () => {
   const [length, width, height] = conveyorEnvelope(parts);
-  assert.equal(length, 2050, '长度含端板与电机');
-  assert.ok(width > DEFAULT_CONVEYOR.widthMm, '宽度应包含滚筒轴头/电机');
+  // 电机改为外挂在纵梁外侧后，不再向 X 伸出，长度就是线体长；宽度由电机/轴头撑开
+  assert.equal(length, 2000, '长度等于线体长（电机不再向 X 伸出）');
+  assert.ok(width > DEFAULT_CONVEYOR.widthMm + 100, '宽度应包含外挂电机');
   assert.ok(height >= DEFAULT_CONVEYOR.beltHeightMm, '高度至少到皮带面');
 });
 

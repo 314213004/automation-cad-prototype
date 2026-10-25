@@ -8,7 +8,15 @@ function boxes(params) {
   const doc = conveyorAssembly(buildConveyorParts(params));
   return compileOps(doc).instances.map((instance) => {
     const box = instance.ops.find((op) => op.op === 'box');
-    const [sizeX, sizeY, sizeZ] = [box?.length ?? 0, box?.width ?? 0, box?.height ?? 0];
+    const cylinder = instance.ops.find((op) => op.op === 'cylinder');
+    let sizes = [0, 0, 0];
+    if (box) sizes = [box.length ?? 0, box.width ?? 0, box.height ?? 0];
+    else if (cylinder) {
+      const d = cylinder.diameter ?? 0;
+      const h = cylinder.height ?? 0;
+      sizes = cylinder.axis === 'x' ? [h, d, d] : cylinder.axis === 'y' ? [d, h, d] : [d, d, h];
+    }
+    const [sizeX, sizeY, sizeZ] = sizes;
     const d = instance.transform ?? { x: 0, y: 0, z: 0, rz: 0 };
     return { id: instance.id, name: instance.name, min: [d.x - sizeX / 2, d.y - sizeY / 2, d.z - sizeZ / 2], max: [d.x + sizeX / 2, d.y + sizeY / 2, d.z + sizeZ / 2] };
   });
@@ -73,4 +81,28 @@ test('回程皮带下沿与横撑顶面留出间隙，不是刚好相切', () =>
   assert.ok(belt && cross);
   assert.ok(cross.max[2] <= belt.min[2], '横撑顶面高过回程皮带下沿');
   assert.ok(belt.min[2] - cross.max[2] >= 2, `间隙只有 ${(belt.min[2] - cross.max[2]).toFixed(1)} mm`);
+});
+
+test('滚筒筒体不穿端板（回归：曾 47985 mm³）', () => {
+  const list = boxes(DEFAULT_CONVEYOR);
+  const plates = list.filter((item) => item.name.includes('端板'));
+  const pulleys = list.filter((item) => item.name.includes('滚筒'));
+  assert.ok(plates.length === 2 && pulleys.length === 2);
+  for (const plate of plates) {
+    for (const pulley of pulleys) {
+      assert.equal(overlapMm3(plate, pulley), 0, `${plate.name} 与 ${pulley.name} 仍然重叠`);
+    }
+  }
+});
+
+test('减速电机箱体不压进纵梁，外侧留安装间隙（回归：曾 128000 mm³）', () => {
+  const list = boxes(DEFAULT_CONVEYOR);
+  const motor = list.find((item) => item.name === '减速电机');
+  const rails = list.filter((item) => item.name.includes('侧纵梁'));
+  assert.ok(motor && rails.length === 2);
+  for (const rail of rails) {
+    assert.equal(overlapMm3(motor, rail), 0, `减速电机压进 ${rail.name}`);
+  }
+  const nearRail = rails.reduce((a, b) => (Math.abs(a.min[1] - motor.max[1]) < Math.abs(b.min[1] - motor.max[1]) ? a : b));
+  assert.ok(nearRail.min[1] - motor.max[1] >= 0, '电机箱体与纵梁之间没有间隙');
 });
