@@ -3,11 +3,11 @@
 ## 概览
 
 - 基线：远端 `main` 为 `0d69dc0`；本轮实现提交 `eb0c830`，位于独立分支 `feat/desktop-module-safety-update`，PR 待审且未合并。PR #6、#7 与原 PR #8 分支均保持不变。
-- 版本：`desktop/package.json` → **0.3.0**；本轮未打包、未触发 Windows workflow、未打 tag 或创建 Release。
+- 版本：`desktop/package.json` → **0.4.0**；已由 `windows-build` 在 `main @ ba5787a` 上构建 NSIS 安装包。
 - 测试：最新 main 基线上 `TZ=UTC npm test` **1800/1800 通过，0 失败、0 跳过**。
 - 构建与冒烟：`npm run build:ext` 通过（含 TypeScript 检查）；fake parametric sidecar 下 Electron headless smoke 最终输出 `SMOKE_OK`。覆盖模块门控、Agent checkpoint、CAD 只读导入/参数化、PLC/sync 和 10 个元器件包校验。
 - 评估：最近一次既有记录 `npm run eval:agent` 为 `EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；本轮未重跑离线或真实模型评估。
-- 最近发布：`v0.3.0` NSIS `AutomationCAD-Setup-0.3.0.exe`（129 MB，未签名；上一版 `v0.2.0`）。本轮更新通道只有 mock/本机代码路径验证，未做真实签名或升级验收。
+- 最近发布：`v0.4.0` NSIS `AutomationCAD-Setup-0.4.0.exe`（约 130 MB，未签名）；上一版 `v0.3.0`。更新通道代码已随模块门控落地，但未做真实签名与跨版本升级验收。
 
 ## 验证记录（本轮真实执行）
 

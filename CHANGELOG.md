@@ -2,6 +2,35 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.0] - 2026-10-25
+
+> 已发布：GitHub Release `v0.4.0`，Windows 安装包 `AutomationCAD-Setup-0.4.0.exe`（NSIS，未签名，约 130 MB），由 `windows-build` 在 `windows-latest` 上构建（1810 单测 / 0 失败）。
+
+### Added · 可选模块门控与工程安全（PR #9）
+
+- **模块 registry + 运行时启停**：8 个可选模块（`cost.estimation`、`elec.validation`、`plcgen`、`parametric.import`、`factory.plc-sync`、`agent.resume`、`project.portable`、`system.update`）统一注册，默认全启用；门控只隐藏/禁用对应入口与 Agent 工具，不卸载代码。`ipcMain.on('modules:sync-*')` 同步通道在 `createWindow()` 之前注册。
+- **工程档案（project archive）**：`.acproj` v2 打包/预览/导入，导入走临时目录 + 校验 + 原子替换。
+- **CAD 导入事务回滚**：导入失败回滚到导入前状态，不留半成品装配体。
+- **更新通道**：`update-service` 支持 `latest.yml` + blockmap 的检查/下载/安装路径（未做真实签名与跨版本升级验收）。
+- **PLC 校验补强**：数值范围与空序列校验，空序列不再生成空程序。
+- 107 个文件、+11693/−442。
+
+### Security
+
+- **Agent IPC 传输安全（PR #6）**：所有 `ipcMain.handle` 走可信 sender 校验（`isTrustedIpcSender`），渲染层 URL 白名单（`isTrustedUiUrl`），MCP/RPC 写操作统一授权（`authorizeAgentToolCall`），API Key 传输策略 `assertSafeApiKeyUrl` 泛内网段放行 HTTP（10/8、172.16/12、192.168/16、169.254、IPv6 ULA/链路本地），仅公网强制 HTTPS。
+- 设计包同步限制单包体积（`MAX_DESIGN_PACKAGE_BYTES`），`.acproj` 导入做路径穿越与大小校验。
+
+### Added · 机型设计与元件库（迭代 37–48）
+
+- 整机形态库扩到 **11 种**（工艺 × 布局 × 机型），选型优先级为「工位覆盖 → 产能达标 → 工艺适配 → 布局偏好（仅同分）→ 占地」，候选产能夹紧到自身工位范围，禁止越界形态凭虚高吞吐入选。
+- 统一功率/成本模型：按实际选型额定功率 × 同时系数 0.7 / 负载率 0.6 / 效率 0.9 / cosφ 0.9 计算 kW、VA、计算电流、断路器建议与 24V 余量；成本分项与缺价计数进入方案卡。
+- 元件库扩到 **9 个内置包 / 617 型号**（新增 `vision-cn`、`drive-cn`、`safety-cn`、`frame-cn`），保留按需懒加载：启动只读 manifest，命中包才读 `parts.json`，`partsSha256` 校验完整性。
+- 价格簿扩到真实分销价条目，案例 BOM 覆盖率提升；缺价项照实计入「待询价」，示例价自动排除。
+
+### Fixed
+
+- **Windows CRLF 检出不误判 integrity**：Windows runner 的 `core.autocrlf=true` 会把 `packs/builtin/*/parts.json` 检出为 CRLF，而 `manifest.partsSha256` 按 LF 计算，导致 `PACK_INTEGRITY_FAILED` 使全部内置包加载失败（CI 18 个用例红）。`assertPartsIntegrity` 与 `scripts/pack-stats.mjs` 统一 `CRLF→LF` 后再取 SHA-256，并新增根目录 `.gitattributes` 对文本文件强制 `eol=lf`；新增回归用例覆盖 CRLF 字符串与 Buffer（`ba5787a`）。
+
 ## [0.3.0] - 2026-10-23
 
 > 已发布：GitHub Release `v0.3.0`，Windows 安装包 `AutomationCAD-Setup-0.3.0.exe`（NSIS，未签名，129 MB），由 `windows-build` 手动触发在 `windows-latest` 上构建（1248 单测 / 0 失败）。
