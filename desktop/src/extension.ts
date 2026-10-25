@@ -995,7 +995,14 @@ function buildElecSheet(project: ProjectMenuRecord): { svg: string; deliverable:
   return {
     svg: sheet.svg,
     deliverable: sheet.deliverable,
-    issues: sheet.issues.map((issue) => ({ severity: issue.severity, code: issue.code, message: issue.message }))
+    // 图面自检（断线/压字/漏画/明细表不一致）与 ERC 同等对待：任何一项都会让 deliverable=false
+    issues: [
+      ...sheet.issues.map((issue) => ({ severity: issue.severity, code: issue.code, message: issue.message })),
+      ...sheet.problems.map((problem) => {
+        const code = /^\[([A-Z_]+)\]/.exec(problem)?.[1] ?? 'LAYOUT';
+        return { severity: 'error', code, message: problem.replace(/^\[[A-Z_]+\]\s*/, '') };
+      })
+    ]
   };
 }
 

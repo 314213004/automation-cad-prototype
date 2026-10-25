@@ -35,6 +35,8 @@ export interface CircuitDevice {
   displayTag?: string;
   /** 选型来自估算 */
   estimated?: boolean;
+  /** 在本机上的用途（如“进料检测”），图上写在位号下方 */
+  purpose?: string;
 }
 
 export interface CircuitNet {
@@ -118,12 +120,50 @@ export function runErc(circuit: Circuit): ErcIssue[] {
     const phaseHits = phases.filter((phase) => net.label === phase);
     if (phaseHits.length > 1) add('error', 'PHASE_SHORT', `网络 ${net.id} 把两相及以上接在一起`, [net.id]);
   }
-  const phasePathOk = phases.every((phase) => {
-    const mains = circuit.nets.filter((net) => net.label === phase);
-    return mains.length >= 2; // 相线被断路器/接触器/热继分割后至少两段
-  });
-  if (!phasePathOk && devicesOfKind(circuit, 'motor').length > 0) {
-    add('warning', 'PHASE_PATH_SUSPECT', '主回路相线没有被保护元件分段，检查是否漏画断路器/接触器/热继');
+  /* 每相从电源网络出发，沿三极元件的 进→出（第 i 与 i+3 脚）逐级走到电机：
+     必须真的走到电机，且途经断路器与接触器（有热继就也要途经热继）。
+     注意：中间段网络通常不带 L1/L2/L3 标签，不能按“标签网络数”判。 */
+  if (devicesOfKind(circuit, 'motor').length > 0) {
+    const poleKinds = new Set<DeviceKind>(['breaker', 'contactor', 'thermal']);
+    const deviceOf = (pin: string): CircuitDevice | undefined => circuit.devices.find((item) => pin.startsWith(`${item.tag}:`));
+    const hasThermal = devicesOfKind(circuit, 'thermal').length > 0;
+    for (const phase of phases) {
+      const start = circuit.nets.find((net) => net.label === phase);
+      if (!start) {
+        add('warning', 'PHASE_PATH_SUSPECT', `主回路缺少 ${phase} 进线`);
+        continue;
+      }
+      let net: CircuitNet | undefined = start;
+      const kinds: DeviceKind[] = [];
+      let reached = false;
+      for (let guard = 0; net && guard < 12 && !reached; guard += 1) {
+        const current: CircuitNet = net;
+        net = undefined;
+        for (const pin of current.pins) {
+          const device = deviceOf(pin);
+          if (!device) continue;
+          if (device.kind === 'motor') {
+            reached = true;
+            break;
+          }
+          if (!poleKinds.has(device.kind)) continue;
+          const index = device.pins.indexOf(pin.slice(device.tag.length + 1));
+          if (index < 0 || index > 2) continue;
+          const outPin = device.pins[index + 3];
+          if (!outPin) continue;
+          kinds.push(device.kind);
+          net = netOfPins(circuit, PIN(device.tag, outPin));
+          break;
+        }
+      }
+      const missing = [
+        ...(!kinds.includes('breaker') ? ['断路器'] : []),
+        ...(!kinds.includes('contactor') ? ['接触器'] : []),
+        ...(hasThermal && !kinds.includes('thermal') ? ['热继'] : [])
+      ];
+      if (!reached) add('warning', 'PHASE_PATH_SUSPECT', `${phase} 从进线走不到电机，主回路相线断开`, [phase]);
+      else if (missing.length > 0) add('warning', 'PHASE_PATH_SUSPECT', `${phase} 到电机没有经过${missing.join('/')}`, [phase]);
+    }
   }
 
   // 3) 电机必须有热保护，且其常闭触点串在控制回路里
