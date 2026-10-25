@@ -81,7 +81,7 @@ interface Bridge {
 | `place_component` | `partId / x / y / rotate? / railSnap?` | `place_component` | ✅ 底板放置，可撤销；越界/重叠只告警 |
 | `update_component` | `partId? / ref? / model? / qty? / remark? / target?` | `update_component` | ✅ 改型号/数量/备注，可撤销；无尺寸返回 `NO_DIMENSIONS` 告警 |
 | `remove_component` | `partId? / ref? / target?` | `remove_component` | ✅ 从底板或 BOM 移除，可撤销；不存在返回 `NOT_PLACED` |
-| `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条 |
+| `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条；三者都不传时经 `getElecDocument` 校验当前电气图纸 |
 | `run_cost_report` | `bom? / pricebook? / placements? / plate? / plc? / options? / overrides? / wireSection? / now?` | `run_cost_report` | ✅ 只读，明细前 50 行、缺价/告警各 20 条 |
 | `run_plc_generate` | `config? / target? / namePrefix? / sequenceTimeoutMs?` | `run_plc_generate` | ✅ 写：11 文件 + ZIP 落盘 `userData/exports/plc/`；预检失败不落盘 |
 | `export_files` | `kind / fileName? / overwrite?` | `export_files` | ✅ 写：pdf/dxf/glb/bom(CSV)，与成本导出一套命名净化/冲突规则 |

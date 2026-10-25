@@ -175,7 +175,9 @@ export function elecDesignFromProject(project: ProjectLike, options: { date?: st
 
 /* ------------------------------------------------------------------ ② 机型方案 */
 
-type DesignLike = Pick<MachineDesign, 'config'> & Partial<Pick<MachineDesign, 'power' | 'bomDraft' | 'assumptions'>>;
+/** 机型方案里出电气图要用的部分：config 必有；BOM 草稿/功率估算缺失时按缺省出图并写说明 */
+export type MachineDesignLike = Pick<MachineDesign, 'config'> & Partial<Pick<MachineDesign, 'power' | 'bomDraft' | 'assumptions'>>;
+type DesignLike = MachineDesignLike;
 
 function bomModel(design: DesignLike, test: (item: MachineDesign['bomDraft']['items'][number]) => boolean): string | undefined {
   const hit = design.bomDraft?.items.find((item) => test(item) && item.model && !item.pendingSelection);

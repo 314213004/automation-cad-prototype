@@ -49,10 +49,13 @@ ElecDocument ──runElectricalCheck()──→ ElecCheckResult
                                                       → runErc → 分页版面 → 线号 → 交叉引用 → 文字摆放 → 逐页/全局自检 → 每页 SVG
 ```
 
-`extension.ts` 只决定数据源（最近“打开的工程”或“应用的机型方案”，谁新用谁），然后 `renderElecDrawing(design)`；
+`extension.ts` 只决定数据源（最近“打开/生成的工程”或“应用的机型方案”，谁新用谁；选源与缓存在 `source.ts` 的 `ElecSourceTracker`），然后 `renderElecDrawing(design)`。
+数据源入口：Agent `apply_machine_design`（新建/幂等重复/覆盖/撤销，渲染桥 `applyMachineConfig` 载荷带 `design.bomDraft` + `design.power`）、
+启动恢复 active 方案（`machine:active` 整份方案）、工程库打开工程、`build_machine_model` 生成并装配的整机。只收到 config 的旧载荷按缺省功率出图，
+并在图纸说明首条写明“未携带 BOM/功率”。顶栏电气按钮/快捷键/菜单/覆盖层电气按钮都经 `body[data-domain]` 刷新到当前数据源；
 没有机型分支、不认零件名、不写死图号。图号由适配器按数据给（`EL-<工艺码>-<标识末段>`），页码 n/N 由分页给。
 多页经 `ElecDomain.setSchematic` 逐页送进电气域画布，画布底部的翻页条（`.cad-elec-pager`）切页；
-`window.__ElecDocProvider` 同时注入线号/负载数据，电气校验面板读的就是出图这份。
+`window.__ElecDocProvider` 同时注入线号/负载数据，电气校验面板读的就是出图这份；Agent `run_electrical_check` 不传数据时经渲染桥 `getElecDocument` 读同一份。
 
 ### ElecDesign 字段
 
