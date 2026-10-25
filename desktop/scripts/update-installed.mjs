@@ -50,14 +50,33 @@ execFileSync('powershell', ['-NoProfile', '-Command',
 // 4) 覆盖安装目录（app.asar 是主产物；exe 只在版本信息变化时需要）
 const unpacked = join(desktopRoot, 'release', 'win-unpacked');
 const copies = [
-  [join(unpacked, 'resources', 'app.asar'), join(installDir, 'resources', 'app.asar')],
-  [join(unpacked, 'AutomationCAD.exe'), join(installDir, 'AutomationCAD.exe')]
+  ['file', join(unpacked, 'resources', 'app.asar'), join(installDir, 'resources', 'app.asar')],
+  ['file', join(unpacked, 'AutomationCAD.exe'), join(installDir, 'AutomationCAD.exe')],
+  // extraResources：原型界面（index.html / styles.css / *.js）与内置数据包不在 app.asar 里，
+  // 只换 asar 会出现「代码更新了但界面没变」的假象。
+  ['dir', join(unpacked, 'resources', 'web'), join(installDir, 'resources', 'web')],
+  ['dir', join(unpacked, 'resources', 'packs'), join(installDir, 'resources', 'packs')],
+  // 参数化建模 sidecar（Python）：修它就得重新拷，否则应用跑的仍是旧脚本。
+  ['dir', join(unpacked, 'resources', 'parametric'), join(installDir, 'resources', 'parametric')]
 ];
-for (const [from, to] of copies) {
+for (const [kind, from, to] of copies) {
   if (!existsSync(from)) { console.error(`缺少产物: ${from}`); process.exit(1); }
-  const size = statSync(from).size;
-  console.log(`copy ${from} -> ${to} (${(size / 1048576).toFixed(1)} MB)`);
-  execFileSync('powershell', ['-NoProfile', '-Command', `Copy-Item -LiteralPath '${from}' -Destination '${to}' -Force`], { stdio: 'inherit' });
+  const size = kind === 'file' ? `${(statSync(from).size / 1048576).toFixed(1)} MB` : '目录';
+  console.log(`copy(${kind}) ${from} -> ${to} (${size})`);
+  if (kind === 'dir') {
+    // 注意：Copy-Item 目录到已存在的目录会套娃（parametric\parametric），
+    // 必须复制目录**内容**。robocopy /MIR 同时会删掉目标里多余的旧文件。
+    try {
+      execFileSync('robocopy', [from, to, '/MIR', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'],
+        { stdio: 'inherit' });
+    } catch (error) {
+      // robocopy 用 0–7 表示成功，8 以上才是错误
+      if ((error.status ?? 8) >= 8) throw error;
+    }
+  } else {
+    execFileSync('powershell', ['-NoProfile', '-Command',
+      `Copy-Item -LiteralPath '${from}' -Destination '${to}' -Force`], { stdio: 'inherit' });
+  }
 }
 
 // 5) 重启应用

@@ -110,6 +110,8 @@ export interface OrbitHandle {
   resize(): void;
   /** 装配工作台的 OrbitView 实例（标准件拖放需要它做射线落位）；WebGL 不可用时为 null。 */
   assemblyView(): OrbitView | null;
+  /** 图纸层诊断（线框是否在场景里、相机 near/far）；用于排查"打开图纸但看不见"。 */
+  drawingDiagnostics(): ReturnType<OrbitView['drawingDiagnostics']> | null;
 }
 
 declare global {
@@ -1135,7 +1137,8 @@ export function initOrbitView(): OrbitHandle {
     resize: () => {
       slots.forEach((slot) => slot.view?.resize());
     },
-    assemblyView: () => slots.find((slot) => slot.kind === 'assembly')?.view ?? null
+    assemblyView: () => slots.find((slot) => slot.kind === 'assembly')?.view ?? null,
+    drawingDiagnostics: () => slots.find((slot) => slot.kind === 'assembly')?.view?.drawingDiagnostics() ?? null
   };
   Object.defineProperty(window, 'AutomationCadOrbit', {
     value: Object.freeze(handle),

@@ -54,7 +54,8 @@ import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
-import { buildEntryButton as buildPanelEntryButton } from './ui/panels';
+import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
+import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
@@ -208,7 +209,7 @@ function buildOverlay(): void {
         <div class="cad-side-pane" id="cadPartsPane">
           <div class="cad-side-head"><span>零件列表</span><b id="cadPartCount">0</b></div>
           <div class="cad-parts" id="cadParts">
-            <div class="cad-parts-empty">打开或拖入 STEP / IGES / BREP / STL / OBJ / GLTF / GLB 文件</div>
+            <div class="cad-parts-empty">打开或拖入 STEP / IGES / BREP / STL / OBJ / GLTF / GLB / DXF / DWG 文件</div>
           </div>
           <div class="cad-detail" id="cadDetail">
             <div class="cad-detail-empty">单击零件查看包围盒与尺寸</div>
@@ -234,7 +235,7 @@ function buildOverlay(): void {
         <div class="cad-empty" id="cadEmpty">
           <div class="cad-empty-ico">${ICONS.cube}</div>
           <div class="cad-empty-title">把 CAD 文件拖到窗口任意位置</div>
-          <div class="cad-empty-sub">STEP / IGES / BREP 由 OCCT WASM 在 Worker 中解析<br>STL / OBJ / GLTF / GLB 使用 three.js 异步加载</div>
+          <div class="cad-empty-sub">STEP / IGES / BREP 由 OCCT WASM 在 Worker 中解析<br>STL / OBJ / GLTF / GLB 使用 three.js 异步加载<br>DXF 直接读线段；DWG 需本机转换器（见 dmaged 提示）</div>
         </div>
         <div class="cad-hint">左键旋转 · 滚轮缩放 · 中键/右键平移 · 单击零件测量</div>
         <div class="cad-loading" id="cadLoading" hidden>
@@ -916,6 +917,25 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
   }
 }
 
+/** 图纸（DXF/DWG）处理句柄；初始化失败时保持 null，走原有实体管线。 */
+let drawingUi: DrawingHandle | null = null;
+
+function isDrawingName(name: string): boolean {
+  return /\.(dxf|dwg)$/i.test(name);
+}
+
+/** 图纸走线框管线；返回 true 表示已接管（调用方不要再走实体网格解析）。 */
+async function openDrawingPath(path: string): Promise<boolean> {
+  if (!isDrawingName(path)) return false;
+  if (!drawingUi) {
+    showNotice('图纸面板未就绪（3D 视图不可用），无法打开图纸', true);
+    return true;
+  }
+  const result = await drawingUi.open(path);
+  showNotice(result.message, !result.ok);
+  return true;
+}
+
 async function importBuffer(buffer: ArrayBuffer, name: string): Promise<void> {
   try {
     await loadCadBuffer(buffer, name);
@@ -943,6 +963,7 @@ async function loadCadPath(path: string): Promise<CadImportResult> {
 async function importPath(path: string): Promise<void> {
   const name = fileNameFromPath(path);
   try {
+    if (await openDrawingPath(path)) return;
     await loadCadPath(path);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -951,7 +972,7 @@ async function importPath(path: string): Promise<void> {
 }
 
 async function importDroppedFile(file: File): Promise<void> {
-  const supported = /\.(step|stp|iges|igs|brep|stl|obj|gltf|glb)$/i.test(file.name);
+  const supported = /\.(step|stp|iges|igs|brep|stl|obj|gltf|glb|dxf|dwg)$/i.test(file.name);
   if (!supported) {
     showNotice(`不支持的文件类型：${file.name}`, true);
     return;
@@ -968,6 +989,7 @@ async function importDroppedFile(file: File): Promise<void> {
     try {
       const path = window.desktop.getPathForFile(file);
       if (path) {
+        if (await openDrawingPath(path)) return;
         await importPath(path);
         return;
       }
@@ -1914,6 +1936,12 @@ function initAgentBridge(): void {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };
       try {
+        if (isDrawingName(path.trim())) {
+          const result = await openDrawingPath(path.trim());
+          return result
+            ? { ok: true, meshCount: 0, triangleCount: 0, drawing: true }
+            : { ok: false, message: '图纸打开失败' };
+        }
         const result = await loadCadPath(path.trim());
         return {
           ok: true,
@@ -2238,6 +2266,41 @@ function init(): void {
     }
   } catch (error) {
     console.warn('[assembly] 标准件装配初始化失败', error);
+  }
+  // 2D 图纸（DXF/DWG）：贴到 3D 视图当参考底图
+  try {
+    if (!document.getElementById('acp-drawing-styles')) {
+      const style = document.createElement('style');
+      style.id = 'acp-drawing-styles';
+      style.textContent = drawingStyles();
+      document.head.appendChild(style);
+    }
+    drawingUi = initDrawingUi({
+      view: () => orbitHandle?.assemblyView() ?? null,
+      beforeOpen: () => {
+        openOverlay();
+        setEmptyVisible(false);
+      },
+      mountDrawer: (body) => {
+        const handle = createDrawer('drawingDrawer', '图纸', 'DXF / DWG 底图');
+        handle.body.appendChild(body);
+        return handle;
+      }
+    });
+    buildPanelEntryButton(
+      'drawingEntryButton',
+      '图纸',
+      '<svg viewBox="0 0 16 16" class="ico"><path d="M2 13V3h12v10zM2 6h12M6 6v7"/></svg>',
+      () => drawingUi?.show()
+    );
+    Object.defineProperty(window, 'AutomationCadDrawing', {
+      value: Object.freeze(drawingUi),
+      writable: false,
+      configurable: false,
+      enumerable: false
+    });
+  } catch (error) {
+    console.warn('[drawing] 图纸面板初始化失败', error);
   }
   bindWindowEvents();
   Object.defineProperty(window, 'AutomationCadKinematics', {

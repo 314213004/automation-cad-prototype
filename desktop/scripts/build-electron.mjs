@@ -30,6 +30,8 @@ await build({
   external: ['electron']
 });
 
+await cp(resolve(root, 'electron/dwg-convert.mjs'), resolve(outdir, 'dwg-convert.mjs'));
+
 const wasmSource = resolve(root, 'node_modules/occt-import-js/dist/occt-import-js.wasm');
 await cp(wasmSource, resolve(root, 'dist/occt-import-js.wasm'));
 await cp(wasmSource, resolve(outdir, 'occt-import-js.wasm'));

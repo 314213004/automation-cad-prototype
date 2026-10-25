@@ -17,7 +17,8 @@ import {
   ensureExportExtension,
   validateExportFileName
 } from '../src/export/file';
-import { CAD_EXTENSIONS, isCadExtension } from '../src/shared/cad';
+import { CAD_EXTENSIONS, DRAWING_EXTENSIONS, isCadExtension, isDrawingExtension } from '../src/shared/cad';
+import { convertDwgToDxf } from './dwg';
 import { assertCadFileSize } from '../src/shared/input-limits.ts';
 import { recordDiagnosticError, setDiagnosticOperation } from '../src/shared/diagnostics.ts';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
@@ -787,6 +788,7 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
       properties: ['openFile'],
       filters: [
         { name: 'CAD 文件', extensions: CAD_EXTENSIONS.map((ext) => ext.slice(1)) },
+        { name: '2D 图纸（DXF/DWG）', extensions: DRAWING_EXTENSIONS.map((ext) => ext.slice(1)) },
         { name: '所有文件', extensions: ['*'] }
       ]
     };
@@ -802,7 +804,9 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
       if (typeof filePath !== 'string' || !filePath) throw new Error('缺少文件路径');
       if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new Error(`文件不存在：${filePath}`);
       const ext = extname(filePath).toLowerCase();
-      if (!isCadExtension(ext)) throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}`);
+      if (!isCadExtension(ext) && !isDrawingExtension(ext)) {
+        throw new Error(`不支持的 CAD 扩展名：${ext || '(无)'}（支持 STEP/IGES/STL/OBJ/GLTF/DXF/DWG）`);
+      }
       const size = statSync(filePath).size;
       // 在 readFileSync 之前拒绝超大文件，避免主进程一次性分配数百 MB。
       assertCadFileSize(filePath, size);
@@ -811,6 +815,43 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     } catch (error) {
       recordDiagnosticError('CAD_READ_FAILED', error, {
         extension: typeof filePath === 'string' ? extname(filePath).toLowerCase() : '',
+        fileName: typeof filePath === 'string' ? filePath.split(/[\\/]/).pop() ?? '' : ''
+      });
+      throw error;
+    }
+  });
+
+  /**
+   * 打开 2D 图纸：DXF 直接读文本；DWG 先用外部转换器转 DXF。
+   * 返回文本而不是字节，因为 DXF 是 ASCII/UTF-8 的「组码/值」对。
+   */
+  handle('cad:open-drawing', async (_event, filePath: unknown) => {
+    setDiagnosticOperation('cad:open-drawing');
+    try {
+      if (typeof filePath !== 'string' || !filePath) throw new Error('缺少文件路径');
+      if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new Error(`文件不存在：${filePath}`);
+      const ext = extname(filePath).toLowerCase();
+      if (ext === '.dxf') {
+        const size = statSync(filePath).size;
+        assertCadFileSize(filePath, size);
+        return { ok: true, text: readFileSync(filePath, 'utf8'), converter: 'none', source: 'dxf' as const };
+      }
+      if (ext === '.dwg') {
+        const converted = await convertDwgToDxf(filePath, process.resourcesPath);
+        if (!converted.ok || !converted.bytes) {
+          return { ok: false, message: converted.message, converter: null, source: 'dwg' as const };
+        }
+        return {
+          ok: true,
+          text: Buffer.from(converted.bytes).toString('utf8'),
+          converter: converted.converter,
+          message: converted.message,
+          source: 'dwg' as const
+        };
+      }
+      throw new Error(`不是 2D 图纸格式：${ext || '(无)'}`);
+    } catch (error) {
+      recordDiagnosticError('DRAWING_OPEN_FAILED', error, {
         fileName: typeof filePath === 'string' ? filePath.split(/[\\/]/).pop() ?? '' : ''
       });
       throw error;

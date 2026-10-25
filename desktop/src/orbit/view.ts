@@ -139,6 +139,8 @@ export class OrbitView {
   /** 装配实例（标准件代理体）与拖入时的预览体；与装配模型分开管理，互不覆盖。 */
   private readonly assemblyInstances = new THREE.Group();
   private assemblyGhost: THREE.Mesh | null = null;
+  /** 2D 图纸（DXF/DWG）的线框层，和实体模型分开，便于单独开关。 */
+  private drawingLayer: THREE.LineSegments | null = null;
   private readonly inputCounters = { pointerDowns: 0, pointerUps: 0, pointerMoves: 0, wheels: 0 };
   private controlsRebuilds = 0;
   private lastControlsRebuildAt = 0;
@@ -478,6 +480,133 @@ export class OrbitView {
     }
   }
 
+  /** 贴 2D 图纸线框层；返回画了多少条线段。 */
+  setDrawingLayer(segments: ReadonlyArray<{ points: readonly number[] }>, options: { color?: number } = {}): number {
+    this.clearDrawingLayer();
+    if (segments.length === 0) return 0;
+    const positions = new Float32Array(segments.length * 6);
+    segments.forEach((segment, index) => {
+      for (let i = 0; i < 6; i += 1) positions[index * 6 + i] = segment.points[i] ?? 0;
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.computeBoundingBox();
+    const material = new THREE.LineBasicMaterial({ color: options.color ?? 0x86b6de, transparent: true, opacity: 0.9 });
+    const lines = new THREE.LineSegments(geometry, material);
+    lines.name = 'drawing-layer';
+    this.scene.add(lines);
+    this.drawingLayer = lines;
+    this.requestRender();
+    return segments.length;
+  }
+
+  /** 图纸层诊断：线框是否在场景里、包围盒、相机范围（排查"看不见"用）。 */
+  drawingDiagnostics(): {
+    has: boolean;
+    segments: number;
+    bounds: { min: Vec3; max: Vec3 } | null;
+    camera: { position: Vec3; target: Vec3; near: number; far: number };
+    /** 包围盒 8 个角投影到 NDC 后的范围；与 [-1,1] 有交集说明在屏幕上 */
+    ndc: { min: Vec3; max: Vec3 } | null;
+    onScreen: boolean;
+    render: { calls: number; lines: number; triangles: number };
+  } {
+    const geometry = this.drawingLayer?.geometry;
+    const position = geometry?.getAttribute('position');
+    const bounds = this.drawingBounds();
+    let ndc: { min: Vec3; max: Vec3 } | null = null;
+    let onScreen = false;
+    if (bounds) {
+      const min: Vec3 = [Infinity, Infinity, Infinity];
+      const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+      this.camera.updateMatrixWorld();
+      const xs: [number, number] = [bounds.min[0] ?? 0, bounds.max[0] ?? 0];
+      const ys: [number, number] = [bounds.min[1] ?? 0, bounds.max[1] ?? 0];
+      const zs: [number, number] = [bounds.min[2] ?? 0, bounds.max[2] ?? 0];
+      for (const x of xs) {
+        for (const y of ys) {
+          for (const z of zs) {
+            const projected = new THREE.Vector3(x, y, z).project(this.camera);
+            // 只看 z 在视锥内的角（-1..1）
+            if (projected.z < -1 || projected.z > 1) continue;
+            const values: Vec3 = [projected.x, projected.y, projected.z];
+            for (let axis = 0; axis < 3; axis += 1) {
+              const value = values[axis] ?? 0;
+              min[axis] = Math.min(min[axis] ?? Infinity, value);
+              max[axis] = Math.max(max[axis] ?? -Infinity, value);
+            }
+          }
+        }
+      }
+      if (Number.isFinite(min[0])) {
+        ndc = { min, max };
+        onScreen = min[0] <= 1 && max[0] >= -1 && min[1] <= 1 && max[1] >= -1;
+      }
+    }
+    const info = this.renderer.info.render;
+    return {
+      has: Boolean(this.drawingLayer),
+      segments: position ? position.count / 2 : 0,
+      bounds,
+      camera: {
+        position: [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+        target: [this.controls.target.x, this.controls.target.y, this.controls.target.z],
+        near: this.camera.near,
+        far: this.camera.far
+      },
+      ndc,
+      onScreen,
+      render: { calls: info.calls, lines: info.lines, triangles: info.triangles }
+    };
+  }
+
+  clearDrawingLayer(): void {
+    if (!this.drawingLayer) return;
+    this.scene.remove(this.drawingLayer);
+    disposeObject(this.drawingLayer);
+    this.drawingLayer = null;
+    this.requestRender();
+  }
+
+  drawingBounds(): { min: Vec3; max: Vec3 } | null {
+    const box = this.drawingLayer?.geometry.boundingBox;
+    if (!box) return null;
+    if (!Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) return null;
+    return { min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z] };
+  }
+
+  /**
+   * 按场景尺度放宽相机的 near/far。
+   * 默认 far=100m，而工地/建筑图纸动辄几公里（实测一张 DWG 跨度 3.4e6 mm），
+   * 不放宽的话线框在视锥外，看起来就是「什么都没画」。
+   */
+  private adaptCameraRange(radius: number): void {
+    const near = Math.max(0.1, radius / 5000);
+    const far = Math.max(100_000, radius * 40);
+    this.perspective.near = near;
+    this.perspective.far = far;
+    this.ortho.near = -far;
+    this.ortho.far = far;
+    this.perspective.updateProjectionMatrix();
+    this.ortho.updateProjectionMatrix();
+  }
+
+  private drawingRadius(bounds: { min: Vec3; max: Vec3 } | null): number {
+    if (!bounds) return 0;
+    return Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]) / 2;
+  }
+
+  /** 把相机对准图纸范围；没有图纸时返回 false。 */
+  fitDrawing(): boolean {
+    const bounds = this.drawingBounds();
+    if (!bounds) return false;
+    const radius = this.drawingRadius(bounds);
+    if (radius > 0) this.adaptCameraRange(radius);
+    const pose = poseAlong([1, -1, 1], [0, 0, 1], bounds, FOV, this.aspect());
+    this.applyPose(pose.position, pose.target, pose.distance);
+    return true;
+  }
+
   setProjection(projection: Projection): void {
     if (projection === this.projection()) return;
     const target = this.controls.target.clone();
@@ -747,6 +876,7 @@ export class OrbitView {
     if (this.assemblyRoot) disposeObject(this.assemblyRoot);
     if (this.overlayRoot) disposeObject(this.overlayRoot);
     for (const child of [...this.assemblyInstances.children]) disposeObject(child);
+    if (this.drawingLayer) disposeObject(this.drawingLayer);
     this.renderer.dispose();
     this.canvas.remove();
   }

@@ -751,6 +751,14 @@ interface Window {
     extensionBaseUrl: string | null;
     openCadDialog(): Promise<{ canceled: boolean; filePaths: string[] }>;
     readFileBuffer(path: string): Promise<Uint8Array>;
+    /**
+     * 打开 2D 图纸。DXF 直接返回文本；DWG 需要外部转换器（ODA / LibreDWG），
+     * 失败时 `ok:false` 且 `message` 给出可执行的安装指引。
+     */
+    openDrawing(path: string): Promise<
+      | { ok: true; text: string; converter: string | null; source: 'dxf' | 'dwg'; message?: string }
+      | { ok: false; message: string; converter: null; source: 'dxf' | 'dwg' }
+    >;
     getPathForFile(file: File): string;
     exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
     exportReport(payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }): Promise<{ path: string; htmlPath: string }>;

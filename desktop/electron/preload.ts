@@ -38,6 +38,7 @@ const desktopApi = {
   extensionBaseUrl: pathToFileURL(join(__dirname, '..', 'dist') + '/').href,
   openCadDialog: () => ipcRenderer.invoke('cad:open-dialog'),
   readFileBuffer: (filePath: string) => ipcRenderer.invoke('cad:read-file', filePath),
+  openDrawing: (filePath: string) => ipcRenderer.invoke('cad:open-drawing', filePath),
   getPathForFile: (file: File) => webUtils.getPathForFile(file),
   exportFile: (name: string, data: Uint8Array | string) => ipcRenderer.invoke('export:saveFile', name, data),
   projectArchive: {
