@@ -1,3 +1,5 @@
+html{zoom:var(--acad-ui-scale,1.15)}
+
 .cad-entry-btn{
   display:inline-flex; align-items:center; gap:6px; height:28px; padding:0 10px;
   margin-left:4px; border:1px solid #3b4a48; border-radius:var(--r,3px);

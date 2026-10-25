@@ -29,6 +29,13 @@ import {
   type HighlightState
 } from './three-scene.ts';
 import type { InterferenceHit } from '../mech/interference.ts';
+import {
+  DRAG_PIXEL_RATIO,
+  effectivePixelRatio,
+  normalizeRenderQuality,
+  resolveEffectiveQuality,
+  type RenderQuality
+} from './quality.ts';
 
 export type Projection = 'perspective' | 'orthographic';
 
@@ -52,6 +59,18 @@ export interface OrbitViewState {
   clipping: boolean;
   renders: number;
   marqueeMode: boolean;
+  render: RenderQualityDiagnostics;
+}
+
+export interface RenderQualityDiagnostics {
+  configuredQuality: RenderQuality;
+  quality: RenderQuality;
+  pixelRatio: number;
+  draggingPixelRatio: number;
+  antialias: boolean;
+  dragging: boolean;
+  autoDowngraded: boolean;
+  parts: number;
 }
 
 const FOV = 40;
@@ -59,14 +78,14 @@ const FOV = 40;
 export type OrbitViewResult = { ok: true; view: OrbitView } | { ok: false; reason: string };
 
 export class OrbitView {
-  readonly canvas: HTMLCanvasElement;
+  canvas!: HTMLCanvasElement;
   private readonly host: HTMLElement;
-  private readonly renderer: THREE.WebGLRenderer;
+  private renderer!: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly perspective = new THREE.PerspectiveCamera(FOV, 1, 0.5, 100_000);
   private readonly ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, -100_000, 100_000);
   private camera: THREE.PerspectiveCamera | THREE.OrthographicCamera = this.perspective;
-  private readonly controls: OrbitControls;
+  private controls!: OrbitControls;
   private assemblyRoot: THREE.Group | null = null;
   private overlayRoot: THREE.Group | null = null;
   private sectionPlane: THREE.Mesh | null = null;
@@ -92,6 +111,11 @@ export class OrbitView {
   /** 粘滞框选模式（工具条「框选」按钮）；否则 Shift+左键拖拽临时框选 */
   private marqueeMode = false;
   private marqueeDrag: { x: number; y: number; active: boolean; pointerId: number } | null = null;
+  private qualitySetting: RenderQuality = 'standard';
+  private rendererAntialias = true;
+  private dragging = false;
+  private dragRestoreTimer = 0;
+  private panMode = false;
   onContextLost: (() => void) | null = null;
 
   static create(options: OrbitViewOptions): OrbitViewResult {
@@ -107,14 +131,7 @@ export class OrbitView {
   private constructor(options: OrbitViewOptions) {
     this.options = options;
     this.host = options.host;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setClearColor(0x000000, 0);
-    this.renderer.localClippingEnabled = true;
-    this.canvas = this.renderer.domElement;
-    this.canvas.className = 'orbit-canvas';
-    this.host.appendChild(this.canvas);
+    this.createRenderer();
 
     this.scene.add(new THREE.HemisphereLight(0xf1f5f9, 0x2a2d31, 1.4));
     const key = new THREE.DirectionalLight(0xffffff, 2.0);
@@ -126,14 +143,35 @@ export class OrbitView {
 
     this.perspective.up.set(0, 0, 1);
     this.ortho.up.set(0, 0, 1);
-    this.controls = new OrbitControls(this.camera, this.canvas);
-    this.controls.enableDamping = false;
-    this.controls.screenSpacePanning = true;
-    this.controls.zoomToCursor = true;
-    this.controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
-    this.controls.addEventListener('change', () => this.requestRender());
-    this.controls.addEventListener('start', () => { this.autoFit = false; });
+    this.createControls(new THREE.Vector3());
+    // 框选要先于 OrbitControls 拿到 pointerdown：在宿主捕获阶段截获，移动/抬起在 window 捕获阶段跟踪。
+    this.host.addEventListener('pointerdown', this.onMarqueeDown, true);
 
+    this.resizeObserver = new ResizeObserver(() => this.resize());
+    this.resizeObserver.observe(this.host);
+    this.resize();
+  }
+
+  private createRenderer(): void {
+    const quality = this.resolveQuality().quality;
+    const antialias = quality !== 'flow';
+    this.renderer = new THREE.WebGLRenderer({
+      antialias,
+      alpha: true,
+      powerPreference: 'high-performance'
+    });
+    this.rendererAntialias = antialias;
+    this.renderer.setPixelRatio(effectivePixelRatio(window.devicePixelRatio || 1, quality, this.dragging));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.localClippingEnabled = true;
+    this.canvas = this.renderer.domElement;
+    this.canvas.className = 'orbit-canvas';
+    this.host.appendChild(this.canvas);
+    this.bindCanvasEvents();
+  }
+
+  private bindCanvasEvents(): void {
     this.canvas.addEventListener('pointerdown', this.onPointerDown);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointermove', this.onPointerMove);
@@ -142,17 +180,27 @@ export class OrbitView {
     ['pointerdown', 'pointermove', 'pointerup', 'click', 'dblclick'].forEach((type) => {
       this.canvas.addEventListener(type, (event) => event.stopPropagation());
     });
-    // 框选要先于 OrbitControls 拿到 pointerdown：在宿主捕获阶段截获，移动/抬起在 window 捕获阶段跟踪。
-    this.host.addEventListener('pointerdown', this.onMarqueeDown, true);
     this.canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       this.contextLost = true;
       this.onContextLost?.();
     });
+  }
 
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(this.host);
-    this.resize();
+  private createControls(target: THREE.Vector3): void {
+    this.controls = new OrbitControls(this.camera, this.canvas);
+    this.controls.enableDamping = false;
+    this.controls.screenSpacePanning = true;
+    this.controls.zoomToCursor = true;
+    this.applyPanMode();
+    this.controls.target.copy(target);
+    this.controls.addEventListener('change', () => this.requestRender());
+    this.controls.addEventListener('start', () => {
+      this.autoFit = false;
+      this.beginDrag();
+    });
+    this.controls.addEventListener('end', () => this.endDrag());
+    this.controls.update();
   }
 
   get isContextLost(): boolean {
@@ -162,6 +210,7 @@ export class OrbitView {
   setAssembly(assembly: Assembly, options: { fit?: boolean } = {}): void {
     const first = this.assembly === null;
     this.assembly = assembly;
+    this.applyRenderQuality();
     if (this.assemblyRoot) {
       this.scene.remove(this.assemblyRoot);
       disposeObject(this.assemblyRoot);
@@ -209,11 +258,80 @@ export class OrbitView {
   }
 
   setPanMode(on: boolean): void {
+    this.panMode = on;
+    this.applyPanMode();
+  }
+
+  private applyPanMode(): void {
+    if (!this.controls) return;
     this.controls.mouseButtons = {
-      LEFT: on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
+      LEFT: this.panMode ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE,
       MIDDLE: THREE.MOUSE.DOLLY,
-      RIGHT: on ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN
+      RIGHT: this.panMode ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN
     };
+  }
+
+  private resolveQuality(): { quality: RenderQuality; autoDowngraded: boolean } {
+    return resolveEffectiveQuality(this.qualitySetting, this.assembly?.parts.length ?? 0);
+  }
+
+  setRenderQuality(quality: RenderQuality): void {
+    this.qualitySetting = normalizeRenderQuality(quality);
+    this.applyRenderQuality();
+    this.requestRender();
+  }
+
+  renderQualityInfo(): RenderQualityDiagnostics {
+    const resolved = this.resolveQuality();
+    return {
+      configuredQuality: this.qualitySetting,
+      quality: resolved.quality,
+      pixelRatio: effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, this.dragging),
+      draggingPixelRatio: effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, true),
+      antialias: this.rendererAntialias,
+      dragging: this.dragging,
+      autoDowngraded: resolved.autoDowngraded,
+      parts: this.assembly?.parts.length ?? 0
+    };
+  }
+
+  private applyRenderQuality(): void {
+    if (!this.renderer) return;
+    const resolved = this.resolveQuality();
+    const antialias = resolved.quality !== 'flow';
+    if (!this.dragging && antialias !== this.rendererAntialias) {
+      this.rebuildRenderer();
+      return;
+    }
+    this.renderer.setPixelRatio(effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, this.dragging));
+  }
+
+  /** antialias 是构造参数：跨 MSAA 边界时重建 renderer，场景和相机对象保持不变。 */
+  private rebuildRenderer(): void {
+    const target = this.controls.target.clone();
+    this.controls.dispose();
+    this.renderer.dispose();
+    this.canvas.remove();
+    this.createRenderer();
+    this.createControls(target);
+    this.resize();
+    this.requestRender();
+  }
+
+  private beginDrag(): void {
+    this.dragging = true;
+    window.clearTimeout(this.dragRestoreTimer);
+    this.renderer.setPixelRatio(DRAG_PIXEL_RATIO);
+    this.requestRender();
+  }
+
+  private endDrag(): void {
+    window.clearTimeout(this.dragRestoreTimer);
+    this.dragRestoreTimer = window.setTimeout(() => {
+      this.dragging = false;
+      this.applyRenderQuality();
+      this.requestRender();
+    }, 200);
   }
 
   private aspect(): number {
@@ -329,7 +447,8 @@ export class OrbitView {
       distance: this.currentDistance(),
       clipping: this.clipping,
       renders: this.renders,
-      marqueeMode: this.marqueeMode
+      marqueeMode: this.marqueeMode,
+      render: this.renderQualityInfo()
     };
   }
 
@@ -409,6 +528,7 @@ export class OrbitView {
 
   dispose(): void {
     this.disposed = true;
+    window.clearTimeout(this.dragRestoreTimer);
     this.resizeObserver.disconnect();
     this.host.removeEventListener('pointerdown', this.onMarqueeDown, true);
     this.endMarquee();

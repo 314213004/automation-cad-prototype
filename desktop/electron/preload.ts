@@ -9,6 +9,10 @@ interface OpenCadPayload {
 
 const desktopApi = {
   version: () => ipcRenderer.invoke('app:version'),
+  appearance: {
+    get: () => ipcRenderer.invoke('appearance:get'),
+    set: (config: unknown) => ipcRenderer.invoke('appearance:set', config)
+  },
   modules: {
     syncPlcgenEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-plcgen-enabled', enabled) === true,
     syncElecValidationEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-elec-validation-enabled', enabled) === true,
@@ -94,6 +98,10 @@ const desktopApi = {
     },
     audit: {
       read: () => ipcRenderer.invoke('agent:audit:read')
+    },
+    lan: {
+      get: () => ipcRenderer.invoke('agent:lan:get'),
+      save: (config: unknown) => ipcRenderer.invoke('agent:lan:save', config)
     }
   },
   parametric: {

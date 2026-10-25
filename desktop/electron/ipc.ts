@@ -80,6 +80,13 @@ import {
   type PlcHistoryEntry
 } from '../src/plcgen/history.ts';
 import { isTrustedIpcSender } from './security.ts';
+import {
+  mergeAppearanceConfig,
+  readAppearanceConfig,
+  writeAppearanceConfig
+} from '../src/shared/appearance.ts';
+import type { LanConfig } from '../src/shared/lan-access.ts';
+import type { AgentRpcInfo } from '../src/agent/rpc.ts';
 
 export interface IpcContext {
   builtinDir: string;
@@ -88,6 +95,7 @@ export interface IpcContext {
   factoryConfigFile: string;
   plcConfigFile: string;
   syncConfigFile: string;
+  userDataDir: string;
   version: string;
   trustedUiPath: string;
   getWindow(): BrowserWindow | null;
@@ -117,6 +125,19 @@ export interface AgentChatIpcContext {
   getWindow(): BrowserWindow | null;
   trustedUiPath: string;
   isAgentResumeEnabled(): boolean;
+  getLanAccess(): AgentLanAccessView;
+  saveLanAccess(patch: unknown): Promise<AgentLanAccessView>;
+}
+
+export interface AgentLanAccessView {
+  ok: boolean;
+  config: LanConfig;
+  token: string;
+  info: AgentRpcInfo & { toolCount?: number };
+  cdpPort: number | null;
+  cdpActive: boolean;
+  cdpRestartRequired: boolean;
+  message?: string;
 }
 
 export { CAD_EXTENSIONS } from '../src/shared/cad';
@@ -479,6 +500,12 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     node: process.versions.node,
     platform: process.platform
   }));
+
+  handle('appearance:get', () => readAppearanceConfig(context.userDataDir));
+  handle('appearance:set', (_event, patch: unknown) => {
+    const existing = readAppearanceConfig(context.userDataDir);
+    return writeAppearanceConfig(context.userDataDir, mergeAppearanceConfig(existing, patch));
+  });
 
   const syncModuleEnabled = (
     event: IpcMainEvent,
@@ -1267,6 +1294,8 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
   };
 
   handle('agent:llm:get', () => publicLlmConfig(readLlmConfig(context.userDataDir)));
+  handle('agent:lan:get', () => context.getLanAccess());
+  handle('agent:lan:save', async (_event, patch: unknown) => await context.saveLanAccess(patch));
 
   // 当前工程机型：只读 active 指针，供渲染层启动时恢复 3D 配置。
   handle('machine:active', () => {

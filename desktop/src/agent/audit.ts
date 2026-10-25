@@ -10,6 +10,10 @@ export interface AgentAuditRecord {
   tool: string;
   ok: boolean;
   code?: string;
+  /** TCP 对端地址；本进程内调用记为 local。 */
+  remoteAddress?: string;
+  /** 调用来源网络位置：本机回环 / 局域网。 */
+  origin?: 'local' | 'lan';
   /** 调用来源：模型工具调用 / 离线规则路由 / 外部 RPC / MCP */
   source?: 'llm' | 'offline' | 'rpc' | 'mcp' | 'plan' | 'recipe';
   args?: Record<string, unknown>;
@@ -82,6 +86,8 @@ export function formatAuditLine(record: AgentAuditRecord, at: Date = new Date())
     at: at.toISOString(),
     tool: record.tool,
     ok: record.ok,
+    remoteAddress: record.remoteAddress ?? 'local',
+    origin: record.origin ?? 'local',
     ...(record.code ? { code: record.code } : {}),
     ...(record.source ? { source: record.source } : {}),
     ...(typeof record.elapsedMs === 'number' && Number.isFinite(record.elapsedMs) && record.elapsedMs >= 0

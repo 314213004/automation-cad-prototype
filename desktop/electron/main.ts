@@ -46,7 +46,21 @@ import { suggestFailure } from '../src/agent/suggest';
 import { suggestNextActions } from '../src/agent/advisor';
 import { KB_STATS } from '../src/agent/kb/search';
 import { repairToolCall } from '../src/agent/repair';
-import { AgentRpcServer, createAgentTokenFile, type AgentRpcInfo } from '../src/agent/rpc';
+import {
+  AgentRpcServer,
+  createAgentTokenFile,
+  restartAgentServer,
+  type AgentRpcInfo
+} from '../src/agent/rpc';
+import type { AgentLanAccessView } from './ipc';
+import { createAuditFileWriter, loadAuditRetention } from '../src/agent/audit-store';
+import {
+  isAddressAllowed,
+  lanHost,
+  readLanConfig,
+  writeLanConfig,
+  type LanConfig
+} from '../src/shared/lan-access.ts';
 import { RendererBridge, createAgentCommandBus, type CommandBus } from '../src/agent/commands';
 import { buildDesignPackage, parseDesignPackage } from '../src/sync/package';
 import { describeCheck, runElectricalCheck } from '../src/elec/check';
@@ -119,6 +133,13 @@ if (HEADLESS) {
   app.setPath('userData', mkdtempSync(join(tmpdir(), prefix)));
 }
 
+const CDP_PORT = 9222;
+const BOOT_LAN_CONFIG = readLanConfig(app.getPath('userData'));
+if (BOOT_LAN_CONFIG.cdpEnabled && !HEADLESS && !DIAGNOSE) {
+  app.commandLine.appendSwitch('remote-debugging-port', String(CDP_PORT));
+  app.commandLine.appendSwitch('remote-debugging-address', '0.0.0.0');
+}
+
 if (DIAGNOSE) {
   void runDiagnoseMode();
 } else {
@@ -145,6 +166,9 @@ let agentResumeModuleEnabled = false;
 let projectPortableModuleEnabled = false;
 let systemUpdateModuleEnabled = false;
 let agentInfo: (AgentRpcInfo & { toolCount: number }) | { error: string } = { error: 'Agent 服务尚未启动' };
+let agentToken = '';
+let agentTokenFile = '';
+let lanConfig: LanConfig = BOOT_LAN_CONFIG;
 
 let crashHandlersInstalled = false;
 
@@ -209,10 +233,80 @@ function publicAgentInfo(): unknown {
   const tools = agentTools?.summaries().map(({ name, description }) => ({ name, description })) ?? [];
   return {
     ...agentInfo,
+    token: agentToken,
+    lanEnabled: lanConfig.enabled,
+    allowlist: [...lanConfig.allowlist],
+    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    cdpActive: cdpActive(),
+    cdpRestartRequired: lanConfig.cdpEnabled && !cdpActive(),
     toolCount: tools.length,
     tools,
     history: commandBus?.history().slice(-5) ?? []
   };
+}
+
+function cdpActive(): boolean {
+  return app.commandLine.hasSwitch('remote-debugging-port');
+}
+
+function currentAgentInfo(): AgentRpcInfo & { toolCount?: number } {
+  if (!('error' in agentInfo)) return agentInfo;
+  const host = lanHost(lanConfig);
+  const port = HEADLESS ? 0 : 7420;
+  return {
+    host,
+    port,
+    url: `http://${host}:${port}`,
+    ...(agentTokenFile ? { tokenFile: agentTokenFile } : {}),
+    ...(agentTools ? { toolCount: agentTools.list().length } : {})
+  };
+}
+
+function agentLanView(ok: boolean, message?: string): AgentLanAccessView {
+  const info = currentAgentInfo();
+  return {
+    ok,
+    config: { ...lanConfig, allowlist: [...lanConfig.allowlist] },
+    token: agentToken,
+    info,
+    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    cdpActive: cdpActive(),
+    cdpRestartRequired: lanConfig.cdpEnabled && !cdpActive(),
+    ...(message ? { message } : {})
+  };
+}
+
+function getAgentLanAccess(): AgentLanAccessView {
+  return agentLanView(true);
+}
+
+async function saveAgentLanAccess(patch: unknown): Promise<AgentLanAccessView> {
+  try {
+    const source = typeof patch === 'object' && patch !== null && !Array.isArray(patch)
+      ? patch as Record<string, unknown>
+      : {};
+    const saved = writeLanConfig(app.getPath('userData'), {
+      enabled: source.enabled === undefined ? lanConfig.enabled : source.enabled,
+      allowlist: source.allowlist === undefined ? lanConfig.allowlist : source.allowlist,
+      cdpEnabled: source.cdpEnabled === undefined ? lanConfig.cdpEnabled : source.cdpEnabled
+    });
+    lanConfig = saved;
+    if (!agentServer || !agentTools) {
+      return agentLanView(false, 'Agent 服务尚未启动，配置已保存但无法立即重启监听。');
+    }
+    const info = await restartAgentServer(agentServer, lanHost(saved), {
+      lanEnabled: saved.enabled,
+      allowlist: saved.allowlist,
+      cdpPort: saved.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null
+    });
+    agentInfo = { ...info, toolCount: agentTools.list().length };
+    const message = saved.cdpEnabled && !cdpActive()
+      ? `已保存并重启 Agent（${info.host}:${info.port}）；CDP ${CDP_PORT} 端口需重启应用后生效。`
+      : `已保存并重启 Agent（${info.host}:${info.port}）。`;
+    return agentLanView(true, message);
+  } catch (error) {
+    return agentLanView(false, error instanceof Error ? error.message : String(error));
+  }
 }
 
 function desktopRoot(): string {
@@ -2498,7 +2592,7 @@ function createWindow(): BrowserWindow {
               const drawer = document.getElementById('agentDrawer');
               fields = drawer?.querySelectorAll('.acp-field').length || 0;
               log = drawer?.querySelectorAll('.acp-chat-log').length || 0;
-              if (fields === 6 && log === 1) break;
+              if (fields === 12 && log === 1) break;
             }
             const drawer = document.getElementById('agentDrawer');
             return {
@@ -2507,6 +2601,10 @@ function createWindow(): BrowserWindow {
               send: Boolean(document.getElementById('agentChatSend')),
               input: Boolean(document.getElementById('agentChatInput')),
               apiKeyPassword: document.getElementById('agentLlmApiKey')?.type === 'password',
+              uiScale: Boolean(document.getElementById('agentUiScale')),
+              renderQuality: Boolean(document.getElementById('agentRenderQuality')),
+              lanAllowlist: Boolean(document.getElementById('agentLanAllowlist')),
+              cdpSwitch: Boolean(document.getElementById('agentCdpEnabled')),
               visible: Boolean(drawer && !drawer.hidden)
             };
           })()`
@@ -2517,10 +2615,15 @@ function createWindow(): BrowserWindow {
           send: boolean;
           input: boolean;
           apiKeyPassword: boolean;
+          uiScale: boolean;
+          renderQuality: boolean;
+          lanAllowlist: boolean;
+          cdpSwitch: boolean;
           visible: boolean;
         };
-        if (chatUi.error || chatUi.fields !== 6 || chatUi.log !== 1 ||
-            !chatUi.send || !chatUi.input || !chatUi.apiKeyPassword || !chatUi.visible) {
+        if (chatUi.error || chatUi.fields !== 12 || chatUi.log !== 1 ||
+            !chatUi.send || !chatUi.input || !chatUi.apiKeyPassword || !chatUi.visible ||
+            !chatUi.uiScale || !chatUi.renderQuality || !chatUi.lanAllowlist || !chatUi.cdpSwitch) {
           console.error('SMOKE_FAIL agent_chat_ui', JSON.stringify(chatUi));
           setTimeout(() => app.exit(1), 100);
           return;
@@ -4226,6 +4329,51 @@ function createWindow(): BrowserWindow {
       }
       console.log(`SMOKE_PACKS_VALIDATE_OK packs=${packValidation.stats.packs} errors=${packValidation.stats.errors}`);
       try {
+        const appearance = await window.webContents.executeJavaScript(`(async () => {
+          const config = await window.desktop.appearance.get();
+          const quality = window.AutomationCadOrbit?.renderQuality?.() ?? null;
+          return {
+            config,
+            cssScale: document.documentElement.style.getPropertyValue('--acad-ui-scale').trim(),
+            dataScale: document.documentElement.dataset.acadUiScale ?? '',
+            quality
+          };
+        })()`) as {
+          config?: { uiScale?: number; renderQuality?: string };
+          cssScale?: string;
+          dataScale?: string;
+          quality?: { quality?: string; draggingPixelRatio?: number } | null;
+        };
+        if (appearance.config?.uiScale !== 1.15 || appearance.config?.renderQuality !== 'standard' ||
+            appearance.cssScale !== '1.15' || appearance.dataScale !== '1.15') {
+          throw new Error(`界面缩放默认值异常：${JSON.stringify(appearance)}`);
+        }
+        console.log(`SMOKE_UI_SCALE_OK scale=${appearance.config.uiScale}`);
+        if (appearance.quality?.quality !== 'standard' || appearance.quality?.draggingPixelRatio !== 0.8) {
+          throw new Error(`渲染质量默认值异常：${JSON.stringify(appearance.quality)}`);
+        }
+        console.log(`SMOKE_RENDER_QUALITY_OK quality=${appearance.quality.quality} draggingRatio=${appearance.quality.draggingPixelRatio}`);
+        const host = agentServer?.info().host ?? lanHost(lanConfig);
+        if (lanConfig.enabled !== false || host !== '127.0.0.1') {
+          throw new Error(`局域网默认状态异常：${JSON.stringify({ enabled: lanConfig.enabled, host })}`);
+        }
+        console.log(`SMOKE_LAN_SWITCH_OK enabled=${lanConfig.enabled} host=${host} allowlist=${lanConfig.allowlist.length}`);
+        const allowedAddress = '192.168.2.117';
+        const deniedAddress = '192.168.2.118';
+        const allowed = isAddressAllowed(allowedAddress, lanConfig.allowlist);
+        const denied = isAddressAllowed(deniedAddress, ['10.0.0.0/8']);
+        if (!allowed || denied) {
+          throw new Error(`局域网白名单判定异常：${JSON.stringify({ allowed, denied })}`);
+        }
+        console.log(
+          `SMOKE_LAN_ALLOWLIST_OK allowed=1 denied=0 allowIp=${allowedAddress} denyIp=${deniedAddress}`
+        );
+      } catch (error) {
+        console.error('SMOKE_FAIL desktop_appearance_lan', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         const userDataPath = app.getPath('userData');
         const metrics = packRegistry?.metrics();
         const report = buildDiagnosisReport({
@@ -4365,15 +4513,26 @@ async function startAgent(
   options: { userDataRoot: string; loadBuiltinPricebook: () => unknown; isModuleEnabled: (moduleId: string) => boolean }
 ): Promise<void> {
   const { token, tokenFile } = createAgentTokenFile(app.getPath('userData'));
+  agentToken = token;
+  agentTokenFile = tokenFile;
+  lanConfig = readLanConfig(app.getPath('userData'));
   const tools = new AgentTools(registry, commands, options);
   agentTools = tools;
   commandBus = commands;
+  const writeAudit = createAuditFileWriter(join(app.getPath('userData'), 'agent-audit.jsonl'), {
+    retention: loadAuditRetention(app.getPath('userData')),
+    onError: (error) => console.warn('[agent-audit] 轮转/清理失败', error instanceof Error ? error.message : String(error))
+  });
   agentServer = new AgentRpcServer({
     tools,
     token,
     version: app.getVersion(),
-    host: '127.0.0.1',
+    host: lanHost(lanConfig),
     port: HEADLESS ? 0 : 7420,
+    lanEnabled: lanConfig.enabled,
+    allowlist: lanConfig.allowlist,
+    cdpPort: lanConfig.cdpEnabled ? CDP_PORT : cdpActive() ? CDP_PORT : null,
+    audit: (record) => writeAudit(formatAuditLine(record)),
     confirmWrite: async (name, args) => {
       const window = mainWindow;
       if (!window || window.isDestroyed()) return false;
@@ -4395,7 +4554,7 @@ async function startAgent(
   try {
     const info = await agentServer.start(tokenFile);
     agentInfo = { ...info, toolCount: tools.list().length };
-    console.log(`[agent] ${info.url} · tools=${tools.list().length} · token=${tokenFile}`);
+    console.log(`[agent] ${info.url} · tools=${tools.list().length} · lan=${lanConfig.enabled ? 'on' : 'off'} · token=${tokenFile}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     agentInfo = { error: `Agent 服务启动失败：${message}` };
@@ -4535,6 +4694,7 @@ async function bootstrap(): Promise<void> {
     factoryConfigFile: join(app.getPath('userData'), 'factory.json'),
     plcConfigFile: join(app.getPath('userData'), 'plc.json'),
     syncConfigFile: join(app.getPath('userData'), 'sync.json'),
+    userDataDir: app.getPath('userData'),
     version: app.getVersion(),
     trustedUiPath: indexHtmlPath(),
     getWindow: () => mainWindow,
@@ -4604,7 +4764,9 @@ async function bootstrap(): Promise<void> {
     getBus: () => commandBus,
     getWindow: () => mainWindow,
     trustedUiPath: indexHtmlPath(),
-    isAgentResumeEnabled: () => agentResumeModuleEnabled
+    isAgentResumeEnabled: () => agentResumeModuleEnabled,
+    getLanAccess: getAgentLanAccess,
+    saveLanAccess: saveAgentLanAccess
   });
 
   app.on('activate', () => {

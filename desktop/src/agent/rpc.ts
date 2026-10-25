@@ -5,6 +5,12 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { AgentTools } from './tools';
 import { authorizeAgentToolCall, type ConfirmAgentToolWrite } from './policy.ts';
+import type { AgentAuditRecord } from './audit.ts';
+import {
+  isAddressAllowed,
+  isLoopbackAddress,
+  normalizeRemoteAddress
+} from '../shared/lan-access.ts';
 
 export interface AgentRpcOptions {
   tools: AgentTools;
@@ -13,6 +19,10 @@ export interface AgentRpcOptions {
   host?: string;
   port?: number;
   confirmWrite?: ConfirmAgentToolWrite;
+  lanEnabled?: boolean;
+  allowlist?: string[];
+  cdpPort?: number | null;
+  audit?: (record: AgentAuditRecord) => void;
 }
 
 export interface AgentRpcInfo {
@@ -20,6 +30,12 @@ export interface AgentRpcInfo {
   port: number;
   url: string;
   tokenFile?: string;
+}
+
+export interface AgentRpcAccessConfig {
+  lanEnabled: boolean;
+  allowlist: string[];
+  cdpPort: number | null;
 }
 
 class RpcError extends Error {
@@ -78,9 +94,13 @@ export class AgentRpcServer {
   readonly tools: AgentTools;
   readonly token: string;
   readonly version: string;
-  readonly host: string;
   readonly port: number;
   readonly confirmWrite: ConfirmAgentToolWrite | undefined;
+  private hostValue: string;
+  private lanEnabledValue: boolean;
+  private allowlistValue: string[];
+  private cdpPortValue: number | null;
+  private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private server: Server | null = null;
   private actualPort = 0;
   private tokenFile: string | undefined;
@@ -89,27 +109,44 @@ export class AgentRpcServer {
     this.tools = options.tools;
     this.token = options.token;
     this.version = options.version;
-    this.host = options.host ?? '127.0.0.1';
+    this.hostValue = options.host ?? '127.0.0.1';
     this.port = options.port ?? 7420;
     this.confirmWrite = options.confirmWrite;
+    this.lanEnabledValue = options.lanEnabled === true;
+    this.allowlistValue = [...(options.allowlist ?? [])];
+    this.cdpPortValue = options.cdpPort ?? null;
+    this.audit = options.audit;
+  }
+
+  get host(): string {
+    return this.hostValue;
   }
 
   async start(tokenFile?: string): Promise<AgentRpcInfo> {
     if (this.server) return this.info(tokenFile);
-    this.tokenFile = tokenFile;
+    if (tokenFile !== undefined) this.tokenFile = tokenFile;
     this.server = createServer((request, response) => {
       void this.handle(request, response);
     });
     this.server.on('clientError', (_error, socket) => {
       if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
     });
-    await new Promise<void>((resolve, reject) => {
-      this.server!.once('error', reject);
-      this.server!.listen(this.port, this.host, () => {
-        this.server!.off('error', reject);
-        resolve();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const fail = (error: Error): void => reject(error);
+        this.server!.once('error', fail);
+        this.server!.listen(this.port, this.hostValue, () => {
+          this.server!.off('error', fail);
+          resolve();
+        });
       });
-    });
+    } catch (error) {
+      const server = this.server;
+      this.server = null;
+      this.actualPort = 0;
+      if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+      throw new Error(agentListenError(error, this.hostValue, this.port));
+    }
     const address = this.server.address() as AddressInfo;
     this.actualPort = address.port;
     return this.info(tokenFile);
@@ -120,6 +157,32 @@ export class AgentRpcServer {
     this.server = null;
     if (!server) return;
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    this.actualPort = 0;
+  }
+
+  /**
+   * 关闭旧 server 后在同一端口监听新地址；失败时尝试恢复旧地址，避免把本机服务留成停止态。
+   * 端口被其它进程占用时抛中文错误，由 IPC 返回 UI 展示。
+   */
+  async restart(host: string, access?: Partial<AgentRpcAccessConfig>): Promise<AgentRpcInfo> {
+    const previousHost = this.hostValue;
+    await this.stop();
+    this.hostValue = host;
+    if (access?.lanEnabled !== undefined) this.lanEnabledValue = access.lanEnabled;
+    if (access?.allowlist !== undefined) this.allowlistValue = [...access.allowlist];
+    if (access?.cdpPort !== undefined) this.cdpPortValue = access.cdpPort;
+    try {
+      return await this.start();
+    } catch (error) {
+      this.hostValue = previousHost;
+      let rollback = '';
+      try {
+        await this.start();
+      } catch (rollbackError) {
+        rollback = `；恢复旧监听也失败：${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`;
+      }
+      throw new Error(`${error instanceof Error ? error.message : String(error)}${rollback}`);
+    }
   }
 
   info(tokenFile?: string): AgentRpcInfo {
@@ -132,9 +195,34 @@ export class AgentRpcServer {
     };
   }
 
+  private requestAccess(request: IncomingMessage): { remoteAddress: string; origin: 'local' | 'lan'; allowed: boolean } {
+    const remoteAddress = normalizeRemoteAddress(request.socket.remoteAddress);
+    const allowed = isAddressAllowed(remoteAddress, this.allowlistValue);
+    return {
+      remoteAddress,
+      origin: isLoopbackAddress(remoteAddress) ? 'local' : 'lan',
+      allowed
+    };
+  }
+
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       const url = new URL(request.url ?? '/', `http://${this.host}`);
+      const access = this.requestAccess(request);
+      if (!access.allowed) {
+        this.audit?.({
+          tool: 'lan_access_check',
+          ok: false,
+          code: 'LAN_NOT_ALLOWED',
+          source: 'rpc',
+          args: { path: url.pathname },
+          message: `来源地址不在白名单：${access.remoteAddress || '(未知)'}`,
+          remoteAddress: access.remoteAddress,
+          origin: access.origin
+        });
+        sendJson(response, 403, { ok: false, error: 'LAN_NOT_ALLOWED' });
+        return;
+      }
       if (!tokenMatches(request.headers.authorization, this.token)) {
         response.setHeader('www-authenticate', 'Bearer');
         sendJson(response, 401, { ok: false, error: 'unauthorized' });
@@ -146,7 +234,11 @@ export class AgentRpcServer {
           ok: true,
           version: this.version,
           toolCount: this.tools.list().length,
-          tools: this.tools.list().map((tool) => tool.name)
+          host: this.host,
+          port: this.actualPort || this.port,
+          lanEnabled: this.lanEnabledValue,
+          allowlist: [...this.allowlistValue],
+          cdpPort: this.cdpPortValue
         });
         return;
       }
@@ -161,11 +253,11 @@ export class AgentRpcServer {
           return;
         }
         if (Array.isArray(parsed)) {
-          const results = await Promise.all(parsed.map((item) => this.handleRpc(item)));
+          const results = await Promise.all(parsed.map((item) => this.handleRpc(item, access)));
           sendJson(response, 200, results);
           return;
         }
-        sendJson(response, 200, await this.handleRpc(parsed));
+        sendJson(response, 200, await this.handleRpc(parsed, access));
         return;
       }
 
@@ -179,7 +271,10 @@ export class AgentRpcServer {
     }
   }
 
-  private async handleRpc(payload: unknown): Promise<unknown> {
+  private async handleRpc(
+    payload: unknown,
+    access: { remoteAddress: string; origin: 'local' | 'lan' }
+  ): Promise<unknown> {
     const id = isRecord(payload) && (payload.id === null || typeof payload.id === 'string' || typeof payload.id === 'number')
       ? payload.id
       : null;
@@ -195,14 +290,14 @@ export class AgentRpcServer {
         const name = typeof params.name === 'string' ? params.name : '';
         if (!this.tools.has(name)) throw new RpcError(-32601, `工具不存在：${name || '(空)'}`);
         const args = isRecord(params.arguments) ? params.arguments : {};
-        const toolResult = await this.callTool(name, args);
+        const toolResult = await this.callTool(name, args, access);
         result = {
           content: [{ type: 'text', text: JSON.stringify(toolResult) }],
           structuredContent: toolResult,
           isError: isRecord(toolResult) && toolResult.ok === false
         };
       } else if (this.tools.has(payload.method)) {
-        result = await this.callTool(payload.method, params);
+        result = await this.callTool(payload.method, params, access);
       } else {
         throw new RpcError(-32601, `方法不存在：${payload.method}`);
       }
@@ -223,11 +318,48 @@ export class AgentRpcServer {
     }
   }
 
-  private async callTool(name: string, args: Record<string, unknown>): Promise<unknown> {
+  private async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    access: { remoteAddress: string; origin: 'local' | 'lan' }
+  ): Promise<unknown> {
+    const started = Date.now();
     const authorization = await authorizeAgentToolCall(name, args, this.confirmWrite);
-    if (!authorization.ok) return authorization;
-    return await this.tools.call(name, args);
+    const result = authorization.ok ? await this.tools.call(name, args) : authorization;
+    const record = isRecord(result) ? result : null;
+    this.audit?.({
+      tool: name,
+      ok: record?.ok !== false,
+      ...(typeof record?.code === 'string' ? { code: record.code } : {}),
+      source: 'rpc',
+      args,
+      ...(typeof record?.message === 'string' ? { message: record.message } : {}),
+      elapsedMs: Date.now() - started,
+      remoteAddress: access.remoteAddress,
+      origin: access.origin
+    });
+    return result;
   }
+}
+
+function agentListenError(error: unknown, host: string, port: number): string {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  const detail = error instanceof Error ? error.message : String(error);
+  if (code === 'EADDRINUSE') {
+    return `Agent 端口被占用：${host}:${port} 无法监听。请关闭占用 ${port} 端口的程序后重试。`;
+  }
+  return `Agent 服务启动失败（${host}:${port}）：${detail}`;
+}
+
+/** 主进程热重启入口；保留显式函数名，方便测试与 UI 调用链定位。 */
+export async function restartAgentServer(
+  server: AgentRpcServer,
+  host: string,
+  access?: Partial<AgentRpcAccessConfig>
+): Promise<AgentRpcInfo> {
+  return await server.restart(host, access);
 }
 
 export function createAgentToken(): string {

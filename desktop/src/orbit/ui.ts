@@ -43,7 +43,13 @@ import { cloneOverrides, parseProtoCounts, UnifiedHistory, type HistorySnapshot,
 import { loadOrbit, ORBIT_STORE_KEY, saveOrbit, type StorageLike } from './persist.ts';
 import type { ScreenRect } from './marquee.ts';
 import type { HighlightState } from './three-scene.ts';
-import { OrbitView, type OrbitViewState, type Projection } from './view.ts';
+import { OrbitView, type OrbitViewState, type Projection, type RenderQualityDiagnostics } from './view.ts';
+import {
+  effectivePixelRatio,
+  normalizeRenderQuality,
+  resolveEffectiveQuality,
+  type RenderQuality
+} from './quality.ts';
 
 type StageKind = 'assembly' | 'check';
 
@@ -71,6 +77,7 @@ export interface OrbitPublicState {
   overrides: ParamOverrides;
   interference: Array<{ a: string; b: string; severity: string }>;
   views: Partial<Record<StageKind, OrbitViewState | null>>;
+  renderQuality: RenderQualityDiagnostics;
   rebuilds: number;
   history: HistorySnapshot;
   store: { key: string; restored: boolean; reason: string | null; saves: number };
@@ -95,6 +102,9 @@ export interface OrbitHandle {
   /** WebGL 框选：rect 为舞台内归一化坐标 0..1；降级模式返回 null */
   marquee(rect: { x0: number; y0: number; x1: number; y1: number }, stage?: StageKind): string[] | null;
   setMarqueeMode(on: boolean, stage?: StageKind): boolean;
+  setRenderQuality(quality: RenderQuality): void;
+  renderQuality(): RenderQualityDiagnostics;
+  resize(): void;
 }
 
 declare global {
@@ -130,6 +140,7 @@ let highlightQueued = false;
 let editTimer = 0;
 let pendingEdit: HTMLInputElement | null = null;
 let handle: OrbitHandle | null = null;
+let qualitySetting: RenderQuality = 'standard';
 const history = new UnifiedHistory();
 let protoCountsSeen = false;
 let store = { key: ORBIT_STORE_KEY, restored: false, reason: null as string | null, saves: 0 };
@@ -900,6 +911,21 @@ function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && /input|textarea|select/i.test(target.tagName);
 }
 
+function qualityDiagnostics(): RenderQualityDiagnostics {
+  const resolved = resolveEffectiveQuality(qualitySetting, assembly?.parts.length ?? 0);
+  const live = slots.map((slot) => slot.view?.renderQualityInfo()).find((info) => info !== undefined);
+  return {
+    configuredQuality: qualitySetting,
+    quality: resolved.quality,
+    pixelRatio: live?.pixelRatio ?? effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, false),
+    draggingPixelRatio: effectivePixelRatio(window.devicePixelRatio || 1, resolved.quality, true),
+    antialias: live?.antialias ?? resolved.quality !== 'flow',
+    dragging: live?.dragging ?? false,
+    autoDowngraded: resolved.autoDowngraded,
+    parts: assembly?.parts.length ?? 0
+  };
+}
+
 function bindDocument(): void {
   document.addEventListener('input', (event) => {
     const el = event.target as HTMLElement;
@@ -992,6 +1018,7 @@ export function initOrbitView(): OrbitHandle {
       overrides: JSON.parse(JSON.stringify(overrides)) as ParamOverrides,
       interference: hits.map((hit) => ({ a: hit.a, b: hit.b, severity: hit.severity })),
       views: Object.fromEntries(slots.map((slot) => [slot.kind, slot.view ? slot.view.state() : null])),
+      renderQuality: qualityDiagnostics(),
       rebuilds,
       history: history.snapshot(),
       store: { ...store }
@@ -1044,6 +1071,14 @@ export function initOrbitView(): OrbitHandle {
       slot.view.setMarqueeMode(on);
       updateHuds();
       return true;
+    },
+    setRenderQuality: (quality) => {
+      qualitySetting = normalizeRenderQuality(quality);
+      slots.forEach((slot) => slot.view?.setRenderQuality(qualitySetting));
+    },
+    renderQuality: () => qualityDiagnostics(),
+    resize: () => {
+      slots.forEach((slot) => slot.view?.resize());
     }
   };
   Object.defineProperty(window, 'AutomationCadOrbit', {

@@ -62,8 +62,14 @@ import { unwrapToolResultData } from './guard.ts';
 import { parseFallbackCandidates } from './retry.ts';
 import { formatTokenCount } from './budget.ts';
 import { isAgentResumeEnabled } from '../modules/agent-resume-gate.ts';
+import {
+  RENDER_QUALITY_OPTIONS,
+  UI_SCALE_OPTIONS,
+  applyAppearance
+} from '../ui/appearance.ts';
 
 const AGENT_ICON = '<svg viewBox="0 0 16 16"><path d="M8 2.2a3.2 3.2 0 1 1 0 6.4 3.2 3.2 0 0 1 0-6.4z"/><path d="M3 13.8c.4-2.5 2.4-4 5-4s4.6 1.5 5 4"/><path d="M2 3.2h1.2M12.8 3.2H14M2 12.8h1.2M12.8 12.8H14"/></svg>';
+const CDP_PORT_TEXT = '9222';
 
 interface AgentToolInfo {
   name: string;
@@ -84,6 +90,12 @@ interface AgentInfo {
   toolCount?: number;
   tools?: AgentToolInfo[];
   history?: AgentHistoryInfo[];
+  token?: string;
+  lanEnabled?: boolean;
+  allowlist?: string[];
+  cdpPort?: number | null;
+  cdpActive?: boolean;
+  cdpRestartRequired?: boolean;
   error?: string;
 }
 
@@ -92,6 +104,8 @@ let refreshButton: HTMLButtonElement | null = null;
 let body: HTMLElement | null = null;
 let infoState: AgentInfo = {};
 let llmState: DesktopAgentLlmConfig | null = null;
+let appearanceState: DesktopAppearanceConfig | null = null;
+let lanState: DesktopAgentLanAccess | null = null;
 let messages: DesktopAgentChatMessage[] = [];
 let thinking = false;
 let apiKeyDirty = false;
@@ -174,6 +188,36 @@ function serviceAddress(info: AgentInfo): string {
   if (info.host && info.port) return `${info.host}:${info.port}`;
   if (info.url) return info.url.replace(/^https?:\/\//, '');
   return '—';
+}
+
+function appearanceScale(): number {
+  return appearanceState?.uiScale ?? 1.15;
+}
+
+function appearanceQuality(): 'flow' | 'standard' | 'high' {
+  return appearanceState?.renderQuality ?? 'standard';
+}
+
+function lanAllowlistText(): string {
+  return (lanState?.config.allowlist ?? infoState.allowlist ?? ['192.168.0.0/16']).join('\n');
+}
+
+function renderQualityText(): string {
+  const diagnostics = window.AutomationCadOrbit?.renderQuality();
+  if (!diagnostics) return '渲染质量设置会在 3D 视口就绪后应用。';
+  const auto = diagnostics.autoDowngraded
+    ? `；零件 ${diagnostics.parts} > 1500，已自动降级（autoDowngraded）`
+    : '';
+  return `当前 ${diagnostics.quality} · 像素比 ${diagnostics.pixelRatio} · 拖动 ${diagnostics.draggingPixelRatio} · 抗锯齿 ${diagnostics.antialias ? '开' : '关'}${auto}`;
+}
+
+function cdpStatusText(): string {
+  const config = lanState?.config.cdpEnabled ?? false;
+  const active = lanState?.cdpActive ?? infoState.cdpActive ?? false;
+  const port = lanState?.cdpPort ?? infoState.cdpPort;
+  if (!config && !active) return 'CDP：关闭';
+  if (active) return `CDP：已监听 0.0.0.0:${port ?? CDP_PORT_TEXT}`;
+  return `CDP：已配置 ${port ?? CDP_PORT_TEXT}，需重启应用后生效`;
 }
 
 function timeText(at: string): string {
@@ -289,12 +333,73 @@ function renderShell(): void {
       <span class="acp-pill" id="agentLlmStatus"></span>
     </div>
 
+    <div class="acp-section-title">界面与渲染 <b>立即生效</b></div>
+    <div class="acp-field">
+      <span>界面缩放（默认 115%）</span>
+      <select class="acp-input" id="agentUiScale" aria-label="界面缩放">
+        ${UI_SCALE_OPTIONS.map((option) => `<option value="${option.value}" ${appearanceScale() === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+      </select>
+      <div class="acp-note">通过注入 CSS 变量缩放原型，不改根样式；切换后自动触发布局与 3D 视口 resize。</div>
+    </div>
+    <div class="acp-field">
+      <span>3D 渲染质量</span>
+      <select class="acp-input" id="agentRenderQuality" aria-label="3D 渲染质量">
+        ${RENDER_QUALITY_OPTIONS.map((option) => `<option value="${option.value}" ${appearanceQuality() === option.value ? 'selected' : ''}>${option.label}</option>`).join('')}
+      </select>
+      <div class="acp-note" id="agentRenderQualityInfo">${escapeHtml(renderQualityText())}</div>
+    </div>
+    <div class="acp-row">
+      <span class="acp-pill" id="agentAppearanceStatus"></span>
+    </div>
+
     <div class="acp-section-title">本机服务 <b>${toolCount} 个工具</b></div>
     <div class="acp-field">
       <span>token 文件路径（不显示 token）</span>
       <div class="acp-note">${escapeHtml(infoState.tokenFile || '—')}</div>
     </div>
-    <div class="acp-note">服务：${escapeHtml(serviceAddress(infoState))} · HTTP JSON-RPC · 仅监听本机</div>
+    <div class="acp-note">服务：${escapeHtml(serviceAddress(infoState))} · HTTP JSON-RPC · ${lanState?.config.enabled || infoState.lanEnabled ? '局域网已启用' : '仅监听本机'}</div>
+
+    <div class="acp-section-title">局域网联调 <b>${lanState?.config.enabled || infoState.lanEnabled ? '已启用' : '默认关闭'}</b></div>
+    <div class="acp-warning">
+      <b>安全警告</b>：启用局域网访问会让白名单内的设备获得与 token 等价的 Agent 能力。写工具仍会在本机弹窗确认，远程不能静默写入。不要把 7420 端口暴露到公网。
+    </div>
+    <label class="acp-switch acp-switch-block">
+      <input type="checkbox" id="agentLanEnabled" ${lanState?.config.enabled || infoState.lanEnabled ? 'checked' : ''}>
+      允许局域网访问 Agent（默认关闭）
+    </label>
+    <div class="acp-field">
+      <span>来源白名单（逗号或换行分隔 CIDR / 单 IP；回环永远放行）</span>
+      <textarea class="acp-textarea" id="agentLanAllowlist" rows="3" spellcheck="false" placeholder="192.168.0.0/16">${escapeHtml(lanAllowlistText())}</textarea>
+    </div>
+    <div class="acp-field">
+      <span>当前监听地址</span>
+      <div class="acp-note" id="agentLanListen">${escapeHtml(serviceAddress(infoState))} · ${lanState?.config.enabled || infoState.lanEnabled ? '0.0.0.0（局域网可达）' : '127.0.0.1（仅本机）'}</div>
+    </div>
+    <div class="acp-field">
+      <span>完整 token（默认隐藏；仅本机受信页面可读）</span>
+      <code class="acp-token" id="agentLanToken" hidden>${escapeHtml(lanState?.token ?? infoState.token ?? '—')}</code>
+      <div class="acp-row">
+        <button type="button" class="acp-btn" id="agentLanTokenToggle">显示 token</button>
+        <button type="button" class="acp-btn" id="agentLanTokenCopy">复制 token</button>
+        <span class="acp-note">token 文件：${escapeHtml(infoState.tokenFile || '—')}</span>
+      </div>
+    </div>
+    <div class="acp-field">
+      <span>示例探测命令（把 &lt;局域网IP&gt; 换成当前机器地址）</span>
+      <pre class="acp-command" id="agentLanCommand">node desktop/scripts/lan-debug-probe.mjs --url http://&lt;局域网IP&gt;:${escapeHtml(String(infoState.port ?? 7420))} --token-file ${escapeHtml(infoState.tokenFile || '<userData>/agent-token')}</pre>
+    </div>
+    <label class="acp-switch acp-switch-block">
+      <input type="checkbox" id="agentCdpEnabled" ${lanState?.config.cdpEnabled ? 'checked' : ''}>
+      允许远程调试 CDP（重启生效）
+    </label>
+    <div class="acp-warning is-critical">
+      <b>CDP 高风险</b>：启用后应用会在下次启动监听 <code>0.0.0.0:${CDP_PORT_TEXT}</code>，任何能访问该端口的程序都可接管渲染进程。仅在受信局域网临时开启，用完立即关闭并重启。
+    </div>
+    <div class="acp-note" id="agentCdpStatus">${escapeHtml(cdpStatusText())}</div>
+    <div class="acp-row">
+      <button type="button" class="acp-btn acp-btn-primary" id="agentLanSave">保存并重启 Agent</button>
+      <span class="acp-pill" id="agentLanStatus"></span>
+    </div>
 
     <div class="acp-section-title">工具列表 <b>${toolCount}</b></div>
     ${tools.length === 0 ? '<div class="acp-empty">尚无工具注册</div>' : tools.map((tool) => `
@@ -2014,6 +2119,93 @@ async function testSettings(): Promise<void> {
   }
 }
 
+async function saveAppearance(patch: Partial<DesktopAppearanceConfig>): Promise<void> {
+  if (!window.desktop) return;
+  const select = body?.querySelector<HTMLSelectElement>(
+    patch.uiScale === undefined ? '#agentRenderQuality' : '#agentUiScale'
+  );
+  if (select) select.disabled = true;
+  setStatus('agentAppearanceStatus', '保存中…');
+  try {
+    const saved = await window.desktop.appearance.set(patch);
+    appearanceState = saved;
+    applyAppearance(saved);
+    setStatus('agentAppearanceStatus', `已保存：缩放 ${Math.round(saved.uiScale * 100)}% · 渲染 ${saved.renderQuality}`);
+    const info = body?.querySelector<HTMLElement>('#agentRenderQualityInfo');
+    if (info) info.textContent = renderQualityText();
+  } catch (error) {
+    setStatus('agentAppearanceStatus', `保存失败：${errorMessage(error)}`, true);
+  } finally {
+    if (select) select.disabled = false;
+  }
+}
+
+function toggleLanToken(): void {
+  const token = body?.querySelector<HTMLElement>('#agentLanToken');
+  const button = body?.querySelector<HTMLButtonElement>('#agentLanTokenToggle');
+  if (!token || !button) return;
+  token.hidden = !token.hidden;
+  button.textContent = token.hidden ? '显示 token' : '隐藏 token';
+}
+
+async function copyLanToken(): Promise<void> {
+  const token = body?.querySelector<HTMLElement>('#agentLanToken')?.textContent?.trim() ?? '';
+  if (!token || token === '—') {
+    setStatus('agentLanStatus', 'token 尚未就绪', true);
+    return;
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(token);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = token;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    setStatus('agentLanStatus', 'token 已复制到剪贴板');
+  } catch (error) {
+    setStatus('agentLanStatus', `复制失败：${errorMessage(error)}`, true);
+  }
+}
+
+async function saveLanAccess(): Promise<void> {
+  if (!window.desktop) return;
+  const enabled = body?.querySelector<HTMLInputElement>('#agentLanEnabled')?.checked === true;
+  const allowlist = (fieldElement('agentLanAllowlist') as HTMLTextAreaElement | null)?.value ?? '';
+  const cdpEnabled = body?.querySelector<HTMLInputElement>('#agentCdpEnabled')?.checked === true;
+  const button = body?.querySelector<HTMLButtonElement>('#agentLanSave');
+  if (button) button.disabled = true;
+  setStatus('agentLanStatus', '保存并重启 Agent 中…');
+  try {
+    const result = await window.desktop.agent.lan.save({ enabled, allowlist, cdpEnabled });
+    lanState = result;
+    infoState = {
+      ...infoState,
+      ...(result.info.host ? { host: result.info.host } : {}),
+      ...(result.info.port !== undefined ? { port: result.info.port } : {}),
+      ...(result.info.url ? { url: result.info.url } : {}),
+      ...(result.info.tokenFile ? { tokenFile: result.info.tokenFile } : {}),
+      token: result.token,
+      lanEnabled: result.config.enabled,
+      allowlist: result.config.allowlist,
+      cdpPort: result.cdpPort,
+      cdpActive: result.cdpActive,
+      cdpRestartRequired: result.cdpRestartRequired
+    };
+    renderShell();
+    setStatus('agentLanStatus', result.message ?? (result.ok ? '已保存并重启 Agent' : '保存失败'), !result.ok);
+  } catch (error) {
+    setStatus('agentLanStatus', `保存失败：${errorMessage(error)}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatSend')?.addEventListener('click', () => { void sendMessage(); });
   body?.querySelector<HTMLButtonElement>('#agentChatClear')?.addEventListener('click', () => { void clearMessages(); });
@@ -2044,6 +2236,15 @@ function bindControls(): void {
   body?.querySelector<HTMLButtonElement>('#agentChatCancel')?.addEventListener('click', () => { void cancelExecution(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmSave')?.addEventListener('click', () => { void saveSettings(); });
   body?.querySelector<HTMLButtonElement>('#agentLlmTest')?.addEventListener('click', () => { void testSettings(); });
+  body?.querySelector<HTMLSelectElement>('#agentUiScale')?.addEventListener('change', (event) => {
+    void saveAppearance({ uiScale: Number((event.target as HTMLSelectElement).value) });
+  });
+  body?.querySelector<HTMLSelectElement>('#agentRenderQuality')?.addEventListener('change', (event) => {
+    void saveAppearance({ renderQuality: (event.target as HTMLSelectElement).value as 'flow' | 'standard' | 'high' });
+  });
+  body?.querySelector<HTMLButtonElement>('#agentLanTokenToggle')?.addEventListener('click', toggleLanToken);
+  body?.querySelector<HTMLButtonElement>('#agentLanTokenCopy')?.addEventListener('click', () => { void copyLanToken(); });
+  body?.querySelector<HTMLButtonElement>('#agentLanSave')?.addEventListener('click', () => { void saveLanAccess(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditRefresh')?.addEventListener('click', () => { void loadAudit(); });
   body?.querySelector<HTMLButtonElement>('#agentAuditExport')?.addEventListener('click', () => { void exportAuditCsv(); });
   body?.querySelector<HTMLSelectElement>('#agentAuditToolFilter')?.addEventListener('change', (event) => {
@@ -2107,13 +2308,18 @@ async function refresh(): Promise<void> {
   body.innerHTML = '<div class="acp-empty">正在读取智能体状态…</div>';
   try {
     if (!window.desktop) throw new Error('智能体面板仅在桌面版可用');
-    const [info, config, chat] = await Promise.all([
+    const [info, config, chat, appearance, lan] = await Promise.all([
       window.desktop.agent.info() as Promise<AgentInfo>,
       window.desktop.agent.getLlmConfig(),
-      window.desktop.agent.chat.history()
+      window.desktop.agent.chat.history(),
+      window.desktop.appearance.get(),
+      window.desktop.agent.lan.get()
     ]);
     infoState = info;
     llmState = config;
+    appearanceState = appearance;
+    lanState = lan;
+    applyAppearance(appearance);
     messages = Array.isArray(chat.messages) ? chat.messages : [];
     renderShell();
     void loadAudit();

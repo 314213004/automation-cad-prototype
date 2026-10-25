@@ -42,6 +42,7 @@ import type { MachineConfig } from './commission/machine-config';
 import { buildOptionalSyncPlcPayload } from './sync/plc.ts';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel, setAgentResumeModuleEnabled } from './agent/ui';
+import { applyAppearance } from './ui/appearance.ts';
 import { bomSignatureFromRows } from './agent/advisor';
 import type { SyncUploadPayload } from './sync/types';
 import type { InterferenceHit, InterferencePart } from './mech/interference';
@@ -2003,6 +2004,11 @@ function bindWindowEvents(): void {
 
 function init(): void {
   injectStyles();
+  const appearanceReady = window.desktop?.appearance?.get()
+    .then((config) => applyAppearance(config))
+    .catch((error: unknown) => {
+      console.error('[appearance] 读取界面缩放/渲染质量失败，使用默认值', error);
+    }) ?? Promise.resolve();
   buildEntryButton();
   initFactoryPanel();
   commission = initCommissionPanel({
@@ -2316,14 +2322,16 @@ function init(): void {
     // active 指针缺失或损坏时保持内置样机，不影响启动。
   });
   if (moduleManager.getStatus('plcgen').enabled) {
-    void activatePlcGenUi(moduleManager).then(() => {
+    void Promise.all([activatePlcGenUi(moduleManager), appearanceReady]).then(() => {
       window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
     }).catch((error: unknown) => {
       console.error('[modules] PLC 程序模块加载失败，面板保持不可用', error);
       window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
     });
   } else {
-    window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
+    void appearanceReady.finally(() => {
+      window.__AUTOMATION_CAD_EXTENSION_READY__ = true;
+    });
   }
 }
 

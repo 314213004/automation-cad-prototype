@@ -696,9 +696,33 @@ interface DesktopProjectExportSnapshot {
   excludedState: string[];
 }
 
+interface DesktopAppearanceConfig {
+  uiScale: number;
+  renderQuality: 'flow' | 'standard' | 'high';
+}
+
+interface DesktopAgentLanAccess {
+  ok: boolean;
+  config: {
+    enabled: boolean;
+    allowlist: string[];
+    cdpEnabled: boolean;
+  };
+  token: string;
+  info: DesktopAgentInfo;
+  cdpPort: number | null;
+  cdpActive: boolean;
+  cdpRestartRequired: boolean;
+  message?: string;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
+    appearance: {
+      get(): Promise<DesktopAppearanceConfig>;
+      set(config: Partial<DesktopAppearanceConfig>): Promise<DesktopAppearanceConfig>;
+    };
     update: {
       state(): Promise<DesktopUpdateSnapshot>;
       setChannel(channel: DesktopUpdateChannel): Promise<DesktopUpdateSnapshot>;
@@ -842,6 +866,10 @@ interface Window {
       onProgress(callback: (progress: DesktopAgentProgressEvent) => void): () => void;
       audit: {
         read(): Promise<DesktopAgentAuditResult>;
+      };
+      lan: {
+        get(): Promise<DesktopAgentLanAccess>;
+        save(config: { enabled: boolean; allowlist: string[] | string; cdpEnabled: boolean }): Promise<DesktopAgentLanAccess>;
       };
     };
     parametric: {
