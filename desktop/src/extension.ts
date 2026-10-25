@@ -55,10 +55,10 @@ import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
-import { protectionRows, selectMotorProtection } from './elec/protection';
-import { buildMachineCircuit } from './elec/machine-circuit';
-import { renderSheet } from './elec/sheet';
-import { estimateConveyorDrive } from './machine/conveyor-synth';
+import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
+import { ElecSourceTracker } from './elec/source';
+import { loadStoredWireScheme, openWireSchemeDialog, storeWireScheme } from './elec/wireno-ui';
+import { schemeLabel } from './elec/wireno';
 import {
   buildConveyorParts,
   conveyorAssembly,
@@ -363,30 +363,19 @@ function buildOverlay(): void {
     const domainBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-domain]');
     if (domainBtn) {
       if (domainBtn.dataset.cadDomain === 'elec') {
-        // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前工程上下文
-        const project = lastOpenedProject;
-        try {
-          if (project) {
-            const sheet = buildElecSheet(project);
-            (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
-              svg: sheet.svg,
-              meta: { project: project.name, drawingNo: 'EL-CV-001', generated: true, devices: [] }
-            });
-            if (!sheet.deliverable) {
-              const errors = sheet.issues.filter((issue) => issue.severity === 'error');
-              showNotice(`电气图已生成，但校验有 ${errors.length} 项问题：${errors[0]?.message ?? ''}`, true);
-            }
-          }
-        } catch (error) {
-          console.warn('[cad] 生成电气图失败', error);
-        }
+        // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前数据源上下文
+        refreshElecView({ notify: true });
         closeOverlay();
         try {
           (window as unknown as { ElecDomain?: { setDomain?: (domain: string) => void } }).ElecDomain?.setDomain?.('elec');
         } catch (error) {
           console.warn('[cad] 切换到电气域失败', error);
         }
-        window.dispatchEvent(new CustomEvent('automation-cad-domain', { detail: { domain: 'elec', project } }));
+        // app.js 只读 detail.project.name：给当前电气数据源（工程或机型方案）的名字，不再固定是最近工程
+        const label = elecSources.label();
+        window.dispatchEvent(new CustomEvent('automation-cad-domain', {
+          detail: { domain: 'elec', project: label ?? lastOpenedProject, source: label }
+        }));
       }
       return;
     }
@@ -950,6 +939,8 @@ interface ProjectMenuRecord {
   design?: unknown;
   geometryReview?: ProjectGeometryReview;
   hasStep?: boolean;
+  /** 工艺（电气图按工艺选物理估算器） */
+  process?: string;
 }
 
 /**
@@ -1404,76 +1395,202 @@ function toggleProjectMenu(open?: boolean): void {
   if (next) void refreshProjectMenu();
 }
 
-/** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
 /**
- * 由工程生成电气原理图数据。
- * 驱动功率来自 conveyor-synth 的真实阻力/功率估算（不是拍脑袋），
- * 传感器来自零件清单里的光电支架，IO 由 schematic.ts 统一排布。
+ * 电气图纸来源：最近一次“打开/生成的工程”或“应用的机型方案”，谁新用谁（见 elec/source.ts）。
+ * 机型方案带完整 BOM 草稿 + 功率估算；工程/方案 → ElecDesign → 电路 → ERC → 分页版面 → 线号 → 自检 → SVG
+ * 全在 elec 引擎里，没有任何机型分支，图号/页码由数据与分页给出。
+ * 电气域画布、电气校验面板（__ElecDocProvider）、Agent run_electrical_check（getElecDocument）读同一份缓存图。
  */
+const elecSources = new ElecSourceTracker(renderElecDrawing);
+let lastElecDrawing: ElecDrawing | null = null;
+/** 画布上正显示的那份图（换源后才回到第 1 页，同源刷新保持当前页） */
+let shownElecDrawing: ElecDrawing | null = null;
+
+function buildElecDrawing(): ElecDrawing | null {
+  const drawing = elecSources.drawing();
+  lastElecDrawing = drawing;
+  return drawing;
+}
+
+function elecDomainActive(): boolean {
+  return document.body.dataset.domain === 'elec';
+}
+
+/** 没有数据源时把画布换成占位页，不留上一个工程/方案的旧图 */
+function showElecPlaceholder(): void {
+  const svg = `<g class="cad-elec-empty"><rect x="6" y="6" width="408" height="285" fill="none" stroke="currentColor" stroke-width="0.5"/>`
+    + `<text x="210" y="148" text-anchor="middle" font-size="7">尚无电气数据源：请应用机型方案或打开工程</text></g>`;
+  (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
+    svg,
+    meta: { project: '', drawingNo: '—', page: '0 / 0', pages: [], generated: false, devices: [] }
+  });
+  document.querySelector('#elStageSchematic .cad-elec-pager')?.remove();
+  shownElecDrawing = null;
+}
+
 /**
- * 工程 → 电路 → ERC → 版面 → SVG，全在 elec 引擎里完成。
- * 这里只负责把工程参数翻译成机型描述，不画任何一条线。
+ * 把当前数据源的图送进电气域画布。顶栏电气按钮、快捷键、菜单（直接调 ElecDomain.setDomain）
+ * 与覆盖层电气按钮都汇到这里；换源时若正停在电气域也立即重画。
  */
-function buildElecSheet(project: ProjectMenuRecord): { svg: string; deliverable: boolean; issues: Array<{ severity: string; code: string; message: string }> } {
-  const params = {
-    lengthMm: Number(project.params?.lengthMm ?? 2000),
-    widthMm: Number(project.params?.widthMm ?? 300),
-    beltHeightMm: Number(project.params?.beltHeightMm ?? 850),
-    pulleyDiameterMm: Number(project.params?.pulleyDiameterMm ?? 50),
-    beltThicknessMm: Number(project.params?.beltThicknessMm ?? 4),
-    frameSectionMm: Number(project.params?.frameSectionMm ?? 40)
-  };
-  let powerKw = 0.04;
+function refreshElecView(options: { notify?: boolean } = {}): void {
+  let drawing: ElecDrawing | null;
   try {
-    const drive = estimateConveyorDrive(params, {});
-    powerKw = Math.max(0.04, Math.round((drive.motorW / 1000) * 100) / 100);
+    drawing = buildElecDrawing();
   } catch (error) {
-    console.warn('[elec] 驱动估算失败，回退 0.04 kW', error);
+    console.warn('[cad] 生成电气图失败', error);
+    return;
   }
-  const pulleyRadiusM = Math.max(0.01, params.pulleyDiameterMm / 2 / 1000);
-  const rpm = Math.max(1, Math.round((60 * 0.2) / (2 * Math.PI * pulleyRadiusM)));
-  const ratio = Math.max(1, Math.round((1400 / rpm) * 10) / 10);
-  const protection = selectMotorProtection(powerKw);
+  if (!drawing) {
+    if (shownElecDrawing) showElecPlaceholder();
+    return;
+  }
+  if (drawing !== shownElecDrawing) showElecDrawing(drawing, 0);
+  if (options.notify && !drawing.deliverable) {
+    const first = [
+      ...drawing.issues.filter((issue) => issue.severity === 'error').map((issue) => issue.message),
+      ...drawing.problems
+    ];
+    showNotice(`电气图已生成（${drawing.pages.length} 页），但校验有 ${first.length} 项问题：${first[0] ?? ''}`, true);
+  }
+}
 
-  const names = (project.partsList ?? []).map((item) => item.name);
-  const sensors: Array<{ tag: string; label: string; address: string }> = [];
-  if (names.some((name) => name.includes('进料'))) sensors.push({ tag: '-PE1', label: '进料检测', address: 'I0.3' });
-  if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', address: 'I0.4' });
-  if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', address: 'I0.3' });
+function elecSourceChanged(): void {
+  if (elecDomainActive()) refreshElecView();
+}
 
-  const circuit = buildMachineCircuit({
-    project: project.name,
-    drive: { powerKw, rpm, ratio },
-    sensors,
-    controls: { estop: true, startStop: true, lamp: true },
-    selection: {
-      breaker: protection.breaker,
-      contactor: protection.contactor,
-      thermal: protection.thermal,
-      currentA: protection.currentA,
-      thermalSetA: protection.thermalSetA
-    },
-    drawingNo: 'EL-CV-001'
+/** 线号格式：读已保存的方案（localStorage），出图与校验同用这一份 */
+function initElecWireScheme(): void {
+  let storage: Storage | null = null;
+  try {
+    storage = window.localStorage;
+  } catch {
+    storage = null;
+  }
+  const loaded = loadStoredWireScheme(storage);
+  elecSources.setWireScheme(loaded.scheme);
+  if (loaded.warning) console.warn('[cad]', loaded.warning);
+}
+
+/** 翻页条「线号格式」：改方案 → 保存 → 停在当前页重画（导线表/端子表/校验数据同一份） */
+function openElecWireSchemeDialog(): void {
+  openWireSchemeDialog({
+    current: elecSources.wireScheme(),
+    onSave: (scheme) => {
+      try {
+        storeWireScheme(window.localStorage, scheme);
+      } catch (error) {
+        showNotice(`线号方案已应用，但保存到本机失败：${error instanceof Error ? error.message : String(error)}`, true);
+      }
+      const pageIndex = Number(document.querySelector<HTMLElement>('#elStageSchematic .cad-elec-pager [data-elec-page].is-active')?.dataset.elecPage ?? 0);
+      elecSources.setWireScheme(scheme);
+      let drawing: ElecDrawing | null = null;
+      try {
+        drawing = buildElecDrawing();
+      } catch (error) {
+        console.warn('[cad] 按新线号方案生成电气图失败', error);
+      }
+      if (!drawing) return;
+      showElecDrawing(drawing, pageIndex);
+      const suffixed = drawing.issues.find((issue) => issue.code === 'WIRENO_SUFFIXED');
+      if (!drawing.deliverable) showNotice(`已按新线号方案重画，但校验有问题：${drawing.problems[0] ?? ''}`, true);
+      else if (suffixed) showNotice(suffixed.message, true);
+    }
   });
-  const sheet = renderSheet(circuit, {
-    project: project.name,
-    drawingNo: 'EL-CV-001',
-    page: '1 / 1',
-    date: new Date().toISOString().slice(0, 10),
-    notes: [
-      `线体 ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)} mm · 皮带面高 ${Math.round(params.beltHeightMm)} mm`,
-      `零件 ${project.parts} 件 · 总质量 ${project.massKg ?? '—'} kg`
-    ]
-  });
-  return {
-    svg: sheet.svg,
-    deliverable: sheet.deliverable,
-    issues: sheet.issues.map((issue) => ({ severity: issue.severity, code: issue.code, message: issue.message }))
+}
+
+function initElecSourceWiring(): void {
+  initElecWireScheme();
+  (window as unknown as { __ElecDocProvider?: () => unknown }).__ElecDocProvider = () => {
+    try {
+      return buildElecDrawing()?.document ?? null;
+    } catch (error) {
+      console.warn('[cad] 电气图数据不可用', error);
+      return null;
+    }
   };
+  // electrical.js 的 setDomain 会写 body[data-domain]；不论从哪个入口进电气域都刷新到当前数据源
+  const observer = new MutationObserver(() => {
+    if (elecDomainActive()) refreshElecView();
+  });
+  observer.observe(document.body, { attributes: true, attributeFilter: ['data-domain'] });
+}
+
+/** 打开已保存的工程：逐件 STL 重新装配成零件树，不是单个合并网格。 */
+/** 把第 index 页送进电气域画布，并维护页切换条（多页图纸） */
+function showElecDrawing(drawing: ElecDrawing, index: number): void {
+  const page = drawing.pages[Math.max(0, Math.min(drawing.pages.length - 1, index))];
+  if (!page) return;
+  shownElecDrawing = drawing;
+  (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
+    svg: page.svg,
+    meta: {
+      project: drawing.project,
+      drawingNo: drawing.drawingNo,
+      page: `${page.index} / ${drawing.pages.length}`,
+      pages: drawing.pages.map((item) => ({ index: item.index, title: item.title, kind: item.kind })),
+      generated: true,
+      devices: drawing.bom.map((row) => [row.tag, row.name, String(row.qty)])
+    }
+  });
+  const stage = document.getElementById('elStageSchematic');
+  if (!stage) return;
+  let pager = stage.querySelector<HTMLElement>('.cad-elec-pager');
+  if (!pager) {
+    pager = document.createElement('div');
+    pager.className = 'cad-elec-pager';
+    pager.setAttribute('role', 'toolbar');
+    pager.setAttribute('aria-label', '电气图纸翻页');
+    stage.appendChild(pager);
+    pager.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('[data-elec-wireno]')) {
+        openElecWireSchemeDialog();
+        return;
+      }
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-elec-page]');
+      if (!button || !lastElecDrawing) return;
+      showElecDrawing(lastElecDrawing, Number(button.dataset.elecPage));
+    });
+  }
+  const current = page.index - 1;
+  pager.innerHTML = [
+    `<button type="button" data-elec-page="${current - 1}" ${current === 0 ? 'disabled' : ''} title="上一页">‹</button>`,
+    ...drawing.pages.map((item, i) => `<button type="button" data-elec-page="${i}" class="${i === current ? 'is-active' : ''}" title="${escapeCadHtml(item.title)}">${item.index}</button>`),
+    `<button type="button" data-elec-page="${current + 1}" ${current === drawing.pages.length - 1 ? 'disabled' : ''} title="下一页">›</button>`,
+    `<span class="cad-elec-pager-title">${escapeCadHtml(page.title)}</span>`,
+    `<button type="button" class="cad-elec-wireno-btn" data-elec-wireno title="线号格式（当前：${escapeCadHtml(schemeLabel(elecSources.wireScheme()))}）">线号格式</button>`
+  ].join('');
 }
 
 /** 最近打开的工程：外壳冷启动时恢复卡片用 */
 let lastOpenedProject: ProjectMenuRecord | null = null;
+
+type DesktopProjectRecordLike = NonNullable<Awaited<ReturnType<NonNullable<NonNullable<Window['desktop']>['projects']>['open']>>['record']>;
+
+/** 工程库记录 → 菜单/电气数据源用的工程描述 */
+function projectMenuRecordOf(record: DesktopProjectRecordLike, parts: number): ProjectMenuRecord {
+  return {
+    id: record.id,
+    name: record.name,
+    parts,
+    massKg: record.massKg,
+    envelope: record.envelope,
+    createdAt: record.createdAt,
+    partsList: (record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name })),
+    params: record.params ?? {},
+    ...(record.process !== undefined && typeof record.process === 'string' ? { process: record.process } : {}),
+    // 设计向导保存的工程要带着概念几何与校核状态，外壳冷启动/重开时才能还原提示
+    ...(record.design !== undefined ? { design: record.design } : {}),
+    ...(record.geometryReview !== undefined ? { geometryReview: record.geometryReview } : {}),
+    hasStep: record.hasStep
+  };
+}
+
+/** 工程成为当前工程，也成为最新的电气数据源 */
+function setCurrentProject(project: ProjectMenuRecord): void {
+  lastOpenedProject = project;
+  elecSources.useProject(project);
+  elecSourceChanged();
+}
 
 async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
   if (!window.desktop?.projects) return null;
@@ -1519,6 +1636,8 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     }
     setEmptyVisible(false);
     toggleProjectMenu(false);
+    const project = projectMenuRecordOf(result.record, merged.meshes.length);
+    setCurrentProject(project);
     if (scenePartCount === 0) {
       const reason = webglFallback
         ? '当前环境不支持 WebGL，仅显示解析统计，不能进行 3D 校核'
@@ -1530,17 +1649,7 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
         : '';
       showNotice(`${label} 已载入 · ${merged.stats.triangleCount} 个三角面 · ${geometryKind}${verificationNotice}`, result.record.design !== undefined && result.record.geometryReview?.status !== 'aabb-screened');
     }
-    lastOpenedProject = {
-      id: result.record.id,
-      name: result.record.name,
-      parts: merged.meshes.length,
-      massKg: result.record.massKg,
-      envelope: result.record.envelope,
-      createdAt: result.record.createdAt,
-      partsList: (result.record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name })),
-      params: result.record.params ?? {}
-    };
-    return lastOpenedProject;
+    return project;
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     showNotice(`工程「${result.record.name}」载入失败：${reason}。未确认场景恢复；请用主工具栏“打开 CAD”导入源文件，并在主视口与零件树非空后再校核。`, true);
@@ -1560,12 +1669,12 @@ async function saveProjectToLibrary(input: {
   stepPath: string | null;
   stlPath: string | null;
   partPaths: Array<{ name: string; path: string }>;
-}): Promise<{ ok: boolean; message?: string }> {
+}): Promise<{ ok: boolean; message?: string; record?: DesktopProjectRecordLike }> {
   if (!window.desktop?.projects) return { ok: false, message: '工程库接口不可用' };
   try {
     const saved = await window.desktop.projects.save(input);
     await refreshProjectMenu();
-    return { ok: saved.ok, ...(saved.message ? { message: saved.message } : {}) };
+    return { ok: saved.ok, ...(saved.message ? { message: saved.message } : {}), ...(saved.record ? { record: saved.record } : {}) };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) };
   }
@@ -1840,6 +1949,11 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
       .map((item) => ({ name: item.name, path: item.stl?.path ?? '' }))
       .filter((item) => item.path.length > 0)
   });
+
+  // 视口里已换成这台整机且已入库：它就是当前工程，电气图跟着换（否则电气域还停在上一个工程/方案）
+  if (loadedParts > 0 && savedProject.ok && savedProject.record) {
+    setCurrentProject(projectMenuRecordOf(savedProject.record, loadedParts));
+  }
 
   return {
     ok: true,
@@ -2435,6 +2549,11 @@ function initAgentBridge(): void {
           : null;
         commission.setMachineConfig(source.config ? source.config as MachineConfig : null, layout);
         const config = commission.getMachineConfig();
+        // 电气图要完整方案（BOM 草稿 + 功率），只有 config 时按缺省出图并在图上注明；
+        // config 为空 = 撤销到“没有方案”，退回最近打开的工程
+        if (source.config) elecSources.useMachine(config, source.design);
+        else elecSources.clearMachine(lastOpenedProject);
+        elecSourceChanged();
         return {
           ok: true,
           machine: {
@@ -2444,6 +2563,21 @@ function initAgentBridge(): void {
             actuators: config.actuators.length,
             sensors: config.sensors.length
           }
+        };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
+    getElecDocument: () => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const drawing = buildElecDrawing();
+        if (!drawing) return { ok: false, message: '尚无电气数据源：请应用机型方案或打开工程' };
+        const label = elecSources.label();
+        return {
+          ok: true,
+          document: drawing.document,
+          source: { ...(label ?? {}), project: drawing.project, drawingNo: drawing.drawingNo, pages: drawing.pages.length }
         };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
@@ -3392,11 +3526,14 @@ function init(): void {
     enumerable: false
   });
   initAgentBridge();
+  initElecSourceWiring();
   void window.desktop?.machine?.active?.().then((result) => {
     if (!result?.ok || !result.design || typeof result.design !== 'object') return;
     const config = (result.design as Record<string, unknown>).config;
-    if (config && typeof config === 'object') {
-      commission?.setMachineConfig(config as MachineConfig);
+    if (config && typeof config === 'object' && commission) {
+      commission.setMachineConfig(config as MachineConfig);
+      // 启动恢复 active 方案：电气图同样用完整方案（只在启动期间还没打开别的工程/方案时）
+      if (elecSources.restoreMachine(commission.getMachineConfig(), result.design)) elecSourceChanged();
     }
   }).catch(() => {
     // active 指针缺失或损坏时保持内置样机，不影响启动。

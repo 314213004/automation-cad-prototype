@@ -76,8 +76,14 @@ test('布局：元件变多时自动换行，不靠手调坐标', () => {
   });
   const layout = layoutCircuit(many);
   assert.deepEqual(layout.problems, [], layout.problems.join('; '));
-  const rows = new Set(layout.symbols.filter((s) => s.kind === 'sensor').map((s) => s.y));
-  assert.equal(rows.size, 4);
+  // IEC 竖向电流路径：传感器各占一列（同一行对齐），而不是逐行堆叠
+  const sensors = layout.symbols.filter((s) => s.kind === 'sensor');
+  const cols = new Set(sensors.map((s) => Math.round(s.box.x * 100)));
+  assert.equal(cols.size, 4);
+  assert.equal(new Set(sensors.map((s) => s.y)).size, 1);
+  // 每一列都真的接上了：BN→+24V、BU→0V、BK→PLC 输入
+  const wiring = layout.problems.filter((p) => /PIN_|NET_/.test(p));
+  assert.deepEqual(wiring, []);
 });
 
 test('出图：合格电路 deliverable=true，图里含全部位号', () => {

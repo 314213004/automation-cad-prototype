@@ -987,7 +987,7 @@ export class AgentTools {
 
     this.add({
       name: 'run_electrical_check',
-      description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。',
+      description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。wires/loads/circuits 都不传时校验当前电气图纸（与电气域图纸、电气校验面板同源）。',
       inputSchema: ELEC_CHECK_SCHEMA,
       handler: async (args) => {
         const result = await this.execute('run_electrical_check', args);
@@ -1005,7 +1005,8 @@ export class AgentTools {
           },
           summary: isRecord(data.summary) ? data.summary : {},
           findings: findings.slice(0, 50),
-          truncated: findings.length > 50
+          truncated: findings.length > 50,
+          ...(isRecord(data.source) ? { source: data.source } : {})
         };
       }
     });

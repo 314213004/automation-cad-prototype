@@ -560,6 +560,8 @@ interface AgentBridgeApi {
   getProjectCheckpointFingerprint(): Promise<string | null>;
   getAdvisorState(): import('./agent/advisor').AdvisorProjectState | AgentBridgeFailure;
   markPlcGenerated(): { ok: boolean };
+  /** 当前电气图纸的校验数据（与电气域画布、__ElecDocProvider 同源）；Agent run_electrical_check 不传数据时用 */
+  getElecDocument?(): { ok: true; document: import('./elec/check').ElecDocument; source: Record<string, unknown> } | AgentBridgeFailure;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
