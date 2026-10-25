@@ -768,6 +768,15 @@ export class CadViewer {
   }
 
   getSceneParts(): CadScenePart[] {
+    // 降级模式（无 WebGL / 软件渲染被禁）只建 modelParts，不建 three 网格；
+    // 此时零件数仍应可见，否则 Agent 的 get_bom / get_project_context 会把已打开工程当空。
+    if (this.parts.length === 0 && this.modelParts.length > 0) {
+      return this.modelParts.map((part) => ({
+        name: part.name,
+        triangles: 0,
+        bbox: { min: [...part.bbox.min], max: [...part.bbox.max] }
+      }));
+    }
     return this.parts.map((part) => {
       const box = this.partBounds(part);
       return {

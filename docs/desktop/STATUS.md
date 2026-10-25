@@ -2,11 +2,12 @@
 
 ## 概览
 
-- 基线：`main` 已发布面到 **v0.4.2**（CDP 内网可达、token 生命周期、渲染性能可观测性 + Windows 本地 smoke 入口）；0.4.2 安装包在 Windows 开发机（192.168.2.117）本地构建，未走 CI、未打 tag。
-- 版本：`desktop/package.json` → **0.4.2**；界面缩放 / 3D 渲染质量 / 局域网联调 / CDP 保持默认关闭。
-- 测试：`TZ=Asia/Shanghai npm test` **1842 总计 / 1838 通过 / 0 失败 / 4 跳过**（Windows 无 POSIX 位，`0600` 权限断言跳过；Linux 上 1842/1842）。
-- 构建与冒烟：`npm run build:ext` 通过；fake-sidecar smoke 输出 `SMOKE_OK` 与 `SMOKE_RENDER_STATS_OK`，渲染指标经 IPC → 主进程缓存 → `/health.render` → `get_render_stats` 全链路验证。
-- 评估：`npm run eval:agent` **107/107 通过**，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
+- 基线：`main` 已发布面到 **v0.4.2**（CDP 内网可达、token 生命周期、渲染性能可观测性 + Windows 本地 smoke 入口）；当前 `desktop/package.json` 为 **0.4.9**（电气出图引擎 + 整机设计五步向导），0.4.9 安装包未构建、未打 tag。
+- 版本：`desktop/package.json` → **0.4.9**；界面缩放 / 3D 渲染质量 / 局域网联调 / CDP 保持默认关闭。
+- 测试（2026-10-26 本机 Linux 实跑）：`npx tsc --noEmit` 0 错误；`npm test` **1967 总计 / 1967 通过 / 0 失败 / 0 跳过**。
+- 构建与冒烟：`npm run build:ext` 通过；`xvfb-run npm run smoke` 收尾 `SMOKE_OK`，`SMOKE_DESIGN_WIZARD_OK steps=5`、`_CANDIDATES_OK count=3`、`_LAYOUT_OK placements=13 overlaps=0`、`_SAVE_OK project=Smoke-整机设计`，不再出现 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。
+- 评估：`npm run eval:agent` **109/109 通过**，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`docs/desktop/eval/cases.json` 已覆盖注册表全部工具（含 `build_machine_model` 的 bm01/bm02）。
+- 离线知识索引：`npm run kb:build` → `KB_BUILD_OK docs=13 chunks≈348 bytes≈383 KB`（约占 400 KB 上限的 93.6%，满足单测要求的 5% 余量）。
 - 最近发布：`v0.4.0` NSIS `AutomationCAD-Setup-0.4.0.exe`（约 130 MB，未签名）；上一版 `v0.3.0`。更新通道代码已随模块门控落地，但未做真实签名与跨版本升级验收。
 
 ## 验证记录（本轮真实执行）
@@ -21,6 +22,10 @@
 | `node scripts/lan-debug-probe.mjs` | 在 `test/agent/lan-rpc.test.mjs` 的临时真实 HTTP 服务上完成 health / tools/list / `list_components`，输出 `LAN_DEBUG_OK` |
 | `npm run smoke:win`（Windows） | 通过；85 条 `SMOKE_*_OK` + `SMOKE_OK`，退出码 0（`--disable-gpu` 走 SwiftShader，覆盖无 WebGL 降级面板） |
 | `git diff --check` | 通过（提交前复核） |
+| `npx tsc --noEmit`（2026-10-26 Linux 主线） | 0 错误 |
+| `npm test`（2026-10-26 Linux 主线） | 1967 / 1967 通过，0 失败、0 跳过 |
+| `xvfb-run npm run smoke`（2026-10-26） | 退出码 0，`SMOKE_OK`；5 条 `SMOKE_DESIGN_*` 带具体数字，无 `SCENE_BRIDGE_WARN` |
+| `npm run eval:agent`（2026-10-26） | 109/109；`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00` |
 
 **跨平台行尾修复（2026-10-24）**：Windows 的 `core.autocrlf=true` 把 `packs/builtin/*/parts.json` 检出为 CRLF，`partsSha256` 按 LF 算 → `PACK_INTEGRITY_FAILED`，内置包全挂（CI 18 红）。修复：`assertPartsIntegrity`、`scripts/pack-stats.mjs` 统一 `CRLF→LF` 后取 SHA-256，加 `.gitattributes` 强制 `eol=lf`；回归用例见 `test/packs/lifecycle.test.mjs`。
 
