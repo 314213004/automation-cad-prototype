@@ -80,6 +80,10 @@ import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnost
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
 import { cadImportFailureView, parseCadImportTransaction } from './cad/import-transaction';
 import { initDesignWizard } from './design/wizard-ui.ts';
+import { projectGeometryReviewLabel, reopenedGeometryReviewMessage, type DesignSceneInfo, type ProjectGeometryReview, type SceneGeometrySource } from './design/geometry-review.ts';
+import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLayoutBounds, renderProjectLayoutSvg } from './design/project-layout.ts';
+import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
+import type { Placement } from './enclosure/layout.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -106,6 +110,8 @@ let noticeTimer = 0;
 let worker: Worker | null = null;
 let workerSequence = 0;
 let currentFileName = '';
+let currentSceneSource: SceneGeometrySource = 'empty';
+let currentSceneGeneration = 0;
 let currentProjectIdentity: CadProjectIdentity | null = null;
 let currentProjectStorageKey = `session:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 let currentModelObjectIdentities: CadModelObjectIdentity[] = [];
@@ -126,6 +132,29 @@ type RemovedComponentSnapshot =
 const removedComponentSnapshots = new Map<string, RemovedComponentSnapshot>();
 let removedComponentSequence = 0;
 let lastPlcGeneratedAt = '';
+interface SavedProjectLayoutSession {
+  id: string;
+  name: string;
+  envelope: [number, number, number] | null;
+  placements: Placement[];
+  fingerprint: string;
+  selectedId: string | null;
+  dirty: boolean;
+  saving: boolean;
+  conflict: boolean;
+  invalidInput: boolean;
+  message: string;
+  messageKind: 'saved' | 'pending' | 'error' | 'conflict';
+}
+interface ProjectLayoutPointerDrag {
+  pointerId: number;
+  placementId: string;
+  start: { x: number; y: number };
+  origin: { x: number; y: number };
+  moved: boolean;
+}
+let savedProjectLayoutSession: SavedProjectLayoutSession | null = null;
+let projectLayoutPointerDrag: ProjectLayoutPointerDrag | null = null;
 
 function activatePlcGenUi(manager: ReturnType<typeof createModuleManager>): Promise<PlcGenUiHandle> {
   if (plcGenUi) {
@@ -285,18 +314,50 @@ function buildOverlay(): void {
       </div>
       <pre id="cadProjectArchivePreviewBody"></pre>
     </dialog>
+    <dialog id="cadSavedProjectLayout" class="cad-project-layout-dialog" aria-label="已保存的二维布局">
+      <div id="cadSavedProjectLayoutBody"></div>
+    </dialog>
     <footer class="cad-footer">
       <span id="cadStats">就绪 · <strong>0</strong> 个零件</span>
       <span class="cad-footer-flex"></span>
       <span class="cad-unit-note">单位按源文件 mm 解释 · 未做隐式缩放</span>
     </footer>`;
   document.body.appendChild(root);
+  const savedLayoutDialog = document.getElementById('cadSavedProjectLayout') as HTMLDialogElement | null;
+  savedLayoutDialog?.addEventListener('cancel', (event) => {
+    if (savedProjectLayoutSession?.saving) {
+      event.preventDefault();
+      return;
+    }
+    if ((savedProjectLayoutSession?.dirty || savedProjectLayoutSession?.invalidInput) && !window.confirm('二维布局有未保存或无效输入，确定关闭并丢弃吗？')) event.preventDefault();
+  });
+  savedLayoutDialog?.addEventListener('close', () => {
+    savedProjectLayoutSession = null;
+    projectLayoutPointerDrag = null;
+  });
 
   root.addEventListener('click', (event) => {
     event.stopPropagation();
     if ((event.target as HTMLElement).closest('[data-project-archive-close]')) {
       const preview = document.getElementById('cadProjectArchivePreview') as HTMLDialogElement | null;
       preview?.close();
+      return;
+    }
+    if ((event.target as HTMLElement).closest('[data-project-layout-close]')) {
+      closeSavedProjectLayout();
+      return;
+    }
+    if ((event.target as HTMLElement).closest('[data-layout-save]')) {
+      void saveSavedProjectLayout();
+      return;
+    }
+    if ((event.target as HTMLElement).closest('[data-layout-reload]')) {
+      void reloadSavedProjectLayout();
+      return;
+    }
+    const layoutItem = (event.target as HTMLElement).closest<HTMLElement>('[data-layout-select-placement]');
+    if (layoutItem) {
+      selectSavedProjectLayoutItem(layoutItem.dataset.layoutSelectPlacement ?? '');
       return;
     }
     const domainBtn = (event.target as HTMLElement).closest<HTMLElement>('[data-cad-domain]');
@@ -332,6 +393,14 @@ function buildOverlay(): void {
     const projectToggle = (event.target as HTMLElement).closest<HTMLElement>('[data-project-menu-toggle]');
     if (projectToggle) {
       toggleProjectMenu();
+      return;
+    }
+    const projectLayout = (event.target as HTMLElement).closest<HTMLElement>('[data-project-layout]');
+    if (projectLayout) {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = projectLayout.dataset.projectLayout ?? '';
+      if (id) void openSavedProjectLayout(id);
       return;
     }
     const projectDelete = (event.target as HTMLElement).closest<HTMLElement>('[data-project-delete]');
@@ -405,6 +474,12 @@ function buildOverlay(): void {
       toggleExportMenu();
     } else if (action === 'close') closeOverlay();
   });
+  root.addEventListener('input', handleSavedProjectLayoutInput);
+  root.addEventListener('change', handleSavedProjectLayoutChange);
+  root.addEventListener('pointerdown', handleSavedProjectLayoutPointerDown);
+  root.addEventListener('pointermove', handleSavedProjectLayoutPointerMove);
+  root.addEventListener('pointerup', handleSavedProjectLayoutPointerEnd);
+  root.addEventListener('pointercancel', handleSavedProjectLayoutPointerEnd);
   root.addEventListener('pointerdown', (event) => event.stopPropagation());
   root.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
 }
@@ -871,6 +946,10 @@ interface ProjectMenuRecord {
   partsList?: Array<{ file: string; name: string }>;
   /** 机型参数（生成电气图用） */
   params?: Record<string, number>;
+  /** 存在时表示由五步设计向导保存；其 STL 是概念估算占位几何，不是型号级实体。 */
+  design?: unknown;
+  geometryReview?: ProjectGeometryReview;
+  hasStep?: boolean;
 }
 
 /**
@@ -899,6 +978,14 @@ async function refreshProjectMenu(): Promise<void> {
     .map((record) => {
       const meta = [
         `${record.parts} 件`,
+        record.design !== undefined
+          ? '设计向导概念估算占位体 · 非型号级 CAD'
+          : record.partsList?.length
+            ? '工程逐件 STL'
+            : record.hasStep
+              ? '仅 STEP · 需用“打开 CAD”导入'
+              : '无可装配 3D 网格',
+        record.geometryReview ? projectGeometryReviewLabel(record.geometryReview) : record.design !== undefined ? projectGeometryReviewLabel(undefined) : null,
         record.massKg !== null ? `${record.massKg} kg` : null,
         record.envelope ? `${Math.round(record.envelope[0])}×${Math.round(record.envelope[1])}×${Math.round(record.envelope[2])}` : null,
         formatProjectTime(record.createdAt)
@@ -909,10 +996,395 @@ async function refreshProjectMenu(): Promise<void> {
       return `<div class="cad-project-item" data-project-open="${escapeCadHtml(record.id)}" role="option" tabindex="0">
         <span class="cad-project-name">${escapeCadHtml(record.name)}</span>
         <span class="cad-project-meta">${escapeCadHtml(meta)}</span>
+        <button type="button" class="cad-project-layout-open" data-project-layout="${escapeCadHtml(record.id)}" title="继续编辑工程中保存的二维毫米布局">编辑 2D</button>
         <button type="button" class="cad-project-del" data-project-delete="${escapeCadHtml(record.id)}" title="删除该工程">×</button>
       </div>`;
     })
     .join('');
+}
+
+async function openSavedProjectLayout(id: string): Promise<void> {
+  if (!window.desktop?.projects) return;
+  try {
+    const result = await window.desktop.projects.open(id);
+    if (!result.ok || !result.record) {
+      showNotice(result.message ?? '读取工程布局失败', true);
+      return;
+    }
+    if (!result.layoutEditable || !result.layoutFingerprint) {
+      showNotice(result.layoutMessage ?? `工程「${result.record.name}」没有可编辑的二维布局`, true);
+      return;
+    }
+    const dialog = document.getElementById('cadSavedProjectLayout') as HTMLDialogElement | null;
+    if (!dialog) return;
+    savedProjectLayoutSession = {
+      id,
+      name: result.record.name,
+      envelope: result.record.envelope,
+      placements: (result.placements ?? []).map((item) => ({ ...item })),
+      fingerprint: result.layoutFingerprint,
+      selectedId: result.placements?.[0]?.id ?? null,
+      dirty: false,
+      saving: false,
+      conflict: false,
+      invalidInput: false,
+      message: result.placements?.length ? '已从工程文件载入，可点选、拖动或输入精确毫米坐标' : '工程布局为空；可在设计向导中保存布局后再继续编辑',
+      messageKind: 'saved'
+    };
+    renderSavedProjectLayoutDialog();
+    toggleProjectMenu(false);
+    if (!dialog.open) dialog.showModal();
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+function renderSavedProjectLayoutDialog(): void {
+  const session = savedProjectLayoutSession;
+  const body = document.getElementById('cadSavedProjectLayoutBody');
+  if (!session || !body) return;
+  const placements = session.placements;
+  const bounds = projectLayoutBounds(placements, session.envelope);
+  const validation = buildProjectLayoutValidationView(placements, session.envelope);
+  const selected = placements.find((item) => item.id === session.selectedId) ?? null;
+  const drawing = renderProjectLayoutSvg(placements, bounds, 1100, 620, {
+    interactive: true,
+    selectedId: session.selectedId,
+    projectEnvelope: session.envelope,
+    validation
+  });
+  const options = placements.map((item) => `<option value="${escapeCadHtml(item.id)}"${item.id === session.selectedId ? ' selected' : ''}>${escapeCadHtml(item.model || item.id)} · ${escapeCadHtml(item.id)}</option>`).join('');
+  const rows = placements.map((item) => {
+    const row = validation.rows.find((entry) => entry.id === item.id);
+    return `<li><button type="button" data-layout-select-placement="${escapeCadHtml(item.id)}"${item.id === session.selectedId ? ' aria-current="true"' : ''}><strong>${escapeCadHtml(item.model || item.id)}</strong><em data-layout-item-status="${escapeCadHtml(item.id)}" data-state="${row?.status ?? 'valid'}">${escapeCadHtml(row?.label ?? '正常')}</em><span>${escapeCadHtml(item.tag ?? (item.id.startsWith('station:') ? '工位' : '元件'))} · X ${item.x} / Y ${item.y} mm · ${item.w} × ${item.h} mm</span></button></li>`;
+  }).join('');
+  const selectedFields = selected
+    ? `<div class="cad-project-layout-coordinate-fields"><label>X 坐标（mm）<input type="number" step="any" min="-${MAX_PROJECT_LAYOUT_COORDINATE}" max="${MAX_PROJECT_LAYOUT_COORDINATE}" data-layout-coordinate="x" aria-label="${escapeCadHtml(selected.model)} X 坐标毫米" value="${selected.x}"></label><label>Y 坐标（mm）<input type="number" step="any" min="-${MAX_PROJECT_LAYOUT_COORDINATE}" max="${MAX_PROJECT_LAYOUT_COORDINATE}" data-layout-coordinate="y" aria-label="${escapeCadHtml(selected.model)} Y 坐标毫米" value="${selected.y}"></label></div>`
+    : '<p class="cad-project-layout-empty">当前工程没有保存的布局项。</p>';
+  body.innerHTML = `<header class="cad-project-layout-head"><div><h2>${escapeCadHtml(session.name)} · 二维布局编辑</h2><p>已保存工程 · ${placements.length} 项 · ${Math.round(bounds.width)} × ${Math.round(bounds.height)} mm</p></div><div class="cad-project-layout-actions"><span data-layout-save-status role="status" aria-live="polite"></span><button type="button" class="cad-project-layout-save" data-layout-save>保存布局</button><button type="button" class="cad-project-archive-close" data-project-layout-close aria-label="关闭二维布局">×</button></div></header><p class="cad-project-layout-note">点选画布或右侧列表，再拖动布局项或输入精确 X/Y 毫米坐标；完成后点击“保存布局”。这里只更新工程 design.json 中现有 placements，不影响向导全局草稿、3D 模型或 STL。</p><p class="cad-project-layout-safety" role="note"><strong>工程语义说明：</strong>矩形宽高是示意卡片尺寸；毫米坐标只表示二维预排布，不代表组件实际外形、安装包络或三维几何。若显示绿色虚线，它是项目级二维边界参考，并非元件安装基准或组件外形。</p><div class="cad-project-layout-validation" data-layout-validation role="status" aria-live="polite" data-state="${validation.state}">${validation.messages.map(escapeCadHtml).join('<br>')}</div><div class="cad-project-layout-workspace"><div class="cad-project-layout-canvas" aria-label="二维布局画布">${drawing.markup}</div><aside class="cad-project-layout-editor"><label class="cad-project-layout-select-label">布局项<select data-layout-select aria-label="选择要编辑的布局项"${placements.length === 0 || session.conflict ? ' disabled' : ''}>${options}</select></label>${selectedFields}<p class="cad-project-layout-hint">坐标单位为 mm。拖动按画布比例移动；可在上方输入框微调。不会自动移动其它项目。</p><div class="cad-project-layout-reload-wrap"><button type="button" data-layout-reload hidden>重新载入最新布局（丢弃本地未保存修改）</button></div><ol class="cad-project-layout-list">${rows}</ol></aside></div>`;
+  updateSavedProjectLayoutControls();
+}
+
+function updateSavedProjectLayoutControls(): void {
+  const session = savedProjectLayoutSession;
+  const body = document.getElementById('cadSavedProjectLayoutBody');
+  if (!session || !body) return;
+  const status = body.querySelector<HTMLElement>('[data-layout-save-status]');
+  if (status) {
+    status.textContent = session.message;
+    status.dataset.state = session.messageKind;
+  }
+  const save = body.querySelector<HTMLButtonElement>('[data-layout-save]');
+  if (save) {
+    const validation = buildProjectLayoutValidationView(session.placements, session.envelope);
+    save.disabled = !session.dirty || session.saving || session.conflict || session.invalidInput || session.placements.length === 0 || validation.saveBlockReason !== null;
+    save.textContent = session.saving ? '正在保存…' : '保存布局';
+  }
+  const close = body.querySelector<HTMLButtonElement>('[data-project-layout-close]');
+  if (close) close.disabled = session.saving;
+  const reload = body.querySelector<HTMLButtonElement>('[data-layout-reload]');
+  if (reload) reload.hidden = !session.conflict;
+  for (const input of body.querySelectorAll<HTMLInputElement>('[data-layout-coordinate]')) {
+    input.disabled = session.saving || session.conflict;
+  }
+  for (const control of body.querySelectorAll<HTMLButtonElement>('[data-layout-select-placement]')) {
+    control.disabled = session.saving || session.conflict;
+  }
+}
+
+function renderSavedProjectLayoutCanvas(): void {
+  const session = savedProjectLayoutSession;
+  const canvas = document.querySelector<HTMLElement>('#cadSavedProjectLayoutBody .cad-project-layout-canvas');
+  if (!session || !canvas) return;
+  const bounds = projectLayoutBounds(session.placements, session.envelope);
+  const validation = buildProjectLayoutValidationView(session.placements, session.envelope);
+  canvas.innerHTML = renderProjectLayoutSvg(session.placements, bounds, 1100, 620, {
+    interactive: true,
+    selectedId: session.selectedId,
+    projectEnvelope: session.envelope,
+    validation
+  }).markup;
+}
+
+function updateSavedProjectLayoutValidation(): void {
+  const session = savedProjectLayoutSession;
+  const body = document.getElementById('cadSavedProjectLayoutBody');
+  if (!session || !body) return;
+  const validation = buildProjectLayoutValidationView(session.placements, session.envelope);
+  const summary = body.querySelector<HTMLElement>('[data-layout-validation]');
+  if (summary) {
+    summary.dataset.state = validation.state;
+    summary.innerHTML = validation.messages.map(escapeCadHtml).join('<br>');
+  }
+  for (const row of validation.rows) {
+    const badge = Array.from(body.querySelectorAll<HTMLElement>('[data-layout-item-status]'))
+      .find((item) => item.dataset.layoutItemStatus === row.id);
+    if (badge) {
+      badge.dataset.state = row.status;
+      badge.textContent = row.label;
+    }
+  }
+  const svg = body.querySelector<SVGSVGElement>('.cad-project-layout-canvas svg');
+  if (!svg) return;
+  for (const group of svg.querySelectorAll<SVGGElement>('[data-layout-placement]')) {
+    const status = projectLayoutItemStatus(validation, group.dataset.layoutPlacement ?? '');
+    group.dataset.layoutState = status;
+    const rect = group.querySelector('rect');
+    if (!rect) continue;
+    const outside = status === 'out-of-bounds' || status === 'overlap-and-out-of-bounds';
+    const overlap = status === 'overlap' || status === 'overlap-and-out-of-bounds' || status === 'overlap-unchecked';
+    const station = group.dataset.layoutPlacement?.startsWith('station:') === true;
+    rect.setAttribute('fill', outside ? '#d9484144' : overlap ? '#ed9c273e' : station ? '#5aa5d833' : '#e0a34144');
+    rect.setAttribute('stroke', outside ? '#e15b50' : overlap ? '#e59a22' : group.dataset.layoutSelected === 'true' ? '#007f73' : station ? '#2778a9' : '#b7791f');
+  }
+}
+
+function selectSavedProjectLayoutItem(id: string): void {
+  const session = savedProjectLayoutSession;
+  if (!session || session.conflict || session.saving || !session.placements.some((item) => item.id === id)) return;
+  session.selectedId = id;
+  renderSavedProjectLayoutDialog();
+}
+
+function handleSavedProjectLayoutInput(event: Event): void {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  const session = savedProjectLayoutSession;
+  const axis = input?.dataset.layoutCoordinate;
+  if (!session || !input || (axis !== 'x' && axis !== 'y')) return;
+  if (session.conflict || session.saving) return;
+  const selected = session.placements.find((item) => item.id === session.selectedId);
+  if (!selected) return;
+  const body = document.getElementById('cadSavedProjectLayoutBody');
+  const xInput = body?.querySelector<HTMLInputElement>('[data-layout-coordinate="x"]');
+  const yInput = body?.querySelector<HTMLInputElement>('[data-layout-coordinate="y"]');
+  if (!xInput || !yInput) return;
+  const x = xInput.value.trim() === '' ? Number.NaN : xInput.valueAsNumber;
+  const y = yInput.value.trim() === '' ? Number.NaN : yInput.valueAsNumber;
+  const candidate = { ...selected, x, y };
+  if (!isValidProjectLayoutGeometry(candidate)) {
+    session.invalidInput = true;
+    session.message = `坐标无效；X/Y 与项目外沿须在 ±${MAX_PROJECT_LAYOUT_COORDINATE.toLocaleString()} mm 范围内，宽高须为正数`;
+    session.messageKind = 'error';
+    input.setCustomValidity(session.message);
+    updateSavedProjectLayoutControls();
+    return;
+  }
+  xInput.setCustomValidity('');
+  yInput.setCustomValidity('');
+  session.invalidInput = false;
+  if (selected.x !== x || selected.y !== y) {
+    selected.x = x;
+    selected.y = y;
+    session.dirty = true;
+    session.message = '有未保存更改';
+    session.messageKind = 'pending';
+  } else if (session.messageKind === 'error') {
+    session.message = session.dirty ? '有未保存更改' : '已保存';
+    session.messageKind = session.dirty ? 'pending' : 'saved';
+  }
+  renderSavedProjectLayoutCanvas();
+  updateSavedProjectLayoutListPosition(selected);
+  updateSavedProjectLayoutValidation();
+  updateSavedProjectLayoutControls();
+}
+
+function handleSavedProjectLayoutChange(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement) || target.dataset.layoutSelect === undefined) return;
+  selectSavedProjectLayoutItem(target.value);
+}
+
+function projectLayoutSvgPoint(svg: SVGSVGElement, clientX: number, clientY: number): { x: number; y: number } | null {
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const point = svg.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  const mapped = point.matrixTransform(matrix.inverse());
+  return Number.isFinite(mapped.x) && Number.isFinite(mapped.y) ? { x: mapped.x, y: mapped.y } : null;
+}
+
+function handleSavedProjectLayoutPointerDown(event: PointerEvent): void {
+  const session = savedProjectLayoutSession;
+  if (!session || session.saving || session.conflict || event.button !== 0 || !(event.target instanceof Element)) return;
+  const group = event.target.closest<SVGGElement>('[data-layout-placement]');
+  const svg = group?.ownerSVGElement;
+  const id = group?.dataset.layoutPlacement;
+  const placement = session.placements.find((item) => item.id === id);
+  if (!group || !svg || !placement) return;
+  const start = projectLayoutSvgPoint(svg, event.clientX, event.clientY);
+  if (!start) return;
+  event.preventDefault();
+  projectLayoutPointerDrag = {
+    pointerId: event.pointerId,
+    placementId: placement.id,
+    start,
+    origin: { x: placement.x, y: placement.y },
+    moved: false
+  };
+  try { svg.setPointerCapture(event.pointerId); } catch { /* 捕获失败时仍允许常规点选 */ }
+}
+
+function handleSavedProjectLayoutPointerMove(event: PointerEvent): void {
+  const drag = projectLayoutPointerDrag;
+  const session = savedProjectLayoutSession;
+  const svg = document.querySelector<SVGSVGElement>('#cadSavedProjectLayoutBody .cad-project-layout-canvas svg');
+  if (!drag || !session || !svg || drag.pointerId !== event.pointerId) return;
+  const point = projectLayoutSvgPoint(svg, event.clientX, event.clientY);
+  if (!point) return;
+  const x = Math.round((drag.origin.x + point.x - drag.start.x) * 100) / 100;
+  const y = Math.round((drag.origin.y + point.y - drag.start.y) * 100) / 100;
+  const placement = session.placements.find((item) => item.id === drag.placementId);
+  if (!placement) return;
+  const candidate = { ...placement, x, y };
+  if (!isValidProjectLayoutGeometry(candidate)) {
+    session.message = '已到达坐标范围上限，画布保留最后一个有效位置';
+    session.messageKind = 'pending';
+    updateSavedProjectLayoutControls();
+    return;
+  }
+  if (placement.x === x && placement.y === y) return;
+  placement.x = x;
+  placement.y = y;
+  drag.moved = true;
+  session.selectedId = placement.id;
+  session.dirty = true;
+  session.message = '有未保存更改';
+  session.messageKind = 'pending';
+  const group = svg.querySelector<SVGGElement>(`[data-layout-placement="${CSS.escape(placement.id)}"]`);
+  group?.setAttribute('transform', `translate(${x - drag.origin.x} ${y - drag.origin.y})`);
+  const xInput = document.querySelector<HTMLInputElement>('#cadSavedProjectLayoutBody [data-layout-coordinate="x"]');
+  const yInput = document.querySelector<HTMLInputElement>('#cadSavedProjectLayoutBody [data-layout-coordinate="y"]');
+  if (xInput) xInput.value = String(x);
+  if (yInput) yInput.value = String(y);
+  updateSavedProjectLayoutListPosition(placement);
+  updateSavedProjectLayoutValidation();
+  updateSavedProjectLayoutControls();
+}
+
+function updateSavedProjectLayoutListPosition(placement: Placement): void {
+  const list = document.querySelector<HTMLElement>('#cadSavedProjectLayoutBody .cad-project-layout-list');
+  if (!list) return;
+  const button = Array.from(list.querySelectorAll<HTMLButtonElement>('[data-layout-select-placement]'))
+    .find((item) => item.dataset.layoutSelectPlacement === placement.id);
+  const position = button?.querySelector<HTMLElement>('span');
+  if (position) position.textContent = `${placement.tag ?? (placement.id.startsWith('station:') ? '工位' : '元件')} · X ${placement.x} / Y ${placement.y} mm · ${placement.w} × ${placement.h} mm`;
+}
+
+function handleSavedProjectLayoutPointerEnd(event: PointerEvent): void {
+  const drag = projectLayoutPointerDrag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  projectLayoutPointerDrag = null;
+  if (drag.moved) {
+    renderSavedProjectLayoutDialog();
+  } else {
+    selectSavedProjectLayoutItem(drag.placementId);
+  }
+}
+
+async function saveSavedProjectLayout(): Promise<void> {
+  const session = savedProjectLayoutSession;
+  if (!session || !window.desktop?.projects || !session.dirty || session.saving || session.conflict || session.invalidInput) return;
+  const validation = buildProjectLayoutValidationView(session.placements, session.envelope);
+  if (validation.saveBlockReason !== null) {
+    session.message = validation.saveBlockReason === 'unknown-envelope'
+      ? '项目包络未知，无法安全校验边界；未保存，请先补全工程包络'
+      : `布局有 ${validation.outOfBounds.length} 项越界；未保存，请调整到项目包络内`;
+    session.messageKind = 'error';
+    updateSavedProjectLayoutControls();
+    return;
+  }
+  const overlapConfirmed = validation.overlaps.length === 0 || window.confirm(projectLayoutOverlapConfirmation(validation, session.placements));
+  if (!canSaveProjectLayout(validation, overlapConfirmed)) {
+    session.message = '保存已取消；本地修改仍保留，重叠布局尚未确认';
+    session.messageKind = 'pending';
+    updateSavedProjectLayoutControls();
+    return;
+  }
+  if (session.placements.some((item) => !isValidProjectLayoutGeometry(item))) {
+    session.message = '布局坐标无效，未保存';
+    session.messageKind = 'error';
+    session.invalidInput = true;
+    updateSavedProjectLayoutControls();
+    return;
+  }
+  session.saving = true;
+  session.message = '正在保存工程布局…';
+  session.messageKind = 'pending';
+  updateSavedProjectLayoutControls();
+  try {
+    const result = await window.desktop.projects.saveLayout({
+      id: session.id,
+      fingerprint: session.fingerprint,
+      placements: session.placements.map((item) => ({ ...item }))
+    });
+    session.saving = false;
+    if (!result.ok) {
+      session.conflict = result.conflict === true;
+      session.message = result.message ?? '布局保存失败；本地修改仍保留';
+      session.messageKind = session.conflict ? 'conflict' : 'error';
+      updateSavedProjectLayoutControls();
+      return;
+    }
+    if (!result.fingerprint) {
+      session.message = '文件已写入，但未收到新的布局版本指纹；请重新打开工程确认';
+      session.messageKind = 'error';
+      session.dirty = true;
+      updateSavedProjectLayoutControls();
+      return;
+    }
+    session.fingerprint = result.fingerprint;
+    session.dirty = false;
+    session.conflict = false;
+    session.message = `已保存 · ${new Date().toLocaleTimeString()}`;
+    session.messageKind = 'saved';
+    renderSavedProjectLayoutDialog();
+  } catch (error) {
+    session.saving = false;
+    session.message = `保存失败：${error instanceof Error ? error.message : String(error)}；本地修改仍保留`;
+    session.messageKind = 'error';
+    updateSavedProjectLayoutControls();
+  }
+}
+
+async function reloadSavedProjectLayout(): Promise<void> {
+  const session = savedProjectLayoutSession;
+  if (!session || !window.desktop?.projects || !session.conflict) return;
+  try {
+    const result = await window.desktop.projects.open(session.id);
+    if (!result.ok || !result.record || !result.layoutEditable || !result.layoutFingerprint) {
+      session.message = result.layoutMessage ?? result.message ?? '重新载入失败；本地更改仍保留';
+      session.messageKind = 'error';
+      updateSavedProjectLayoutControls();
+      return;
+    }
+    savedProjectLayoutSession = {
+      id: session.id,
+      name: result.record.name,
+      envelope: result.record.envelope,
+      placements: (result.placements ?? []).map((item) => ({ ...item })),
+      fingerprint: result.layoutFingerprint,
+      selectedId: result.placements?.[0]?.id ?? null,
+      dirty: false,
+      saving: false,
+      conflict: false,
+      invalidInput: false,
+      message: '已载入最新工程布局',
+      messageKind: 'saved'
+    };
+    renderSavedProjectLayoutDialog();
+  } catch (error) {
+    session.message = `重新载入失败：${error instanceof Error ? error.message : String(error)}；本地更改仍保留`;
+    session.messageKind = 'error';
+    updateSavedProjectLayoutControls();
+  }
+}
+
+function closeSavedProjectLayout(): void {
+  const session = savedProjectLayoutSession;
+  if (session?.saving) return;
+  if ((session?.dirty || session?.invalidInput) && !window.confirm('二维布局有未保存或无效输入，确定关闭并丢弃吗？')) return;
+  (document.getElementById('cadSavedProjectLayout') as HTMLDialogElement | null)?.close();
 }
 
 function formatProjectTime(value: string): string {
@@ -1012,7 +1484,10 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
   }
   const items = result.partPaths ?? [];
   if (items.length === 0) {
-    showNotice('工程里没有零件网格，可能只保存了 STEP', true);
+    const nextStep = result.stepPath
+      ? '请点主工具栏“打开 CAD”，选择该工程目录里的 model.step；确认视口与零件树已载入且非空后再校核。'
+      : '请重新导入源 CAD，或从设计向导保存包含逐件 STL 的工程；确认视口与零件树非空后再校核。';
+    showNotice(`工程「${result.record.name}」没有可装配的逐件 STL，当前视口未由本次打开操作恢复。${nextStep}`, true);
     return null;
   }
   try {
@@ -1024,7 +1499,15 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     const merged = await parseStandardCadBuffers(buffers, 'STL');
     const label = `${result.record.name}（${merged.meshes.length} 件）`;
     openOverlay();
-    ensureViewer().load(merged, label);
+    const currentViewer = ensureViewer();
+    currentViewer.load(merged, label);
+    const scenePartCount = currentViewer.getSceneParts().length;
+    currentSceneSource = result.record.design !== undefined ? 'concept-placeholder' : 'saved-model';
+    currentSceneGeneration += 1;
+    const webglFallback = document.getElementById('cadWebglFallback');
+    const geometryKind = result.record.design !== undefined
+      ? '设计向导概念估算占位体（非型号级 CAD）'
+      : '工程逐件 STL 网格';
     currentFileName = label;
     displayFileInfo(label);
     const partCount = document.getElementById('cadPartCount');
@@ -1036,7 +1519,17 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     }
     setEmptyVisible(false);
     toggleProjectMenu(false);
-    showNotice(`${label} 已载入 · ${merged.stats.triangleCount} 个三角面`, false);
+    if (scenePartCount === 0) {
+      const reason = webglFallback
+        ? '当前环境不支持 WebGL，仅显示解析统计，不能进行 3D 校核'
+        : '主视口没有可校核的 3D 零件，场景恢复未确认';
+      showNotice(`${label} 已解析 ${merged.stats.meshCount} 个网格（${geometryKind}），但${reason}；请在支持 WebGL 的环境重新载入，并确认主视口与零件树非空后再校核。`, true);
+    } else {
+      const verificationNotice = result.record.design !== undefined
+        ? ` · ${reopenedGeometryReviewMessage(result.record.geometryReview)}`
+        : '';
+      showNotice(`${label} 已载入 · ${merged.stats.triangleCount} 个三角面 · ${geometryKind}${verificationNotice}`, result.record.design !== undefined && result.record.geometryReview?.status !== 'aabb-screened');
+    }
     lastOpenedProject = {
       id: result.record.id,
       name: result.record.name,
@@ -1049,7 +1542,8 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     };
     return lastOpenedProject;
   } catch (error) {
-    showNotice(error instanceof Error ? error.message : String(error), true);
+    const reason = error instanceof Error ? error.message : String(error);
+    showNotice(`工程「${result.record.name}」载入失败：${reason}。未确认场景恢复；请用主工具栏“打开 CAD”导入源文件，并在主视口与零件树非空后再校核。`, true);
     return null;
   }
 }
@@ -1196,6 +1690,8 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
       nextModelObjectIdentities = [];
     }
     currentFileName = name;
+    currentSceneSource = 'imported-model';
+    currentSceneGeneration += 1;
     currentProjectIdentity = nextIdentity;
     currentProjectStorageKey = nextStorageKey;
     currentModelObjectIdentities = nextModelObjectIdentities;
@@ -1311,6 +1807,8 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
       openOverlay();
       ensureViewer().load(merged, label);
       currentFileName = label;
+      currentSceneSource = 'saved-model';
+      currentSceneGeneration += 1;
       displayFileInfo(label);
       const partCount = document.getElementById('cadPartCount');
       if (partCount) partCount.textContent = String(merged.stats.meshCount);
@@ -1443,6 +1941,14 @@ async function chooseAndImport(): Promise<void> {
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), true);
   }
+}
+
+async function importCadForDesign(): Promise<boolean> {
+  const generation = currentSceneGeneration;
+  await chooseAndImport();
+  const imported = currentSceneGeneration > generation && currentSceneSource === 'imported-model';
+  if (imported) closeOverlay();
+  return imported;
 }
 
 function createPortableProjectExportSnapshot(): DesktopProjectExportSnapshot | null {
@@ -2668,6 +3174,8 @@ function init(): void {
   const designWizard = initDesignWizard({
     onSaved: async () => { await refreshProjectMenu(); },
     openProject: async (id) => { await openSavedProject(id); },
+    sceneInfo: (): DesignSceneInfo => ({ source: currentSceneSource, ...(currentFileName ? { sourceName: currentFileName } : {}) }),
+    importCad: importCadForDesign,
     notify: showNotice
   });
   window.desktop?.onNewDesign(() => designWizard.open());

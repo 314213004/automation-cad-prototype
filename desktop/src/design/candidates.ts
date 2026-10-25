@@ -2,11 +2,12 @@
 // 节拍、功率、成本、BOM 全部继续调用 synthMachine，与 Agent design_machine 同源。
 
 import type { MachineBrief } from '../machine/spec.ts';
-import type { SynthOptions, MachineDesign } from '../machine/synth.ts';
+import type { SynthOptions, MachineDesign, MachineStationCycleInput } from '../machine/synth.ts';
 import { synthMachine } from '../machine/synth.ts';
 import { MACHINE_FORMS, rankForms, PROCESS_BASE_SECONDS, ACTUATOR_SECONDS } from '../machine/forms.ts';
 import type { FlowEvaluation, FlowModel, FlowOp } from '../machine/flow.ts';
 import { evaluateFlow } from '../machine/flow.ts';
+import type { StationCycleAssessment } from './station-cycle.ts';
 
 function linearFormId(stations: number): string {
   if (stations <= 4) return 'linear-4';
@@ -128,4 +129,40 @@ function inferProcess(design: MachineDesign): keyof typeof PROCESS_BASE_SECONDS 
 
 export function reevaluateCandidateCycle(design: MachineDesign): FlowEvaluation {
   return evaluateFlow(flowModelForDesign(design));
+}
+
+/** 将校核的实时节拍回写到工程模型，供向导展示和保存共用。 */
+export function withReviewedCycle(design: MachineDesign, evaluation: FlowEvaluation | StationCycleAssessment): MachineDesign {
+  const stationSeconds = Math.round(evaluation.stationSecondsMax * 1000) / 1000;
+  const throughputPerMin = Math.round(evaluation.throughputPerMin * 100) / 100;
+  const requiredTotalStations = Number.isFinite(evaluation.requiredStations) ? evaluation.requiredStations : 0;
+  const requiredParallelStations = evaluation.mode === 'parallel'
+    ? requiredTotalStations
+    : Math.max(1, Math.ceil(requiredTotalStations / design.config.stations.length));
+  const slowestStation = (evaluation.bottleneck?.station ?? 0) + 1;
+  const meetsTarget = evaluation.meetsTarget === true;
+  const bottleneck = evaluation.bottleneck
+    ? `工位${slowestStation} ${evaluation.bottleneck.op}（${evaluation.bottleneck.seconds.toFixed(2)} 秒）`
+    : '无关键工序';
+  const cycleSource = 'source' in evaluation ? evaluation.source : 'model-estimate';
+  const stationCycleInputs: MachineStationCycleInput[] = 'stationCycleInputs' in evaluation ? evaluation.stationCycleInputs : [];
+  return {
+    ...design,
+    cycle: {
+      ...design.cycle,
+      mode: evaluation.mode,
+      source: cycleSource,
+      stationCycleInputs,
+      stationSeconds,
+      throughputPerMin,
+      partsPerMinute: throughputPerMin,
+      estimatedSecondsPerPiece: stationSeconds,
+      slowestStation,
+      slowestActionSeconds: Math.round(Math.max(0, stationSeconds - design.cycle.baseSeconds) * 1000) / 1000,
+      requiredParallelStations,
+      requiredTotalStations,
+      meetsTarget,
+      bottleneck: `${bottleneck} → ${throughputPerMin.toFixed(2)} 件/分钟（目标 ${design.cycle.perMin} 件/分钟${meetsTarget ? '，达标' : '，未达标'}）`
+    }
+  };
 }

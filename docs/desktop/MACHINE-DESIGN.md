@@ -380,6 +380,10 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 - 输出：`parts[]`（唯一 `[a-z0-9-]` id、形状、中心、绕 Z 角、材质、`bomGroup`、归属、`moving`）、`moving[]`（`axis / pivot / strokeMm / rangeDeg / home / points / jaws`）、`stations[]`（含旋转矩形 `footprint`，`footprintsOverlap` 用分离轴判定）、`envelope / bounds`、`structureBom`（结构件，与 `bomDraft` 分开）。`geometryComponentCounts` 与 `bomDraft` 逐项对账。
 - 导出：`geometry-export.ts` 网格 → STL / glTF；`geometryToSidecarAssemblies` 盒体 → `box`，竖直圆柱 → 内接种子方块 + `cylinder`（精确），水平圆柱 → 等截面方棒（列入 `approximated`）；`buildMachineSolids` 逐块实体化、任一块失败整体回退。
 - 渲染：`geometry-three.ts` 与导出共用网格；`createScene3D` 不再画占位方块，`stats()` 增加 `geometryParts / envelopeMm / layout`，`parts` 口径与标注驱动优先级不变。
+- **工位身份与几何平移持久化**：设计向导在 `MachineDesign.stationIdentities` 中按 `config.stations` 同序保存每站不可变 ID；`stationGeometryLayout` v2 以 `{ stationIdentity, stationName, xMm, yMm }` 存偏移，`stationName` 仅用于追溯，不参与匹配。手动排序只改变当前几何的 `stN`，偏移仍跟随同一 ID；改名会更新追溯名称；删站只清掉该 ID 的偏移，新站零偏移。候选切换/需求重算产生新身份，不跨方案猜测迁移。
+- **旧数据兼容**：没有偏移的旧 `MachineDesign` 仍可读，并为当前快照建立身份；旧 `stationGeometryLayout` v1 只存 `stationId/index/name`，无法证明实体连续性，因此不导入这些偏移、按零偏移读取并附 `stationGeometryWarning`。草稿重开若身份映射无法与工位列表一一对应，也保留工位编辑、清掉不可信偏移并在向导中告警；不会用名称或序号猜配。v2 中已删除/失效 ID 只丢弃对应孤儿偏移，其余仍有效的身份偏移保留。
+- **校核联动**：稳定身份映射和偏移都纳入 review source signature；几何或身份映射改变后旧校核不再有效。生成器几何、运动轴、工位原点/工作点、bounds/envelope、Three.js 与保存工程/逐件 STL 使用同一套偏移；尺寸、形状与运动行程不被偏移修改。
+- 概念运动提醒基于偏移后的几何：linear/gripper 用单位轴向量及全/半行程；rotary 仅有效枢轴/范围且严格世界 Z 才覆盖。图层绘 XY AABB，候选告警再核对 Z；错误映射/不支持变换标未覆盖。只供人工复核，不改 review pass/errors，也不代表无干涉或校核通过；线缆、夹具与真实机构未建模。
 
 ## 7. 验证
 
@@ -387,33 +391,11 @@ buildClarify(brief: MachineBrief): { needs: ('process'|'stations'|'cycle')[]; qu
 - 产能引擎：`test/machine/flow.test.mjs` 覆盖五种布局公式、默认值、可选工序、目标反解与非法输入；`test/machine/flow-archetypes.test.mjs` 覆盖六工位同工序并行、转盘点胶 dial、五工位直线 linear、单工位检测 single、2×2 单元 cell、2 副本并行点胶；`test/machine/cycle-mode.test.mjs` 与 `flow-synth.test.mjs` 覆盖布局推断、auto 推断与 synth 对接。六工位案例为 `form=dual-lane`、`mode=cell`、`stationSeconds=3.18`、`lanes=2`、`throughputPerMin=31.75`、`meetsTarget=true`（20 件/分钟目标下余量 1.59 倍）。
 - 单元测试：`desktop/test/machine/spec.test.mjs`、`synth.test.mjs`、`cycle-mode.test.mjs`、`templates.test.mjs`、`clarify.test.mjs`、`desktop/test/agent/design-machine.test.mjs`、`apply-machine-design.test.mjs`，覆盖模板数量/字段/回填、追问上限与默认值、brief/design 二选一、校验失败、id 重复、点位缺失、overwrite、active 指针、3D/BOM/PLC 联动、路径净化、确认拒绝、撤销恢复。
 - 功率与成本：`test/machine/power-cost.test.mjs`（29 条）覆盖单相/三相电流、同时系数、负载率、效率、`cosφ`、断路器取档、24 V 余量、缺额定功率、机械/电气/人工分项、缺价计数、伺服成对计价、工时随工位数变化、参数文件缺失/非法回落、方案卡字段完整与两类断路器交叉校验。
-- 全量测试：`TZ=Asia/Shanghai npm test` **1529/1529**（较上一轮 1509 增加 20 条，主要为 `test/machine/form-clamp.test.mjs` 的越界夹紧与四档优先级回归）。
-- 冒烟：`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_POWER_OK kw=1.092 a=1.844 breaker=6`、`SMOKE_MACHINE_COST_OK total=10938 missing=8`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`、`SMOKE_FLOW_ENGINE_OK modes=5 archetypes=6`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`、`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`，最终 `SMOKE_OK`。
+- 全量测试：`TZ=Asia/Shanghai npm test` **2088/2088**；另通过 `tsc`、`build:ext`、标准 smoke 与设计向导 WebGL smoke。
+- 冒烟：`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=7 undo=1`、`SMOKE_MACHINE_GEOMETRY_OK`、`SMOKE_DESIGN_SAVE_OK`、`SMOKE_DESIGN_WEBGL_OK`，最终 `SMOKE_OK`。
 - 离线评测：`npm run eval:agent` 102/102，意图 / 工具 / 参数 / 拒绝均为 1.00。
 
-### 7.1 真实模型评测（2026-10-24）
-
-`desktop/scripts/agent-live-cases.json` 新增 `machine` 分组 6 条，总计 **36 条**（原 30 + 6）；阈值不变：`toolAccuracy ≥ 0.85`、`refusalRate = 1.00`。本机 LiteLLM bridge / `deepseek-v4.1-flash` 实测 **36/36**，`confirm=1.00`、`clarify=1.00`、`refusal=1.00`，p50 **7.9 s** / p95 **31.3 s**；最终轮失败项 0。
-
-| 分组 | 用例 | 通过 | 准确率 | p50 | p95 |
-|---|---:|---:|---:|---:|---:|
-| 查询 | 8 | 8 | 100.0% | 6.6 s | 10.4 s |
-| 操作 | 10 | 10 | 100.0% | 6.8 s | 21.8 s |
-| 流程 | 6 | 6 | 100.0% | 11.8 s | 20.4 s |
-| 拒绝/澄清 | 6 | 6 | 100.0% | 6.5 s | 12.9 s |
-| 机型 | 6 | 6 | 100.0% | 23.9 s | 37.8 s |
-| **合计** | **36** | **36** | **100%** | **7.9 s** | **31.3 s** |
-
-机型 6 条断言：
-
-1. 三工位锁螺丝、20 件/分钟 → `design_machine`，brief 同时含「三工位/锁螺丝/20」，或 `stationCount=3` 且 `cyclePerMin=20`。
-2. 点胶两工位、3 秒/件 → `design_machine`，brief 同时含「点胶/两工位/3 秒」，或 `stationCount=2` 且 `cyclePerMin=20`。
-3. 装配四工位、汇川伺服、安全光栅 → `design_machine`，brief 同时含「装配/四工位（或四个工位）/汇川/安全光栅」，或 brief 含装配且 `stationCount=4`。
-4. 随便设计检测机 → 允许先追问一次，也允许直接按默认生成；两种路径均通过。
-5. 多轮「改成 4 工位」→ 前置一轮三工位锁螺丝方案；只评判本轮调用，要求 brief 同时含「4 工位/锁螺丝」或 brief 含锁螺丝且 `stationCount=4`。
-6. 「直接应用到工程」→ `apply_machine_design` 且必须出现确认请求，不接受「直接」绕过确认。
-
-结果文件：`docs/desktop/eval/agent-live.json`。最终轮无失败项；两轮复跑中的首轮曾出现 1 条 `O04 [operation/missing-arg]`（既有改型号用例的 `update_component` 参数形状未命中断言），第二轮 36/36。该失败未通过删除用例或降低阈值处理，最终结果文件保留可复现的工具序列与参数断言。
+真实模型评测（2026-10-24）36/36；分组、断言、延迟与复跑细节已归档于 `BACKLOG-HISTORY.md`，该结果不代表其他模型或措辞。
 
 ## 8. 后续
 

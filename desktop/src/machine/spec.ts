@@ -39,12 +39,20 @@ export interface ConveyorSpec {
   loadKg: number | null;
 }
 
+/** 工程师明确输入的整机占地边界；仅用于与实际几何包络比较，不缩放实体。 */
+export interface MachineFootprintRequirement {
+  lengthMm: number;
+  widthMm: number;
+}
+
 export interface MachineBrief {
   process: MachineProcess;
   stations: number;
   cyclePerMin: number | null;
   layout: MachineLayout;
   conveyor?: ConveyorSpec;
+  /** 可选占地限制；未填写时沿用形态的推荐尺寸。 */
+  footprint?: MachineFootprintRequirement | null;
   /** 需求中显式列出的工序名，按出现顺序去重。 */
   processes?: string[];
   actuators: { kind: MachineActuatorKind; count: number }[];

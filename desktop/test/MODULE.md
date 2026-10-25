@@ -16,6 +16,7 @@
 | 工具扩展 v1 | `test/agent/tools-v2.test.mjs` | 同上 | 上下文 null 字段、元件修改/移除、PLC 预检拦截不落盘、导出白名单/净化/覆盖、确认拒绝 |
 | 机型方案落盘 | `test/agent/apply-machine-design.test.mjs` | 同上 | brief/design 二选一、设计校验、id/点位冲突、overwrite、active 指针、BOM/PLC 联动、撤销、确认拒绝、路径净化、参数化模块写前拒绝（31 条） |
 | 机型几何 | `test/machine/geometry*.test.mjs`、`test/agent/apply-machine-geometry.test.mjs` | 同上 | 尺寸、id 唯一、1–12 工位 × 6 工艺占地不重叠、运动轴元数据、BOM 对账、STL/glTF/sidecar 契约、three 动画、几何落盘/撤销/实体化回退（24 条） |
+| 概念运动包络 | `test/design/motion-envelope.test.mjs` | 同上 | 真实 MachineGeometry 的 linear/gripper/rotary 扫掠、偏移工位、方向/边界采样、映射 fail-closed、XYZ AABB 人工复核与无重叠不签核（6 条） |
 | 底板放置 | `test/agent/place-component.test.mjs` | 同上 | 参数校验、AMBIGUOUS、NO_DIMENSIONS、越界/重叠告警、旋转/吸附、撤销、确认拒绝 |
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 22 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
@@ -35,7 +36,7 @@
 | 联调 | `test/commission/*.test.mjs` | 同上 | 序列通过/超时/前置失败/异常；28 点位、6 步上电、3 用例；10 条诊断规则/排序/兜底 |
 | 设计同步 | `test/sync/*.test.mjs` | 同上 | manifest/SHA、ZIP 路径、缺文件、配置脱敏、401/404/超时、幂等、diff |
 | 数据包 | `test/packs/*.test.mjs` | 同上 | 包校验/导入、symbol 字段、iec-cn 数据契约、参考表生成、符号映射扫描 |
-| 端到端冒烟 | `electron . --headless-smoke` | `npm run smoke` | xvfb 下加载页面、注入扩展、解析 fixture、断言 UI 结构与 system.update 开关/隐藏/IPC拒绝/开发态无网络 |
+| 端到端冒烟 | `electron . --headless-smoke` / `--headless-design-webgl-smoke` | `npm run smoke`（强制关闭 WebGL，验证降级）/ `npm run smoke:design:webgl`（SwiftShader）/ `npm run smoke:win`（Windows 无 GPU） | 降级模式保留空场景/降级提示断言；SwiftShader 模式经 CAD fixture 拖放、五步向导校核保存、工程菜单重开，断言 `getScene().parts`、零件树/计数及 `cadNotice`；通用 smoke 另验证 UI 结构与 system.update 开关/隐藏/IPC拒绝/开发态无网络 |
 
 ## smoke 的断言输出
 
@@ -105,7 +106,7 @@ npm run build:ext
 
 ## 进度
 
-- ✅ 1720 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D、更新通道及发行 preflight mock、CAD 导入事务）
+- ✅ 2080 个单测全绿（含 MCP 代理、LLM 客户端、会话循环、执行进度/取消/失败建议/审计筛选、命令总线、底板放置/撤销、元件修改/移除、机型方案校验/落盘/BOM/PLC 联动、离线意图路由、上下文裁剪、审计脱敏、计划预览与统一回执、数据包、同步、联调诊断与配置驱动 3D、更新通道及发行 preflight mock、CAD 导入事务、真实 MachineGeometry 的概念运动包络与工位平移初筛）
 - ✅ smoke 含智能体 21 工具/机型方案合成与落盘/场景/BOM/对话面板/只读问答 UI（计划预览 + 审计面板）/离线路由与审计/底板放置与撤销/PLC 落盘与通用导出/本地知识检索、电气元件面板、PLC 生成/模拟验证、PLC 点位、6 步上电、3 用例、联调 PDF、3D 联动和参数化、system.update 模块关停/重开与 IPC 拒绝断言
 - ⏳ CI（GitHub Actions）因 token 缺 `workflow` scope 未启用，见 `docs/desktop/CI.md`
 - ⏳ 性能基准（10 万面模型解析耗时）未建立

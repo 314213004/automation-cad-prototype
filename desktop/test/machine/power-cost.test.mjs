@@ -14,6 +14,7 @@ import { readMachinePricing } from '../../electron/pricing.ts';
 import { synthMachine } from '../../src/machine/synth.ts';
 import { parseMachineBrief } from '../../src/machine/spec.ts';
 import { mapMachineBom } from '../../src/machine/bom-map.ts';
+import { reviewDesign } from '../../src/design/review.ts';
 import { AgentTools } from '../../src/agent/tools.ts';
 import { serializeToolResult, toolResultByteLimit } from '../../src/agent/trim.ts';
 
@@ -183,6 +184,96 @@ test('功率：缺额定功率时告警并使用类别默认值', () => {
   assert.ok(result.warnings.some((line) => /缺少额定功率/.test(line)));
   assert.ok(result.assumptions.some((line) => /夹爪 2 件按 15 W/.test(line)));
   assert.ok(result.byGroup.some((group) => group.name === '夹爪' && group.ratedW === 30));
+});
+
+test('功率：执行机构绑定型号及 packId 的额定功率进入计算', () => {
+  const axisDesign = (partId) => {
+    const part = parts.find((candidate) => candidate.id === partId && candidate.packId === 'iec-cn');
+    assert.ok(part, `测试元件库中应存在 ${partId}`);
+    return {
+      config: {
+        actuators: [{ kind: 'rotary', model: part.model, partId, packId: 'iec-cn' }],
+        sensors: []
+      },
+      bomDraft: {
+        items: [{
+          kind: 'actuator', name: '旋转轴', role: 'rotary', qty: 1,
+          model: part.model, partId, packId: 'iec-cn'
+        }]
+      },
+      power: { voltage: '380VAC', byGroup: [{ name: '伺服' }] }
+    };
+  };
+  const options = { parts, servo: true, simultaneity: 1, loadFactor: 1, efficiency: 1, cosPhi: 1 };
+  const compact = estimatePower(axisDesign('SV660NS1R6I'), options);
+  const standard = estimatePower(axisDesign('SV660PS5R5I'), options);
+
+  assert.equal(compact.byGroup.find((group) => group.name === '伺服')?.ratedW, 400);
+  assert.equal(standard.byGroup.find((group) => group.name === '伺服')?.ratedW, 750);
+  assert.ok(Math.abs((standard.totalKw - compact.totalKw) - 0.35) < 1e-9);
+});
+
+test('功率：旧方案只有 BOM 型号绑定时也读取伺服电机额定值', () => {
+  const result = estimatePower({
+    config: { actuators: [{ kind: 'rotary' }], sensors: [] },
+    bomDraft: {
+      items: [{
+        kind: 'actuator', name: '伺服电机', role: 'servo', qty: 1,
+        model: 'SV660N', partId: 'SV660NS1R6I', packId: 'iec-cn'
+      }]
+    },
+    power: { voltage: '380VAC', byGroup: [{ name: '伺服' }] }
+  }, { parts, servo: true, simultaneity: 1, loadFactor: 1, efficiency: 1, cosPhi: 1 });
+
+  assert.equal(result.byGroup.find((group) => group.name === '伺服')?.ratedW, 400);
+});
+
+test('功率：同料号存在于多个元件包时按绑定 packId 取额定值', () => {
+  const duplicateParts = [
+    { id: 'AXIS-1', model: 'AXIS-1', category: '伺服', packId: 'pack-400', specs: { 功率: '400 W' } },
+    { id: 'AXIS-1', model: 'AXIS-1', category: '伺服', packId: 'pack-2k', specs: { 功率: '2 kW' } }
+  ];
+  const result = estimatePower({
+    config: {
+      actuators: [{ kind: 'rotary', model: 'AXIS-1', partId: 'AXIS-1', packId: 'pack-2k' }],
+      sensors: []
+    },
+    bomDraft: {
+      items: [{ kind: 'actuator', name: '旋转轴', role: 'rotary', qty: 1,
+        model: 'AXIS-1', partId: 'AXIS-1', packId: 'pack-2k' }]
+    },
+    power: { voltage: '380VAC', byGroup: [{ name: '伺服' }] }
+  }, { parts: duplicateParts, servo: true, simultaneity: 1, loadFactor: 1, efficiency: 1, cosPhi: 1 });
+
+  assert.equal(result.byGroup.find((group) => group.name === '伺服')?.ratedW, 2000);
+});
+
+test('设计复核：当前绑定伺服型号的额定功率进入复核结果', () => {
+  const selectedPart = parts.find((part) => part.id === 'SV660NS1R6I' && part.packId === 'iec-cn');
+  assert.ok(selectedPart);
+  const reviewedDesign = synthMachine(
+    parseMachineBrief('三工位锁螺丝机，节拍 20 件/分钟，用 750W 伺服'),
+    { parts, pricing: DEFAULT_MACHINE_PRICING }
+  );
+  const rotary = reviewedDesign.config.actuators.find((actuator) => actuator.kind === 'rotary');
+  assert.ok(rotary);
+  reviewedDesign.config.actuators = [{
+    ...rotary,
+    model: selectedPart.model,
+    partId: selectedPart.id,
+    packId: selectedPart.packId
+  }];
+  reviewedDesign.config.sensors = [];
+  reviewedDesign.bomDraft.items = [{
+    kind: 'actuator', name: '伺服电机', qty: 1, role: 'servo',
+    model: selectedPart.model, partId: selectedPart.id, packId: selectedPart.packId
+  }];
+
+  const review = reviewDesign(reviewedDesign, [{
+    name: '工件 A', bbox: { min: [0, 0, 0], max: [10, 10, 10] }
+  }], parts, DEFAULT_MACHINE_PRICING);
+
+  assert.equal(review.power.byGroup.find((group) => group.name === '伺服')?.ratedW, 400);
 });
 
 test('功率：已选断路器小于计算电流时告警', () => {

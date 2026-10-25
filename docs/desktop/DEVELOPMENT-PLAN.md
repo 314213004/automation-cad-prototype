@@ -1,6 +1,6 @@
 # AutomationCAD 开发计划与进度
 
-> 更新：2026-10-24。本文作为跨模块计划和进度索引；逐模块职责见 [`MODULES.md`](./MODULES.md)，当前限制与决策见 [`STATUS.md`](./STATUS.md) 和 [`BACKLOG.md`](./BACKLOG.md)。
+> 更新：2026-10-26。本文作为跨模块计划和进度索引；逐模块职责见 [`MODULES.md`](./MODULES.md)，当前限制与决策见 [`STATUS.md`](./STATUS.md) 和 [`BACKLOG.md`](./BACKLOG.md)。
 
 ## 目标与原则
 
@@ -17,7 +17,16 @@
 | 增量更新 | Windows NSIS 包启用 blockmap 差分；更新器保留 SHA-512 完整包校验，差分失败走完整包回退。 | 在两个相邻签名版本间实测差分字节量、网络中断和损坏 blockmap；确认完整包回退与最终安装器 Authenticode 校验均有效。差分下载不是签名或完整性校验的替代品。 |
 | 客户自选模块 | 注册表、依赖/API/能力校验、本机持久化开关和模块设置面板已实现；当前已接入 `plcgen`、`elec.validation`、`commission.io-test`、`factory.plc-sync`、`cad.parametric-import`、`parametric.history`、`agent.resume`、`project.portable`、`cost.estimation`、`system.update` 等可选能力。关键入口由 renderer 与主进程等层共同门控。 | 当前代码仍随桌面应用整体打包，开关只启停功能，不会卸载代码或按需下载。需要继续将尚未迁移的 CAD 只读/运动学、机械、电气设计、工厂、Agent、同步、通用导出等能力定义清晰边界，并设计真正的按需安装/更新。 |
 | 工程与导入安全 | 可移植工程档案采用稳定工程身份和来源哈希；导入先做严格预览。CAD 导入身份事务、候选模型加载失败回滚以及 PLC 整数范围校验已有本轮测试覆盖。 | 工程档案的事务恢复与候选状态应用仍需独立设计；跨机器 CAD 几何复核及 PLC/工厂/Agent 等状态迁移尚不支持。 |
-| 当前工作树验证 | 本轮复验：`TZ=UTC npm test` 1727/1727、TypeScript、`build:ext`、Electron smoke（`SMOKE_OK`）和 `git diff --check` 均通过。 | 真实 Windows Authenticode、升级发布和真实 PLC 不在本轮执行范围。 |
+| 整机设计向导 | 第 4 步真实几何 AABB 俯视支持明确选站，以 mm 输入 X/Y 偏移或拖动整组 `stationId` 零件；同一几何快照同步更新工位 origin/workPoint、运动轴 pivot、bounds/envelope、Three.js 与逐件 STL。示意 `placements` 仍独立。`MachineDesign.stationIdentities` 保存不可变身份，`stationGeometryLayout` schema v2 按身份关联偏移，`stN` 仅为当前几何快照的内部编号。 | 型号级 CAD、真实 B-rep 干涉/强度、工程签核、现场节拍与 3D↔2D 型号 CAD 未完成；AABB 非精确求交，工位移动不替代结构/碰撞/安装净距复核。 |
+| 当前工作树验证 | 2026-10-26：工位平移端到端测试、全量测试、`tsc`、`build:ext`、Linux/WebGL smoke、KB 专测与 diff-check 结果见 [STATUS.md](./STATUS.md)。 | Windows `smoke:win`、Windows Authenticode/升级发布及真实 PLC 未验收；KB 索引余量须持续 ≥5%。 |
+
+### 工程师操作优先：真实几何工位定位（2026-10-26）
+
+第 4 步提供两个清楚分开的坐标空间：下方示意 `placements` 用于预排布，不能驱动模型；上方真实几何俯视使用生成器的世界毫米坐标，选定工位后通过 X/Y 绝对偏移输入或 mm 网格拖动。拖动直接更新设计字段，再从该字段重算部件中心、工位工作点、运动轴枢轴和整体包络；3D 预览按钮、工程重开与逐件 STL 读取同一变换。修改几何会使旧 review 失效。
+
+偏移以 `stationGeometryLayout.schemaVersion=2` 持久化，由 `MachineDesign.stationIdentities` 的不可变身份关联；生成器 `stN` 仅是当前几何快照内部编号，不作为跨方案身份。工位改名或重排时，若稳定身份仍能对应同一实体则保留该站偏移；删除或无法对应的身份只清除相应偏移，新工位按零偏移处理。需求重算或候选切换不按名称或序号猜测身份迁移。旧 `schemaVersion=1` 偏移只记录旧序号/名称，无法证明工位实体连续性，加载时保留工程内容但安全清除全部旧偏移并提示重新定位；没有偏移字段的旧设计按零偏移打开。未知版本、未映射身份、无效毫米坐标或损坏几何映射均拒绝应用。
+
+这一能力只移动概念几何的世界 XY 位置：不改变零件形状/尺寸、运动行程、型号绑定或 Z 高度，不是型号级 CAD，也不证明工位可装配、无干涉或满足安全/结构要求。下一步重点是让工程师能核对占地/安装关系并提供 CAD 几何与配置关联，同时保持明确的版本化身份、失效策略和旧工程读取能力。
 
 ## 分阶段路线
 
@@ -78,6 +87,11 @@
 - 本地自动化测试、mock、仿真和 smoke 仅证明对应软件路径，不替代 Windows 签名、真实网络或真实 PLC 验收。
 - PR #6 与 PR #7 保持独立，不并入本轮；本轮 Git 提交只包含本计划文档，不改写或清理其余工作树改动。
 - 用户选择模块是产品功能，不代表授权、付费状态或代码卸载；商业规则、企业管理策略和在线模块目录的托管方式仍需另行决策。
+
+## 夜间迭代与仓库操作约定
+
+- 夜间迭代只做代码与文档，不打包、不触发 CI、不发版；每轮只推进一步，须有 `npm test` 和 `npm run smoke` 证据才提交。失败先记录并回滚本轮改动；不删除测试或放宽断言，不改 `index.html` / `app.js` / `styles.css` / `electrical.*`，除非任务明确要求。
+- `origin` 配置 GitHub 与 Gitee 两个 push URL，`git push origin main` 会双推；任一远端失败都视为失败，不可只推一边。tag 使用 `git bothpush`；推后核对两远端 tag 和 HEAD 指向一致。Gitee 5xx/超时重试一次，仍失败则记录错误；凭据只留在本机 git credentials，不得进仓库、提交信息或日志。
 
 ## 关键参考
 

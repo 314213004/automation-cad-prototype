@@ -11,6 +11,29 @@ export interface DesignPartIssue {
   path: string;
 }
 
+export type DesignIssueTarget =
+  | { stationIndex: number; itemType: 'actuator'; itemIndex: number; field: 'name' | 'kind' | 'model' | 'extendPoint' | 'retractPoint' | 'gripPoint' | 'point' }
+  | { stationIndex: number; itemType: 'sensor'; itemIndex: number; field: 'point' | 'model' };
+
+/** 将校验器的稳定字段路径解析为可聚焦的工位表格坐标；不接受未知字段或畸形路径。 */
+export function designIssueTargetFromPath(path: string): DesignIssueTarget | null {
+  const match = /^stations\[(\d+)\]\.(actuators|sensors)\[(\d+)\]\.([A-Za-z][A-Za-z0-9]*)$/.exec(path);
+  if (!match) return null;
+  const stationIndex = Number(match[1]);
+  const itemIndex = Number(match[3]);
+  if (!Number.isSafeInteger(stationIndex) || !Number.isSafeInteger(itemIndex)) return null;
+  const itemType = match[2];
+  const field = match[4];
+  if (!itemType || !field) return null;
+  if (itemType === 'actuators' && ['name', 'kind', 'model', 'extendPoint', 'retractPoint', 'gripPoint', 'point'].includes(field)) {
+    return { stationIndex, itemType: 'actuator', itemIndex, field: field as Extract<DesignIssueTarget, { itemType: 'actuator' }>['field'] };
+  }
+  if (itemType === 'sensors' && ['point', 'model'].includes(field)) {
+    return { stationIndex, itemType: 'sensor', itemIndex, field: field as Extract<DesignIssueTarget, { itemType: 'sensor' }>['field'] };
+  }
+  return null;
+}
+
 const ACTUATOR_CATEGORY: Record<ActuatorDraft['kind'], RegExp> = {
   cylinder: /气缸|滑台|气动执行/i,
   gripper: /气爪|夹爪|真空吸盘/i,

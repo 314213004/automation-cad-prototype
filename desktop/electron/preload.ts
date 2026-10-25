@@ -55,6 +55,7 @@ const desktopApi = {
     list: () => ipcRenderer.invoke('projects:list'),
     save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),
     open: (id: string) => ipcRenderer.invoke('projects:open', id),
+    saveLayout: (payload: unknown) => ipcRenderer.invoke('projects:layout-save', payload),
     remove: (id: string) => ipcRenderer.invoke('projects:delete', id)
   },
   exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),

@@ -29,6 +29,39 @@ test('机型配置：合法配置补全默认行程和动作时长', () => {
   assert.deepEqual(config.stations, ['上料']);
 });
 
+test('机型配置：旋转轴默认分度角为 90°，工程师输入值和来源独立持久化', () => {
+  const rotary = { id: 'rot-1', name: '分度台', kind: 'rotary', station: '上料', point: 'Y1' };
+  const estimated = validateMachineConfig(minimalConfig({ actuators: [rotary], sensors: [] })).actuators[0];
+  assert.equal(estimated?.rotationRangeDeg, 90);
+  assert.equal(estimated?.rotationRangeSource, undefined);
+  assert.equal(estimated?.travelMm, undefined);
+
+  const manual = validateMachineConfig(minimalConfig({
+    actuators: [{ ...rotary, rotationRangeDeg: 135.5, rotationRangeSource: 'engineer-input' }],
+    sensors: []
+  })).actuators[0];
+  assert.equal(manual?.rotationRangeDeg, 135.5);
+  assert.equal(manual?.rotationRangeSource, 'engineer-input');
+});
+
+test('机型配置：旋转角拒绝非有限、低于下限和高于 360°，并拒绝运动来源跨类型', () => {
+  const rotary = { id: 'rot-1', name: '分度台', kind: 'rotary', station: '上料' };
+  for (const rotationRangeDeg of [Number.NaN, Number.POSITIVE_INFINITY, 0, 0.09, 360.1]) {
+    assert.throws(() => validateMachineConfig(minimalConfig({
+      actuators: [{ ...rotary, rotationRangeDeg }], sensors: []
+    })), /旋转分度角/);
+  }
+  assert.throws(() => validateMachineConfig(minimalConfig({
+    actuators: [{ ...rotary, rotationRangeSource: 'engineer-input' }], sensors: []
+  })), /必须显式填写 rotationRangeDeg/);
+  assert.throws(() => validateMachineConfig(minimalConfig({
+    actuators: [{ ...rotary, travelSource: 'engineer-input', travelMm: 40 }], sensors: []
+  })), /不能携带直线行程来源/);
+  assert.throws(() => validateMachineConfig(minimalConfig({
+    actuators: [{ ...minimalConfig().actuators[0], rotationRangeDeg: 90 }]
+  })), /非旋转轴不能携带/);
+});
+
 test('机型配置：缺少 stations 抛出中文错误', () => {
   assert.throws(() => validateMachineConfig(minimalConfig({ stations: undefined })), /缺少必填参数：机型配置\.stations/);
 });

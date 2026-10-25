@@ -736,6 +736,10 @@ interface DesktopAgentLanAccess {
   message?: string;
 }
 
+type DesktopProjectGeometryReview =
+  | { status: 'not-executed'; partCount: 0 }
+  | { status: 'aabb-screened'; partCount: number; method: 'AABB'; sourceName?: string; checkedAt: string };
+
 interface DesktopDesignProjectSaveInput {
   name: string;
   process: string;
@@ -749,6 +753,7 @@ interface DesktopDesignProjectSaveInput {
   partPaths?: Array<{ name: string; path: string }>;
   design?: unknown;
   config?: unknown;
+  geometryReview?: DesktopProjectGeometryReview;
   stlData?: Uint8Array;
   partData?: Array<{ name: string; data: Uint8Array }>;
   placements?: unknown[];
@@ -769,6 +774,21 @@ interface DesktopDesignProjectRecord {
   hasStl: boolean;
   bytes: number;
   design?: unknown;
+  geometryReview?: DesktopProjectGeometryReview;
+}
+
+interface DesktopProjectLayoutPlacement {
+  id: string;
+  partId: string;
+  model: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  railId?: string;
+  tag?: string;
+  qty?: number;
+  note?: string;
 }
 
 interface Window {
@@ -870,7 +890,8 @@ interface Window {
     projects: {
       list(): Promise<DesktopDesignProjectRecord[]>;
       save(payload: DesktopDesignProjectSaveInput): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; message?: string }>;
-      open(id: string): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      open(id: string): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; placements?: DesktopProjectLayoutPlacement[]; layoutEditable?: boolean; layoutFingerprint?: string; layoutMessage?: string; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      saveLayout(payload: { id: string; fingerprint: string; placements: DesktopProjectLayoutPlacement[] }): Promise<{ ok: boolean; conflict?: boolean; fingerprint?: string; message?: string }>;
       remove(id: string): Promise<{ ok: boolean; message?: string }>;
     };
     projectArchive: {

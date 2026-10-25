@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { parseMachineBrief } from '../../src/machine/spec.ts';
 import { synthMachine } from '../../src/machine/synth.ts';
 import { demoMachineConfig } from '../../src/commission/machine-config.ts';
+import { applyAxisValue, buildThreeMachine } from '../../src/machine/geometry-three.ts';
+import { resetActuatorTravelOnKindChange } from '../../src/design/wizard-state.ts';
 import {
   GEOMETRY_DIMENSIONS as D,
   chooseLayout,
@@ -294,4 +296,135 @@ test('几何：分度转盘超过 6 工位给出布局 warning；占地重叠判
     { stationId: 'd', center: [0, 0], half: [50, 50], rotationZDeg: 45 },
     { stationId: 'f', center: [60, 0], half: [10, 10], rotationZDeg: 0 }
   ), true);
+});
+
+test('几何与运动预览：工程师行程更新气缸/夹爪几何、运动轴，并明确标注仍待复核', () => {
+  const base = demoMachineConfig();
+  const cylinder = base.actuators.find((item) => item.kind === 'cylinder');
+  const gripper = base.actuators.find((item) => item.kind === 'gripper');
+  assert.ok(cylinder);
+  assert.ok(gripper);
+  const config = {
+    ...base,
+    actuators: base.actuators.map((item) => item.id === cylinder.id
+      ? { ...item, travelMm: 125, travelSource: 'engineer-input' }
+      : item.id === gripper.id
+        ? { ...item, travelMm: 35, travelSource: 'engineer-input' }
+        : item)
+  };
+  const geometry = generateMachineGeometry(config, { layout: 'linear', bypassCache: true });
+  const cylinderAxis = geometry.moving.find((axis) => axis.actuatorId === cylinder.id);
+  const gripperAxis = geometry.moving.find((axis) => axis.actuatorId === gripper.id);
+  assert.equal(cylinderAxis?.strokeMm, 125);
+  assert.equal(gripperAxis?.strokeMm, 35);
+  assert.equal(partById(geometry, `${cylinder.id}-body`).shape.length, 195);
+  const jaws = gripperAxis?.jaws.map((jaw) => partById(geometry, jaw.partId));
+  assert.ok(jaws);
+  assert.equal(Math.abs(jaws[0].center[0] - jaws[1].center[0]) - D.gripperJaw[0], D.gripperClosedGap + 35);
+  assert.ok(geometry.assumptions.some((line) => /直线行程（工程师输入·待复核）/.test(line)));
+  assert.ok(geometry.warnings.some((line) => /工程师输入的直线行程尚待复核/.test(line)));
+  assert.ok(geometry.warnings.some((line) => /直线行程为方案\/系统估算值（待核验）/.test(line)));
+  assert.ok(geometry.parts.every((part) => part.estimated === true), '手工行程不改变整机概念估算占位体的精度标记');
+
+  const preview = buildThreeMachine(geometry);
+  const cylinderNode = preview.actuators.get(cylinder.id);
+  const gripperNode = preview.actuators.get(gripper.id);
+  assert.ok(cylinderNode?.mover);
+  assert.ok(gripperNode);
+  applyAxisValue(cylinderNode, 1);
+  applyAxisValue(gripperNode, 1);
+  assert.equal(cylinderNode.mover.position.z, -125);
+  assert.deepEqual(gripperNode.jaws.map((jaw) => jaw.group.position.x).sort((a, b) => a - b), [-17.5, 17.5]);
+});
+
+test('旋转轴分度角驱动 GeomMovingAxis 和 3D 预览运动，报告来源且保持概念估算边界', () => {
+  const base = demoMachineConfig();
+  const rotary = base.actuators.find((item) => item.kind === 'rotary');
+  assert.ok(rotary);
+  const manual = {
+    ...base,
+    actuators: base.actuators.map((item) => item.id === rotary.id
+      ? { ...item, rotationRangeDeg: 137.5, rotationRangeSource: 'engineer-input' }
+      : item)
+  };
+  const geometry = generateMachineGeometry(manual, { layout: 'linear', bypassCache: true });
+  const axis = geometry.moving.find((item) => item.actuatorId === rotary.id);
+  assert.equal(axis?.rangeDeg, 137.5);
+  assert.ok(geometry.assumptions.some((line) => /旋转轴分度角（工程师输入·待复核）/.test(line)));
+  assert.ok(geometry.warnings.some((line) => /工程师输入的旋转轴分度角尚待复核/.test(line)));
+  assert.ok(geometry.warnings.some((line) => /不代表旋转台型号、安装或制造数据/.test(line)));
+  assert.ok(geometry.parts.every((part) => part.estimated === true));
+
+  const preview = buildThreeMachine(geometry);
+  const node = preview.actuators.get(rotary.id);
+  assert.ok(node?.mover);
+  applyAxisValue(node, 137.5);
+  assert.equal(node.lastValue, 137.5);
+  const appliedAngle = 2 * Math.atan2(node.mover.quaternion.z, node.mover.quaternion.w) * 180 / Math.PI;
+  assert.ok(Math.abs(appliedAngle - 137.5) < 1e-6);
+
+  const estimatedGeometry = generateMachineGeometry(base, { layout: 'linear', bypassCache: true });
+  const estimatedAxis = estimatedGeometry.moving.find((item) => item.actuatorId === rotary.id);
+  assert.equal(estimatedAxis?.rangeDeg, 90);
+  assert.ok(estimatedGeometry.assumptions.some((line) => /旋转轴分度角（方案\/系统估算）.*90°/.test(line)));
+  assert.ok(estimatedGeometry.warnings.some((line) => /旋转轴分度角为方案\/系统估算值（待核验）/.test(line)));
+
+  for (const range of [0.1, 360]) {
+    const edgeConfig = { ...base, actuators: base.actuators.map((item) => item.id === rotary.id
+      ? { ...item, rotationRangeDeg: range, rotationRangeSource: 'engineer-input' }
+      : item) };
+    assert.equal(generateMachineGeometry(edgeConfig, { layout: 'linear', bypassCache: true }).moving.find((item) => item.actuatorId === rotary.id)?.rangeDeg, range);
+  }
+});
+
+test('几何入口拒绝非有限、非正及大于 2000 mm 的行程，不再 clamp 到 1 mm', () => {
+  const base = demoMachineConfig();
+  const cylinder = base.actuators.find((item) => item.kind === 'cylinder');
+  assert.ok(cylinder);
+  for (const travelMm of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 2000.1]) {
+    const config = { ...base, actuators: base.actuators.map((item) => item.id === cylinder.id ? { ...item, travelMm } : item) };
+    const expected = !Number.isFinite(travelMm) ? /行程必须是有限数/ : travelMm <= 0 ? /travelMm 必须大于 0/ : /行程必须在 0\.1–2000 mm 范围内/;
+    assert.throws(() => generateMachineGeometry(config, { bypassCache: true }), expected);
+  }
+});
+
+test('几何类型切换清除旧运动参数来源，线性轴回到 40 mm、旋转轴回到 90° 估算', () => {
+  const base = demoMachineConfig();
+  const cylinder = base.actuators.find((item) => item.kind === 'cylinder');
+  const gripper = base.actuators.find((item) => item.kind === 'gripper');
+  const rotary = base.actuators.find((item) => item.kind === 'rotary');
+  assert.ok(cylinder);
+  assert.ok(gripper);
+  assert.ok(rotary);
+
+  for (const [source, to, oldTravel, oldRotation] of [
+    [cylinder, 'gripper', 125, undefined],
+    [gripper, 'cylinder', 35, undefined],
+    [rotary, 'cylinder', undefined, 135],
+    [cylinder, 'rotary', 125, undefined]
+  ]) {
+    const changed = {
+      ...source,
+      ...(oldTravel === undefined ? {} : { travelMm: oldTravel, travelSource: 'engineer-input' }),
+      ...(oldRotation === undefined ? {} : { rotationRangeDeg: oldRotation, rotationRangeSource: 'engineer-input' })
+    };
+    changed.kind = to;
+    resetActuatorTravelOnKindChange(changed);
+    assert.equal(changed.travelMm, undefined);
+    assert.equal(changed.travelSource, undefined);
+    assert.equal(changed.rotationRangeSource, undefined);
+    assert.equal(changed.rotationRangeDeg, to === 'rotary' ? 90 : undefined);
+    const config = { ...base, actuators: base.actuators.map((item) => item.id === changed.id ? changed : item) };
+    const geometry = generateMachineGeometry(config, { bypassCache: true });
+    const axis = geometry.moving.find((item) => item.actuatorId === changed.id);
+    if (to === 'rotary') {
+      assert.equal(axis?.rangeDeg, 90);
+      assert.ok(geometry.warnings.some((warning) => warning.startsWith('旋转轴分度角为方案/系统估算值（待核验）：') && warning.includes(`${changed.station}·${changed.name} 90°`)));
+      assert.ok(!geometry.warnings.some((warning) => warning.includes('工程师输入的旋转轴分度角尚待复核') && warning.includes(changed.name)));
+    } else {
+      assert.equal(axis?.strokeMm, 40);
+      assert.ok(geometry.warnings.some((warning) => warning.startsWith('直线行程为方案/系统估算值（待核验）：') && warning.includes(`${changed.station}·${changed.name} 40 mm`)));
+      assert.ok(!geometry.warnings.some((warning) => warning.includes('工程师输入的直线行程尚待复核') && warning.includes(changed.name)));
+    }
+  }
 });

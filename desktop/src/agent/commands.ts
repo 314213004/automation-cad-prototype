@@ -63,6 +63,8 @@ import { AGENT_COMMAND_MODULES, moduleDisabledResult, moduleIsEnabled, type Modu
 import { COST_ESTIMATION_MODULE_ID } from '../modules/cost-estimation-gate.ts';
 import { PARAMETRIC_IMPORT_MODULE_ID, PARAMETRIC_MODULE_DISABLED_MESSAGE } from '../modules/parametric-gate.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
+import { stationIdentitiesFor } from '../machine/station-identity.ts';
+import { applyStationGeometryLayout } from '../machine/station-layout.ts';
 import {
   buildMachineSolids,
   geometryToGltf,
@@ -1528,7 +1530,12 @@ function registerMachineApplyCommand(bus: CommandBus): void {
           }
         };
         try {
-          const geometry = generateMachineGeometry(normalized);
+          const generatedGeometry = generateMachineGeometry(normalized);
+          const geometry = applyStationGeometryLayout(
+            generatedGeometry,
+            normalized.stationGeometryLayout,
+            stationIdentitiesFor(normalized.config.id, normalized.config.stations.length, normalized.stationIdentities)
+          );
           const bundle = geometryToSidecarAssemblies(geometry, { updatedAt: appliedAt });
           for (const path of [paths.json, paths.stl, paths.gltf, paths.sidecar]) snapshot(path);
           writeText(paths.json, `${JSON.stringify(geometry, null, 2)}\n`);

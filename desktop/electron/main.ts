@@ -116,7 +116,12 @@ const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const DIAGNOSE = process.argv.includes('--diagnose');
 const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
 const HEADLESS_MACHINE_SCREENSHOTS = process.argv.includes('--headless-machine-screenshots');
-const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS;
+const HEADLESS_DESIGN_WEBGL_SMOKE = process.argv.includes('--headless-design-webgl-smoke');
+const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS || HEADLESS_DESIGN_WEBGL_SMOKE;
+if (HEADLESS_SMOKE && HEADLESS_DESIGN_WEBGL_SMOKE) {
+  console.error('SMOKE_MODE_CONFLICT --headless-smoke disables WebGL; use --headless-design-webgl-smoke alone for SwiftShader');
+  process.exit(1);
+}
 const APP_NAME = 'AutomationCAD';
 app.setName(APP_NAME);
 
@@ -134,9 +139,18 @@ if (HEADLESS_MACHINE_SCREENSHOTS) {
   app.commandLine.appendSwitch('use-gl', 'angle');
   app.commandLine.appendSwitch('use-angle', 'swiftshader');
 }
+if (HEADLESS_DESIGN_WEBGL_SMOKE) {
+  // 与降级 smoke 分离：不禁用硬件加速/WebGL，强制 Chromium 走 SwiftShader WebGL。
+  app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+  app.commandLine.appendSwitch('use-gl', 'angle');
+  app.commandLine.appendSwitch('use-angle', 'swiftshader');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+}
 if (HEADLESS) {
   // 避免与开发机上正在运行的实例争抢单实例锁。
-  const prefix = HEADLESS_MACHINE_SCREENSHOTS
+  const prefix = HEADLESS_DESIGN_WEBGL_SMOKE
+    ? 'automationcad-design-webgl-smoke-'
+    : HEADLESS_MACHINE_SCREENSHOTS
     ? 'automationcad-machine-shots-'
     : HEADLESS_SCREENSHOTS
       ? 'automationcad-shots-'
@@ -839,13 +853,176 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
   }
 }
 
+async function runHeadlessDesignWebglSmoke(window: BrowserWindow): Promise<void> {
+  try {
+    const fixturePath = resolve(desktopRoot(), 'test', 'fixtures', 'cube.stp');
+    const result = await window.webContents.executeJavaScript(`(async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const bridgeReady = () => Boolean(window.__AgentBridge?.ready?.());
+      for (let attempt = 0; attempt < 100 && !bridgeReady(); attempt += 1) await wait(50);
+      if (!bridgeReady() || !window.desktop?.design || !window.desktop?.projects) {
+        throw new Error('桌面工程 API / AgentBridge 未就绪');
+      }
+      const fixtureBytes = await window.desktop.readFileBuffer(${JSON.stringify(fixturePath)});
+      const fixture = new File([fixtureBytes], 'cube.stp', { type: 'application/octet-stream' });
+      const transfer = new DataTransfer();
+      transfer.items.add(fixture);
+      window.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      let seedParts = 0;
+      for (let attempt = 0; attempt < 120 && seedParts === 0; attempt += 1) {
+        await wait(100);
+        seedParts = window.__AgentBridge.getScene().parts?.length ?? 0;
+      }
+      if (seedParts < 1 || !document.getElementById('cadFileInfo')?.textContent?.includes('cube.stp')) {
+        throw new Error('真实 CAD 拖放导入 fixture 未载入：' + JSON.stringify({ seedParts, fileInfo: document.getElementById('cadFileInfo')?.textContent ?? '' }));
+      }
+      await window.desktop.design.clearDraft();
+      const entry = document.getElementById('designWizardEntry');
+      if (!entry) throw new Error('五步设计向导入口缺失');
+      entry.click();
+      await wait(500);
+      const root = document.getElementById('designWizard');
+      if (!root || root.hidden) throw new Error('五步设计向导未打开');
+      const next = () => {
+        const button = root.querySelector('[data-action="next"]');
+        if (!button || button.disabled) throw new Error('向导下一步不可用：' + root.querySelector('.design-content')?.textContent);
+        button.click();
+      };
+      const set = (name, value) => {
+        const field = root.querySelector('[name="' + name + '"]');
+        if (!field) throw new Error('向导输入项缺失：' + name);
+        field.value = value;
+        field.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      set('name', 'Smoke WebGL 工程');
+      set('stations', '3');
+      set('cyclePerMin', '10');
+      set('lengthMm', '2400');
+      set('widthMm', '1600');
+      next();
+      let candidateCount = 0;
+      for (let attempt = 0; attempt < 80 && candidateCount === 0; attempt += 1) {
+        await wait(100);
+        candidateCount = root.querySelectorAll('[data-candidate]').length;
+      }
+      if (candidateCount !== 3) throw new Error('向导候选未生成：' + candidateCount);
+      root.querySelector('[data-preview="0"]')?.click();
+      await wait(80);
+      root.querySelector('#designPreviewClose')?.click();
+      next();
+      await wait(120);
+      const station = root.querySelectorAll('[data-station]')[2];
+      if (!station) throw new Error('向导第三工位缺失');
+      station.click();
+      root.querySelector('[data-action="add-actuator"]')?.click();
+      await wait(60);
+      next();
+      await wait(120);
+      const placements = root.querySelectorAll('[data-placement]').length;
+      if (placements < 1) throw new Error('向导没有生成可保存的 2D 布局');
+      const layoutMetrics = root.querySelector('.design-layout-tools')?.textContent ?? '';
+      const layoutSemantics = root.querySelector('.design-layout-semantics')?.textContent ?? '';
+      if (!layoutMetrics.includes('示意卡片占画布比例') || layoutMetrics.includes('利用率') ||
+          !layoutSemantics.includes('重叠矩形可能重复计入') ||
+          !layoutSemantics.includes('不代表组件实际外形、安装包络或三维几何')) {
+        throw new Error('向导布局文案未清楚区分示意卡片与物理尺寸：' + JSON.stringify({ layoutMetrics, layoutSemantics }));
+      }
+      next();
+      await wait(100);
+      root.querySelector('[data-action="run-review"]')?.click();
+      await wait(180);
+      const saveButton = root.querySelector('[data-action="save-project"]');
+      if (!saveButton || saveButton.disabled) {
+        throw new Error('设计工程未通过保存门槛：' + root.querySelector('.design-content')?.textContent);
+      }
+      saveButton.click();
+      let saved = null;
+      for (let attempt = 0; attempt < 80 && !saved; attempt += 1) {
+        await wait(100);
+        saved = (await window.desktop.projects.list()).find((project) => project.name === 'Smoke WebGL 工程') ?? null;
+      }
+      if (!saved?.id || !saved.design) throw new Error('向导工程未保存或缺少 design 数据');
+      const openResult = await window.desktop.projects.open(saved.id);
+      const partPaths = openResult?.partPaths?.length ?? 0;
+      if (!openResult?.ok || partPaths < 1) throw new Error('projects:open IPC 未返回逐件 STL：' + (openResult?.message ?? partPaths));
+
+      const menu = document.getElementById('cadProjectMenu');
+      if (menu?.hidden) document.querySelector('[data-project-menu-toggle]')?.click();
+      let projectRow = null;
+      for (let attempt = 0; attempt < 50 && !projectRow; attempt += 1) {
+        projectRow = [...document.querySelectorAll('[data-project-open]')].find((row) => row.dataset.projectOpen === saved.id) ?? null;
+        if (!projectRow) await wait(100);
+      }
+      if (!projectRow) throw new Error('工程菜单未显示刚保存的工程');
+      const layoutButton = projectRow.querySelector('[data-project-layout]');
+      if (!layoutButton) throw new Error('工程菜单缺少已保存布局编辑入口');
+      layoutButton.click();
+      const layoutDialog = document.getElementById('cadSavedProjectLayout');
+      for (let attempt = 0; attempt < 50 && !layoutDialog?.open; attempt += 1) await wait(50);
+      if (!layoutDialog?.open) throw new Error('已保存工程布局编辑器未打开');
+      const layoutEditorSemantics = layoutDialog.querySelector('.cad-project-layout-safety')?.textContent ?? '';
+      if (!layoutEditorSemantics.includes('矩形宽高是示意卡片尺寸') ||
+          !layoutEditorSemantics.includes('毫米坐标只表示二维预排布') ||
+          !layoutEditorSemantics.includes('不代表组件实际外形、安装包络或三维几何')) {
+        throw new Error('已保存工程布局编辑器缺少示意卡片/二维预排布说明：' + layoutEditorSemantics);
+      }
+      layoutDialog.querySelector('[data-project-layout-close]')?.click();
+      for (let attempt = 0; attempt < 50 && layoutDialog.open; attempt += 1) await wait(50);
+      if (menu?.hidden) document.querySelector('[data-project-menu-toggle]')?.click();
+      projectRow = [...document.querySelectorAll('[data-project-open]')].find((row) => row.dataset.projectOpen === saved.id) ?? null;
+      if (!projectRow) throw new Error('关闭布局编辑器后工程菜单未恢复');
+      projectRow.click();
+
+      let scene = { parts: [] };
+      let treeRows = 0;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await wait(250);
+        scene = window.__AgentBridge.getScene();
+        treeRows = document.querySelectorAll('#cadParts .cad-part-row').length;
+        if (scene?.parts?.length >= partPaths && treeRows >= partPaths) break;
+      }
+      const fallback = document.getElementById('cadWebglFallback');
+      const canvas = document.querySelector('#cadHost canvas');
+      const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl') ?? null;
+      const debugInfo = gl?.getExtension('WEBGL_debug_renderer_info');
+      const renderer = gl
+        ? String(debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER))
+        : '';
+      const notice = document.getElementById('cadNotice')?.textContent ?? '';
+      const noticeIsError = Boolean(document.getElementById('cadNotice')?.classList.contains('is-error'));
+      const menuMeta = projectRow.querySelector('.cad-project-meta')?.textContent ?? '';
+      const partCount = Number(document.getElementById('cadPartCount')?.textContent ?? 0);
+      if (fallback) throw new Error('SwiftShader WebGL 未启用，Viewer 进入降级视图：' + fallback.textContent);
+      if (!gl || !/SwiftShader/i.test(renderer)) throw new Error('没有确认 SwiftShader WebGL context：' + JSON.stringify({ hasCanvas: Boolean(canvas), hasContext: Boolean(gl), renderer }));
+      if (!scene?.parts?.length || scene.parts.length !== partPaths || treeRows !== scene.parts.length || partCount !== scene.parts.length) {
+        throw new Error('工程重开后 scene / 零件树数量不一致：' + JSON.stringify({ scene: scene?.parts?.length ?? 0, partPaths, treeRows, partCount }));
+      }
+      if (!notice.includes('概念估算占位体') || !notice.includes('非型号级 CAD') || noticeIsError) {
+        throw new Error('工程载入提示缺失或标为错误：' + JSON.stringify({ notice, noticeIsError }));
+      }
+      if (!menuMeta.includes('设计向导概念估算占位体')) throw new Error('工程菜单未标明概念估算占位体：' + menuMeta);
+      return { renderer, seedParts, sceneParts: scene.parts.length, partPaths, treeRows, partCount, notice, menuMeta, placements, layoutMetrics, layoutSemantics, layoutEditorSemantics, step: root.querySelector('.design-steps li.active')?.dataset.step ?? '' };
+    })()`);
+    console.log(`SMOKE_DESIGN_WEBGL_OK renderer=${result.renderer} seed=STEP_fixture:${result.seedParts} scene=${result.sceneParts} partPaths=${result.partPaths} tree=${result.treeRows} cadPartCount=${result.partCount} placements=${result.placements}`);
+    console.log('SMOKE_DESIGN_LAYOUT_SEMANTICS_OK wizard=symbolic-card saved-project=symbolic-card');
+    console.log(`SMOKE_DESIGN_WEBGL_NOTICE ${result.notice}`);
+  } catch (error) {
+    console.error('SMOKE_DESIGN_WEBGL_FAIL', error);
+    if (parametric) await parametric.stop();
+    setTimeout(() => app.exit(1), 100);
+    return;
+  }
+  if (parametric) await parametric.stop();
+  setTimeout(() => app.exit(0), 100);
+}
+
 function createWindow(): BrowserWindow {
   const trustedUiPath = indexHtmlPath();
   const isTrustedNavigation = (url: string): boolean => isTrustedUiUrl(url, trustedUiPath);
   const window = new BrowserWindow({
-    width: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1600 : 1440,
-    height: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ? 1000 : 900,
-    useContentSize: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS,
+    width: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS || HEADLESS_DESIGN_WEBGL_SMOKE ? 1600 : 1440,
+    height: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS || HEADLESS_DESIGN_WEBGL_SMOKE ? 1000 : 900,
+    useContentSize: HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS || HEADLESS_DESIGN_WEBGL_SMOKE,
     minWidth: 1000,
     minHeight: 680,
     backgroundColor: '#1E2124',
@@ -935,6 +1112,10 @@ function createWindow(): BrowserWindow {
         if (parametric) await parametric.stop();
         setTimeout(() => app.exit(1), 100);
       }
+      return;
+    }
+    if (HEADLESS_DESIGN_WEBGL_SMOKE) {
+      await runHeadlessDesignWebglSmoke(window);
       return;
     }
     if (HEADLESS_SMOKE) {
@@ -4597,9 +4778,9 @@ function createWindow(): BrowserWindow {
           await wait(1200);
           const candidates = root.querySelectorAll('[data-candidate]');
           const forms = [...candidates].map((card) => card.querySelector('.design-candidate-id').textContent);
-          const throughputs = [...candidates].map((card) => card.querySelector('.design-metrics .design-good,.design-metrics .design-bad').textContent);
+          const throughputs = [...candidates].map((card) => card.querySelector('.design-metrics > div:nth-child(2) b')?.textContent ?? '');
           const distinct = new Set(forms).size;
-          if (candidates.length !== 3 || distinct !== 3) throw new Error('候选生成失败 cards=' + candidates.length + ' forms=' + JSON.stringify(forms) + ' 提示=' + (document.getElementById('cadNotice')?.textContent ?? '(无)'));
+          if (candidates.length !== 3 || distinct !== 3 || throughputs.some((value) => !value)) throw new Error('候选生成失败 cards=' + candidates.length + ' forms=' + JSON.stringify(forms) + ' 提示=' + (document.getElementById('cadNotice')?.textContent ?? '(无)'));
           root.querySelector('[data-preview="0"]').click();
           await wait(80);
           root.querySelector('#designPreviewClose').click();
@@ -4631,19 +4812,30 @@ function createWindow(): BrowserWindow {
             await wait(2000);
           }
           // 保存后要解析 61 个 STL 并载入主视口，软件渲染下可能超过 2s，轮询等待
-          let sceneParts = 0;
-          for (let i = 0; i < 60 && sceneParts < 1; i += 1) {
+          let scenePartCount = 0;
+          let sceneTrianglesZero = false;
+          for (let i = 0; i < 60 && scenePartCount < 1; i += 1) {
             await wait(250);
-            sceneParts = window.__AgentBridge.getScene().parts?.length ?? 0;
+            const parts = window.__AgentBridge.getScene().parts ?? [];
+            scenePartCount = parts.length;
+            sceneTrianglesZero = parts.length > 0 && parts.every((part) => part.triangles === 0);
           }
+          const fallback = document.getElementById('cadWebglFallback');
           const saved = (await window.desktop.projects.list()).find((project) => project.name === 'Smoke 整机设计');
+          const projectRow = [...document.querySelectorAll('[data-project-open]')].find((entry) => entry.dataset.projectOpen === saved?.id);
           return {
             steps, count: candidates.length, distinct, forms, throughputs,
             placements, overlaps, layoutText, reviewText, step5, canSave,
             saved: saved?.id || null, hasDesign: Boolean(saved?.design),
             draft: (await window.desktop.design.loadDraft()).draft,
             rootHidden: root.hidden,
-            scene: sceneParts,
+            scene: scenePartCount,
+            sceneTrianglesZero,
+            degraded: Boolean(fallback),
+            fallbackText: fallback?.textContent ?? '',
+            fallbackMeshCount: Number(fallback?.querySelector('[data-cad-fallback="meshes"]')?.textContent ?? 0),
+            fallbackTitle: fallback?.querySelector('.cad-fallback-title')?.textContent ?? '',
+            projectMenuMeta: projectRow?.querySelector('.cad-project-meta')?.textContent ?? '',
             partPaths: (await window.desktop.projects.open(saved.id)).partPaths?.length ?? -1,
             bridgeReady: window.__AgentBridge.ready(),
             notice: document.getElementById('cadNotice')?.textContent ?? '',
@@ -4652,7 +4844,7 @@ function createWindow(): BrowserWindow {
         })()`) as {
           steps: number; count: number; distinct: number; forms: string[]; throughputs: string[];
           placements: number; overlaps: number; layoutText: string; reviewText: string; step5: string;
-          canSave: boolean; saved: string | null; hasDesign: boolean; draft: unknown; rootHidden: boolean; scene: number; partCountText: string; notice: string; partPaths: number; bridgeReady: boolean;
+          canSave: boolean; saved: string | null; hasDesign: boolean; draft: unknown; rootHidden: boolean; scene: number; sceneTrianglesZero: boolean; degraded: boolean; fallbackText: string; fallbackMeshCount: number; fallbackTitle: string; projectMenuMeta: string; partCountText: string; notice: string; partPaths: number; bridgeReady: boolean;
         };
         if (designResult.steps !== 5 || designResult.step5 !== '5') throw new Error(`五步 UI 未走完 ${JSON.stringify(designResult)}`);
         console.log(`SMOKE_DESIGN_WIZARD_OK steps=${designResult.steps}`);
@@ -4661,8 +4853,17 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_DESIGN_CANDIDATE_DATA ${designResult.forms.map((form, index) => `${form}:${designResult.throughputs[index]}`).join(' ')}`);
         if (designResult.placements < 1) throw new Error(`布局没有元素 ${JSON.stringify(designResult)}`);
         console.log(`SMOKE_DESIGN_LAYOUT_OK placements=${designResult.placements} overlaps=${designResult.overlaps}`);
-        if (designResult.scene < 1) console.warn(`SMOKE_DESIGN_SCENE_BRIDGE_WARN bridgeScene=${designResult.scene} partCount=${designResult.partCountText}`);
-        if (!designResult.canSave || !designResult.saved || !designResult.hasDesign || designResult.draft !== null || !designResult.rootHidden || !Number(designResult.partCountText || 0)) {
+        if (designResult.degraded) {
+          if (designResult.scene !== designResult.partPaths || !designResult.sceneTrianglesZero || designResult.fallbackMeshCount !== designResult.partPaths || !designResult.fallbackTitle.includes('无法显示 3D 模型') || !designResult.fallbackText.includes('3D 渲染已停用') || !designResult.notice.includes('概念估算占位体') || !designResult.notice.includes('这不是 B-rep 精检或工程签核') || !designResult.reviewText.includes('不是 B-rep 精检、型号级实体验证或工程签核') || !designResult.projectMenuMeta.includes('设计向导概念估算占位体') || !designResult.projectMenuMeta.includes('非 B-rep 精检或工程签核')) {
+            throw new Error(`WebGL 降级时应保留零件元数据、标记渲染停用并保留非签核提示：${JSON.stringify(designResult)}`);
+          }
+          console.log(`SMOKE_DESIGN_VIEWPORT_FALLBACK_OK scene=${designResult.scene} triangles=0 parsedMeshes=${designResult.fallbackMeshCount} viewport=unavailable`);
+        } else {
+          if (designResult.scene < 1) throw new Error(`已保存工程打开后主视口为空：AgentBridge scene=${designResult.scene}, partCount=${designResult.partCountText}`);
+          if (!designResult.notice.includes('概念估算占位体') || !designResult.projectMenuMeta.includes('设计向导概念估算占位体')) throw new Error(`设计向导几何类型提示缺失：${JSON.stringify({ notice: designResult.notice, projectMenuMeta: designResult.projectMenuMeta })}`);
+          console.log(`SMOKE_DESIGN_SCENE_BRIDGE_OK parts=${designResult.scene} type=concept-placeholder`);
+        }
+        if (!designResult.canSave || !designResult.saved || !designResult.hasDesign || designResult.draft !== null || !designResult.rootHidden || !Number(designResult.partCountText || 0) || designResult.partPaths < 1) {
           throw new Error(`设计工程保存/重载失败 ${JSON.stringify(designResult)}`);
         }
         console.log(`SMOKE_DESIGN_SAVE_OK project=${designResult.saved}`);
