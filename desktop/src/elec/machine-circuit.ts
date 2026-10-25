@@ -71,9 +71,9 @@ export function buildMachineCircuit(spec: MachineElecSpec): Circuit {
   devices.push(device('-KM1A', 'no', '接触器辅助触点', contactor, '13/14 NO', ['13', '14'], { displayTag: '-KM1' }));
   devices.push(device('-KM1K', 'coil', '接触器线圈', contactor, '24V DC · A1/A2', ['A1', 'A2'], { displayTag: '-KM1' }));
   devices.push(device('-FR1NC', 'nc', '热继常闭触点', thermal, '95/96', ['95', '96'], { displayTag: '-FR1' }));
-  if (spec.controls.estop) devices.push(device('-SB1', 'nc', '急停按钮（常闭）', 'XB2-BS542C', '蘑菇头 · 旋转复位', ['13', '14']));
+  if (spec.controls.estop) devices.push(device('-SB1', 'nc', '急停按钮（常闭）', 'XB2-BS542C', '蘑菇头 · 旋转复位', ['11', '12']));
   if (spec.controls.startStop) {
-    devices.push(device('-SB3', 'nc', '停止按钮（常闭）', 'XB2-BA42C', '红色', ['13', '14']));
+    devices.push(device('-SB3', 'nc', '停止按钮（常闭）', 'XB2-BA42C', '红色', ['11', '12']));
     devices.push(device('-SB2', 'no', '启动按钮（常开）', 'XB2-BA31C', '绿色', ['13', '14']));
   }
   if (spec.controls.lamp) devices.push(device('-HL1', 'lamp', '运行指示灯', 'XB2-BVM3LC', '24V DC', ['1', '2']));
@@ -107,11 +107,14 @@ export function buildMachineCircuit(spec: MachineElecSpec): Circuit {
   if (spec.controls.estop) seriesTags.push('-SB1');
   if (spec.controls.startStop) seriesTags.push('-SB3');
   const firstTag = seriesTags[0] ?? '-SB2';
-  addNet('N-CTRL-FUSE', undefined, [PIN('-FU1', '2'), PIN(firstTag, '13')]);
+  // IEC 60947-5-1 端子号：常闭 11/12，常开 13/14
+  const pinIn = (tag: string) => (tag === '-SB2' ? '13' : '11');
+  const pinOut = '12';
+  addNet('N-CTRL-FUSE', undefined, [PIN('-FU1', '2'), PIN(firstTag, pinIn(firstTag))]);
   seriesTags.forEach((tag, index) => {
-    const pins: string[] = [PIN(tag, '14')];
+    const pins: string[] = [PIN(tag, pinOut)];
     const next = seriesTags[index + 1];
-    if (next) pins.push(PIN(next, '13'));
+    if (next) pins.push(PIN(next, pinIn(next)));
     else pins.push(PIN('-SB2', '13'), PIN('-KM1A', '13'));
     addNet(`N-CTRL-S${index + 1}`, undefined, pins);
   });
