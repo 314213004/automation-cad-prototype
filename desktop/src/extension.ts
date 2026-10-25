@@ -55,7 +55,7 @@ import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
-import { buildElectricalSheet, type ElectricMachineModel } from './elec/schematic';
+import { protectionRows, selectMotorProtection } from './elec/protection';
 import { estimateConveyorDrive } from './machine/conveyor-synth';
 import {
   buildConveyorParts,
@@ -301,18 +301,10 @@ function buildOverlay(): void {
       if (domainBtn.dataset.cadDomain === 'elec') {
         // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前工程上下文
         const project = lastOpenedProject;
-        const sheet = project ? generateElecSheet(project) : null;
         try {
-          if (sheet) {
-            (window as unknown as { ElecDomain?: { setSchematic?: (payload: unknown) => boolean } }).ElecDomain?.setSchematic?.({
-              svg: sheet.svg,
-              meta: {
-                project: project?.name ?? '',
-                drawingNo: 'EL-CV-001',
-                generated: true,
-                devices: sheet.devices
-              }
-            });
+          if (project) {
+            const machine = buildElecMachineModel(project);
+            (window as unknown as { ElecDomain?: { applyMachine?: (model: unknown) => boolean } }).ElecDomain?.applyMachine?.(machine);
           }
         } catch (error) {
           console.warn('[cad] 生成电气图失败', error);
@@ -936,7 +928,7 @@ function toggleProjectMenu(open?: boolean): void {
  * 驱动功率来自 conveyor-synth 的真实阻力/功率估算（不是拍脑袋），
  * 传感器来自零件清单里的光电支架，IO 由 schematic.ts 统一排布。
  */
-function generateElecSheet(project: ProjectMenuRecord): ReturnType<typeof buildElectricalSheet> | null {
+function buildElecMachineModel(project: ProjectMenuRecord): Record<string, unknown> {
   const params = {
     lengthMm: Number(project.params?.lengthMm ?? 2000),
     widthMm: Number(project.params?.widthMm ?? 300),
@@ -945,38 +937,41 @@ function generateElecSheet(project: ProjectMenuRecord): ReturnType<typeof buildE
     beltThicknessMm: Number(project.params?.beltThicknessMm ?? 4),
     frameSectionMm: Number(project.params?.frameSectionMm ?? 40)
   };
-  // 驱动功率与滚筒转速来自同一套估算：v = 0.2 m/s 默认，n = 60v / (πD)
+  // 功率/转速来自同一套估算：v = 0.2 m/s，n = 60v/(πD)
   let powerKw = 0.04;
-  let speedMps = 0.2;
-  let rpm = 76;
-  let ratio = 18;
   try {
     const drive = estimateConveyorDrive(params, {});
     powerKw = Math.max(0.04, Math.round((drive.motorW / 1000) * 100) / 100);
-    speedMps = 0.2;
-    const pulleyRadiusM = Math.max(0.01, params.pulleyDiameterMm / 2 / 1000);
-    rpm = Math.max(1, Math.round((60 * speedMps) / (2 * Math.PI * pulleyRadiusM)));
-    ratio = Math.max(1, Math.round((1400 / rpm) * 10) / 10);
   } catch (error) {
-    console.warn('[elec] 驱动估算失败，回退默认值', error);
+    console.warn('[elec] 驱动估算失败，回退 0.04 kW', error);
   }
-  const names = (project.partsList ?? []).map((item) => item.name);
-  const sensors: ElectricMachineModel['sensors'] = [];
-  if (names.some((name) => name.includes('进料'))) sensors.push({ tag: '-PE1', label: '进料检测', type: 'photo' });
-  if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', type: 'photo' });
-  if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', type: 'proximity' });
+  const pulleyRadiusM = Math.max(0.01, params.pulleyDiameterMm / 2 / 1000);
+  const rpm = Math.max(1, Math.round((60 * 0.2) / (2 * Math.PI * pulleyRadiusM)));
+  const ratio = Math.max(1, Math.round((1400 / rpm) * 10) / 10);
+  const protection = selectMotorProtection(powerKw);
 
-  return buildElectricalSheet({
+  const names = (project.partsList ?? []).map((item) => item.name);
+  const sensors: Array<{ tag: string; label: string; address: string }> = [];
+  if (names.some((name) => name.includes('进料'))) sensors.push({ tag: '-PE1', label: '进料检测', address: 'I0.3' });
+  if (names.some((name) => name.includes('出料'))) sensors.push({ tag: '-PE2', label: '出料检测', address: 'I0.4' });
+  if (sensors.length === 0) sensors.push({ tag: '-PE1', label: '工件到位', address: 'I0.3' });
+
+  return {
     project: project.name,
-    drive: { powerKw, rpm, ratio, voltage: 380 },
+    drawingNo: 'EL-CV-001',
+    page: '1 / 1',
+    breaker: { tag: '-QF1', model: protection.breaker, spec: `${protection.currentA}A` },
+    contactor: { tag: '-KM1', model: protection.contactor, spec: `${protection.currentA}A` },
+    thermal: { tag: '-FR1', model: protection.thermal, spec: `整定 ${protection.thermalSetA}A` },
+    motor: { tag: '-M1', model: '减速电机', power: `${powerKw}kW · ${rpm}rpm · i=${ratio}` },
+    estop: { tag: '-SB1' },
+    stop: { tag: '-SB3' },
+    start: { tag: '-SB2' },
+    coil: { tag: '-KM1' },
+    lamp: { tag: '-HL1', address: 'Q0.0' },
     sensors,
-    controls: { estop: true, startStop: true },
-    notes: [
-      `线体 ${Math.round(params.lengthMm)}×${Math.round(params.widthMm)} mm · 皮带面高 ${Math.round(params.beltHeightMm)} mm`,
-      `零件 ${project.parts} 件 · 总质量 ${project.massKg ?? '—'} kg`
-    ],
-    drawingNo: 'EL-CV-001'
-  });
+    devices: protectionRows(protection, { sensors: sensors.length })
+  };
 }
 
 /** 最近打开的工程：外壳冷启动时恢复卡片用 */
