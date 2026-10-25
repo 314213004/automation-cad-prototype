@@ -208,6 +208,10 @@ export class PlcManager extends EventEmitter {
   async write(id: string, value: PlcValue): Promise<PlcActionResult<null>> {
     if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     if (!isPlcValue(value)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
+    // 点位校验必须在发往适配器之前：仿真器不校验区属，Modbus 写输入区也只是被从站忽略，
+    // 两种情况下调用方都会以为「写成功了」，到现场才发现执行机构没动。
+    const guard = this.checkWritable(id);
+    if (guard) return guard;
     return await this.run('写入点位', async (adapter) => {
       await adapter.write(id, value);
       return null;
@@ -218,11 +222,31 @@ export class PlcManager extends EventEmitter {
   async force(id: string, value: PlcValue): Promise<PlcActionResult<null>> {
     if (typeof id !== 'string' || !id) return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少必填参数：点位 id' };
     if (!isPlcValue(value)) return { ok: false, code: 'INVALID_ARGUMENT', message: '点位值必须是布尔值或数字' };
+    // 强制允许写输入区（调试现场就是这么用的），但点位必须真实存在。
+    const config = this.activeConfig;
+    if (config && !config.points.some((item) => item.id === id)) {
+      return { ok: false, code: 'POINT_NOT_FOUND', message: `点位不存在：${id}` };
+    }
     return await this.run('强制写入点位', async (adapter) => {
       if (adapter instanceof SimPlcAdapter) await adapter.force(id, value);
       else await adapter.write(id, value);
       return null;
     });
+  }
+
+  /** 点位存在性 + 可写性校验；通过返回 null。 */
+  private checkWritable(id: string): PlcActionResult<null> | null {
+    const config = this.activeConfig;
+    if (!config) return null; // 未连接由 run() 统一报 NOT_CONNECTED
+    const point = config.points.find((item) => item.id === id);
+    if (!point) {
+      return { ok: false, code: 'POINT_NOT_FOUND', message: `点位不存在：${id}（当前配置共 ${config.points.length} 个点位）` };
+    }
+    const writableArea = point.area === 'coil' || point.area === 'holding';
+    if (!writableArea || point.writable === false) {
+      return { ok: false, code: 'READ_ONLY_POINT', message: `点位「${id}」位于 ${point.area} 区，是只读点，不能写入` };
+    }
+    return null;
   }
 
   subscribe(callback: (values: Record<string, PlcValue>) => void): PlcActionResult<true> {

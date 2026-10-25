@@ -1,6 +1,6 @@
 {
   "name": "automation-cad-desktop",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "description": "非标自动化整机设计软件 · Windows 11 桌面版",
   "author": "owlco",
@@ -28,7 +28,7 @@
     "check:orbit-webgl": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a -s \"-screen 0 1700x1100x24\" electron scripts/orbit-webgl-check.cjs",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "screenshots:machine": "npm run build:ext && node scripts/capture-machine-screenshots.mjs",
-    "dist:win": "electron-builder --win nsis --x64",
+    "dist:win": "node scripts/vendor-dwg.mjs && electron-builder --win nsis --x64",
     "build:mcp": "node scripts/build-mcp.mjs",
     "mcp": "node dist-electron/mcp.cjs",
     "agent:live": "node scripts/agent-live.mjs",
@@ -99,6 +99,10 @@
       {
         "from": "../spike/build123d/app.py",
         "to": "parametric/app.py"
+      },
+      {
+        "from": "vendor/dwg",
+        "to": "dwg"
       }
     ],
     "publish": {

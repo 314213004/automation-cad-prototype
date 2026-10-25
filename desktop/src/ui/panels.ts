@@ -1,5 +1,6 @@
 import panelStyles from './panels.css?inline';
 import { drawerIdForEntry } from './drawer-ids.ts';
+import { decideEntryBar } from './entry-bar.ts';
 
 let stylesInjected = false;
 let toastTimer = 0;
@@ -36,6 +37,39 @@ export function closeOtherDrawers(keep: HTMLElement | null = null): number {
   return closed;
 }
 
+/**
+ * 按当前可用宽度决定入口栏是「带文字」还是「只留图标」。
+ * 只会切 class，不隐藏任何入口——极端窄窗口仍有横向滚动兜底。
+ */
+let entryBarResizeBound = false;
+
+/** 窗口变窄/变宽时要重新判定（一次绑定，幂等）。 */
+function bindEntryBarResize(): void {
+  if (entryBarResizeBound) return;
+  entryBarResizeBound = true;
+  window.addEventListener('resize', () => syncEntryBarMode());
+}
+
+export function syncEntryBarMode(): void {
+  bindEntryBarResize();
+  const bar = document.querySelector<HTMLElement>('.tb-right');
+  if (!bar) return;
+  const buttons = Array.from(bar.querySelectorAll<HTMLElement>('.acp-entry-btn'));
+  if (buttons.length === 0) return;
+  // 先撤掉 compact 再量，否则会拿图标态宽度去和阈值比、class 来回抖
+  bar.classList.remove('is-compact');
+  const gap = 6;
+  const fullWidth = buttons.reduce((sum, button) => sum + button.offsetWidth, 0) + gap * (buttons.length - 1);
+  const compactNeeded = buttons.length * 32 + gap * (buttons.length - 1);
+  const decision = decideEntryBar({
+    needed: fullWidth,
+    available: bar.clientWidth,
+    compactNeeded
+  });
+  bar.classList.toggle('is-compact', decision.mode === 'compact');
+  bar.classList.toggle('is-scrollable', decision.scrolls);
+}
+
 export function buildEntryButton(id: string, label: string, icon: string, onClick: () => void): HTMLButtonElement | null {
   const existing = document.getElementById(id);
   if (existing instanceof HTMLButtonElement) return existing;
@@ -60,6 +94,7 @@ export function buildEntryButton(id: string, label: string, icon: string, onClic
     onClick();
   });
   target.appendChild(button);
+  syncEntryBarMode();
   return button;
 }
 

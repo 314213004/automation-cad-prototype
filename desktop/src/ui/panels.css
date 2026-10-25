@@ -1,8 +1,23 @@
+/* 入口按钮挂在 .tb-right 里；该容器必须可收缩 + 横向滚动，
+   否则入口一多就顶出窗口（实测 13 个入口时最右 4 个完全在窗口外）。 */
+.tb-right{
+  flex:1 1 auto; min-width:0;
+  justify-content:flex-end;
+  overflow-x:auto; overflow-y:hidden;
+  overscroll-behavior-x:contain;
+  scrollbar-width:thin;
+}
+.tb-right::-webkit-scrollbar{height:4px}
+.tb-right::-webkit-scrollbar-thumb{background:#3d444b;border-radius:2px}
 .acp-entry-btn{
   display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;margin-left:4px;
   border:1px solid #414850;border-radius:var(--r,3px);color:#cbd2d8;
   background:linear-gradient(180deg,#292d31,#23272b);font:inherit;font-size:12px;white-space:nowrap;
+  flex:0 0 auto;
 }
+/* 拥挤时降到图标模式：文字隐藏、内边距收紧，靠 title 提示；不隐藏任何入口。 */
+.tb-right.is-compact .acp-entry-btn{padding:0 8px;gap:0}
+.tb-right.is-compact .acp-entry-btn span{display:none}
 .acp-entry-btn:hover{border-color:#5d6770;background:#2d3237;color:#fff}
 .acp-entry-btn.is-active{border-color:#1f9c8d;color:#b9f2e9;background:#243a37}
 .acp-entry-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}

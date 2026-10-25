@@ -2,6 +2,19 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [0.4.7] - 2026-10-25
+
+### Added · 装配 / 图纸
+
+- **标准件可视化装配**：顶部「装配」入口，从 617 件库里拖标准件进 3D，松手贴合命中面并沿法向对齐；代理体尺寸由 `specs` 解析（导轨/丝杠/气缸/减速机/型材…），解析不到的字段标「估」并染橙色。`window.AutomationCadAssembly` 暴露 state/placeAt/remove/clear。
+- **DXF / DWG 图纸**：顶部「图纸」入口，DXF 直读（LINE/ARC/CIRCLE/LWPOLYLINE/POLYLINE/ELLIPSE/SPLINE/INSERT 递归展开），DWG 经 LibreDWG WASM 转 DXF 后同样渲染成 Z=0 线框底图；相机 near/far 按图纸尺度放宽（默认 far=100m，公里级图纸会被裁掉）。打开对话框、拖放、agent `importPath` 三条入口都已路由。
+- **DWG 转换器随包分发**：`resources/dwg/libredwg-web`（GPL-3.0），见 `THIRD-PARTY-NOTICES.md`；没有转换器时给出 ODA / dwg2dxf / 另存 DXF 三条可执行路径。
+
+### Fixed · PLC
+
+- **只读点位可写**：`manager.write` 原先不校验点位，写输入区（discrete/input）会被仿真器接受、被 Modbus 从站忽略，调用方却以为写成功。现在返回 `READ_ONLY_POINT` / `POINT_NOT_FOUND`；`force` 仍允许强制输入区（现场调试），但点位必须存在。
+- 新增 3 条 manager 测试（只读区、不存在点位、强制输入区）。
+
 ## [0.4.6] - 2026-10-25
 
 ### Fixed · 3D 视口交互（真机连续反馈）

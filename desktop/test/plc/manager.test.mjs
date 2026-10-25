@@ -121,3 +121,43 @@ test('manager 读取 plc.json 时对坏 JSON 返回中文错误', async () => {
   assert.match(result.message, /plc\.json 解析失败/);
   assert.throws(() => manager.readConfigFile(), /plc\.json 解析失败/);
 });
+
+test('写入只读点位被拒绝：discrete / input 区不可写', async () => {
+  const { manager } = makeManager();
+  const cfg = {
+    kind: 'sim',
+    points: [
+      ...points,
+      { id: 'X0', name: '启动按钮', area: 'discrete', address: 0, dataType: 'bool' },
+      { id: 'D100', name: '计数', area: 'holding', address: 100, dataType: 'int16', writable: true }
+    ]
+  };
+  assert.equal((await manager.connect(cfg)).ok, true);
+  const readOnly = await manager.write('X0', true);
+  assert.equal(readOnly.ok, false);
+  assert.equal(readOnly.code, 'READ_ONLY_POINT');
+  assert.match(readOnly.message, /只读/);
+  // 可写区不受影响
+  assert.equal((await manager.write('Y0', true)).ok, true);
+  assert.equal((await manager.write('D100', 7)).ok, true);
+});
+
+test('写入不存在的点位被拒绝，而不是静默成功', async () => {
+  const { manager } = makeManager();
+  assert.equal((await manager.connect({ kind: 'sim', points })).ok, true);
+  const missing = await manager.write('Y99', true);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'POINT_NOT_FOUND');
+});
+
+test('强制写入允许输入区（现场调试），但点位必须存在', async () => {
+  const { manager } = makeManager();
+  await manager.connect({
+    kind: 'sim',
+    points: [...points, { id: 'X0', name: '启动按钮', area: 'discrete', address: 0, dataType: 'bool' }]
+  });
+  assert.equal((await manager.force('X0', true)).ok, true);
+  const missing = await manager.force('X99', true);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'POINT_NOT_FOUND');
+});

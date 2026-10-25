@@ -38,6 +38,8 @@ function run(cmd, args, options = {}) {
 // 1) 只做增量验证 + 构建，不打安装包
 run('npx', ['tsc', '--noEmit']);
 run('npm', ['run', 'build:ext']);
+// DWG 转换器不在 node_modules 里，先把 vendor 目录备好，否则 extraResources 拷不到
+run('node', ['scripts/vendor-dwg.mjs']);
 
 // 2) 生成 unpacked 目录（electron-builder 的 dir 目标，不做 NSIS）
 run('npx', ['electron-builder', '--win', 'dir', '--x64']);
@@ -57,7 +59,9 @@ const copies = [
   ['dir', join(unpacked, 'resources', 'web'), join(installDir, 'resources', 'web')],
   ['dir', join(unpacked, 'resources', 'packs'), join(installDir, 'resources', 'packs')],
   // 参数化建模 sidecar（Python）：修它就得重新拷，否则应用跑的仍是旧脚本。
-  ['dir', join(unpacked, 'resources', 'parametric'), join(installDir, 'resources', 'parametric')]
+  ['dir', join(unpacked, 'resources', 'parametric'), join(installDir, 'resources', 'parametric')],
+  // DWG 转换器（GPL-3.0，独立目录，见 scripts/vendor-dwg.mjs）
+  ['dir', join(unpacked, 'resources', 'dwg'), join(installDir, 'resources', 'dwg')]
 ];
 for (const [kind, from, to] of copies) {
   if (!existsSync(from)) { console.error(`缺少产物: ${from}`); process.exit(1); }
