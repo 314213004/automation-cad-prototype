@@ -23,6 +23,12 @@ export interface AgentRpcOptions {
   allowlist?: string[];
   cdpPort?: number | null;
   audit?: (record: AgentAuditRecord) => void;
+  /**
+   * 覆盖来源地址解析。默认取 `request.socket.remoteAddress`；
+   * 测试注入固定地址，避免依赖「拨号本机网卡 IP 时对端到底报什么」这种平台差异
+   * （Windows 上拨自己的局域网 IP 可能被系统短路成回环）。
+   */
+  resolveRemoteAddress?: (request: IncomingMessage) => string | undefined;
 }
 
 export interface AgentRpcInfo {
@@ -101,6 +107,7 @@ export class AgentRpcServer {
   private allowlistValue: string[];
   private cdpPortValue: number | null;
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
+  private readonly resolveRemoteAddress: ((request: IncomingMessage) => string | undefined) | undefined;
   private server: Server | null = null;
   private actualPort = 0;
   private tokenFile: string | undefined;
@@ -116,6 +123,7 @@ export class AgentRpcServer {
     this.allowlistValue = [...(options.allowlist ?? [])];
     this.cdpPortValue = options.cdpPort ?? null;
     this.audit = options.audit;
+    this.resolveRemoteAddress = options.resolveRemoteAddress;
   }
 
   get host(): string {
@@ -196,7 +204,9 @@ export class AgentRpcServer {
   }
 
   private requestAccess(request: IncomingMessage): { remoteAddress: string; origin: 'local' | 'lan'; allowed: boolean } {
-    const remoteAddress = normalizeRemoteAddress(request.socket.remoteAddress);
+    const remoteAddress = normalizeRemoteAddress(
+      this.resolveRemoteAddress?.(request) ?? request.socket.remoteAddress
+    );
     const allowed = isAddressAllowed(remoteAddress, this.allowlistValue);
     return {
       remoteAddress,

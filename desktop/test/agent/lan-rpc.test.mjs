@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { networkInterfaces, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -42,15 +42,6 @@ async function getHealth(target, authToken = token) {
     headers: { authorization: `Bearer ${authToken}` }
   });
   return { status: response.status, body: await response.json() };
-}
-
-function externalIpv4() {
-  for (const entries of Object.values(networkInterfaces())) {
-    for (const entry of entries ?? []) {
-      if (entry.family === 'IPv4' && !entry.internal) return entry.address;
-    }
-  }
-  return null;
 }
 
 before(async () => {
@@ -127,28 +118,63 @@ test('热重启后 host 变化且服务继续可用，审计带 remoteAddress/or
   assert.equal(record.remoteAddress, '127.0.0.1');
 });
 
-test('局域网来源未命中白名单返回 403 并审计', { skip: !externalIpv4() }, async () => {
-  const address = externalIpv4();
-  assert.ok(address);
-  const info = await restartAgentServer(server, '0.0.0.0', {
+test('局域网来源未命中白名单返回 403 并审计', async () => {
+  // 用注入的来源地址代替「拨本机网卡 IP」：Windows 上拨自己的局域网 IP 会被系统
+  // 短路成回环，导致这条断言在 CI 上失效（Linux 通过、Windows 实测 200）。
+  const isolated = new AgentRpcServer({
+    tools: tools(),
+    token,
+    version: '0.1.0-lan-deny-test',
+    host: '127.0.0.1',
+    port: 0,
     lanEnabled: true,
     allowlist: ['10.0.0.0/8'],
-    cdpPort: null
+    cdpPort: null,
+    resolveRemoteAddress: () => '192.168.2.117',
+    audit: (record) => audit.push(record)
   });
-  const target = `http://${address}:${info.port}`;
-  const denied = await getHealth(target);
-  assert.equal(denied.status, 403);
-  assert.deepEqual(denied.body, { ok: false, error: 'LAN_NOT_ALLOWED' });
-  const record = audit.at(-1);
-  assert.equal(record.tool, 'lan_access_check');
-  assert.equal(record.code, 'LAN_NOT_ALLOWED');
-  assert.equal(record.origin, 'lan');
-  assert.equal(record.remoteAddress, address);
+  const info = await isolated.start();
+  try {
+    const denied = await getHealth(`http://127.0.0.1:${info.port}`);
+    assert.equal(denied.status, 403);
+    assert.deepEqual(denied.body, { ok: false, error: 'LAN_NOT_ALLOWED' });
+    const record = audit.at(-1);
+    assert.equal(record.tool, 'lan_access_check');
+    assert.equal(record.code, 'LAN_NOT_ALLOWED');
+    assert.equal(record.origin, 'lan');
+    assert.equal(record.remoteAddress, '192.168.2.117');
+  } finally {
+    await isolated.stop();
+  }
 });
 
-test('远程写工具仍必须经过桌面确认，不能静默执行', { skip: !externalIpv4() }, async () => {
-  const address = externalIpv4();
-  assert.ok(address);
+test('白名单命中时局域网来源可正常调用', async () => {
+  const isolated = new AgentRpcServer({
+    tools: tools(),
+    token,
+    version: '0.1.0-lan-allow-test',
+    host: '127.0.0.1',
+    port: 0,
+    lanEnabled: true,
+    allowlist: ['192.168.2.0/24'],
+    cdpPort: null,
+    resolveRemoteAddress: () => '192.168.2.117',
+    audit: (record) => audit.push(record)
+  });
+  const info = await isolated.start();
+  try {
+    const health = await getHealth(`http://127.0.0.1:${info.port}`);
+    assert.equal(health.status, 200);
+    assert.equal(health.body.lanEnabled, true);
+    const record = audit.at(-1);
+    assert.equal(record.remoteAddress, '192.168.2.117');
+    assert.equal(record.origin, 'lan');
+  } finally {
+    await isolated.stop();
+  }
+});
+
+test('远程写工具仍必须经过桌面确认，不能静默执行', async () => {
   const calls = [];
   const confirmations = [];
   const summary = {
@@ -168,11 +194,12 @@ test('远程写工具仍必须经过桌面确认，不能静默执行', { skip: 
     },
     token,
     version: '0.1.0-lan-write-test',
-    host: '0.0.0.0',
+    host: '127.0.0.1',
     port: 0,
     lanEnabled: true,
-    allowlist: [`${address}/32`],
+    allowlist: ['192.168.2.0/24'],
     cdpPort: null,
+    resolveRemoteAddress: () => '192.168.2.118',
     confirmWrite: async (name, args) => {
       confirmations.push({ name, args });
       return false;
@@ -180,7 +207,7 @@ test('远程写工具仍必须经过桌面确认，不能静默执行', { skip: 
   });
   const info = await remote.start();
   try {
-    const response = await fetch(`http://${address}:${info.port}/rpc`, {
+    const response = await fetch(`http://127.0.0.1:${info.port}/rpc`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
