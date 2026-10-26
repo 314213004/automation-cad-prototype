@@ -17,6 +17,8 @@ export interface HomeScreenOptions {
 
 export interface HomeScreenHandle {
   open(): void;
+  /** 底部提示行（首页「空白画布」清草稿前的二次确认提示用） */
+  message(text: string, warn?: boolean): void;
   close(): void;
   isOpen(): boolean;
   refresh(): Promise<void>;
@@ -190,6 +192,9 @@ export function initHomeScreen(options: HomeScreenOptions): HomeScreenHandle {
   }
 
   const handle: HomeScreenHandle = {
+    message(text: string, warn = false): void {
+      setMessage(text, warn);
+    },
     open(): void {
       if (!root) return;
       root.hidden = false;

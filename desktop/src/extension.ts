@@ -1624,6 +1624,7 @@ function setCurrentProject(project: ProjectMenuRecord): void {
 }
 
 let homeHandle: HomeScreenHandle | null = null;
+let blankResetPending = 0;
 
 /**
  * 启动首页：首屏不展示原型里的「滑台气缸」示例装配。
@@ -1642,8 +1643,28 @@ function mountHomeScreen(): void {
   };
   homeHandle = initHomeScreen({
     onNewBlank: () => {
-      reveal();
-      openCanvasWorkbench({ blank: true });
+      // 首页「空白画布」会覆盖已有草稿：非空时必须再点一次（4 秒内），否则等于无确认清空
+      void (async () => {
+        const draft = await window.desktop?.canvasDraft?.load?.().catch(() => null);
+        const nodes = Array.isArray((draft?.draft as { graph?: { nodes?: unknown[] } } | null)?.graph?.nodes)
+          ? ((draft?.draft as { graph: { nodes: unknown[] } }).graph.nodes.length)
+          : 0;
+        if (nodes > 0 && blankResetPending === 0) {
+          blankResetPending = window.setTimeout(() => {
+            blankResetPending = 0;
+            homeHandle?.message('');
+          }, 4000);
+          homeHandle?.message(`当前草稿有 ${nodes} 个工位：再点一次「空白画布」确认清空（4 秒内）`, true);
+          return;
+        }
+        if (blankResetPending !== 0) {
+          window.clearTimeout(blankResetPending);
+          blankResetPending = 0;
+        }
+        homeHandle?.message('');
+        reveal();
+        openCanvasWorkbench({ blank: true });
+      })();
     },
     onNewDemo: () => {
       reveal();
