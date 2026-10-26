@@ -317,6 +317,83 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
   ]);
 }
 
+export interface BrepInterferenceHit {
+  a: string;
+  b: string;
+  volumeMm3: number;
+  ratio: number;
+  severity: string;
+}
+
+export interface BrepInterferenceResult {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  parts?: number;
+  candidates?: number;
+  checks?: number;
+  hits?: BrepInterferenceHit[];
+  elapsedMs?: number;
+  tolerances?: { volumeMm3: number; ratio: number };
+}
+
+/**
+ * 跑 B-Rep 精确干涉脚本（OCP 布尔）。超时/解析失败都返回结构化结果，不抛异常给 UI。
+ * 注意：这是 O(n²) 的布尔运算，几十件就要几十秒；脚本自己会在零件/候选对超限时拒绝。
+ */
+export async function runBrepInterferenceScript(options: {
+  python: string;
+  script: string;
+  stepPath: string;
+  timeoutMs?: number;
+  maxParts?: number;
+  maxCandidates?: number;
+}): Promise<BrepInterferenceResult> {
+  const timeoutMs = options.timeoutMs ?? 600_000;
+  const args = [options.script, options.stepPath];
+  if (options.maxParts !== undefined) args.push('--max-parts', String(options.maxParts));
+  if (options.maxCandidates !== undefined) args.push('--max-candidates', String(options.maxCandidates));
+  return await new Promise<BrepInterferenceResult>((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (result: BrepInterferenceResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    let child: ChildProcess;
+    try {
+      child = spawn(options.python, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    } catch (error) {
+      resolve({ ok: false, code: 'SPAWN_FAILED', message: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
+      finish({ ok: false, code: 'TIMEOUT', message: `B-Rep 干涉超时（${Math.round(timeoutMs / 1000)} 秒）：装配太大，先按子装配拆分` });
+    }, timeoutMs);
+    child.stdout?.on('data', (chunk) => { stdout += String(chunk); });
+    child.stderr?.on('data', (chunk) => { stderr += String(chunk); });
+    child.on('error', (error) => {
+      finish({ ok: false, code: 'SPAWN_FAILED', message: error.message });
+    });
+    child.on('close', (code) => {
+      const line = stdout.trim().split(/\r?\n/).filter(Boolean).pop();
+      if (!line) {
+        finish({ ok: false, code: 'NO_OUTPUT', message: stderr.trim().slice(-400) || `脚本无输出（退出码 ${code}）` });
+        return;
+      }
+      try {
+        finish(JSON.parse(line) as BrepInterferenceResult);
+      } catch {
+        finish({ ok: false, code: 'BAD_OUTPUT', message: `脚本输出不是 JSON：${line.slice(0, 200)}` });
+      }
+    });
+  });
+}
+
 export class ParametricManager {
   private readonly options: ParametricManagerOptions;
   private readonly idleMs: number;
@@ -579,6 +656,23 @@ export class ParametricManager {
     this.setStatus('ready', `参数化建模内核就绪（${info.version}）`, info.version);
     this.armIdleTimer();
     return { ok: true, status: 'ready', message: this.state.message, port, token, version };
+  }
+
+  /** B-Rep 精确干涉：复用同一个 Python 解释器（OCP 随 build123d 一起装）。 */
+  async brepInterference(stepPath: string, options: { timeoutMs?: number; maxParts?: number; maxCandidates?: number } = {}): Promise<BrepInterferenceResult> {
+    const python = resolvePython(this.options.env ?? process.env, {
+      ...(this.options.isPackaged !== undefined ? { isPackaged: this.options.isPackaged } : {}),
+      ...(this.options.resourcesPath ? { resourcesPath: this.options.resourcesPath } : {})
+    });
+    if (!python) {
+      return { ok: false, code: 'PYTHON_NOT_FOUND', message: '没有可用的 Python 解释器：B-Rep 干涉需要装 Python + OCP/build123d' };
+    }
+    const root = this.options.appRoot;
+    const script = root ? join(root, 'spike', 'brep-interference', 'brep_interference.py') : null;
+    if (!script || !existsSync(script)) {
+      return { ok: false, code: 'SCRIPT_MISSING', message: `找不到干涉脚本：${script ?? '(appRoot 未配置)'}` };
+    }
+    return await runBrepInterferenceScript({ python, script, stepPath, ...options });
   }
 
   private commandSpec(): CommandSpec | null {

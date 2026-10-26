@@ -712,6 +712,18 @@ interface AgentBridgeApi {
   /** 运动件自动识别：只生成建议并刷新标注抽屉的建议列表，从不写入标注。 */
   suggestKinematics(): AgentKinematicsSuggestBridgeResult | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
+  /** B-Rep 精确干涉（OCP 布尔，真体积）；不做 AABB 初筛。 */
+  brepInterference(payload: { stepPath: string; timeoutMs?: number; maxParts?: number }): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    parts?: number;
+    candidates?: number;
+    checks?: number;
+    hits?: Array<{ a: string; b: string; volumeMm3: number; ratio: number; severity: string }>;
+    elapsedMs?: number;
+    tolerances?: { volumeMm3: number; ratio: number };
+  }>;
   /** 工程零件清单 CSV → userData/exports（不接任意绝对路径）。 */
   exportPartsCsv(payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }): Promise<{
     ok: boolean;
@@ -918,7 +930,19 @@ interface Window {
     getPathForFile(file: File): string;
     exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
     exportReport(payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }): Promise<{ path: string; htmlPath: string }>;
-    /** 工程零件清单 CSV → userData/exports（不接任意绝对路径）。 */
+    /** B-Rep 精确干涉（OCP 布尔，真体积）；不做 AABB 初筛。 */
+  brepInterference(payload: { stepPath: string; timeoutMs?: number; maxParts?: number }): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    parts?: number;
+    candidates?: number;
+    checks?: number;
+    hits?: Array<{ a: string; b: string; volumeMm3: number; ratio: number; severity: string }>;
+    elapsedMs?: number;
+    tolerances?: { volumeMm3: number; ratio: number };
+  }>;
+  /** 工程零件清单 CSV → userData/exports（不接任意绝对路径）。 */
   exportPartsCsv(payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }): Promise<{
     ok: boolean;
     path?: string;

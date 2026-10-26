@@ -1086,6 +1086,27 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     return manager.status();
   });
 
+  // B-Rep 精确干涉：OCP 布尔（真体积），不是 AABB 初筛。只对已存在的文件做只读解析。
+  handle('interference:brep', async (_event, payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.stepPath !== 'string' || !payload.stepPath.trim()) {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少 stepPath（要检查的 STEP/IGES 文件路径）' };
+    }
+    const manager = getParametric();
+    if (!manager) return { ok: false, code: 'UNAVAILABLE', message: '参数化内核不可用，无法跑 B-Rep 干涉' };
+    const target = resolve(payload.stepPath.trim());
+    if (!existsSync(target)) return { ok: false, code: 'FILE_NOT_FOUND', message: `文件不存在：${target}` };
+    const timeoutMs = typeof payload.timeoutMs === 'number' && Number.isFinite(payload.timeoutMs)
+      ? Math.max(5_000, Math.min(900_000, Math.trunc(payload.timeoutMs)))
+      : undefined;
+    const maxParts = typeof payload.maxParts === 'number' && Number.isFinite(payload.maxParts)
+      ? Math.max(2, Math.min(2000, Math.trunc(payload.maxParts)))
+      : undefined;
+    return await manager.brepInterference(target, {
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(maxParts !== undefined ? { maxParts } : {})
+    });
+  });
+
   handle('factory:info', () => ({ ok: true, adapters: factory.list(), status: factory.getStatus() }));
   handle('factory:list', () => ({ ok: true, data: factory.list() }));
   handle('factory:status', () => ({ ok: true, data: factory.getStatus() }));

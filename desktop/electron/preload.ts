@@ -74,6 +74,8 @@ const desktopApi = {
     remove: (id: string) => ipcRenderer.invoke('projects:delete', id)
   },
   exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),
+  brepInterference: (payload: { stepPath: string; timeoutMs?: number; maxParts?: number }) =>
+    ipcRenderer.invoke('interference:brep', payload),
   exportPartsCsv: (payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }) =>
     ipcRenderer.invoke('export:partsCsv', payload),
   exportCostFile: (payload: {

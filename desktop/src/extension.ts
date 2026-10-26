@@ -314,7 +314,7 @@ function buildOverlay(): void {
         </div>
       </section>
       <aside class="cad-inspector">
-        <div class="cad-side-head"><span>干涉检查</span><b id="cadInterferenceCount">0</b></div>
+        <div class="cad-side-head"><span>干涉检查</span><b id="cadInterferenceCount">0</b><button type="button" class="cad-brep-btn" id="cadBrepBtn" title="用 OCP 布尔算真实交接体积（需要 STEP/IGES 源文件；比 AABB 慢，几十件要几十秒）">精确干涉</button></div>
         <div class="cad-inspector-body" id="cadInterferencePanel"></div>
       </aside>
       <aside class="cad-kinematics-drawer" id="cadKinematicsDrawer" hidden></aside>
@@ -606,7 +606,66 @@ function initMechUi(): void {
       if (badge) badge.textContent = String(count);
     }
   });
+  bindBrepInterferenceButton();
   mechUiReady = true;
+}
+
+/**
+ * B-Rep 精确干涉：拿当前 STEP/IGES 源文件跑 OCP 布尔，结果直接写进干涉面板。
+ * 与 AABB 面板的区别写清楚——一个是「疑似」，一个是真实交接体积；不要混着说。
+ */
+function bindBrepInterferenceButton(): void {
+  const button = document.getElementById('cadBrepBtn');
+  if (!button || button.dataset.bound === '1') return;
+  button.dataset.bound = '1';
+  button.addEventListener('click', () => { void runBrepInterference(); });
+}
+
+async function runBrepInterference(): Promise<void> {
+  const button = document.getElementById('cadBrepBtn') as HTMLButtonElement | null;
+  const panel = document.getElementById('cadInterferencePanel');
+  const badge = document.getElementById('cadInterferenceCount');
+  if (!window.desktop?.brepInterference) {
+    showNotice('当前环境不支持 B-Rep 干涉（缺少桌面接口）', true);
+    return;
+  }
+  if (!lastCadSourcePath) {
+    showNotice('B-Rep 干涉需要实体源文件：请先打开 STEP/IGES（STL/OBJ 是网格，没有实体可算）', true);
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+    button.textContent = '计算中…';
+  }
+  try {
+    const result = await window.desktop.brepInterference({ stepPath: lastCadSourcePath });
+    if (!result.ok) {
+      showNotice(`精确干涉失败：${result.message ?? result.code ?? '未知原因'}`, true);
+      if (panel) {
+        panel.innerHTML = `<div class="cad-interference-empty">精确干涉失败：${escapeCadHtml(result.message ?? '')}</div>`;
+      }
+      return;
+    }
+    const hits = result.hits ?? [];
+    if (badge) badge.textContent = String(hits.length);
+    if (panel) {
+      const rows = hits.length === 0
+        ? '<div class="cad-interference-empty">没有真实交接体积（阈值 1mm³ / 0.05%）：比 AABB 初筛更可信，但只针对实体文件</div>'
+        : hits.map((hit) => `<div class="cad-interference-row">
+            <b>${escapeCadHtml(hit.a)}</b> × <b>${escapeCadHtml(hit.b)}</b>
+            <span>${hit.volumeMm3.toLocaleString()} mm³ · 占比 ${(hit.ratio * 100).toFixed(2)}% · ${escapeCadHtml(hit.severity)}</span>
+          </div>`).join('');
+      panel.innerHTML = `<div class="cad-interference-summary">B-Rep 精确：${result.parts} 件 · AABB 候选 ${result.candidates} 对 · 布尔计算 ${result.checks} 对 · ${hits.length} 处交接 · ${(result.elapsedMs ?? 0) / 1000}s</div>${rows}`;
+    }
+    showNotice(`B-Rep 精确干涉：${result.parts} 件 / ${hits.length} 处真实交接（${((result.elapsedMs ?? 0) / 1000).toFixed(1)}s）`);
+  } catch (error) {
+    showNotice(`精确干涉失败：${error instanceof Error ? error.message : String(error)}`, true);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '精确干涉';
+    }
+  }
 }
 
 function openStressView(): void {
@@ -1636,6 +1695,8 @@ function setCurrentProject(project: ProjectMenuRecord): void {
 
 let homeHandle: HomeScreenHandle | null = null;
 let blankResetPending = 0;
+/** 最近一次导入的实体文件（STEP/IGES/BREP）；B-Rep 精确干涉要用它，STL 没有实体不算。 */
+let lastCadSourcePath: string | null = null;
 
 /**
  * 启动首页：首屏不展示原型里的「滑台气缸」示例装配。
@@ -2344,7 +2405,10 @@ async function loadCadPath(path: string): Promise<CadImportResult> {
   try {
     updateLoading(true, `正在读取 ${name}…`);
     const bytes = await window.desktop.readFileBuffer(path);
-    return await loadCadBuffer(toArrayBuffer(bytes), name);
+    const loaded = await loadCadBuffer(toArrayBuffer(bytes), name);
+    // B-Rep 精确干涉要回到源文件（STL 网格没有实体），记下这次的 STEP/IGES 路径
+    lastCadSourcePath = /\.(stp|step|igs|iges|brep)$/i.test(name) ? path : null;
+    return loaded;
   } catch (error) {
     // A second concurrent open must not clear the first import's busy state.
     if (!busy) showCadImportFailure('读取失败', error);
