@@ -13,6 +13,7 @@
 - `parametric.history`（v1.0.0，API 1，依赖 `core` 与 `cad.parametric-import`，能力 `cad.parametric.undo-redo`）仅控制参数化特征树 undo/redo 控件及程序化入口，默认启用。关闭只隐藏/禁用 undo、redo，不改树、模型或当前会话栈；关闭期间的正常编辑仍记录历史，重新启用后同一会话可继续撤销/重做。父 `cad.parametric-import` 关闭时该模块始终 `unavailable`；它不拦截服务于其它编辑域的共享 Ctrl+Z/Ctrl+Y。
 - `agent.resume`（v1.0.0，API 1，依赖 `core`，能力 `agent.plan.checkpoint` 与 `agent.plan.cross-restart-resume`）控制跨重启 Agent 计划 checkpoint 与恢复 UI，默认启用。关闭后主进程和 renderer 均不创建、读取、覆盖或删除 checkpoint；已保存记录保留但不可用。普通 Agent 计划、当前会话逐步执行和写操作原生确认不受影响；重新启用后仍须验证 schema、签名、强工程指纹、步骤游标及写副作用，并等待用户显式确认继续。
 - `project.portable`（v2.0.0，API 1–2，依赖 `core`，要求 `project.identity.stable`、`project.archive.snapshot.export`、`project.archive.preview` 与 `project.archive.candidate-only`）默认启用。它以持久 project ID 和 CAD 原件 SHA-256 绑定 schema v2 `.acproj`，可收录当前可安全取得的特征树、带 stable objectId 的运动学 v2、CAD 视角快照和原始 CAD；导出时用户仍须选择 CAD 原件，且必须与活动来源文件名、SHA-256 和字节数匹配。稳定身份不可用时导出按钮禁用；不支持的字段会列出排除原因。档案导入严格校验后只展示摘要，不覆盖或应用当前工程；运动学跨机器 CAD 几何重验证、状态事务应用、PLC/工厂/Agent/围栏状态和生成网格缓存尚不支持。关闭会隐藏入口并由主进程拒绝档案读取/写入，既有状态与档案保留。
+- `design.layout-editor`（v1.0.0，API 1，依赖 `core`，能力 `design.layout-editor.viewport`）控制整机设计向导第 4 步的「3D 布局编辑」入口与编辑器，默认启用。关闭只隐藏入口并关闭已打开的编辑器；已保存的工位位姿（`stationGeometryLayout`）、俯视 X/Y 数值编辑与撤销时间线不受影响。详见 `src/layout-editor/MODULE.md`。
 - 以上可选模块不删除其负责的数据、历史或导出文件；状态变化即时推送主进程，不需重载应用。参数化关闭会停止运行中的 sidecar，但不触碰已生成文件或叠加体。
 - `system.update`（v1.0.0，API 1，依赖 `core`）控制 Windows NSIS 的 stable/beta 更新面板、检查、手动下载、渠道选择、状态事件及安装入口。下载完成后仍必须先点击安装，再通过主进程原生确认框；不静默安装或退出时自动安装。关闭会隐藏入口、关闭弹窗、退订 renderer 状态，并由主进程在每个更新 IPC 副作用前拒绝请求；重开后按原流程继续。Core 不随模块开关关闭：主进程仍检查固定 GitHub feed 和非空 Authenticode `publisherName`，缺失或不匹配时 fail-closed；electron-updater 保留 SHA-512 完整包校验与 NSIS blockmap 差分/完整包回退。真实 Windows 签名与升级尚未验收，细节见 [`desktop/docs/update-channel.md`](../../docs/update-channel.md)。
 
@@ -24,4 +25,4 @@
 
 ## 尚未迁移
 
-目前已注册 `core`、`plcgen`、`elec.validation`、`cost.estimation`、`factory.plc-sync`、`commission.io-test`、`cad.parametric-import`、`parametric.history`、`agent.resume`、`project.portable` 与实际接入的 `system.update`。Agent 普通对话/执行、CAD 只读查看、运动学编辑、机型设计、通电联调、电气原理图与元件库、数据包、工厂、通用同步、底板与主视口仍使用各自独立入口；关闭 `cost.estimation` 只封锁成本面板与成本报告工具，不封锁普通 BOM 和一般导出。机型方案内嵌估价属于机型设计，仍可保存其项目数据；PLC 实时连接、读写/强制 IO 仍由 commission 子系统管理，不受 `factory.plc-sync` 影响。
+目前已注册 `core`、`design.layout-editor`、`plcgen`、`elec.validation`、`cost.estimation`、`factory.plc-sync`、`commission.io-test`、`cad.parametric-import`、`parametric.history`、`agent.resume`、`project.portable` 与实际接入的 `system.update`。Agent 普通对话/执行、CAD 只读查看、运动学编辑、机型设计、通电联调、电气原理图与元件库、数据包、工厂、通用同步、底板与主视口仍使用各自独立入口；关闭 `cost.estimation` 只封锁成本面板与成本报告工具，不封锁普通 BOM 和一般导出。机型方案内嵌估价属于机型设计，仍可保存其项目数据；PLC 实时连接、读写/强制 IO 仍由 commission 子系统管理，不受 `factory.plc-sync` 影响。

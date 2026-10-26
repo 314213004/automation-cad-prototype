@@ -80,6 +80,7 @@ import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnost
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
 import { cadImportFailureView, parseCadImportTransaction } from './cad/import-transaction';
 import { initDesignWizard } from './design/wizard-ui.ts';
+import { setLayoutEditorEnabled } from './layout-editor/ui.ts';
 import { projectGeometryReviewLabel, reopenedGeometryReviewMessage, type DesignSceneInfo, type ProjectGeometryReview, type SceneGeometrySource } from './design/geometry-review.ts';
 import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLayoutBounds, renderProjectLayoutSvg } from './design/project-layout.ts';
 import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
@@ -3272,7 +3273,9 @@ function init(): void {
   publishAgentResumeState(moduleManager.list());
   publishProjectPortableState(moduleManager.list());
   publishSystemUpdateState(moduleManager.list());
+  setLayoutEditorEnabled(moduleManager.getStatus('design.layout-editor').enabled);
   moduleManager.subscribe((states: ModuleStatus[]) => {
+    setLayoutEditorEnabled(states.find((module) => module.id === 'design.layout-editor')?.enabled === true);
     const enabled = states.find((module) => module.id === 'plcgen')?.enabled === true;
     commission?.setIoTestsEnabled(states.find((module) => module.id === 'commission.io-test')?.enabled === true);
     publishPlcgenState(states);
