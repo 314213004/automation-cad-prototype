@@ -12,6 +12,7 @@ import {
   type KinematicsUiHandle
 } from './cad/kinematics-ui';
 import { initParametricUi, type ParametricUiHandle } from './parametric/ui';
+import { initDrawingsUi, type DrawingsUiHandle } from './drawings/ui.ts';
 import { serializeDoc } from './parametric/model';
 import type { CadImportResult } from './shared/types';
 import { initFactoryPanel } from './factory/ui';
@@ -102,6 +103,8 @@ let viewer: CadViewer | null = null;
 let plcSyncModulesEnabled = (): { plcgen: boolean; plcSync: boolean } => ({ plcgen: false, plcSync: false });
 let parametricImportModuleEnabled = false;
 let parametricHistoryModuleEnabled = false;
+let drawingsModuleEnabled = false;
+let drawingsUi: DrawingsUiHandle | null = null;
 let projectPortableModuleEnabled = false;
 let root: HTMLElement | null = null;
 let overlayOpen = false;
@@ -824,7 +827,31 @@ function ensureParametricUi(): ParametricUiHandle {
       document.getElementById('cadParametricToggle')?.classList.toggle('is-active', open);
     }
   });
+  mountDrawingsUi(container);
   return parametric;
+}
+
+/** drawings.techdraw：在参数化抽屉里挂「工程图（FreeCAD）」分区；桌面 API 不在时不挂。 */
+function drawingsProjectKey(): string {
+  const projectId = currentProjectIdentity?.projectId?.trim();
+  if (projectId) return projectId;
+  return currentFileName ? `src:${currentFileName}` : 'untitled';
+}
+
+function mountDrawingsUi(container: HTMLElement): void {
+  if (drawingsUi || !window.desktop?.drawings) return;
+  const body = container.querySelector<HTMLElement>('.cad-param-body');
+  if (!body) return;
+  const section = document.createElement('section');
+  body.appendChild(section);
+  drawingsUi = initDrawingsUi({
+    host: section,
+    getDoc: () => parametric?.getDoc() ?? null,
+    getSelectedInstanceId: () => parametric?.selectedInstanceId() ?? null,
+    getProjectKey: drawingsProjectKey,
+    isEnabled: () => drawingsModuleEnabled && parametricImportModuleEnabled,
+    notify: showNotice
+  });
 }
 
 interface ParametricStateView {
@@ -3226,6 +3253,25 @@ function init(): void {
       console.error('[modules] 参数化模块状态同步失败；参数化功能保持关闭', error);
     }
   };
+  const publishDrawingsState = (states: ModuleStatus[]): void => {
+    const desired = states.find((module) => module.id === 'drawings.techdraw')?.enabled === true;
+    let enabled = desired;
+    try {
+      const sync = window.desktop?.modules.syncDrawingsTechdrawEnabled;
+      if (window.desktop?.drawings) {
+        const accepted = sync ? sync(desired) : false;
+        if (accepted !== true) {
+          enabled = false;
+          if (desired) console.error('[modules] 主进程未接受 drawings.techdraw 状态；工程图保持关闭');
+        }
+      }
+    } catch (error) {
+      enabled = false;
+      console.error('[modules] drawings.techdraw 状态同步失败；工程图保持关闭', error);
+    }
+    drawingsModuleEnabled = enabled;
+    drawingsUi?.setEnabled(enabled && parametricImportModuleEnabled);
+  };
   const publishParametricHistoryState = (states: ModuleStatus[]): void => {
     parametricHistoryModuleEnabled =
       parametricImportModuleEnabled && states.find((module) => module.id === 'parametric.history')?.enabled === true;
@@ -3269,6 +3315,7 @@ function init(): void {
   publishPlcSyncState(moduleManager.list());
   publishParametricImportState(moduleManager.list());
   publishParametricHistoryState(moduleManager.list());
+  publishDrawingsState(moduleManager.list());
   publishAgentResumeState(moduleManager.list());
   publishProjectPortableState(moduleManager.list());
   publishSystemUpdateState(moduleManager.list());
@@ -3281,6 +3328,7 @@ function init(): void {
     publishPlcSyncState(states);
     publishParametricImportState(states);
     publishParametricHistoryState(states);
+    publishDrawingsState(states);
     publishAgentResumeState(states);
     publishProjectPortableState(states);
     publishSystemUpdateState(states);
@@ -3442,6 +3490,20 @@ function init(): void {
       suggestions: () => ensureKinematicsUi().suggestions(),
       acceptSuggestion: (id: string): string | null => ensureKinematicsUi().acceptSuggestion(id),
       dismissSuggestion: (id: string): void => ensureKinematicsUi().dismissSuggestion(id)
+    }),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+  Object.defineProperty(window, 'AutomationCadDrawings', {
+    value: Object.freeze({
+      state: () => drawingsUi?.state() ?? null,
+      refresh: async (): Promise<void> => { await drawingsUi?.refresh(); },
+      generate: async (scope: 'selected' | 'all' | 'stale') => {
+        if (!drawingsModuleEnabled) return { ok: false, message: '功能模块「drawings.techdraw」当前已关闭' };
+        ensureParametricUi();
+        return drawingsUi ? await drawingsUi.generate(scope) : { ok: false, message: '工程图分区不可用（需要桌面版）' };
+      }
     }),
     writable: false,
     configurable: false,

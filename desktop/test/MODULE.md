@@ -21,6 +21,7 @@
 | MCP | `test/agent/mcp.test.mjs` | 同上 | `buildServer()` 后列 22 个工具 |
 | 电气校验 | `test/elec/{check,report}.test.mjs`、`test/agent/elec-check.test.mjs` | 同上 | 线号/功率/截面规则、报告转义、命令入参校验、工具 schema |
 | 参数化 CAD 模块边界 | `test/modules/{registry,settings}.test.mjs`、`test/parametric-sidecar.test.ts`、`test/parametric-import-safety.test.mjs`、`test/agent/apply-machine-design.test.mjs` | 同上 | 默认启用/设置持久化、依赖失败关闭；history 开关不清树/模型/会话 undo-redo 栈；关闭时 IPC/manager 与 Agent `withSolids` 拒绝、无 sidecar/写文件副作用、保留 CAD/特征树/叠加体 |
+| FreeCAD 工程图 | `test/drawings/*.test.mjs`、`test/modules/drawings-module.test.mjs` | 同上 | 协议校验/结果只采信约定文件名/进度行；指纹与过期（几何、标题栏、脚本版本、失败保留旧图）；运行器用 `scripts/fake-freecadcmd.mjs` 覆盖成功/单件失败/崩溃/超时/取消/PDF 兜底/伪造路径/未安装；服务层逐件 STEP 与工程目录；脚本 `python3 --self-test`；`AUTOMATIONCAD_FREECAD_REAL=<freecadcmd>` 时真 FreeCAD 端到端 |
 | Agent 跨重启恢复模块 | `test/modules/agent-resume-gate.test.mjs`、`test/agent/plan-checkpoint.test.mjs` | 同上 | 默认开启、API/依赖/能力、关停保留旧记录、状态异常 fail-closed；普通计划和写确认不受影响；checkpoint 签名/工程指纹/游标/副作用校验仍严格 |
 | Windows 更新通道 | `test/update-channel.test.mjs`、`test/update-release-preflight.test.mjs` | 同上 | 默认/开关与 IPC gate、stable/beta/禁止降级、离线与签名配置 fail-closed、mock Authenticode 拒签、NSIS blockmap 差分失败后完整包回退、SHA-512/blockmap/publisherName 发行门禁；不连接真实更新源 |
 | MCP 代理 | `test/agent/mcp-proxy.test.mjs` | 同上 | 写工具转发、无桌面时只读回退/写工具降级、超时不泄露 token |

@@ -513,3 +513,30 @@ html{zoom:var(--acad-ui-scale,1.15)}
 .cad-wireno-actions button { padding: 4px 12px; border: 1px solid rgba(0, 0, 0, 0.2); border-radius: 6px; background: #fff; cursor: pointer; }
 .cad-wireno-actions button.is-primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
 .cad-wireno-actions button:disabled { opacity: 0.45; cursor: default; }
+/* drawings.techdraw：参数化抽屉里的工程图（FreeCAD）分区 */
+.cad-dwg{border-top:1px solid #2b3035;padding-top:9px}
+.cad-dwg-status{display:flex;align-items:center;gap:6px;font-size:9px;line-height:1.45;color:#9aa6ae;margin-bottom:5px}
+.cad-dwg-status span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cad-dwg-hint{margin:0 0 6px;padding:6px 8px;border:1px solid #3d3528;border-radius:3px;background:#29251d;color:#d9bd83;font-size:9px;line-height:1.55}
+.cad-dwg-tools,.cad-dwg-actions{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.cad-dwg-tools .cad-btn,.cad-dwg-actions .cad-btn{height:24px;font-size:9px;padding:0 7px;white-space:nowrap}
+.cad-dwg-title{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:6px}
+.cad-dwg-title label{display:flex;align-items:center;gap:4px;font-size:9px;color:#86919a}
+.cad-dwg-title input,.cad-dwg-row input{min-width:0;width:100%;height:21px;padding:0 4px;border:1px solid #3c434a;border-radius:2px;background:#16181b;color:#d6dde2;font:9px/1 var(--font-mono,monospace)}
+.cad-dwg-parts{border:1px solid #343a40;border-radius:3px;background:#23272b;overflow:auto;max-height:200px;margin-bottom:6px}
+.cad-dwg-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) 40px auto;gap:4px;align-items:center;padding:4px 6px;font-size:9px;color:#b9c2c8;border-top:1px solid #2b3035}
+.cad-dwg-row > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cad-dwg-row-head{position:sticky;top:0;background:#1b1f22;color:#6f7b84;border-top:0;border-bottom:1px solid #343a40;font-size:8px}
+.cad-dwg-badge{font:8px/1 var(--font-mono,monospace);padding:2px 3px;border-radius:2px;text-align:center;white-space:nowrap}
+.cad-dwg-badge[data-state="fresh"]{color:#8ee0d4;background:#1c2b29;border:1px solid #2a5b55}
+.cad-dwg-badge[data-state="stale"]{color:#f3c98b;background:#302819;border:1px solid #5c4a2c}
+.cad-dwg-badge[data-state="missing"]{color:#8d98a0;background:#202428;border:1px solid #3c434a}
+.cad-dwg-open{display:flex;gap:2px}
+.cad-dwg-open button{height:18px;padding:0 4px;border:1px solid #3c434a;border-radius:2px;background:#282d31;color:#8d98a0;font-size:8px;cursor:pointer}
+.cad-dwg-open button:disabled{opacity:.4;cursor:default}
+.cad-dwg-open button:not(:disabled):hover{background:#353b40;color:#fff}
+.cad-dwg-orphans{padding:4px 6px;font-size:8px;color:#6f7b84;border-top:1px solid #2b3035}
+.cad-dwg-auto{display:flex;align-items:center;gap:5px;font-size:9px;color:#86919a;margin-bottom:5px}
+.cad-dwg-progress{font:9px/1.4 var(--font-mono,monospace);color:#7f8a92;min-height:12px}
+.cad-dwg-progress[data-state="failed"],.cad-dwg-progress[data-state="timeout"]{color:#f87171}
+.cad-dwg-progress[data-state="succeeded"]{color:#2dd4bf}

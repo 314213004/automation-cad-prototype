@@ -227,6 +227,93 @@ interface DesktopParametricBuildResult {
   files?: Record<string, unknown>;
 }
 
+interface DesktopFreecadInfo {
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  source: 'configured' | 'env' | 'detected' | null;
+  reason: string;
+  installHint: string;
+  checkedAt: string | null;
+}
+
+type DesktopDrawingFormat = 'pdf' | 'dxf' | 'svg' | 'fcstd';
+
+interface DesktopDrawingsFailure {
+  ok: false;
+  code: string;
+  message: string;
+  info?: DesktopFreecadInfo;
+}
+
+interface DesktopDrawingPartResult {
+  partId: string;
+  ok: boolean;
+  files: Partial<Record<DesktopDrawingFormat, string>>;
+  warnings: string[];
+  error?: string;
+  paper?: string;
+  scale?: string;
+}
+
+interface DesktopDrawingJobSnapshot {
+  jobId: string;
+  label: string;
+  state: 'queued' | 'preparing' | 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'timeout';
+  total: number;
+  done: number;
+  currentPartId: string | null;
+  message: string;
+  createdAt: string;
+  finishedAt: string | null;
+  outcome?: {
+    jobId: string;
+    state: string;
+    message: string;
+    freecadVersion?: string;
+    parts: Array<{ part: { partKey: string; partId: string; name: string }; result: DesktopDrawingPartResult; stepSha256?: string }>;
+    stderrTail: string;
+    durationMs: number;
+  };
+}
+
+interface DesktopDrawingManifestEntry {
+  partKey: string;
+  partId: string;
+  name: string;
+  fingerprint: string;
+  geometryHash: string;
+  fileStem: string;
+  files: Partial<Record<DesktopDrawingFormat, string>>;
+  stepSha256?: string;
+  paper?: string;
+  scale?: string;
+  bbox?: [number, number, number];
+  warnings: string[];
+  generatedAt: string;
+  freecadVersion?: string;
+  scriptVersion: string;
+  jobId: string;
+  lastError?: string;
+}
+
+interface DesktopDrawingManifest {
+  schemaVersion: 1;
+  projectKey: string;
+  updatedAt: string;
+  entries: Record<string, DesktopDrawingManifestEntry>;
+}
+
+interface DesktopDrawingsGenerateRequest {
+  projectKey: string;
+  doc: unknown;
+  instanceIds?: string[];
+  onlyStale?: boolean;
+  meta?: Record<string, { material?: string; drawingNo?: string; scale?: string; paper?: 'auto' | 'A4' | 'A3' }>;
+  titleBlock?: { designer?: string; company?: string; date?: string };
+  options?: { formats?: DesktopDrawingFormat[]; paper?: 'auto' | 'A4' | 'A3'; scale?: string; iso?: boolean; hiddenLines?: boolean };
+}
+
 interface DesktopAgentToolInfo {
   name: string;
   description: string;
@@ -935,6 +1022,7 @@ interface Window {
       syncAgentResumeEnabled(enabled: boolean): boolean;
       syncProjectPortableEnabled(enabled: boolean): boolean;
       syncSystemUpdateEnabled(enabled: boolean): boolean;
+      syncDrawingsTechdrawEnabled?(enabled: boolean): boolean;
     };
     agent: {
       info(): Promise<DesktopAgentInfo>;
@@ -990,6 +1078,22 @@ interface Window {
     };
     render: {
       stats(stats: DesktopRenderStats): Promise<{ ok: boolean; message?: string }>;
+    };
+    drawings?: {
+      freecadStatus(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      detectFreecad(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      chooseFreecadPath(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      setFreecadPath(path: string | null): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      generate(request: DesktopDrawingsGenerateRequest): Promise<
+        | { ok: true; jobId: string; partKeys: string[]; skipped: Array<{ instanceId: string; name: string; reason: string }>; warnings: string[] }
+        | DesktopDrawingsFailure
+      >;
+      cancel(jobId: string): Promise<{ ok: boolean }>;
+      jobs(): Promise<{ ok: true; jobs: DesktopDrawingJobSnapshot[] } | DesktopDrawingsFailure>;
+      list(projectKey: string): Promise<{ ok: true; projectKey: string; directory: string; manifest: DesktopDrawingManifest } | DesktopDrawingsFailure>;
+      open(projectKey: string, partKey: string, format: DesktopDrawingFormat): Promise<{ ok: true } | DesktopDrawingsFailure>;
+      reveal(projectKey: string, partKey?: string): Promise<{ ok: true } | DesktopDrawingsFailure>;
+      onJob(callback: (snapshot: DesktopDrawingJobSnapshot) => void): () => void;
     };
     parametric: {
       status(): Promise<DesktopParametricStatusInfo>;
@@ -1252,6 +1356,23 @@ interface Window {
   __Parametric?: {
     status(): Promise<DesktopParametricStatusInfo>;
     build(doc: unknown): Promise<DesktopParametricBuildResult>;
+  };
+  AutomationCadDrawings?: {
+    state(): {
+      enabled: boolean;
+      freecadAvailable: boolean;
+      freecadVersion: string | null;
+      freecadReason: string;
+      projectKey: string;
+      parts: number;
+      fresh: number;
+      stale: number;
+      missing: number;
+      job: { jobId: string; state: string; done: number; total: number; message: string } | null;
+      autoRegenerate: boolean;
+    } | null;
+    refresh(): Promise<void>;
+    generate(scope: 'selected' | 'all' | 'stale'): Promise<{ ok: boolean; message: string; jobId?: string }>;
   };
   AutomationCadParametric?: {
     open(): void;

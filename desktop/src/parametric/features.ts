@@ -147,6 +147,33 @@ function collectPlate(doc: FeatureDoc): { minX: number; maxX: number; minY: numb
   return plate;
 }
 
+/**
+ * 螺纹孔（可选，只影响工程图标注，不改 sidecar 几何：diameter 即螺纹底孔径）：
+ * thread 如 M6 / M8x1（空串视为光孔）；threadDepth 为螺纹有效深度，不得超过定深孔深。
+ */
+function validateThread(params: UnknownRecord, label: string, diameter: number | null, errors: string[]): void {
+  const raw = params.thread;
+  const hasThread = raw !== undefined && raw !== '';
+  if (hasThread) {
+    const match = typeof raw === 'string' ? /^M(\d+(?:\.\d+)?)(?:[x×*]\d+(?:\.\d+)?)?$/i.exec(raw.trim().replace(/\s+/g, '')) : null;
+    if (!match) {
+      errors.push(`${label}：参数「thread」必须是螺纹规格（如 M6、M8x1）`);
+    } else if (diameter !== null && diameter >= Number(match[1])) {
+      errors.push(`${label}：螺纹底孔径 ${formatMm(diameter)} mm 必须小于公称直径 ${match[1]} mm`);
+    }
+  }
+  const depth = params.threadDepth;
+  if (depth === undefined || depth === '') return;
+  if (!positiveNumber(depth)) {
+    errors.push(`${label}：参数「threadDepth」必须大于 0`);
+    return;
+  }
+  if (!hasThread) errors.push(`${label}：填写了螺纹深但没有螺纹规格`);
+  if (positiveNumber(params.depth) && depth > params.depth) {
+    errors.push(`${label}：螺纹深 ${formatMm(depth)} mm 超过孔深 ${formatMm(params.depth)} mm`);
+  }
+}
+
 /** 判断输入是否为装配文档（存在 instances 数组）。 */
 export function isAssemblyDoc(value: unknown): value is AssemblyDoc {
   return isRecord(value) && Array.isArray(value.instances);
@@ -297,6 +324,7 @@ function validateFeatureDoc(doc: FeatureDoc): string[] {
       if (params.depth !== undefined && params.depth !== 'through' && !positiveNumber(params.depth)) {
         errors.push(`${label}：参数「depth」必须是 through 或大于 0 的数字`);
       }
+      validateThread(params, label, diameter, errors);
       if (positions && plate) {
         const outside = positions.find(([x, y]) =>
           x < plate.minX || x > plate.maxX || y < plate.minY || y > plate.maxY);

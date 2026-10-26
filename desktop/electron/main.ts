@@ -92,6 +92,10 @@ import { generateSt } from '../src/plcgen/st';
 import { generateProject } from '../src/plcgen/generate';
 import { verifyGenerated } from '../src/plcgen/verify';
 import { ParametricManager } from './parametric.ts';
+import { FreecadRunner, resolveTechdrawScript } from './freecad.ts';
+import { DrawingsService } from './drawings-service.ts';
+import { readFreecadSettings, registerDrawingsIpc, svgToPdfWithElectron } from './drawings-ipc.ts';
+import { projectsRoot } from './projects.ts';
 import { PARAMETRIC_IMPORT_MODULE_ID } from '../src/modules/parametric-gate.ts';
 import {
   assertUpdateIpcAuthorization,
@@ -185,6 +189,9 @@ let agentTools: AgentTools | null = null;
 let commandBus: CommandBus | null = null;
 let parametric: ParametricManager | null = null;
 let parametricImportModuleEnabled = false;
+let freecadRunner: FreecadRunner | null = null;
+let drawingsModuleEnabled = false;
+let freecadConfiguredPath: string | null = null;
 let plcgenModuleEnabled = false;
 let elecValidationModuleEnabled = false;
 let costEstimationModuleEnabled = false;
@@ -848,6 +855,103 @@ async function runParametricSmoke(window: BrowserWindow): Promise<void> {
     }
     console.log('SMOKE_PARAMETRIC_HISTORY_OK add=undo=redo mergedInput=1');
     console.log(`SMOKE_PARAMETRIC_RECOVERY_OK tree=last-success overlay=unchanged visible=${result.failure.overlayAfter}`);
+  } finally {
+    if (parametric) await parametric.stop();
+  }
+}
+
+/**
+ * drawings.techdraw：模块门控（无需 FreeCAD）+ 参数化抽屉里的工程图分区；
+ * 同时设置 AUTOMATIONCAD_PARAMETRIC_CMD（假内核）与 AUTOMATIONCAD_FREECAD_CMD（假/真 freecadcmd）时再跑一次出图作业。
+ */
+async function runDrawingsSmoke(window: BrowserWindow): Promise<void> {
+  const gate = await window.webContents.executeJavaScript(`(async () => {
+    const registry = window.__ModuleRegistry;
+    const api = window.desktop?.drawings;
+    if (!registry || !api) return { error: '工程图 API 或模块注册表缺失' };
+    const enabledBefore = registry.getStatus('drawings.techdraw').enabled;
+    const status = await api.freecadStatus();
+    registry.setEnabled('drawings.techdraw', false);
+    const blockedGenerate = await api.generate({ projectKey: 'smoke', doc: { schemaVersion: 1, features: [], updatedAt: '2026-10-26T00:00:00Z' } });
+    const blockedList = await api.list('smoke');
+    registry.setEnabled('drawings.techdraw', true);
+    const listed = await api.list('smoke');
+    return {
+      enabledBefore,
+      statusOk: status.ok === true,
+      blockedGenerate: blockedGenerate.code,
+      blockedList: blockedList.code,
+      reenabled: registry.getStatus('drawings.techdraw').enabled && listed.ok === true
+    };
+  })()`) as { error?: string; enabledBefore?: boolean; statusOk?: boolean; blockedGenerate?: string; blockedList?: string; reenabled?: boolean };
+  if (gate.error || !gate.enabledBefore || !gate.statusOk || gate.blockedGenerate !== 'MODULE_DISABLED'
+    || gate.blockedList !== 'MODULE_DISABLED' || !gate.reenabled) {
+    throw new Error(`工程图模块门控异常：${JSON.stringify(gate)}`);
+  }
+  console.log('SMOKE_DRAWINGS_MODULE_GATE_OK default=enabled ipc=MODULE_DISABLED reenabled=true');
+  if (!process.env.AUTOMATIONCAD_PARAMETRIC_CMD) {
+    console.log('SMOKE_DRAWINGS_UI_SKIP');
+    return;
+  }
+  const withJob = Boolean(process.env.AUTOMATIONCAD_FREECAD_CMD);
+  try {
+    const result = await window.webContents.executeJavaScript(`(async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const ui = window.AutomationCadParametric;
+      const drawings = window.AutomationCadDrawings;
+      if (!ui || !drawings) return { error: '参数化或工程图入口缺失' };
+      ui.open();
+      ui.setDoc({
+        schemaVersion: 2,
+        updatedAt: '2026-10-26T09:00:00Z',
+        instances: [
+          { id: 'p1', name: '转接板', partId: 'SMOKE-ADP', transform: { x: 0, y: 0, z: 0, rz: 0 },
+            features: [{ id: 'f1', type: 'box', name: '底板', params: { length: 120, width: 80, height: 8 } }] },
+          { id: 'p2', name: '垫块', transform: { x: 200, y: 0, z: 0, rz: 0 },
+            features: [{ id: 'f1', type: 'box', name: '垫块', params: { length: 40, width: 40, height: 10 } }] }
+        ]
+      });
+      const section = document.querySelector('#cadParametricDrawer [data-drawings-section]');
+      let state = drawings.state();
+      for (let i = 0; i < 100 && state && !state.freecadReason; i += 1) { await wait(100); state = drawings.state(); }
+      await wait(1700);
+      state = drawings.state();
+      const rows = document.querySelectorAll('#cadParametricDrawer [data-dwg-part]').length;
+      const hint = document.querySelector('#cadParametricDrawer [data-dwg-hint]');
+      let job = null;
+      if (${withJob ? 'true' : 'false'} && state?.freecadAvailable) {
+        const submitted = await drawings.generate('all');
+        if (!submitted.ok) return { error: '出图提交失败：' + submitted.message };
+        for (let i = 0; i < 300; i += 1) {
+          await wait(100);
+          const current = drawings.state();
+          if (current?.job && ['succeeded', 'partial', 'failed', 'cancelled', 'timeout'].includes(current.job.state)) break;
+        }
+        await wait(1800);
+        const after = drawings.state();
+        job = { state: after?.job?.state, fresh: after?.fresh, parts: after?.parts };
+      }
+      return {
+        section: Boolean(section),
+        rows,
+        available: Boolean(state?.freecadAvailable),
+        hintShown: Boolean(hint && !hint.hidden),
+        parts: state?.parts ?? 0,
+        missing: state?.missing ?? 0,
+        job
+      };
+    })()`) as { error?: string; section?: boolean; rows?: number; available?: boolean; hintShown?: boolean; parts?: number; missing?: number; job?: { state?: string; fresh?: number; parts?: number } | null };
+    if (result.error || !result.section || result.rows !== 2 || result.parts !== 2) {
+      throw new Error(`工程图分区异常：${JSON.stringify(result)}`);
+    }
+    if (!result.available && !result.hintShown) throw new Error(`FreeCAD 不可用但没有显示安装指引：${JSON.stringify(result)}`);
+    console.log(`SMOKE_DRAWINGS_UI_OK rows=${result.rows} freecad=${result.available ? 'available' : 'unavailable+hint'} missing=${result.missing}`);
+    if (withJob && result.available) {
+      if (result.job?.state !== 'succeeded' || result.job.fresh !== 2) throw new Error(`工程图作业异常：${JSON.stringify(result.job)}`);
+      console.log(`SMOKE_DRAWINGS_JOB_OK state=${result.job.state} fresh=${result.job.fresh}`);
+    } else {
+      console.log('SMOKE_DRAWINGS_JOB_SKIP');
+    }
   } finally {
     if (parametric) await parametric.stop();
   }
@@ -4545,6 +4649,13 @@ function createWindow(): BrowserWindow {
         return;
       }
       try {
+        await runDrawingsSmoke(window);
+      } catch (error) {
+        console.error('SMOKE_FAIL drawings', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+      try {
         // 1000 件规模：几何生成 + three.js 场景树 + 300 次 headless tick。
         // 动态加载，避免普通桌面启动把 three.js / 几何生成器打进主进程启动路径。
         const { runPerfSmoke } = await import('./perf-smoke.ts');
@@ -5259,6 +5370,50 @@ async function bootstrap(): Promise<void> {
     setSystemUpdateEnabled: (enabled) => { systemUpdateModuleEnabled = enabled === true; }
   });
 
+  // FreeCAD 后台任务（可选组件）：未安装只禁用工程图等任务，不影响建模；探测延迟到首次查询。
+  const freecadSettingsFile = join(app.getPath('userData'), 'freecad.json');
+  freecadConfiguredPath = readFreecadSettings(freecadSettingsFile).path;
+  freecadRunner = new FreecadRunner({
+    resolveScript: () => resolveTechdrawScript({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      appRoot: resolve(desktopRoot(), '..')
+    }),
+    getConfiguredPath: () => freecadConfiguredPath,
+    tempRoot: join(app.getPath('temp'), 'automationcad-freecad'),
+    svgToPdf: svgToPdfWithElectron
+  });
+  const drawingsService = new DrawingsService({
+    userDataDir: app.getPath('userData'),
+    projectsRoot: projectsRoot(app.getPath('userData')),
+    runner: freecadRunner,
+    isEnabled: () => drawingsModuleEnabled,
+    // 逐件 STEP：特征树是唯一主数据，现场让 build123d sidecar 导出单件（零件自身坐标系）
+    buildStep: async (doc) => {
+      if (!parametricImportModuleEnabled) throw new Error('参数化模块已关闭，无法导出零件 STEP');
+      const manager = parametric;
+      if (!manager) throw new Error('参数化建模内核不可用');
+      const started = await manager.start();
+      if (!started.ok) throw new Error(started.message);
+      const built = await manager.build(doc);
+      if (!built.ok) throw new Error(built.message ?? '建模失败');
+      const step = built.files?.step;
+      const path = step && typeof step === 'object' ? (step as { path?: unknown }).path : null;
+      if (typeof path !== 'string' || !path) throw new Error('内核未返回 STEP 文件');
+      return path;
+    }
+  });
+  registerDrawingsIpc({
+    getWindow: () => mainWindow,
+    trustedUiPath: indexHtmlPath(),
+    runner: freecadRunner,
+    service: drawingsService,
+    settingsFile: freecadSettingsFile,
+    isEnabled: () => drawingsModuleEnabled,
+    setEnabled: (enabled) => { drawingsModuleEnabled = enabled === true; },
+    setConfiguredPath: (path) => { freecadConfiguredPath = path; }
+  });
+
   packRegistry = registry;
   mainWindow = createWindow();
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -5322,6 +5477,11 @@ app.on('before-quit', (event) => {
   if (agentServer) void agentServer.stop();
   void stopCdpForwarder();
   void disposeIpcRuntime();
+  if (freecadRunner) {
+    const runner = freecadRunner;
+    freecadRunner = null;
+    void runner.dispose();
+  }
   if (!parametric || parametric.status().status === 'stopped') return;
   if (quitAfterParametricStop) return;
   event.preventDefault();

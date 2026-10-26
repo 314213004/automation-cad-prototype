@@ -481,7 +481,7 @@ export async function disposeIpcRuntime(): Promise<void> {
 
 type IpcHandler = (event: IpcMainInvokeEvent, ...args: any[]) => any;
 
-function createTrustedIpcHandler(
+export function createTrustedIpcHandler(
   getWindow: () => BrowserWindow | null,
   trustedUiPath: string
 ): (channel: string, handler: IpcHandler) => void {

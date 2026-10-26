@@ -21,7 +21,8 @@ const desktopApi = {
     syncParametricImportEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-cad-parametric-import-enabled', enabled) === true,
     syncAgentResumeEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-agent-resume-enabled', enabled) === true,
     syncProjectPortableEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-project-portable-enabled', enabled) === true,
-    syncSystemUpdateEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-system-update-enabled', enabled) === true
+    syncSystemUpdateEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-system-update-enabled', enabled) === true,
+    syncDrawingsTechdrawEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-drawings-techdraw-enabled', enabled) === true
   },
   update: {
     state: () => ipcRenderer.invoke('update:state'),
@@ -135,6 +136,23 @@ const desktopApi = {
   },
   render: {
     stats: (stats: unknown) => ipcRenderer.invoke('render:stats', stats)
+  },
+  drawings: {
+    freecadStatus: () => ipcRenderer.invoke('freecad:status'),
+    detectFreecad: () => ipcRenderer.invoke('freecad:detect'),
+    chooseFreecadPath: () => ipcRenderer.invoke('freecad:choose-path'),
+    setFreecadPath: (path: string | null) => ipcRenderer.invoke('freecad:set-path', path),
+    generate: (request: unknown) => ipcRenderer.invoke('drawings:generate', request),
+    cancel: (jobId: string) => ipcRenderer.invoke('drawings:cancel', jobId),
+    jobs: () => ipcRenderer.invoke('drawings:jobs'),
+    list: (projectKey: string) => ipcRenderer.invoke('drawings:list', { projectKey }),
+    open: (projectKey: string, partKey: string, format: string) => ipcRenderer.invoke('drawings:open', { projectKey, partKey, format }),
+    reveal: (projectKey: string, partKey?: string) => ipcRenderer.invoke('drawings:reveal', { projectKey, partKey }),
+    onJob: (callback: (snapshot: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, snapshot: unknown) => callback(snapshot);
+      ipcRenderer.on('drawings:job-changed', listener);
+      return () => ipcRenderer.removeListener('drawings:job-changed', listener);
+    }
   },
   parametric: {
     status: () => ipcRenderer.invoke('parametric:status'),

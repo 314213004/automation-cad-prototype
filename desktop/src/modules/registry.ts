@@ -145,6 +145,22 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = Object.freeze([
     implemented: true
   }),
   Object.freeze({
+    id: 'drawings.techdraw',
+    name: 'FreeCAD 零件工程图',
+    version: '1.0.0',
+    apiCompatibility: Object.freeze({ min: 1, max: 1 }),
+    dependencies: Object.freeze(['core', 'cad.parametric-import']),
+    requiredCapabilities: Object.freeze([
+      'drawings.freecad.runner',
+      'drawings.techdraw.part',
+      'drawings.staleness'
+    ]),
+    description: '调用本机可选安装的 FreeCAD 1.x（freecadcmd，独立进程，LGPL）按参数化特征树逐件出零件工程图：第一角投影主/俯/左三视图 + 轴测图、自动图幅比例、外形总尺寸与国标标题栏，导出 PDF/DXF 到工程目录；参数改动后标记过期并可一键重出。默认启用；FreeCAD 未安装时只禁用出图并显示安装指引，建模不受影响。关闭会隐藏入口、取消排队作业并由主进程拒绝相关 IPC，已生成的图纸与清单保留。依赖 cad.parametric-import（逐件 STEP 由 build123d 内核导出）。',
+    kind: 'optional' as const,
+    defaultEnabled: true,
+    implemented: true
+  }),
+  Object.freeze({
     id: 'factory.plc-sync',
     name: '智慧工厂 PLC 同步扩展',
     version: '1.0.0',
@@ -229,6 +245,9 @@ const RUNTIME_CAPABILITIES = Object.freeze([
   'cad.parametric.sidecar-build',
   'cad.parametric.export',
   'cad.parametric.undo-redo',
+  'drawings.freecad.runner',
+  'drawings.techdraw.part',
+  'drawings.staleness',
   'sync.design-package',
   'machine.io-map',
   'project.identity.stable',
