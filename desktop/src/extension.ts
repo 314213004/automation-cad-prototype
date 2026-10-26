@@ -93,6 +93,7 @@ import { closeCanvasWorkbench, installCanvasWorkbench, openCanvasWorkbench } fro
 import { buildAssemblyProject } from './canvas/assembly-export.ts';
 import { normalizeGraph } from './canvas/graph.ts';
 import { unionEnvelope } from './cad/stl-export.ts';
+import { buildPartsCsv, partsCsvFileName } from './cad/parts-csv.ts';
 import type { MachineGraph } from './canvas/types.ts';
 
 const ICONS = {
@@ -1720,6 +1721,15 @@ function mountHomeScreen(): void {
     saveButton.title = '把当前视口里的模型逐件存成工程（出现在文件菜单里，可再次打开、查零件树与包围盒）';
     saveButton.addEventListener('click', () => { void saveSceneAsProject(); });
     left.appendChild(saveButton);
+
+    const partsCsvButton = document.createElement('button');
+    partsCsvButton.type = 'button';
+    partsCsvButton.id = 'exportPartsCsvButton';
+    partsCsvButton.className = 'tbtn';
+    partsCsvButton.textContent = '零件清单';
+    partsCsvButton.title = '导出当前视口零件清单 CSV（名字/装配路径/包围盒/三角面数；不含质量与价格）';
+    partsCsvButton.addEventListener('click', () => { void exportPartsCsv(); });
+    left.appendChild(partsCsvButton);
   }
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && homeHandle?.isOpen()) {
@@ -1796,6 +1806,51 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     showNotice(`工程「${result.record.name}」载入失败：${reason}。未确认场景恢复；请用主工具栏“打开 CAD”导入源文件，并在主视口与零件树非空后再校核。`, true);
     return null;
   }
+}
+
+/**
+ * 当前视口零件清单 → CSV（userData/exports）。
+ *
+ * 只导真实量：名字、装配路径、包围盒、三角面数。质量/价格不写——没有材料与价格语义，
+ * 空着比编一个数强。装配路径来自当前工程记录（partsList[].path），视口本身没有层级。
+ */
+async function exportPartsCsv(): Promise<void> {
+  if (!window.desktop?.exportPartsCsv) {
+    showNotice('当前环境不支持导出零件清单', true);
+    return;
+  }
+  let viewer;
+  try {
+    viewer = ensureViewer();
+  } catch (error) {
+    showNotice(`当前没有可导出的 3D 场景：${error instanceof Error ? error.message : String(error)}`, true);
+    return;
+  }
+  const sceneParts = viewer.getSceneParts();
+  if (sceneParts.length === 0) {
+    showNotice('当前视口没有零件：先打开 CAD / 工程，再导出清单', true);
+    return;
+  }
+  const pathByName = new Map<string, string[]>();
+  for (const item of lastOpenedProject?.partsList ?? []) {
+    if (item?.name && Array.isArray(item.path) && item.path.length > 0) pathByName.set(item.name, item.path);
+  }
+  const { csv, rows } = buildPartsCsv(sceneParts.map((part) => {
+    const path = pathByName.get(part.name);
+    return {
+      name: part.name,
+      ...(path ? { path } : {}),
+      bbox: { min: part.bbox.min, max: part.bbox.max },
+      ...(Number.isFinite(part.triangles) ? { triangles: part.triangles } : {})
+    };
+  }));
+  const fileName = partsCsvFileName(lastOpenedProject?.name ?? currentFileName ?? '工程零件');
+  const saved = await window.desktop.exportPartsCsv({ fileName, data: csv, rows });
+  if (!saved.ok) {
+    showNotice(`导出零件清单失败：${saved.message ?? '未知原因'}`, true);
+    return;
+  }
+  showNotice(`已导出零件清单 ${rows} 行 → ${saved.path}`);
 }
 
 /**

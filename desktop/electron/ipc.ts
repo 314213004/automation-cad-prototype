@@ -815,6 +815,29 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     }
   });
 
+  // 工程零件清单 CSV：只写 userData/exports（不接任意绝对路径），文件名经 planExportName 规划
+  handle('export:partsCsv', (_event, payload: unknown) => {
+    try {
+      if (!isRecord(payload) || typeof payload.data !== 'string' || payload.data.length === 0) {
+        return { ok: false, code: 'INVALID_ARGUMENT', message: '零件清单内容不能为空' };
+      }
+      const directory = join(app.getPath('userData'), 'exports');
+      mkdirSync(directory, { recursive: true });
+      const planned = planExportName({
+        directory,
+        format: 'csv',
+        fileName: typeof payload.fileName === 'string' ? payload.fileName : undefined,
+        suggestedName: typeof payload.suggestedName === 'string' ? payload.suggestedName : '工程零件清单',
+        overwrite: payload.overwrite === true,
+        exists: existsSync
+      });
+      writeFileSync(planned.path, payload.data, 'utf8');
+      return { ok: true, path: planned.path, bytes: Buffer.byteLength(payload.data, 'utf8'), rows: payload.rows ?? null };
+    } catch (error) {
+      return { ok: false, code: 'WRITE_FAILED', message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
   // PLC 生成历史与导出：目录固定 userData/exports/plc，不接受任意绝对路径。
   handle('plcgen:history', () => readPlcGenHistory());
 
