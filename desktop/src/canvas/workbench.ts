@@ -19,7 +19,7 @@ import {
   removeNode
 } from './graph.ts';
 import { axisSizing, screwSizing, type AxisSizingResult, type ScrewSizingResult } from './metrics.ts';
-import { build123dScript, buildMachineGraphJson, plcSt } from './export.ts';
+import { build123dScript, buildBomCsv, buildMachineGraphJson, plcSt } from './export.ts';
 import {
   buildArtboards,
   buildBomLines,
@@ -66,7 +66,7 @@ import type { CanvasNode, MachineGraph } from './types.ts';
 
 type ViewMode = CanvasViewMode;
 type InspectorTab = 'prop' | 'mech' | 'bom';
-type ExportTab = 'json' | 'build123d' | 'plc';
+type ExportTab = 'json' | 'build123d' | 'plc' | 'bom';
 
 interface WorkbenchState {
   graph: MachineGraph;
@@ -360,6 +360,7 @@ function buildShell(): void {
           <button type="button" class="cw-btn is-active" data-action="export-tab" data-tab="json">Machine Graph JSON</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="build123d">build123d 脚本</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="plc">PLC ST</button>
+          <button type="button" class="cw-btn" data-action="export-tab" data-tab="bom">BOM CSV</button>
         </div>
         <pre class="cw-pre" id="cwExportCode"></pre>
         <div class="cw-modal-foot">
@@ -1100,6 +1101,7 @@ function renderMode(): void {
 function exportContent(tab: ExportTab): string {
   if (tab === 'json') return buildMachineGraphJson(state.graph);
   if (tab === 'build123d') return build123dScript(state.graph);
+  if (tab === 'bom') return buildBomCsv(state.graph, priceLookup).csv;
   const result = plcSt(state.graph);
   if (result.supported && result.content) return result.content;
   return [
@@ -1682,7 +1684,7 @@ export interface CanvasSelfTestResult {
   stations: number;
   artboards: number;
   ganttRows: number;
-  exportLengths: { json: number; build123d: number; plc: number };
+  exportLengths: { json: number; build123d: number; plc: number; bom: number };
   pipStatus: string;
   pipBoxes: number;
   adapterModelDoc: number;
@@ -1740,8 +1742,8 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   const ganttRows = Number(document.getElementById('cwGantt')?.dataset.rows ?? 0);
 
   section.querySelector<HTMLElement>('[data-action="export"]')?.click();
-  const lengths = { json: 0, build123d: 0, plc: 0 };
-  for (const tab of ['json', 'build123d', 'plc'] as const) {
+  const lengths = { json: 0, build123d: 0, plc: 0, bom: 0 };
+  for (const tab of ['json', 'build123d', 'plc', 'bom'] as const) {
     section.querySelector<HTMLElement>(`[data-action="export-tab"][data-tab="${tab}"]`)?.click();
     lengths[tab] = document.getElementById('cwExportCode')?.textContent?.length ?? 0;
   }

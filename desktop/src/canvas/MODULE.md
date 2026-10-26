@@ -13,7 +13,7 @@
 | `types.ts` | `MountPort` / `CanvasNode` / `CanvasEdge` / `MachineGraph` / `AdapterParams`，字段语义写在注释里 |
 | `graph.ts` | `portsCompatible` / `portDiff` / `normalizeGraph` / `findMismatchedEdges` / `insertAdapterForEdge` / `insertAdaptersForAllMismatches` / `removeNode` / `graphConsistencyIssues` |
 | `metrics.ts` | `graphFlowModel` + `machineMetrics`（CT 走 `evaluateFlow`）、`costSummary`（只认注入的价格查询）、`axisSizing`（梯形曲线） |
-| `export.ts` | `buildMachineGraphJson`（稳定字段顺序）、`build123dScript`（文本）、`plcSt`（复用 plcgen）、`portReport` |
+| `export.ts` | `buildMachineGraphJson`（稳定字段顺序）、`build123dScript`（文本）、`plcSt`（复用 plcgen）、`buildBomCsv`（缺价留空+不完全统计）、`portReport` |
 | `metrics.ts` 追加 | `screwSizing`（临界转速 / 欧拉压杆 / DN）、`railMomentCheck`（导轨三向倾覆力矩） |
 | `view-model.ts` | 纯视图模型：拓扑布局、2D 正交投影、甘特、多口径画板、汇总、BOM 行、转接板默认工厂 |
 | `workbench.ts` | P2 界面：入口按钮 + 全屏工作台，只做 DOM/事件，数值全交给 view-model |

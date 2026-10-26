@@ -12,6 +12,7 @@ import { generatePlcSt } from '../plcgen/st.ts';
 import { precheck } from '../plcgen/precheck.ts';
 import type { PlcGenConfig } from '../plcgen/types.ts';
 import { findMismatchedEdges, isAdapterNode, portDiff } from './graph.ts';
+import type { PriceLookup } from './metrics.ts';
 import type { CanvasNode, MachineGraph, MountPort } from './types.ts';
 
 /** 导出 schema 版本；改字段必须升版本，避免下游静默错读。 */
@@ -389,4 +390,74 @@ export function portReport(graph: MachineGraph): PortReportLine[] {
       detail: diff.length === 0 ? '端口全字段匹配' : `不匹配字段：${diff.join('、')}`
     };
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// BOM CSV
+// ---------------------------------------------------------------------------
+
+function csvCell(value: string | number | null): string {
+  if (value === null) return '';
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export interface BomCsvResult {
+  csv: string;
+  /** 有价行数 / 待询价行数 / 已计价合计。 */
+  pricedRows: number;
+  pendingRows: number;
+  totalYuan: number;
+}
+
+/**
+ * BOM CSV（文本，不落盘）。列顺序固定：序号,名称,型号,数量,单价,小计,状态,备注。
+ * 缺价行单价/小计留空、状态写「待询价」，末尾汇总行标注「不完全统计」——
+ * 缺价既不能当 0，也不能从表里悄悄消失。
+ */
+export function buildBomCsv(graph: MachineGraph, priceLookup: PriceLookup): BomCsvResult {
+  const rows: string[] = ['序号,名称,型号,数量,单价,小计,状态,备注'];
+  let pricedRows = 0;
+  let pendingRows = 0;
+  let total = 0;
+  let index = 1;
+  for (const node of graph.nodes) {
+    const partId = node.partId ?? '';
+    const price = partId ? priceLookup(partId) : null;
+    const priced = typeof price === 'number' && Number.isFinite(price) && price >= 0;
+    if (priced) {
+      pricedRows += 1;
+      total += price as number;
+    } else {
+      pendingRows += 1;
+    }
+    rows.push(
+      [
+        csvCell(index),
+        csvCell(node.name),
+        csvCell(partId || '待选型'),
+        csvCell(1),
+        priced ? csvCell((price as number).toFixed(2)) : '',
+        priced ? csvCell((price as number).toFixed(2)) : '',
+        csvCell(priced ? '已计价' : '待询价'),
+        csvCell(isAdapterNode(node) ? '非标转接板' : node.spec)
+      ].join(',')
+    );
+    index += 1;
+  }
+  rows.push('');
+  rows.push(
+    [
+      csvCell('合计'),
+      csvCell(`已计价 ${pricedRows} 行`),
+      csvCell(`待询价 ${pendingRows} 行`),
+      '',
+      '',
+      csvCell(total.toFixed(2)),
+      csvCell(pendingRows > 0 ? '不完全统计' : '价格齐全'),
+      csvCell(pendingRows > 0 ? '缺价行不计入合计，需询价后更新' : '')
+    ].join(',')
+  );
+  return { csv: `${rows.join('\n')}\n`, pricedRows, pendingRows, totalYuan: Number(total.toFixed(2)) };
 }

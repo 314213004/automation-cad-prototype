@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   build123dScript,
+  buildBomCsv,
   buildMachineGraphJson,
   plcSt,
   portReport
@@ -266,4 +267,49 @@ test('portReport：逐边给出兼容明细，不匹配边指出差异字段', (
   assert.equal(fixedReport.length, 2);
   assert.ok(fixedReport.every((line) => line.compatible));
   assert.ok(fixedReport.every((line) => line.detail === '端口全字段匹配'));
+});
+
+
+// ---------------------------------------------------------------------------
+// BOM CSV
+// ---------------------------------------------------------------------------
+
+test('buildBomCsv：列顺序固定，缺价行留空并标待询价，合计标不完全统计', () => {
+  const graph = mismatchedChain();
+  const result = buildBomCsv(graph, (partId) => (partId === 'part-A' ? 3450 : null));
+  const lines = result.csv.trim().split('\n');
+  assert.equal(lines[0], '序号,名称,型号,数量,单价,小计,状态,备注');
+  assert.equal(result.pricedRows, 1);
+  assert.equal(result.pendingRows, 1);
+  assert.equal(result.totalYuan, 3450);
+  assert.match(lines[1], /3450\.00,3450\.00,已计价/);
+  assert.match(lines[2], /,,\s*待询价/);
+  const footer = lines.at(-1);
+  assert.match(footer, /合计/);
+  assert.match(footer, /3450\.00/);
+  assert.match(footer, /不完全统计/);
+});
+
+test('buildBomCsv：价格齐全时不写「不完全统计」', () => {
+  const result = buildBomCsv(mismatchedChain(), () => 100);
+  assert.equal(result.pendingRows, 0);
+  assert.equal(result.totalYuan, 200);
+  assert.match(result.csv, /价格齐全/);
+  assert.equal(result.csv.includes('不完全统计'), false);
+});
+
+test('buildBomCsv：名称/规格里的逗号与引号被正确转义', () => {
+  const graph = mismatchedChain();
+  graph.nodes[0].name = 'A, 带逗号';
+  graph.nodes[0].spec = '含 "引号" 的规格';
+  const csv = buildBomCsv(graph, () => null).csv;
+  assert.ok(csv.includes('"A, 带逗号"'));
+  assert.ok(csv.includes('"含 ""引号"" 的规格"'));
+});
+
+test('buildBomCsv：转接板行备注标「非标转接板」', () => {
+  const inserted = insertAdapterForEdge(mismatchedChain(), 'e1', factory());
+  const csv = buildBomCsv(inserted.graph, () => null).csv;
+  assert.match(csv, /非标转接板/);
+  assert.equal(buildBomCsv(inserted.graph, () => null).pendingRows, 3);
 });
