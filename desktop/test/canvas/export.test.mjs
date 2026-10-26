@@ -4,6 +4,7 @@ import {
   build123dScript,
   buildBomCsv,
   buildMachineGraphJson,
+  exportFileName,
   plcSt,
   portReport
 } from '../../src/canvas/export.ts';
@@ -312,4 +313,36 @@ test('buildBomCsv：转接板行备注标「非标转接板」', () => {
   const csv = buildBomCsv(inserted.graph, () => null).csv;
   assert.match(csv, /非标转接板/);
   assert.equal(buildBomCsv(inserted.graph, () => null).pendingRows, 3);
+});
+
+
+test('exportFileName：json/bom/dxf 可落盘，python/st 明确拒绝（白名单外）', () => {
+  const graph = mismatchedChain();
+  const json = exportFileName(graph, 'json');
+  assert.equal(json.supported, true);
+  assert.equal(json.name, 'scheme-export-graph.json');
+
+  const bom = exportFileName(graph, 'bom');
+  assert.equal(bom.name, 'scheme-export-bom.csv');
+
+  const dxf = exportFileName(graph, 'dxf');
+  assert.equal(dxf.name, 'scheme-export-adapter.dxf', '没有转接板时也给稳定名字');
+
+  const inserted = insertAdapterForEdge(graph, 'e1', factory()).graph;
+  assert.match(exportFileName(inserted, 'dxf').name, /^scheme-export-adapter-n_adapter_/);
+
+  const py = exportFileName(graph, 'build123d');
+  assert.equal(py.supported, false);
+  assert.match(py.reason, /白名单/);
+  const st = exportFileName(graph, 'plc');
+  assert.equal(st.supported, false);
+  assert.match(st.reason, /白名单/);
+});
+
+test('exportFileName：schemeId 里的非法字符被替换，避免路径注入', () => {
+  const graph = { ...mismatchedChain(), schemeId: '../../etc/passwd' };
+  const name = exportFileName(graph, 'json').name;
+  assert.equal(name.includes('..'), false);
+  assert.equal(name.includes('/'), false);
+  assert.ok(name.endsWith('.json'));
 });

@@ -461,3 +461,36 @@ export function buildBomCsv(graph: MachineGraph, priceLookup: PriceLookup): BomC
   );
   return { csv: `${rows.join('\n')}\n`, pricedRows, pendingRows, totalYuan: Number(total.toFixed(2)) };
 }
+
+
+// ---------------------------------------------------------------------------
+// 落盘文件名（受主进程扩展名白名单约束：.pdf/.dxf/.glb/.obj/.csv/.xlsx/.step/.stl/.json）
+// ---------------------------------------------------------------------------
+
+export interface ExportFileName {
+  name: string;
+  supported: boolean;
+  reason: string;
+}
+
+/**
+ * 导出页签 → 落盘文件名。build123d(.py) 与 PLC(.st) 不在主进程白名单里，
+ * 这里如实返回 supported=false，让 UI 提示「复制到编辑器另存」，不要偷偷改名成 .txt 骗过去。
+ */
+export function exportFileName(graph: MachineGraph, tab: 'json' | 'build123d' | 'plc' | 'bom' | 'dxf'): ExportFileName {
+  const base = (graph.schemeId || 'canvas').replace(/[^A-Za-z0-9_-]/g, '_');
+  if (tab === 'json') return { name: `${base}-graph.json`, supported: true, reason: '' };
+  if (tab === 'bom') return { name: `${base}-bom.csv`, supported: true, reason: '' };
+  if (tab === 'dxf') {
+    const adapter = graph.nodes.find((node) => node.kind === 'adapter');
+    const suffix = adapter ? `-${adapter.id.replace(/[^A-Za-z0-9_-]/g, '_')}` : '';
+    return { name: `${base}-adapter${suffix}.dxf`, supported: true, reason: '' };
+  }
+  return {
+    name: '',
+    supported: false,
+    reason: tab === 'build123d'
+      ? 'Python 脚本（.py）不在导出白名单（.json/.dxf/.csv/.step/.stl/.obj/.glb/.pdf/.xlsx），请复制到编辑器另存'
+      : 'PLC 文本（.st）不在导出白名单，请复制到 IDE 另存'
+  };
+}

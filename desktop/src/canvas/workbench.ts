@@ -19,7 +19,7 @@ import {
   removeNode
 } from './graph.ts';
 import { axisSizing, screwSizing, type AxisSizingResult, type ScrewSizingResult } from './metrics.ts';
-import { build123dScript, buildBomCsv, buildMachineGraphJson, plcSt } from './export.ts';
+import { build123dScript, buildBomCsv, buildMachineGraphJson, exportFileName, plcSt } from './export.ts';
 import {
   buildArtboards,
   buildBomLines,
@@ -367,6 +367,7 @@ function buildShell(): void {
         <pre class="cw-pre" id="cwExportCode"></pre>
         <div class="cw-modal-foot">
           <button type="button" class="cw-btn primary" data-action="copy-export">复制到剪贴板</button>
+          <button type="button" class="cw-btn" data-action="save-export">保存到文件</button>
           <span id="cwCopyState"></span>
         </div>
       </div>
@@ -1134,6 +1135,41 @@ function renderExport(): void {
   }
   const stateLabel = document.getElementById('cwCopyState');
   if (stateLabel) stateLabel.textContent = '';
+  const saveButton = modal.querySelector<HTMLButtonElement>('[data-action="save-export"]');
+  if (saveButton) {
+    const target = exportFileName(state.graph, state.exportTab);
+    saveButton.disabled = !target.supported;
+    saveButton.title = target.supported ? `保存为 ${target.name}` : target.reason;
+  }
+}
+
+/** 落盘：走主进程 export:saveFile（会弹保存对话框）；不支持的类型只提示，不改名糊弄。 */
+async function saveExport(): Promise<void> {
+  const target = exportFileName(state.graph, state.exportTab);
+  const label = document.getElementById('cwCopyState');
+  if (!target.supported) {
+    toast(target.reason, true);
+    if (label) label.textContent = target.reason;
+    return;
+  }
+  const api = window.desktop?.exportFile;
+  if (!api) {
+    toast('浏览器模式没有落盘接口，请用「复制到剪贴板」', true);
+    return;
+  }
+  try {
+    const result = await api(target.name, exportContent(state.exportTab));
+    if (result.canceled) {
+      toast('已取消保存');
+      return;
+    }
+    toast(`已保存：${result.path ?? target.name}`);
+    if (label) label.textContent = `已保存 ${result.path ?? target.name}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    toast(`保存失败：${message}`, true);
+    if (label) label.textContent = `保存失败：${message}`;
+  }
 }
 
 function renderAll(): void {
@@ -1530,6 +1566,10 @@ function bindEvents(): void {
       renderAll();
       markDirty();
       toast(`已采纳 ${candidate.formName} 的口径：布局 ${layout}，目标 ${candidate.targetPerMin ?? '—'} 件/分钟；模块未导入`);
+      return;
+    }
+    if (action === 'save-export') {
+      void saveExport();
       return;
     }
     if (action === 'adapter-dxf') {
