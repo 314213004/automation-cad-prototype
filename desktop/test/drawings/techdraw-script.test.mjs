@@ -44,6 +44,18 @@ test('python3 语法检查', { skip: python ? false : '沙箱无 python3' }, () 
 });
 
 const realFreecad = process.env.AUTOMATIONCAD_FREECAD_REAL;
+test('真 FreeCAD 自带 Python 跑同一套自检（--pass --self-test，确认不是只打印帮助）', { skip: realFreecad && existsSync(realFreecad) ? false : '未设置 AUTOMATIONCAD_FREECAD_REAL' }, () => {
+  const run = spawnSync(realFreecad, [SCRIPT, '--pass', '--self-test'], { encoding: 'utf8', timeout: 120_000 });
+  assert.match(run.stdout + run.stderr, /SELF_TEST_OK/);
+  assert.doesNotMatch(run.stdout, /--safe-mode/, '不应落到 freecadcmd 的帮助输出');
+});
+
+test('脚本自检入口：freecadcmd 下 __name__ 非 __main__ 时 --self-test 参数也能触发', () => {
+  const source = readFileSync(SCRIPT, 'utf8');
+  assert.match(source, /"--self-test" in sys\.argv:\n/);
+  assert.ok(source.includes('--pass --self-test'));
+});
+
 test('真 FreeCAD 端到端（AUTOMATIONCAD_FREECAD_REAL）', { skip: realFreecad && existsSync(realFreecad) ? false : '未设置 AUTOMATIONCAD_FREECAD_REAL' }, () => {
   const root = mkdtempSync(join(tmpdir(), 'acad-real-freecad-'));
   try {
