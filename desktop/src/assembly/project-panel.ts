@@ -131,6 +131,34 @@ function render(): void {
     ? partHtml(selection.name, selection.bbox ?? null)
     : summaryHtml(current);
   host.dataset.projectPanel = 'true';
+  syncTree(selection?.name ?? null);
+}
+
+/** 结构树选中态 + 状态栏层级都从这一处同步，不各存一份。 */
+function syncTree(name: string | null): void {
+  const win = window as unknown as { __projectTreeSetSelected?: (value: string | null) => void };
+  try {
+    win.__projectTreeSetSelected?.(name);
+  } catch {
+    /* 树未渲染时忽略 */
+  }
+  const hier = document.getElementById('stHier');
+  if (hier && current) {
+    hier.textContent = name
+      ? `当前层级：工程 > ${groupOfPartName(name)} > ${name}`
+      : `当前层级：工程 > ${current.name}`;
+  }
+}
+
+export function groupOfPartName(name: string): string {
+  const match = /^([^-]+)-/.exec(name);
+  return match?.[1] ?? '其他';
+}
+
+/** 手动触发一次重绘（点结构树后立刻生效，不等 500ms 轮询）。 */
+export function refreshProjectPanel(): void {
+  lastKey = '';
+  render();
 }
 
 /** 工程打开后调用：接管右侧属性面板。 */

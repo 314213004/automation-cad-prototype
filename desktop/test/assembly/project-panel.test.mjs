@@ -55,3 +55,13 @@ test('partHtml：名称做 HTML 转义（零件名可能带 < >）', () => {
   assert.equal(html.includes('<3mm>'), false);
   assert.match(html, /托条&lt;3mm&gt;/);
 });
+
+import { groupOfPartName } from '../../src/assembly/project-panel.ts';
+
+test('groupOfPartName：按第一个连字符前缀分组，与结构树分组规则一致', () => {
+  assert.equal(groupOfPartName('托条-L17-2'), '托条');
+  assert.equal(groupOfPartName('链轨-近侧-外'), '链轨');
+  assert.equal(groupOfPartName('立柱-左前'), '立柱');
+  assert.equal(groupOfPartName('驱动座'), '其他', '没有分隔符的件归「其他」');
+  assert.equal(groupOfPartName(''), '其他');
+});

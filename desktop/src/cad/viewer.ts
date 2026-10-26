@@ -1233,6 +1233,14 @@ export class CadViewer {
     return true;
   }
 
+  /** 按零件名选中（工程结构树 / 面板联动用）；找不到返回 false，不猜下标。 */
+  selectPartByName(name: string, focus = false): boolean {
+    const index = this.parts.findIndex((part) => part.data.name === name);
+    if (index < 0) return false;
+    this.selectPart(index, focus);
+    return true;
+  }
+
   selectPart(index: number | null, focus = false): void {
     if (this.degraded) return;
     if (!this.selectionHelper) return;

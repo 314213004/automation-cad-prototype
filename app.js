@@ -1314,23 +1314,59 @@ function applyProjectStage(record) {
   renderProjectTree(record);
 }
 
-/** 左侧结构树改成工程零件清单（演示装配的 6 件不再冒充） */
+/** 左侧结构树改成工程零件清单：按名称前缀分组、全部列出、可点选（演示装配的 6 件不再冒充） */
+function projectGroupOf(name) {
+  const m = /^([^-]+)-/.exec(String(name || ''));
+  return m ? m[1] : '其他';
+}
 function renderProjectTree(record) {
   const left = $('[data-panel="left"][data-for="assembly"]');
   const body = left && left.querySelector('.panel-body');
   if (!body) return;
-  const names = Array.isArray(record.partsList) ? record.partsList.map((item) => item.name) : [];
-  const rows = names.slice(0, 60).map((name, index) => `
-    <div class="tree-row" style="display:flex;gap:6px;align-items:center;padding:3px 8px;font-size:12px;color:var(--text-2)">
-      <span class="mono" style="color:var(--text-3);width:22px">${String(index + 1).padStart(2, '0')}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</span>
-    </div>`).join('');
+  const names = Array.isArray(record.partsList) ? record.partsList.map((item) => item.name).filter(Boolean) : [];
+  const groups = new Map();
+  names.forEach((name) => {
+    const group = projectGroupOf(name);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(name);
+  });
+  const sections = Array.from(groups.entries()).map(([group, list], groupIndex) => `
+    <details class="pt-group" ${groupIndex === 0 || list.length <= 8 ? 'open' : ''}>
+      <summary class="pt-group-head">${esc(group)}<span class="pt-count">${list.length}</span></summary>
+      ${list.map((name, index) => `
+        <div class="tree-row pt-row" role="button" tabindex="0" data-project-part="${attr(name)}">
+          <span class="mono pt-idx">${String(index + 1).padStart(2, '0')}</span>
+          <span class="pt-name">${esc(name)}</span>
+        </div>`).join('')}
+    </details>`).join('');
   body.innerHTML = `
     <div class="panel-section">
-      <div class="panel-section-head">工程零件 · ${record.parts} 件</div>
-      ${rows || '<div class="panel-empty">工程里没有零件记录</div>'}
-      ${names.length > 60 ? `<div class="panel-empty">还有 ${names.length - 60} 件…</div>` : ''}
+      <div class="panel-section-head">工程零件 · ${record.parts} 件 · ${groups.size} 组</div>
+      ${sections || '<div class="panel-empty">工程里没有零件记录</div>'}
+      ${names.length !== record.parts ? `<div class="panel-empty">工程记录 ${record.parts} 件，清单 ${names.length} 件</div>` : ''}
     </div>`;
+  body.querySelectorAll('.pt-row').forEach((row) => {
+    const pick = () => {
+      const name = row.dataset.projectPart;
+      if (!name) return;
+      if (typeof window.__projectTreeSelect === 'function') window.__projectTreeSelect(name);
+      else window.__projectTreeSetSelected?.(name);
+    };
+    row.addEventListener('click', pick);
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); }
+    });
+  });
+  window.__projectTreeSetSelected?.(currentProjectPartName());
+}
+/** 选中态由外部（扩展 / 3D 拾取）同步进树，避免树自己维护第二份真相 */
+window.__projectTreeSetSelected = function (name) {
+  document.querySelectorAll('[data-project-part]').forEach((row) => {
+    row.classList.toggle('is-sel', !!name && row.dataset.projectPart === name);
+  });
+};
+function currentProjectPartName() {
+  try { return window.__AgentBridge?.getSelection?.()?.name ?? null; } catch { return null; }
 }
 
 function esc(v) {

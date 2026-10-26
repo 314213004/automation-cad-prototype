@@ -55,7 +55,7 @@ import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initHomeScreen, type HomeScreenHandle } from './home/home-screen.ts';
-import { attachProjectPanel, detachProjectPanel, toPanelInfo } from './assembly/project-panel.ts';
+import { attachProjectPanel, detachProjectPanel, refreshProjectPanel, toPanelInfo } from './assembly/project-panel.ts';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
 import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
@@ -2582,6 +2582,16 @@ function initAgentBridge(): void {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
       }
     },
+    selectPartByName: (name: string) => {
+      if (!agentBridgeReady()) return agentBridgeUnavailable();
+      try {
+        const ok = ensureViewer().selectPartByName(name, true);
+        refreshProjectPanel();
+        return ok ? { ok: true, name } : { ok: false, message: `场景里没有零件「${name}」` };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) };
+      }
+    },
     getSelection: () => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       try {
@@ -3131,6 +3141,21 @@ function initAgentBridge(): void {
   };
   Object.defineProperty(window, '__AgentBridge', {
     value: Object.freeze(bridge),
+    writable: false,
+    configurable: false,
+    enumerable: false
+  });
+  // 工程结构树点选入口（app.js 的 renderProjectTree 调它；视口未就绪时静默失败）
+  Object.defineProperty(window, '__projectTreeSelect', {
+    value: (name: string) => {
+      if (!agentBridgeReady() || typeof name !== 'string') return;
+      try {
+        ensureViewer().selectPartByName(name, true);
+        refreshProjectPanel();
+      } catch {
+        /* 场景未就绪：忽略，面板仍会在下次拾取时刷新 */
+      }
+    },
     writable: false,
     configurable: false,
     enumerable: false
