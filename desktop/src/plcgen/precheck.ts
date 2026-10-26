@@ -383,6 +383,31 @@ function parseBomTextPoints(text: string): { input: number; output: number; tota
       output = Number(prefixed[2]);
     }
   }
+  if (input === 0 && output === 0) {
+    // 入口/出口写法：8 IN / 6 OUT、8 入 / 6 出
+    const io = /(\d+)\s*(?:IN|入)\s*[/／,、]\s*(\d+)\s*(?:OUT|出)/i.exec(text);
+    if (io) {
+      input = Number(io[1]);
+      output = Number(io[2]);
+    }
+  }
+  if (input === 0 && output === 0) {
+    // 按出现顺序：「输入8 输出6」「DI:8 DO:6」
+    const ordered = /(?:输入|\bDI\b)\s*[:：=]?\s*(\d+)[\s\S]*?(?:输出|\bDO\b)\s*[:：=]?\s*(\d+)/i.exec(text);
+    if (ordered) {
+      input = Number(ordered[1]);
+      output = Number(ordered[2]);
+    }
+  }
+  if (input === 0) {
+    // 8×DI / 8 x DI
+    const timesInput = /(\d+)\s*[×xX*]\s*(?:DI|数字量输入)/i.exec(text);
+    if (timesInput) input = Number(timesInput[1]);
+  }
+  if (output === 0) {
+    const timesOutput = /(\d+)\s*[×xX*]\s*(?:DO|数字量输出)/i.exec(text);
+    if (timesOutput) output = Number(timesOutput[1]);
+  }
   if (input === 0) {
     const match = /(\d+)\s*(?:DI|数字量输入|输入点|输入通道)/i.exec(text);
     if (match) input = Number(match[1]);
