@@ -604,6 +604,16 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     );
   }
 
+  // 大件告警：模板几何按标准小件排，工件超过 1.5m 时包络/工位间距必须按工件重做
+  const workpiece = brief.workpiece;
+  const bigPart = Math.max(workpiece?.lengthMm ?? 0, workpiece?.widthMm ?? 0);
+  if (bigPart >= 1500) {
+    warnings.push(
+      `工件 ${workpiece?.lengthMm ?? '?'}×${workpiece?.widthMm ?? '?'} mm 属于大件：模板工位间距与机架包络按标准小件排，` +
+        '不含大件夹持/缓存空间，方案包络不能作为占地与验收依据；需按工件尺寸重做输送段与缓存工位。'
+    );
+  }
+
   let sensorKinds = flattened(brief.sensors);
   let sensorSource = 'brief';
   if (sensorKinds.length === 0) {

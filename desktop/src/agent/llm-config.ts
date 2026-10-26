@@ -29,8 +29,13 @@ export const DEFAULT_LLM_CONFIG: AgentLlmConfig = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
-  maxIterations: 6,
-  maxToolCalls: 24
+  /**
+   * 设计类任务（查库 → 选型 → 核算 → 出 BOM → 成本）实测要 8~12 轮：
+   * 6 轮会在「查完库还没开始设计」时被掐断（真实案例：光伏缓存堆叠机只做了 14 次
+   * 组件查询就被判定「达到最大工具调用轮数」）。
+   */
+  maxIterations: 14,
+  maxToolCalls: 40
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
