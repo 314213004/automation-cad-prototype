@@ -121,6 +121,8 @@ let priceSourceLoaded = false;
 let restorePending = false;
 /** 2D 正交尺寸标注开关（默认开：排布先看包络和中心距）。 */
 let showDimensions = true;
+/** 「新建空白」的二次确认计时器（画布非空时要求连点两次）。 */
+let pendingNewBlank = 0;
 const adapterFactory = createDefaultAdapterFactory({ dowelDiaMm: 4 });
 
 // ---------------------------------------------------------------------------
@@ -415,6 +417,7 @@ function buildShell(): void {
         <button type="button" class="cw-btn" data-action="export">导出</button>
         <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
         <span class="cw-draft-state" id="cwDraftState" role="status" aria-live="polite">—</span>
+        <button type="button" class="cw-btn" data-action="new-blank">新建空白</button>
         <button type="button" class="cw-btn" data-action="reset-demo">重置演示</button>
         <button type="button" class="cw-btn" data-action="close">关闭 Esc</button>
       </div>
@@ -584,6 +587,20 @@ function renderTopology(): void {
   if (!canvas || !svg || !host) return;
   const view = buildTopologyView(state.graph);
   canvas.style.width = `${view.width}px`;
+  if (view.nodes.length === 0) {
+    // 空画布不要只留一片网格：给出下一步怎么走
+    host.innerHTML = `
+      <div class="cw-empty">
+        <b>画布是空的</b>
+        <p>从左侧「模组库」点一件开始，或点顶部「重置演示」看示例拓扑（6 工位 / 1 处真实端口不匹配）。</p>
+        <p class="cw-hint">节点之间要端口五字段全等才能直连；不匹配时用「⚡ 生成转接板」插板桥接。</p>
+      </div>`;
+    svg.innerHTML = '';
+    canvas.dataset.mismatch = '0';
+    canvas.dataset.nodes = '0';
+    canvas.dataset.edges = '0';
+    return;
+  }
   canvas.style.height = `${view.height}px`;
   canvas.dataset.mismatch = String(view.mismatchCount);
   canvas.dataset.nodes = String(view.nodes.length);
@@ -1864,6 +1881,42 @@ function bindEvents(): void {
       void navigator.clipboard?.writeText(code).then(done).catch(() => {
         toast('剪贴板不可用，请手动全选复制', true);
       });
+      return;
+    }
+    if (action === 'new-blank') {
+      // 非空画布要连点两次，避免误清；4 秒不点自动失效
+      if (state.graph.nodes.length > 0 && pendingNewBlank === 0) {
+        pendingNewBlank = window.setTimeout(() => {
+          pendingNewBlank = 0;
+          const button = document.querySelector<HTMLElement>('[data-action="new-blank"]');
+          if (button) button.textContent = '新建空白';
+        }, 4000);
+        const button = document.querySelector<HTMLElement>('[data-action="new-blank"]');
+        if (button) button.textContent = '再点一次确认';
+        toast('画布非空：再点一次「再点一次确认」清空（或先导出 JSON 备份）', true);
+        return;
+      }
+      if (pendingNewBlank !== 0) {
+        window.clearTimeout(pendingNewBlank);
+        pendingNewBlank = 0;
+        const button = document.querySelector<HTMLElement>('[data-action="new-blank"]');
+        if (button) button.textContent = '新建空白';
+      }
+      state.graph = {
+        schemeId: 'scheme-unnamed',
+        title: '未命名方案',
+        layout: 'linear',
+        transferSeconds: 0.2,
+        nodes: [],
+        edges: []
+      };
+      state.selectedId = null;
+      state.mode = 'topology';
+      history = createHistory({ graph: state.graph, selectedId: null }, '新建空白');
+      renderHistoryButtons();
+      renderAll();
+      markDirty();
+      toast('已清空画布：从左侧模组库添加节点，或「重置演示」恢复示例');
       return;
     }
     if (action === 'reset-demo') {
