@@ -41,6 +41,8 @@ import {
   type CandidateSummary
 } from './candidates-source.ts';
 import { createPipScene, type PipScene } from './pip3d.ts';
+import { checkNodeSizes, describeModelCheck } from './model-check.ts';
+import type { InterferencePart } from '../mech/interference.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
@@ -389,6 +391,7 @@ function buildShell(): void {
           </header>
           <div class="cw-pip-host" id="cwPipHost"></div>
           <p class="cw-pip-note" id="cwPipNote">占位盒按节点外形/坐标生成，不是型号级几何；无 B-Rep / 干涉结论。</p>
+          <p class="cw-pip-note" id="cwPipModelCheck"></p>
         </div>
         <div class="cw-gantt" id="cwGantt"></div>
       </main>
@@ -707,7 +710,25 @@ function ensurePip(): PipScene | null {
   return pipScene;
 }
 
+/** 有导入模型时，用它的 AABB 体积跟画布节点尺寸对一遍（只报偏差，不渲染网格）。 */
+function renderPipModelCheck(): void {
+  const element = document.getElementById('cwPipModelCheck');
+  if (!element) return;
+  const bridge = (window as unknown as { __AgentBridge?: { getSceneParts?: () => unknown } }).__AgentBridge;
+  let parts: InterferencePart[] = [];
+  try {
+    const raw = typeof bridge?.getSceneParts === 'function' ? bridge.getSceneParts() : [];
+    if (Array.isArray(raw)) parts = raw as InterferencePart[];
+  } catch {
+    parts = [];
+  }
+  const summary = parts.length > 0 ? checkNodeSizes(state.graph, parts) : null;
+  element.textContent = describeModelCheck(summary, parts.length);
+  element.classList.toggle('cw-warn', (summary?.differs ?? 0) > 0);
+}
+
 function renderPip(): void {
+  renderPipModelCheck();
   const scene = ensurePip();
   if (!scene || scene.status !== 'ready') return;
   scene.update(state.graph, state.selectedId);
@@ -1797,6 +1818,7 @@ export interface CanvasSelfTestResult {
   exportLengths: { json: number; build123d: number; plc: number; bom: number; dxf: number };
   pipStatus: string;
   pipBoxes: number;
+  modelCheck: string;
   adapterModelDoc: number;
   undoRestoredMismatch: number;
   redoRestoredAdapters: number;
@@ -1865,6 +1887,7 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   const result: CanvasSelfTestResult = {
     pipStatus: pip?.status ?? 'missing',
     pipBoxes: state.graph.nodes.length,
+    modelCheck: document.getElementById('cwPipModelCheck')?.textContent ?? '',
     adapterModelDoc: state.graph.nodes.filter((node) => adapterFeatureDoc(node) !== null).length,
     undoRestoredMismatch,
     redoRestoredAdapters,

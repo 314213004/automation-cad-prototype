@@ -131,7 +131,9 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 30. **保存对话框会阻塞**：`exportFile()` 弹原生保存框，自动化里只验证按钮启用/禁用与文件名，不要真去点（会挂住会话）。
 31. **`draft-store.ts` 不能进渲染进程**：它 import `node:fs`，被 `canvas/index` 或 workbench 间接引用会让前端打不开；只给 `electron/ipc.ts` 用，渲染侧走 `window.desktop.canvasDraft`。
 32. **重置演示后草稿会立刻重建**：`reset-demo` 先清磁盘再 `persistNow()`，落盘的是新演示图——这是预期，「清空」不等于「不再保存」。
-33. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
+33. **AABB ≠ 可渲染几何**：导入零件只拿得到包围盒（`InterferencePart`），坐标系是 CAD 的 Z-up，画布是 Y-up；直接摆盒子会歪，所以只做体积核对。
+34. **`window.__AgentBridge` 是只读属性**：对象成员可改但整体不可替换，自动化里想注入假零件会被静默忽略——验证真实模型分支必须走真实导入。
+35. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
 
 ## 验证命令
 

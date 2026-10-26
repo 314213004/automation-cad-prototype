@@ -4894,6 +4894,7 @@ function createWindow(): BrowserWindow {
           exportLengths: { json: number; build123d: number; plc: number; bom: number; dxf: number };
           pipStatus: string;
           pipBoxes: number;
+          modelCheck: string;
           adapterModelDoc: number;
           undoRestoredMismatch: number;
           redoRestoredAdapters: number;
@@ -4916,7 +4917,7 @@ function createWindow(): BrowserWindow {
           throw new Error(`3D 预览状态异常 ${JSON.stringify(canvas)}`);
         }
         if (canvas.pipBoxes < 1) throw new Error(`3D 预览没有盒子 ${JSON.stringify(canvas)}`);
-        console.log(`SMOKE_CANVAS_PIP_OK boxes=${canvas.pipBoxes} status=${canvas.pipStatus}`);
+        console.log(`SMOKE_CANVAS_PIP_OK boxes=${canvas.pipBoxes} status=${canvas.pipStatus} modelCheck=${canvas.modelCheck.length}`);
         if (canvas.adapterModelDoc < 1) throw new Error(`转接板没有可建模的特征树 ${JSON.stringify(canvas)}`);
         console.log(`SMOKE_CANVAS_ADAPTER_MODEL_OK docs=${canvas.adapterModelDoc}`);
         if (
