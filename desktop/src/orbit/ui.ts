@@ -39,7 +39,7 @@ import {
   strokeFromRodPath
 } from './proto-sync.ts';
 import { findTreeNode, insertedIdsFromTree, nodeForPart, resolveSelection, type ProtoTreeNode } from './selection.ts';
-import { cloneOverrides, parseProtoCounts, UnifiedHistory, type HistorySnapshot, type OrbitEdit } from './history.ts';
+import { cloneOverrides, parseProtoCounts, UnifiedHistory, type HistorySnapshot, type LayoutEdit, type OrbitEdit } from './history.ts';
 import { loadOrbit, ORBIT_STORE_KEY, saveOrbit, type StorageLike } from './persist.ts';
 import type { ScreenRect } from './marquee.ts';
 import type { HighlightState } from './three-scene.ts';
@@ -84,7 +84,7 @@ export interface OrbitPublicState {
   store: { key: string; restored: boolean; reason: string | null; saves: number };
 }
 
-export type HistoryStepResult = { ok: true; by: 'orbit' | 'proto'; label: string } | { ok: false; message: string };
+export type HistoryStepResult = { ok: true; by: 'orbit' | 'proto' | 'layout'; label: string } | { ok: false; message: string };
 
 export interface OrbitHandle {
   state(): OrbitPublicState;
@@ -696,10 +696,59 @@ function protoStep(kind: 'undo' | 'redo'): HistoryStepResult {
   return result?.ok ? { ok: true, by: 'proto', label: result.label ?? '' } : { ok: false, message: result?.message ?? '原型撤销失败' };
 }
 
+/* -------------------------------------------- 整机布局编辑并入同一时间线 */
+
+/** 布局编辑器宿主注册：把快照写回 MachineDesign 主数据；返回 false 表示快照已不适用。 */
+export type LayoutHistoryApplier = (snapshot: unknown, label: string, direction: 'undo' | 'redo') => boolean;
+let layoutApplier: LayoutHistoryApplier | null = null;
+let historyBound = false;
+
+function layoutStep(direction: 'undo' | 'redo'): HistoryStepResult {
+  const edit = direction === 'undo' ? history.takeLayoutUndo() : history.takeLayoutRedo();
+  if (!edit) return { ok: false, message: direction === 'undo' ? '没有可撤销的布局编辑' : '没有可重做的布局编辑' };
+  const applied = layoutApplier ? layoutApplier(direction === 'undo' ? edit.before : edit.after, edit.label, direction) : false;
+  if (!applied) {
+    // 主数据已被替换（换方案/重算/向导关闭）：旧快照不能再写回，整段布局历史作废。
+    history.clearLayout();
+    syncHistoryUi();
+    notify('布局历史已失效（方案已变化），未写回', 'warn');
+    return { ok: false, message: '布局历史已失效（方案已变化），未写回' };
+  }
+  notify(`已${direction === 'undo' ? '撤销' : '重做'}：${edit.label}`);
+  syncHistoryUi();
+  return { ok: true, by: 'layout', label: edit.label };
+}
+
+/**
+ * 供 src/layout-editor 使用的时间线入口。布局编辑与原型/3D 编辑共用一条撤销线：
+ * Ctrl+Z / 状态栏按钮按发生顺序撤销，不另起栈。
+ */
+export const layoutHistory = Object.freeze({
+  record(edit: LayoutEdit): boolean {
+    syncProtoCounts();
+    const recorded = history.recordLayout(edit);
+    syncHistoryUi();
+    return recorded;
+  },
+  setApplier(applier: LayoutHistoryApplier | null): void { layoutApplier = applier; },
+  undo: (): HistoryStepResult => undoStep(),
+  redo: (): HistoryStepResult => redoStep(),
+  clear(): void { history.clearLayout(); syncHistoryUi(); },
+  /** 全局 Ctrl+Z 捕获是否已由主视口挂上；未挂上时布局编辑器自己转发快捷键。 */
+  bound: (): boolean => historyBound,
+  counts: (): { undo: number; redo: number } => history.layoutCounts(),
+  peek: (): { undo: string | null; redo: string | null } => ({
+    undo: history.peekLayoutUndo()?.label ?? null,
+    redo: history.peekLayoutRedo()?.label ?? null
+  }),
+  snapshot: (): HistorySnapshot => history.snapshot()
+});
+
 function undoStep(): HistoryStepResult {
   syncProtoCounts();
   flushPendingEdit();
   const next = history.nextUndo();
+  if (next === 'layout') return layoutStep('undo');
   if (next === 'orbit') return orbitUndo();
   if (next === 'proto') return protoStep('undo');
   return { ok: false, message: '没有可撤销的操作' };
@@ -709,6 +758,7 @@ function redoStep(): HistoryStepResult {
   syncProtoCounts();
   flushPendingEdit();
   const next = history.nextRedo();
+  if (next === 'layout') return layoutStep('redo');
   if (next === 'orbit') return orbitRedo();
   if (next === 'proto') return protoStep('redo');
   return { ok: false, message: '没有可重做的操作' };
@@ -749,14 +799,16 @@ function syncHistoryUi(): void {
   };
   const nextUndo = history.nextUndo();
   const nextRedo = history.nextRedo();
-  const undoEdit = history.peekOrbitUndo();
-  const redoEdit = history.peekOrbitRedo();
-  apply(undoBtn, nextUndo !== null, undoEdit ? `撤销：${undoEdit.label}（Ctrl+Z）` : null, counts.undo);
+  const undoEdit = history.peekOrbitUndo() ?? history.peekLayoutUndo();
+  const redoEdit = history.peekOrbitRedo() ?? history.peekLayoutRedo();
+  const layoutCounts = history.layoutCounts();
+  apply(undoBtn, nextUndo !== null, undoEdit ? `撤销：${undoEdit.label}（Ctrl+Z）` : null, counts.undo + layoutCounts.undo);
   apply(redoBtn, nextRedo !== null,
-    redoEdit ? `重做：${redoEdit.label}（Ctrl+Y / Ctrl+Shift+Z）` : (nextRedo === null ? '没有可重做的操作' : null), counts.redo);
+    redoEdit ? `重做：${redoEdit.label}（Ctrl+Y / Ctrl+Shift+Z）` : (nextRedo === null ? '没有可重做的操作' : null), counts.redo + layoutCounts.redo);
 }
 
 function bindHistory(): void {
+  historyBound = true;
   syncProtoCounts();
   window.addEventListener('keydown', (event) => {
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
@@ -775,6 +827,8 @@ function bindHistory(): void {
     if (next === 'orbit') {
       if (isUndo) orbitUndo();
       else orbitRedo();
+    } else if (next === 'layout') {
+      layoutStep(isUndo ? 'undo' : 'redo');
     } else {
       notify('没有可重做的操作', 'warn');
     }
@@ -794,6 +848,8 @@ function bindHistory(): void {
     if (next === 'orbit') {
       if (isUndo) orbitUndo();
       else orbitRedo();
+    } else if (next === 'layout') {
+      layoutStep(isUndo ? 'undo' : 'redo');
     } else {
       notify('没有可重做的操作', 'warn');
     }

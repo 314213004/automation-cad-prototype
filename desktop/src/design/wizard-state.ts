@@ -588,7 +588,7 @@ function parseDraftDesign(raw: Record<string, unknown>, allowIncompleteConfig = 
   if (!allowIncompleteConfig && (!Array.isArray(raw.points) || !isRecord(raw.bomDraft) || !Array.isArray(raw.bomDraft.items) ||
       !Array.isArray(raw.warnings) || !Array.isArray(raw.assumptions))) return null;
   if (raw.stationGeometryLayout !== undefined) {
-    if (!identityMapValid && isRecord(raw.stationGeometryLayout) && raw.stationGeometryLayout.schemaVersion === 2) {
+    if (!identityMapValid && isRecord(raw.stationGeometryLayout) && (raw.stationGeometryLayout.schemaVersion === 2 || raw.stationGeometryLayout.schemaVersion === 3)) {
       delete design.stationGeometryLayout;
       design.stationGeometryWarning = '稳定工位身份映射缺失或重复，无法安全关联已有偏移；已清除全部偏移，请重新定位工位。';
       return design;

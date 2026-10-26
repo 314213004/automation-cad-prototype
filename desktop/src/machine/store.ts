@@ -218,7 +218,7 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
     ? value.stationGeometryWarning.trim().slice(0, 1000)
     : undefined;
   if (value.stationGeometryLayout !== undefined) {
-    if (!stationIdentityMapValid && isRecord(value.stationGeometryLayout) && value.stationGeometryLayout.schemaVersion === 2) {
+    if (!stationIdentityMapValid && isRecord(value.stationGeometryLayout) && (value.stationGeometryLayout.schemaVersion === 2 || value.stationGeometryLayout.schemaVersion === 3)) {
       stationGeometryWarning = '稳定工位身份映射缺失或重复，无法安全关联已有偏移；已清除全部偏移，请重新定位工位。';
     } else {
       const resolution = normalizeStationGeometryLayout(value.stationGeometryLayout, config.stations, stationIdentities);
