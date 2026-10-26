@@ -477,7 +477,10 @@ export interface ExportFileName {
  * 导出页签 → 落盘文件名。build123d(.py) 与 PLC(.st) 不在主进程白名单里，
  * 这里如实返回 supported=false，让 UI 提示「复制到编辑器另存」，不要偷偷改名成 .txt 骗过去。
  */
-export function exportFileName(graph: MachineGraph, tab: 'json' | 'build123d' | 'plc' | 'bom' | 'dxf'): ExportFileName {
+export function exportFileName(
+  graph: MachineGraph,
+  tab: 'json' | 'build123d' | 'plc' | 'bom' | 'dxf' | 'layout-dxf'
+): ExportFileName {
   const base = (graph.schemeId || 'canvas').replace(/[^A-Za-z0-9_-]/g, '_');
   if (tab === 'json') return { name: `${base}-graph.json`, supported: true, reason: '' };
   if (tab === 'bom') return { name: `${base}-bom.csv`, supported: true, reason: '' };
@@ -486,6 +489,7 @@ export function exportFileName(graph: MachineGraph, tab: 'json' | 'build123d' | 
     const suffix = adapter ? `-${adapter.id.replace(/[^A-Za-z0-9_-]/g, '_')}` : '';
     return { name: `${base}-adapter${suffix}.dxf`, supported: true, reason: '' };
   }
+  if (tab === 'layout-dxf') return { name: `${base}-layout.dxf`, supported: true, reason: '' };
   return {
     name: '',
     supported: false,
