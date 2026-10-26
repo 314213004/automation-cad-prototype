@@ -10,6 +10,7 @@
 interface ConfirmRequest {
   id: string;
   tool: string;
+  title?: string;
   summary: string;
   detail?: string;
   bypassNotice?: string;
@@ -69,7 +70,7 @@ function showCard(request: ConfirmRequest): void {
   mask.innerHTML = `
     <div class="acw-confirm-card" role="dialog" aria-modal="true" aria-label="智能体写操作确认">
       <div class="acw-confirm-head">
-        <b>智能体请求写操作</b>
+        <b>${escapeHtml(request.title ?? '智能体请求写操作')}</b>
         <span class="acw-confirm-tool">${escapeHtml(request.tool)}</span>
       </div>
       <div class="acw-confirm-body">

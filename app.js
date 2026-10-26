@@ -1323,6 +1323,20 @@ function projectGroupOf(name) {
   const dash = /^([^-]+)-/.exec(text);
   return dash ? dash[1] : '其他';
 }
+let treeProjectId = '';
+/** 结构树折叠状态按工程 id 存 localStorage；key = T:顶层 或 S:顶层/子层 */
+function treeCollapseKey(id) { return 'acw.treeCollapsed.' + id; }
+function loadTreeCollapsed(id) {
+  try {
+    const raw = localStorage.getItem(treeCollapseKey(id));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((item) => typeof item === 'string') : []);
+  } catch { return new Set(); }
+}
+function saveTreeCollapsed(id, set) {
+  try { localStorage.setItem(treeCollapseKey(id), JSON.stringify([...set])); } catch { /* 隐私模式/配额满：忽略，不影响树 */ }
+}
+
 function renderProjectTree(record) {
   const left = $('[data-panel="left"][data-for="assembly"]');
   const body = left && left.querySelector('.panel-body');
@@ -1352,16 +1366,21 @@ function renderProjectTree(record) {
       <span class="pt-name">${esc(item.name)}</span>
     </div>`;
   };
+  const collapsed = loadTreeCollapsed(record.id);
+  treeProjectId = record.id;
   const sections = Array.from(byTop.entries()).map(([top, bucket], groupIndex) => {
     const total = Array.from(bucket.values()).reduce((sum, list) => sum + list.length, 0);
     const inner = Array.from(bucket.entries()).map(([sub, list]) => {
       if (!sub) return list.map(rowHtml).join('');
-      return `<details class="pt-group pt-sub" ${list.length <= 12 ? 'open' : ''}>
+      const subKey = `S:${top}/${sub}`;
+      return `<details class="pt-group pt-sub" data-tree-key="${attr(subKey)}" ${collapsed.has(subKey) ? '' : 'open'}>
         <summary class="pt-group-head">${esc(sub)}<span class="pt-count">${list.length}</span></summary>
         ${list.map(rowHtml).join('')}
       </details>`;
     }).join('');
-    return `<details class="pt-group" ${groupIndex === 0 || total <= 8 ? 'open' : ''}>
+    const topKey = `T:${top}`;
+    const defaultOpen = groupIndex === 0 || total <= 8;
+    return `<details class="pt-group" data-tree-key="${attr(topKey)}" ${collapsed.has(topKey) ? '' : (defaultOpen ? 'open' : '')}>
       <summary class="pt-group-head">${esc(top)}<span class="pt-count">${total}</span></summary>
       ${inner}
     </details>`;
@@ -1383,6 +1402,15 @@ function renderProjectTree(record) {
     row.addEventListener('click', pick);
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); }
+    });
+  });
+  body.querySelectorAll('details[data-tree-key]').forEach((node) => {
+    node.addEventListener('toggle', () => {
+      const key = node.dataset.treeKey;
+      if (!key || treeProjectId !== record.id) return;
+      const next = loadTreeCollapsed(record.id);
+      if (node.open) next.delete(key); else next.add(key);
+      saveTreeCollapsed(record.id, next);
     });
   });
   window.__projectTreeSetSelected?.(currentProjectPartName());

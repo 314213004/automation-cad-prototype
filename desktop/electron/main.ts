@@ -38,6 +38,7 @@ import { trimListResult } from '../src/agent/trim';
 import { estimateTokens, pack } from '../src/agent/budget';
 import { createAuditLog, formatAuditLine, parseAuditLines, type AgentAuditRecord } from '../src/agent/audit';
 import { AgentCancelledError, AgentSession } from '../src/agent/session';
+import { requestWriteConfirmation } from './write-confirm.ts';
 import { TurnCallDeduper } from '../src/agent/dedupe';
 import { runReadOnlyBatch } from '../src/agent/parallel';
 import { ToolResultCache } from '../src/agent/cache';
@@ -5181,23 +5182,13 @@ async function startAgent(
     cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null,
     renderStats: () => lastRenderStats,
     audit: (record) => writeAudit(formatAuditLine(record)),
-    confirmWrite: async (name, args) => {
-      const window = mainWindow;
-      if (!window || window.isDestroyed()) return false;
-      const serialized = JSON.stringify(args);
-      const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
-      const response = await dialog.showMessageBox(window, {
-        type: 'question',
-        title: '外部写操作确认',
-        message: `MCP/JSON-RPC 客户端请求执行 ${name}，参数：${summary}，是否允许？`,
-        detail: '该操作可能修改当前工程、导入模型或写入文件；允许仅对本次工具调用生效。',
-        buttons: ['允许本次调用', '拒绝'],
-        defaultId: 1,
-        cancelId: 1,
-        noLink: true
-      });
-      return response.response === 0;
-    }
+    // 外部客户端（MCP / JSON-RPC）也走页面内卡片：原生模态在无人值守/远程调试下点不到
+    confirmWrite: async (name, args) => await requestWriteConfirmation(mainWindow, {
+      tool: name,
+      args,
+      detail: 'MCP/JSON-RPC 客户端请求写操作，可能修改当前工程、导入模型或写入文件；允许仅对本次调用生效。',
+      title: '外部客户端请求写操作'
+    })
   });
   try {
     const info = await agentServer.start(tokenFile);

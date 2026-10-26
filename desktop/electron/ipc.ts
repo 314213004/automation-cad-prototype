@@ -49,9 +49,7 @@ import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '.
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentCancelledError, AgentSession, emptyAgentUsage } from '../src/agent/session.ts';
 import { BYPASS_CONFIRMATION_NOTICE } from '../src/agent/policy.ts';
-
-/** 页面内写确认的最长等待（毫秒）；超时按拒绝处理，绝不让智能体无限挂起。 */
-const CONFIRM_TIMEOUT_MS = 120_000;
+import { requestWriteConfirmation } from './write-confirm.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import type { AgentPlan, PlanStep } from '../src/agent/planner.ts';
 import { READ_ONLY_TOOLS } from '../src/agent/router.ts';
@@ -1423,40 +1421,16 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       confirmWrite: async (name, args, confirmContext) => {
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
-        // 页面内确认卡片（替代原生 dialog）：原生模态框在无人值守/远程调试时点不到，
-        // 实测会把智能体卡死在一个看不见的窗口上。这里改成主进程 → 渲染进程一问一答。
-        const serialized = JSON.stringify(args ?? {});
-        const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
         const bypassNotice = confirmContext?.bypass
           ? (confirmContext.notice ?? BYPASS_CONFIRMATION_NOTICE)
           : '';
-        const requestId = `cw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const answer = new Promise<{ allow: boolean; remember?: boolean }>((resolve) => {
-          let settled = false;
-          const finish = (value: { allow: boolean; remember?: boolean }): void => {
-            if (settled) return;
-            settled = true;
-            ipcMain.removeListener('agent:confirm-write:reply', onReply);
-            clearTimeout(timer);
-            resolve(value);
-          };
-          const onReply = (event: Electron.IpcMainEvent, payload: unknown): void => {
-            if (!isRecord(payload) || payload.id !== requestId) return;
-            if (event.sender !== window.webContents) return;
-            finish({ allow: payload.allow === true, remember: payload.remember === true });
-          };
-          const timer = setTimeout(() => finish({ allow: false }), CONFIRM_TIMEOUT_MS);
-          ipcMain.on('agent:confirm-write:reply', onReply);
-        });
-        window.webContents.send('agent:confirm-write:request', {
-          id: requestId,
+        return await requestWriteConfirmation(window, {
           tool: name,
-          summary,
-          bypassNotice,
-          detail: bypassNotice ? `该操作会修改当前装配体。${bypassNotice}。` : '该操作会修改当前装配体。'
+          args,
+          detail: bypassNotice ? `该操作会修改当前装配体。${bypassNotice}。` : '该操作会修改当前装配体。',
+          ...(bypassNotice ? { bypassNotice } : {}),
+          title: '智能体请求写操作'
         });
-        const result = await answer;
-        return result.allow;
       }
     });
     return session;
