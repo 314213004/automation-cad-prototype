@@ -32,6 +32,7 @@ import {
   type WorkbenchSummary
 } from './view-model.ts';
 import { buildDimensions, selectionToBounds } from './dimensions.ts';
+import { currentPitchMm, shiftToPitch, upstreamOf } from './spacing.ts';
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
 import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
@@ -1099,9 +1100,10 @@ function inspectorProp(node: CanvasNode): string {
     </section>
     ${
       boundsLines.length > 0
-        ? `<section class="cw-section"><h4>2D 位置（距包络边）</h4>${boundsLines
+        ? `<section class="cw-section"><h4>2D 位置</h4>${boundsLines
             .map((line) => `<p class="cw-hint">${escapeHtml(line)}</p>`)
-            .join('')}</section>`
+            .join('')}
+            ${pitchEditor(node)}</section>`
         : ''
     }
     ${adapterBlock}
@@ -1229,6 +1231,22 @@ function downstreamMass(nodeId: string): number {
     for (const next of outgoing.get(id) ?? []) queue.push(next);
   }
   return Math.round(mass * 1000) / 1000;
+}
+
+/** 中心距编辑器：填「到上游中心距」→ 只沿 X 移动本节点，上游不动。 */
+function pitchEditor(node: CanvasNode): string {
+  const upstream = upstreamOf(state.graph, node.id);
+  const pitch = currentPitchMm(state.graph, node.id);
+  if (!upstream || pitch === null) {
+    return '<p class="cw-hint">该工位是最左一个，没有上游中心距可调。</p>';
+  }
+  return `
+    <div class="cw-field cw-price-entry">
+      <span>到上游中心距（${escapeHtml(upstream.name)}）</span>
+      <input type="number" step="10" id="cwPitchInput" value="${pitch}" />
+      <button type="button" class="cw-btn" data-action="set-pitch" data-node-id="${escapeHtml(node.id)}">应用</button>
+    </div>
+    <p class="cw-hint">只沿 X 移动本工位，上游坐标不动；间距必须大于 0。</p>`;
 }
 
 function costLinePriced(node: CanvasNode): boolean {
@@ -1834,6 +1852,31 @@ function bindEvents(): void {
       const button = document.getElementById('cwToggleDims');
       if (button) button.textContent = showDimensions ? '尺寸标注 ✓' : '尺寸标注 ✗';
       renderOrtho();
+      return;
+    }
+    if (action === 'set-pitch') {
+      const nodeId = target.dataset.nodeId ?? state.selectedId ?? '';
+      const input = document.getElementById('cwPitchInput') as HTMLInputElement | null;
+      const pitch = Number(input?.value ?? '');
+      const node = state.graph.nodes.find((item) => item.id === nodeId);
+      const result = shiftToPitch(state.graph, nodeId, pitch);
+      if (result.error) {
+        toast(`中心距未应用：${result.error}`, true);
+        return;
+      }
+      if (result.movedMm === 0) {
+        toast('中心距没有变化');
+        return;
+      }
+      state.graph = result.graph;
+      recordHistory(`调整中心距 ${node?.name ?? nodeId} → ${pitch}mm`);
+      renderAll();
+      markDirty();
+      toast(
+        `已移动 ${result.movedMm > 0 ? '+' : ''}${result.movedMm}mm，中心距 ${pitch}mm${
+          result.reordered ? '（已跨过相邻工位，尺寸链顺序重排）' : ''
+        }`
+      );
       return;
     }
     if (action === 'save-price') {
