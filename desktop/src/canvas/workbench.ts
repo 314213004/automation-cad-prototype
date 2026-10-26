@@ -31,6 +31,7 @@ import {
   formatPort,
   type WorkbenchSummary
 } from './view-model.ts';
+import { buildDimensions, selectionToBounds } from './dimensions.ts';
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
 import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
@@ -114,6 +115,8 @@ let priceSourceError = '';
 let priceSourceLoaded = false;
 /** 草稿正在异步恢复：KPI 暂时显示占位，避免闪现示例数据的 CT/UPH。 */
 let restorePending = false;
+/** 2D 正交尺寸标注开关（默认开：排布先看包络和中心距）。 */
+let showDimensions = true;
 const adapterFactory = createDefaultAdapterFactory({ dowelDiaMm: 4 });
 
 // ---------------------------------------------------------------------------
@@ -669,16 +672,61 @@ function renderOrtho(): void {
         </g>`;
     })
     .join('');
+  const dims = showDimensions ? buildDimensions(view, state.selectedId) : null;
+  // mm → px：用第一个工位反推内边距，避免把 view-model 的内部常数复制到这里
+  const reference = view.stations[0];
+  const scale = view.scale;
+  const padX = reference ? reference.x - (reference.mmX - view.boundsMm.minX) * scale : 0;
+  const padY = reference ? reference.y - (reference.mmY - view.boundsMm.minY) * scale : 0;
+  const toPxX = (mm: number): number => (mm - view.boundsMm.minX) * scale + padX;
+  const toPxY = (mm: number): number => (mm - view.boundsMm.minY) * scale + padY;
+  const dimLayer = dims
+    ? dims.chains
+        .map((chain) => {
+          const bad = chain.direction < 0;
+          const stroke = bad ? '#e06c75' : chain.kind === 'selection' ? '#35c7b3' : '#7f8ea3';
+          if (chain.axis === 'x') {
+            const y = chain.kind === 'overall' ? view.height - 12 : Math.max(14, 26 + chain.level * 14);
+            const x1 = toPxX(chain.fromMm);
+            const x2 = toPxX(chain.toMm);
+            const left = Math.min(x1, x2);
+            const right = Math.max(x1, x2);
+            return `
+              <g class="cw-dim" data-dim="${escapeHtml(chain.id)}">
+                <line x1="${left}" y1="${y}" x2="${right}" y2="${y}" stroke="${stroke}" stroke-width="1" />
+                <line x1="${left}" y1="${y - 4}" x2="${left}" y2="${y + 4}" stroke="${stroke}" stroke-width="1" />
+                <line x1="${right}" y1="${y - 4}" x2="${right}" y2="${y + 4}" stroke="${stroke}" stroke-width="1" />
+                <text x="${(left + right) / 2}" y="${y - 4}" text-anchor="middle" fill="${stroke}">${escapeHtml(chain.text)}</text>
+              </g>`;
+          }
+          const x = Math.max(12, 22 + chain.level * 14);
+          const y1 = toPxY(chain.fromMm);
+          const y2 = toPxY(chain.toMm);
+          const top = Math.min(y1, y2);
+          const bottom = Math.max(y1, y2);
+          return `
+            <g class="cw-dim" data-dim="${escapeHtml(chain.id)}">
+              <line x1="${x}" y1="${top}" x2="${x}" y2="${bottom}" stroke="${stroke}" stroke-width="1" />
+              <line x1="${x - 4}" y1="${top}" x2="${x + 4}" y2="${top}" stroke="${stroke}" stroke-width="1" />
+              <line x1="${x - 4}" y1="${bottom}" x2="${x + 4}" y2="${bottom}" stroke="${stroke}" stroke-width="1" />
+              <text x="${x - 6}" y="${(top + bottom) / 2}" text-anchor="end" fill="${stroke}">${escapeHtml(chain.text)}</text>
+            </g>`;
+        })
+        .join('')
+    : '';
   host.innerHTML = `
     <svg class="cw-ortho-svg" width="${view.width}" height="${view.height}" viewBox="0 0 ${view.width} ${view.height}" aria-label="2D 正交布局">
       ${lines.join('')}
       ${stations}
+      ${dimLayer}
     </svg>
     <div class="cw-ortho-note">
       1px ≈ ${(1 / view.scale).toFixed(2)}mm · 包围盒 ${Math.round(view.boundsMm.maxX - view.boundsMm.minX)}×${Math.round(view.boundsMm.maxY - view.boundsMm.minY)}mm<br />
       ${view.notes.map((note) => `<b>${escapeHtml(note)}</b>`).join('<br />')}
+      ${dims ? `<br /><b>${escapeHtml(dims.note)}</b>` : '<br /><b>尺寸标注已关闭</b>'}
     </div>`;
   host.dataset.stations = String(view.stations.length);
+  host.dataset.dims = String(dims?.chains.length ?? 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -983,6 +1031,7 @@ function editRow(node: CanvasNode, meta: (typeof EDITABLE_FIELDS)[number]): stri
 }
 
 function inspectorProp(node: CanvasNode): string {
+  const boundsLines = selectionToBounds(state.graph, buildOrthoView(state.graph).stations, node.id);
   const outgoing = state.graph.edges.filter((edge) => edge.from === node.id);
   const incoming = state.graph.edges.filter((edge) => edge.to === node.id);
   const badFields = new Set<string>();
@@ -1046,6 +1095,13 @@ function inspectorProp(node: CanvasNode): string {
           : '<p class="cw-hint cw-ok">端口全字段匹配，无需转接板。</p>'
       }
     </section>
+    ${
+      boundsLines.length > 0
+        ? `<section class="cw-section"><h4>2D 位置（距包络边）</h4>${boundsLines
+            .map((line) => `<p class="cw-hint">${escapeHtml(line)}</p>`)
+            .join('')}</section>`
+        : ''
+    }
     ${adapterBlock}
     <section class="cw-section">
       <h4>操作</h4>
@@ -1539,9 +1595,12 @@ function deleteSelected(): void {
 /** 点选（鼠标 click + 键盘 Enter/Space）：pointerdown 也会选中，这里覆盖无 pointer 的路径。 */
 function bindSelection(): void {
   document.addEventListener('click', (event) => {
-    const nodeElement = (event.target as HTMLElement | null)?.closest<HTMLElement>('.cw-node');
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('[data-action]')) return;
+    // 拓扑卡片和 2D 工位都能选中（两处都用 data-node-id）
+    const nodeElement =
+      target?.closest<HTMLElement>('.cw-node') ?? target?.closest<HTMLElement>('.cw-station[data-node-id]');
     if (!nodeElement) return;
-    if ((event.target as HTMLElement | null)?.closest('[data-action]')) return;
     const id = nodeElement.dataset.nodeId;
     if (id) selectNode(id);
   });
@@ -1764,6 +1823,13 @@ function bindEvents(): void {
       void saveExport();
       return;
     }
+    if (action === 'toggle-dims') {
+      showDimensions = !showDimensions;
+      const button = document.getElementById('cwToggleDims');
+      if (button) button.textContent = showDimensions ? '尺寸标注 ✓' : '尺寸标注 ✗';
+      renderOrtho();
+      return;
+    }
     if (action === 'save-price') {
       void saveManualPrice(target.dataset.partId ?? '');
       return;
@@ -1945,6 +2011,7 @@ export interface CanvasSelfTestResult {
   pipStatus: string;
   pipBoxes: number;
   modelCheck: string;
+  dimensions: number;
   adapterModelDoc: number;
   undoRestoredMismatch: number;
   redoRestoredAdapters: number;
@@ -2014,6 +2081,7 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
     pipStatus: pip?.status ?? 'missing',
     pipBoxes: state.graph.nodes.length,
     modelCheck: document.getElementById('cwPipModelCheck')?.textContent ?? '',
+    dimensions: Number(document.getElementById('cwOrtho')?.dataset.dims ?? 0),
     adapterModelDoc: state.graph.nodes.filter((node) => adapterFeatureDoc(node) !== null).length,
     undoRestoredMismatch,
     redoRestoredAdapters,
