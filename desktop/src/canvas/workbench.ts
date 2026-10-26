@@ -43,6 +43,14 @@ import { createPipScene, type PipScene } from './pip3d.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
 import {
+  createHistory,
+  historyAffordances,
+  pushHistory,
+  redoHistory,
+  undoHistory,
+  type HistoryState
+} from './history.ts';
+import {
   CANVAS_DRAFT_KEY,
   clearDraft,
   loadDraft,
@@ -233,6 +241,8 @@ function restoreDraft(): void {
     state.graph = loaded.draft.graph;
     state.selectedId = loaded.draft.selectedId;
     state.mode = loaded.draft.mode;
+    history = createHistory({ graph: state.graph, selectedId: state.selectedId }, '恢复草稿');
+    renderHistoryButtons();
     const savedAt = loaded.draft.savedAt.slice(11, 19);
     setDraftState(savedAt ? `已恢复草稿 ${savedAt}` : '已恢复草稿');
     if (loaded.issues.length > 0) {
@@ -287,6 +297,8 @@ function buildShell(): void {
         <span><em>不匹配</em><b id="cwKpiMismatch">—</b></span>
       </div>
       <div class="cw-actions">
+        <button type="button" class="cw-btn" data-action="undo" title="撤销 Ctrl+Z" disabled>↶ 撤销</button>
+        <button type="button" class="cw-btn" data-action="redo" title="重做 Ctrl+Y" disabled>↷ 重做</button>
         <button type="button" class="cw-btn primary" data-action="auto-adapters">⚡ 全部生成转接板</button>
         <button type="button" class="cw-btn" data-action="export">导出</button>
         <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
@@ -570,6 +582,60 @@ let pipScene: PipScene | null = null;
 const adapterBuildState = new Map<string, { text: string; error: boolean }>();
 let pipWireframe = false;
 let pipFocusId: string | null = null;
+let history: HistoryState = createHistory({ graph: state.graph, selectedId: state.selectedId });
+
+function renderHistoryButtons(): void {
+  const affordance = historyAffordances(history);
+  const undoButton = document.querySelector<HTMLButtonElement>('[data-action="undo"]');
+  const redoButton = document.querySelector<HTMLButtonElement>('[data-action="redo"]');
+  if (undoButton) {
+    undoButton.disabled = !affordance.canUndo;
+    undoButton.title = affordance.canUndo ? `撤销：${affordance.undoLabel}（Ctrl+Z）` : '没有可撤销的操作';
+    undoButton.textContent = affordance.canUndo ? `↶ 撤销 ${affordance.undoLabel}` : '↶ 撤销';
+  }
+  if (redoButton) {
+    redoButton.disabled = !affordance.canRedo;
+    redoButton.title = affordance.canRedo ? `重做：${affordance.redoLabel}（Ctrl+Y）` : '没有可重做的操作';
+    redoButton.textContent = affordance.canRedo ? `↷ 重做 ${affordance.redoLabel}` : '↷ 重做';
+  }
+}
+
+/** 提交一次可撤销的动作（在 state 已改完之后调用）。 */
+function recordHistory(label: string): void {
+  history = pushHistory(history, { graph: state.graph, selectedId: state.selectedId }, label);
+  renderHistoryButtons();
+}
+
+function applyHistorySnapshot(snapshot: { graph: MachineGraph; selectedId: string | null }): void {
+  state.graph = snapshot.graph;
+  state.selectedId = snapshot.selectedId;
+  renderAll();
+  markDirty();
+}
+
+function undoCanvas(): void {
+  const step = undoHistory(history);
+  if (!step) {
+    toast('没有可撤销的操作');
+    return;
+  }
+  history = step.state;
+  applyHistorySnapshot(step.snapshot);
+  renderHistoryButtons();
+  toast(`已撤销：${step.label}`);
+}
+
+function redoCanvas(): void {
+  const step = redoHistory(history);
+  if (!step) {
+    toast('没有可重做的操作');
+    return;
+  }
+  history = step.state;
+  applyHistorySnapshot(step.snapshot);
+  renderHistoryButtons();
+  toast(`已重做：${step.label}`);
+}
 
 /** 懒创建 PiP 场景；WebGL 不可用时 createPipScene 自己会写降级说明。 */
 function ensurePip(): PipScene | null {
@@ -1131,6 +1197,7 @@ function insertAdapter(edgeId: string): void {
     }
     state.graph = result.graph;
     state.selectedId = result.adapterId;
+    recordHistory('插入转接板');
     renderAll();
     markDirty();
     const after = findMismatchedEdges(state.graph).length;
@@ -1149,6 +1216,7 @@ function insertAllAdapters(): void {
   const result = insertAdaptersForAllMismatches(state.graph, adapterFactory);
   state.graph = result.graph;
   if (result.adapterIds.length > 0) state.selectedId = result.adapterIds[0] ?? state.selectedId;
+  recordHistory('批量生成转接板');
   renderAll();
   markDirty();
   toast(`已生成 ${result.adapterIds.length} 块转接板：不匹配 ${before} → ${findMismatchedEdges(state.graph).length}`);
@@ -1176,6 +1244,7 @@ function addModule(itemId: string): void {
   if (current) edges.push({ id: `e-${current.id}-${id}`, from: current.id, to: id });
   state.graph = { ...state.graph, nodes: [...state.graph.nodes, node], edges };
   state.selectedId = id;
+  recordHistory(`添加模组 ${item.label}`);
   renderAll();
   markDirty();
   const mismatched = current
@@ -1191,6 +1260,7 @@ function deleteSelected(): void {
     const result = removeNode(state.graph, node.id);
     state.graph = result.graph;
     state.selectedId = null;
+    recordHistory('删除节点');
     renderAll();
     markDirty();
     const mismatched = findMismatchedEdges(state.graph).length;
@@ -1271,7 +1341,10 @@ function bindDrag(): void {
     const moved = drag.moved;
     drag = null;
     renderInspector();
-    if (moved) markDirty();
+    if (moved) {
+      recordHistory('拖动节点');
+      markDirty();
+    }
   });
 }
 
@@ -1304,6 +1377,7 @@ function bindGanttDrag(): void {
   document.addEventListener('pointerup', () => {
     if (!drag) return;
     drag = null;
+    recordHistory('改单步时间');
     markDirty();
   });
 }
@@ -1387,9 +1461,18 @@ function bindEvents(): void {
       state.graph = demoCanvasGraph();
       state.selectedId = 'AXIS-Y';
       state.mode = 'topology';
+      history = createHistory({ graph: state.graph, selectedId: state.selectedId });
       renderAll();
       persistNow();
       toast('已清除本地草稿并重置为演示拓扑');
+      return;
+    }
+    if (action === 'undo') {
+      undoCanvas();
+      return;
+    }
+    if (action === 'redo') {
+      redoCanvas();
       return;
     }
     if (action === 'build-adapter') {
@@ -1438,6 +1521,7 @@ function bindEvents(): void {
       ...state.graph,
       nodes: state.graph.nodes.map((item) => (item.id === node.id ? result.node : item))
     };
+    recordHistory(`改参数：${EDITABLE_FIELDS.find((meta) => meta.field === field)?.label ?? field}`);
     renderAll();
     markDirty();
     const label = EDITABLE_FIELDS.find((meta) => meta.field === field)?.label ?? field;
@@ -1461,6 +1545,19 @@ function bindEvents(): void {
         return;
       }
       closeCanvasWorkbench();
+    }
+    const targetElement = event.target instanceof HTMLElement ? event.target : null;
+    const typing = targetElement?.closest('input, textarea, select');
+    if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) redoCanvas();
+      else undoCanvas();
+      return;
+    }
+    if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      redoCanvas();
+      return;
     }
     if (event.key === 'Delete' && state.selectedId) {
       event.preventDefault();
@@ -1508,6 +1605,7 @@ export function installCanvasWorkbench(): void {
     () => openCanvasWorkbench()
   );
   renderAll();
+  renderHistoryButtons();
   void loadPriceSource();
 }
 
@@ -1544,6 +1642,8 @@ export interface CanvasSelfTestResult {
   pipStatus: string;
   pipBoxes: number;
   adapterModelDoc: number;
+  undoRestoredMismatch: number;
+  redoRestoredAdapters: number;
   cycleSeconds: number;
   unitsPerHour: number;
   pendingQuote: number;
@@ -1580,6 +1680,12 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
       return portDiff(upstream.portOut, node.portIn).length === 0 && portDiff(node.portOut, downstream.portIn).length === 0;
     });
 
+  // 撤销：不匹配应回到 1；重做：转接板应回来
+  section.querySelector<HTMLElement>('[data-action="undo"]')?.click();
+  const undoRestoredMismatch = findMismatchedEdges(state.graph).length;
+  section.querySelector<HTMLElement>('[data-action="redo"]')?.click();
+  const redoRestoredAdapters = state.graph.nodes.filter((node) => isAdapterNode(node)).length;
+
   section.querySelector<HTMLElement>('[data-action="auto-adapters"]')?.click();
   const mismatchAfterAll = findMismatchedEdges(state.graph).length;
 
@@ -1604,6 +1710,8 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
     pipStatus: pip?.status ?? 'missing',
     pipBoxes: state.graph.nodes.length,
     adapterModelDoc: state.graph.nodes.filter((node) => adapterFeatureDoc(node) !== null).length,
+    undoRestoredMismatch,
+    redoRestoredAdapters,
     nodes,
     edges,
     mismatchBefore,

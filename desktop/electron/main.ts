@@ -4895,6 +4895,8 @@ function createWindow(): BrowserWindow {
           pipStatus: string;
           pipBoxes: number;
           adapterModelDoc: number;
+          undoRestoredMismatch: number;
+          redoRestoredAdapters: number;
         };
         if (!canvas) throw new Error('画布工作台未挂载（window.__CanvasWorkbench 缺失）');
         if (canvas.nodes < 2 || canvas.edges < 1) throw new Error(`画布拓扑为空 ${JSON.stringify(canvas)}`);
@@ -4904,6 +4906,10 @@ function createWindow(): BrowserWindow {
           throw new Error(`转接板闭环失败 ${JSON.stringify(canvas)}`);
         }
         console.log(`SMOKE_CANVAS_ADAPTER_OK mismatch=${canvas.mismatchBefore}->${canvas.mismatchAfterInsert} adapters=${canvas.adaptersAfterInsert} bridges=match`);
+        if (canvas.undoRestoredMismatch !== canvas.mismatchBefore || canvas.redoRestoredAdapters !== 1) {
+          throw new Error(`撤销/重做没有回放正确状态 ${JSON.stringify(canvas)}`);
+        }
+        console.log(`SMOKE_CANVAS_UNDO_OK undo_mismatch=${canvas.undoRestoredMismatch} redo_adapters=${canvas.redoRestoredAdapters}`);
         if (canvas.stations < canvas.nodes) throw new Error(`2D 正交站点数不足 ${JSON.stringify(canvas)}`);
         console.log(`SMOKE_CANVAS_ORTHO_OK stations=${canvas.stations} artboards=${canvas.artboards} gantt=${canvas.ganttRows}`);
         if (canvas.pipStatus !== 'ready' && canvas.pipStatus !== 'unavailable') {

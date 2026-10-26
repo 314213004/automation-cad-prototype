@@ -26,6 +26,7 @@
 | `pip3d.ts` | 3D 预览：`buildPipBoxes`（纯几何，mm→m）+ 轻量 three 场景（占位盒/包络线框/选中聚焦） |
 | `adapter-model.ts` | 转接板 → parametric FeatureDoc（board/holes/fillet），走 build123d sidecar |
 | `edit-node.ts` | 检查器字段编辑：批量校验（任一非法整批拒绝）、纯函数返回新节点 |
+| `history.ts` | 撤销/重做：有界快照栈（默认 60 步）、undo 后提交丢弃 redo 尾巴、动作名必填 |
 
 ## 数据结构与口径
 
@@ -114,6 +115,12 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 
 22. **编辑必须整批通过**：行程/导程/质量/单步时间是一组耦合参数，只应用一半会让选型结果变成混合值；任一非法就原样返回并报原因。
 23. **改完要 renderAll**：只重渲染检查器会让 KPI/甘特/2D 包络/3D 停在旧值，看起来像「改了没生效」。
+
+## 坑点（P4 第四步追加）
+
+24. **键盘事件里 `event.target` 可能不是 HTMLElement**（document/window）：直接用 `?.closest` 会在 `document` 上抛 TypeError，撤销快捷键就静默失效 —— 必须先 `instanceof HTMLElement` 再取 closest。
+25. **undo 之后再改图会丢 redo**：这是标准行为，不是 bug；但提交前必须 `slice(0, index+1)` 截断，否则会把旧尾巴拼回来。
+26. **快照必须深拷贝**：`cloneGraph` 而不是共享引用，否则后续编辑会把历史里的状态一起改掉。
 
 ## 验证命令
 
