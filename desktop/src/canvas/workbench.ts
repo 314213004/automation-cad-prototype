@@ -32,9 +32,20 @@ import {
   type WorkbenchSummary
 } from './view-model.ts';
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode } from './demo-graph.ts';
+import {
+  CANVAS_DRAFT_KEY,
+  clearDraft,
+  loadDraft,
+  saveDraft,
+  type CanvasViewMode,
+  type DraftStorage
+} from './persistence.ts';
+import { validatePricebook } from '../cost/pricebook.ts';
+import { createPricebookLookup, describePriceSource, summarizePricebook, type PriceSourceSummary } from './price-source.ts';
+import type { PriceLookup } from './metrics.ts';
 import type { CanvasNode, MachineGraph } from './types.ts';
 
-type ViewMode = 'topology' | 'ortho' | 'artboard';
+type ViewMode = CanvasViewMode;
 type InspectorTab = 'prop' | 'mech' | 'bom';
 type ExportTab = 'json' | 'build123d' | 'plc';
 
@@ -60,8 +71,11 @@ let state: WorkbenchState = {
   open: false
 };
 
-/** P2 没有价格源：一律返回 null → 全部待询价。P3 接 pricebook 时替换这里。 */
-const priceLookup = (): number | null => null;
+// 价格源：P3 起从内置价格簿读取；读不到时保持「全部待询价」，不编价。
+let priceLookup: PriceLookup = () => null;
+let priceSource: PriceSourceSummary | null = null;
+let priceSourceError = '';
+let priceSourceLoaded = false;
 const adapterFactory = createDefaultAdapterFactory({ dowelDiaMm: 4 });
 
 // ---------------------------------------------------------------------------
@@ -117,6 +131,108 @@ function toast(message: string, error = false): void {
   toastTimer = window.setTimeout(() => element?.classList.remove('is-on'), 3200);
 }
 
+// ---- 本地草稿（P2.5）：localStorage 不可用时只提示，不影响使用 ----
+
+let draftStorageCache: DraftStorage | null | undefined;
+let draftLoaded = false;
+let draftSaveTimer = 0;
+
+function getDraftStorage(): DraftStorage | null {
+  if (draftStorageCache !== undefined) return draftStorageCache;
+  try {
+    const storage = window.localStorage;
+    // 真正探一次：部分环境 getItem 会抛（隐私模式 / 禁用存储）
+    storage.getItem(CANVAS_DRAFT_KEY);
+    draftStorageCache = storage;
+  } catch {
+    draftStorageCache = null;
+  }
+  return draftStorageCache;
+}
+
+function setDraftState(text: string, error = false): void {
+  const element = document.getElementById('cwDraftState');
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle('cw-warn', error);
+}
+
+function persistNow(): void {
+  const storage = getDraftStorage();
+  if (!storage) {
+    setDraftState('无本地存储，改动不会保存', true);
+    return;
+  }
+  const savedAt = new Date().toISOString();
+  const result = saveDraft(storage, { graph: state.graph, selectedId: state.selectedId, mode: state.mode }, savedAt);
+  setDraftState(result.ok ? `已保存 ${savedAt.slice(11, 19)}` : result.reason ?? '保存失败', !result.ok);
+}
+
+/** 改动后 400ms 落草稿；连续拖拽只在停手后写一次。 */
+function markDirty(): void {
+  setDraftState('未保存…');
+  draftSaveTimer = window.setTimeout(persistNow, 400);
+}
+
+function renderPriceSource(): void {
+  const element = document.getElementById('cwPriceSource');
+  if (!element) return;
+  element.textContent = priceSourceError ? `价格源：不可用（${priceSourceError}）` : describePriceSource(priceSource);
+  element.classList.toggle('cw-warn', Boolean(priceSourceError));
+  element.title = priceSource?.source ?? priceSourceError;
+}
+
+/**
+ * 读内置价格簿（主进程 cost:pricebook）。
+ * 模块未启用 / 浏览器模式 / 书损坏都只影响「有没有价」，不影响画布可用性。
+ */
+async function loadPriceSource(): Promise<void> {
+  if (priceSourceLoaded) return;
+  priceSourceLoaded = true;
+  const api = window.desktop?.cost;
+  if (!api) {
+    priceSourceError = '浏览器模式没有价格簿接口';
+    renderPriceSource();
+    return;
+  }
+  try {
+    const result = await api.pricebook();
+    if (!result.ok) {
+      priceSourceError = result.message ?? result.code ?? '价格簿不可用';
+      renderPriceSource();
+      return;
+    }
+    const book = validatePricebook(result.book as unknown);
+    priceLookup = createPricebookLookup(book);
+    priceSource = summarizePricebook(book);
+    priceSourceError = '';
+    renderPriceSource();
+    renderAll();
+  } catch (error) {
+    priceSourceError = error instanceof Error ? error.message : String(error);
+    renderPriceSource();
+    console.warn('[canvas] 价格簿读取失败，保持待询价', error);
+  }
+}
+
+function restoreDraft(): void {
+  if (draftLoaded) return;
+  draftLoaded = true;
+  const loaded = loadDraft(getDraftStorage());
+  if (loaded.draft) {
+    state.graph = loaded.draft.graph;
+    state.selectedId = loaded.draft.selectedId;
+    state.mode = loaded.draft.mode;
+    const savedAt = loaded.draft.savedAt.slice(11, 19);
+    setDraftState(savedAt ? `已恢复草稿 ${savedAt}` : '已恢复草稿');
+    if (loaded.issues.length > 0) {
+      toast(`草稿已清理 ${loaded.issues.length} 处结构问题（重复 id / 孤儿边等）`);
+    }
+    return;
+  }
+  if (loaded.reason && loaded.reason !== '没有本地草稿') setDraftState(loaded.reason, true);
+}
+
 function root(): HTMLElement {
   const element = document.getElementById('canvasWorkbench');
   if (!element) throw new Error('画布工作台尚未挂载');
@@ -163,6 +279,8 @@ function buildShell(): void {
       <div class="cw-actions">
         <button type="button" class="cw-btn primary" data-action="auto-adapters">⚡ 全部生成转接板</button>
         <button type="button" class="cw-btn" data-action="export">导出</button>
+        <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
+        <span class="cw-draft-state" id="cwDraftState" role="status" aria-live="polite">—</span>
         <button type="button" class="cw-btn" data-action="reset-demo">重置演示</button>
         <button type="button" class="cw-btn" data-action="close">关闭 Esc</button>
       </div>
@@ -647,6 +765,12 @@ function inspectorBom(node: CanvasNode): string {
   const adapterLines = lines.filter((line) => line.adapter);
   return `
     <section class="cw-section">
+      <h4>价格源</h4>
+      <p class="cw-hint ${priceSourceError ? 'cw-warn' : ''}">${escapeHtml(
+        priceSourceError ? `不可用：${priceSourceError}` : describePriceSource(priceSource)
+      )}</p>
+    </section>
+    <section class="cw-section">
       <h4>当前节点 IO</h4>
       <div class="cw-field"><span>DI / DO</span><b>${node.io.di} / ${node.io.do}</b></div>
       <div class="cw-field"><span>说明</span><b>${escapeHtml(node.io.desc || '—')}</b></div>
@@ -737,6 +861,7 @@ function selectNode(id: string | null): void {
   renderTopology();
   renderOrtho();
   renderInspector();
+  markDirty();
 }
 
 function insertAdapter(edgeId: string): void {
@@ -750,6 +875,7 @@ function insertAdapter(edgeId: string): void {
     state.graph = result.graph;
     state.selectedId = result.adapterId;
     renderAll();
+    markDirty();
     const after = findMismatchedEdges(state.graph).length;
     toast(`已插入 ${result.adapterId}：不匹配 ${before} → ${after}，转接板价格待询价`);
   } catch (error) {
@@ -767,6 +893,7 @@ function insertAllAdapters(): void {
   state.graph = result.graph;
   if (result.adapterIds.length > 0) state.selectedId = result.adapterIds[0] ?? state.selectedId;
   renderAll();
+  markDirty();
   toast(`已生成 ${result.adapterIds.length} 块转接板：不匹配 ${before} → ${findMismatchedEdges(state.graph).length}`);
 }
 
@@ -793,6 +920,7 @@ function addModule(itemId: string): void {
   state.graph = { ...state.graph, nodes: [...state.graph.nodes, node], edges };
   state.selectedId = id;
   renderAll();
+  markDirty();
   const mismatched = current
     ? portDiff(current.portOut, node.portIn).length > 0
     : false;
@@ -807,6 +935,7 @@ function deleteSelected(): void {
     state.graph = result.graph;
     state.selectedId = null;
     renderAll();
+    markDirty();
     const mismatched = findMismatchedEdges(state.graph).length;
     toast(
       result.restoredEdge
@@ -841,7 +970,7 @@ function bindSelection(): void {
 }
 
 function bindDrag(): void {
-  let drag: { id: string; startX: number; startY: number; originX: number; originY: number; mode: ViewMode } | null = null;
+  let drag: { id: string; startX: number; startY: number; originX: number; originY: number; mode: ViewMode; moved: boolean } | null = null;
   document.addEventListener('pointerdown', (event) => {
     const target = event.target as HTMLElement | null;
     if (!target) return;
@@ -859,7 +988,8 @@ function bindDrag(): void {
       startY: event.clientY,
       originX: state.mode === 'ortho' ? node.ortho.x : node.pos.x,
       originY: state.mode === 'ortho' ? node.ortho.y : node.pos.y,
-      mode: state.mode
+      mode: state.mode,
+      moved: false
     };
     nodeElement.setPointerCapture?.(event.pointerId);
   });
@@ -869,6 +999,7 @@ function bindDrag(): void {
     if (!node || drag.mode === 'artboard') return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
     if (drag.mode === 'ortho') {
       const scale = buildOrthoView(state.graph).scale || 1;
       node.ortho = { x: Math.round(drag.originX + dx / scale), y: Math.round(drag.originY + dy / scale) };
@@ -880,8 +1011,10 @@ function bindDrag(): void {
   });
   document.addEventListener('pointerup', () => {
     if (!drag) return;
+    const moved = drag.moved;
     drag = null;
     renderInspector();
+    if (moved) markDirty();
   });
 }
 
@@ -912,7 +1045,9 @@ function bindGanttDrag(): void {
     renderInspector();
   });
   document.addEventListener('pointerup', () => {
+    if (!drag) return;
     drag = null;
+    markDirty();
   });
 }
 
@@ -927,6 +1062,7 @@ function bindEvents(): void {
       if (mode) {
         state.mode = mode;
         renderMode();
+        markDirty();
       }
       return;
     }
@@ -990,10 +1126,13 @@ function bindEvents(): void {
       return;
     }
     if (action === 'reset-demo') {
+      clearDraft(getDraftStorage());
       state.graph = demoCanvasGraph();
       state.selectedId = 'AXIS-Y';
+      state.mode = 'topology';
       renderAll();
-      toast('已重置为演示拓扑');
+      persistNow();
+      toast('已清除本地草稿并重置为演示拓扑');
       return;
     }
     if (action === 'close') {
@@ -1030,6 +1169,7 @@ export function openCanvasWorkbench(): void {
   const section = root();
   section.hidden = false;
   state.open = true;
+  restoreDraft();
   renderAll();
 }
 
@@ -1056,6 +1196,7 @@ export function installCanvasWorkbench(): void {
     () => openCanvasWorkbench()
   );
   renderAll();
+  void loadPriceSource();
 }
 
 /** 给冒烟/自动化用的状态快照（不含 DOM 引用）。 */
@@ -1162,6 +1303,7 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   state.graph = demoCanvasGraph();
   state.selectedId = 'AXIS-Y';
   renderAll();
+  markDirty();
   return result;
 }
 

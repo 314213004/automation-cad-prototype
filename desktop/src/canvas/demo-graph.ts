@@ -103,9 +103,9 @@ export function demoCanvasGraph(): MachineGraph {
     node({
       id: 'GRIP',
       kind: 'gripper',
-      partId: 'gripper-rotary-vac',
-      name: '旋转电爪 / 真空吸盘组',
-      spec: '重复精度 ±0.02mm · 带真空压力表',
+      partId: 'MHZ2-20D',
+      name: '平行气爪 MHZ2-20D',
+      spec: '缸径 20mm · 双作用 · 带磁性开关槽（价格簿有价型号）',
       portIn: PLATE32,
       portOut: TIP,
       strokeMm: 20,
@@ -113,7 +113,7 @@ export function demoCanvasGraph(): MachineGraph {
       massKg: 0.95,
       stepSec: 0.25,
       dimsMm: [70, 70, 95],
-      io: { di: 2, do: 2, desc: '真空达标 + 吸气/破真空' },
+      io: { di: 2, do: 2, desc: '开合到位 + 双电控阀' },
       pos: { x: 1160, y: 120 },
       ortho: { x: 860, y: 170 }
     }),
@@ -157,6 +157,8 @@ export function demoCanvasGraph(): MachineGraph {
 export interface PaletteItem {
   id: string;
   label: string;
+  /** 绑定的真实元件库 id（价格由价格簿按此 id 查）；不绑定 = 待选型。 */
+  partId?: string;
   kind: CanvasNode['kind'];
   spec: string;
   portIn: MountPort;
@@ -214,7 +216,8 @@ export const CANVAS_PALETTE: PaletteItem[] = [
   },
   {
     id: 'palette-gripper',
-    label: '气动/真空末端',
+    label: '平行气爪 MHZ2-20D',
+    partId: 'MHZ2-20D',
     kind: 'gripper',
     spec: '通用末端执行器模板（型号待选）',
     portIn: PLATE32,
@@ -247,6 +250,7 @@ export function paletteNode(item: PaletteItem, id: string, pos: { x: number; y: 
   return {
     id,
     kind: item.kind,
+    ...(item.partId === undefined ? {} : { partId: item.partId }),
     name: item.label,
     spec: item.spec,
     portIn: { ...item.portIn },

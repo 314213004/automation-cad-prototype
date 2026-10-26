@@ -18,7 +18,9 @@
 | `view-model.ts` | 纯视图模型：拓扑布局、2D 正交投影、甘特、多口径画板、汇总、BOM 行、转接板默认工厂 |
 | `workbench.ts` | P2 界面：入口按钮 + 全屏工作台，只做 DOM/事件，数值全交给 view-model |
 | `canvas.css` | 工作台样式（深色工程界面，无 CDN / 无外链字体） |
-| `demo-graph.ts` | 演示拓扑（6 节点 5 边，含 1 条真实端口不匹配）+ 通用模组库（无型号、无价格） |
+| `demo-graph.ts` | 演示拓扑（6 节点 5 边，含 1 条真实端口不匹配）+ 模组库（可绑真实型号，价格仍只由价格簿给） |
+| `persistence.ts` | 草稿序列化/校验（schema 版本、normalizeGraph 清理、存储注入），localStorage 由 workbench 注入 |
+| `price-source.ts` | 价格簿 → `PriceLookup`（排除示例条码、阶梯价、过期统计）+ 一句话价格源说明 |
 
 ## 数据结构与口径
 
@@ -74,7 +76,11 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 - ✅ `export.ts`：稳定字段顺序 Graph JSON、build123d 文本、plcgen 复用/降级、端口报告（9 条单测）
 - ✅ P2：`canvas/workbench.ts` + `canvas.css`——拓扑（拖拽/选中/⚡ 插板）、2D 正交（mm 刻度/包络虚线）、多画板（single/linear/dial 真实评估）、Inspector 三页签、甘特（拖条改 stepSec）、导出预览（JSON/build123d/PLC）
 - ✅ 扩充：`screwSizing`（n_cr / P_cr / DN）、`railMomentCheck`（M_pitch/M_roll/M_yaw）、干涉面板文案改为「AABB 初筛 / N 处疑似，需人工确认」
-- ⏳ P3：候选来自 `design/synthesis`、元件来自 `packs`、价格来自 `pricebook-cn`
+- ✅ P2.5：本地草稿（`automationcad.canvas.workbench.v1`）——改动 400ms 自动保存，重开自动恢复；
+  schema 不匹配拒绝加载、不做自动迁移；草稿里的孤儿边/重复 id 由 `normalizeGraph` 清理并回报
+- ✅ P3 第一步：价格接 `packs/builtin/pricebook-cn`（主进程 `cost:pricebook`）——64 项可计价、
+  排除 4 条示例、过期条数单独统计；演示图的气爪绑真实型号 `MHZ2-20D`（¥1109），其余仍待询价
+- ⏳ P3 剩余：候选来自 `design/synthesis`、模组库直接读 `packs.listParts`（现在只有 5 个通用模板）
 - ⏳ 转接板真实建模（build123d sidecar）、B-Rep 精确干涉
 
 ## 坑点（P2 追加）
@@ -83,7 +89,9 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 10. **2D 俯视投影重叠 ≠ 干涉**：Y 轴压在 X 轴滑块上，俯视图必然重叠。文案统一写「平面投影重叠…（含叠层安装，非干涉结论）」，禁止出现「0 碰撞」。
 11. **⚡ 按钮只在真正不匹配的边上出现**：匹配的边不渲染按钮；插板后按钮自动消失（`is-mismatch` 由 `portDiff` 决定）。
 12. **多画板不是三套方案**：三块画板是同一张拓扑在 single/linear/dial 三种产能口径下的真实评估；候选方案要等 P3 接 `design/synthesis`，现在不伪造三套 BOM。
-13. **默认转接板工厂价格恒为 null**：尺寸/质量可算（孔距 + 余量、体积×密度），价格必须询价；P2 没有接价格簿，所以 KPI 显示「¥0（N 项待询价）」是正确状态，不是 bug。
+13. **草稿版本不猜、不迁移**：`schema` 不匹配就拒绝加载并提示，旧图宁可让用户重画，也不要读成半成品；草稿里的脏数据（重复 id / 孤儿边）必须回报 `issues`，不能静默丢边。
+14. **价格源失败不影响画布**：`cost:pricebook` 被模块门控关掉或浏览器模式下没有接口时，只把 KPI 变成「全部待询价」，不许编价、也不许把面板整块隐藏。
+15. **默认转接板工厂价格恒为 null**：尺寸/质量可算（孔距 + 余量、体积×密度），价格必须询价；P2 没有接价格簿，所以 KPI 显示「¥0（N 项待询价）」是正确状态，不是 bug。
 
 ## 验证命令
 

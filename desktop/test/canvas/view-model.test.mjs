@@ -228,19 +228,31 @@ test('buildBomLines：无价源全部待询价，有价源按 partId 命中', ()
   assert.equal(priced.find((line) => line.priceState === 'priced').partId, 'frame-4040-800x650');
 });
 
-test('模组库：模板不带 partId、不带价格，落到画布后必然待询价', () => {
+test('模组库：模板不带价格；绑型号的必须能在价格簿里查价，没绑的就是待选型', () => {
   assert.ok(CANVAS_PALETTE.length >= 4);
   for (const item of CANVAS_PALETTE) {
-    assert.equal(item.partId, undefined, `${item.id} 不得内置型号`);
     assert.equal('cost' in item, false, `${item.id} 不得内置价格`);
+    assert.equal('price' in item, false, `${item.id} 不得内置价格`);
+    if (item.partId !== undefined) assert.equal(typeof item.partId, 'string');
   }
-  const node = paletteNode(CANVAS_PALETTE[1], 'n1', { x: 10, y: 20 }, { x: 30, y: 40 });
+  // 至少留一个「待选型」模板，避免所有模组都假装有型号
+  assert.ok(CANVAS_PALETTE.some((item) => item.partId === undefined));
+  const unbound = CANVAS_PALETTE.find((item) => item.partId === undefined);
+  const node = paletteNode(unbound, 'n1', { x: 10, y: 20 }, { x: 30, y: 40 });
   assert.equal(node.partId, undefined);
   assert.deepEqual(node.pos, { x: 10, y: 20 });
   assert.deepEqual(node.ortho, { x: 30, y: 40 });
   const lines = buildBomLines(graphOf([node], []), noPrice);
   assert.equal(lines[0].priceState, 'pending');
   assert.equal(lines[0].partId, null);
+
+  // 绑了型号的模板：型号透传到节点，价格仍然只能由 priceLookup 决定
+  const bound = CANVAS_PALETTE.find((item) => item.partId !== undefined);
+  assert.ok(bound, '至少有一个绑定真实型号的模板');
+  const boundNode = paletteNode(bound, 'n2', { x: 0, y: 0 }, { x: 0, y: 0 });
+  assert.equal(boundNode.partId, bound.partId);
+  const priced = buildBomLines(graphOf([boundNode], []), (partId) => (partId === bound.partId ? 1109 : null));
+  assert.equal(priced[0].priceState, 'priced');
 });
 
 test('演示图自身：只有 Y→Z 一条不匹配，且机器指标与 metrics 一致', () => {

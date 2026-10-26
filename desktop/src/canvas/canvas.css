@@ -165,3 +165,6 @@
 }
 .cw-toast.is-on { opacity: 1; }
 .cw-toast.is-error { background: #6b2f2a; color: #ffd9d4; }
+
+.cw-draft-state { font-size: 11px; color: #8b959d; min-width: 84px; text-align: right; }
+.cw-draft-state.cw-warn { color: #ffb86b; }
