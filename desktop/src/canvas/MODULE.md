@@ -159,3 +159,18 @@ npm run build:ext && npm run smoke   # 冒烟：SMOKE_CANVAS_TOPOLOGY_OK / _ADAP
 `SMOKE_CANVAS_ADAPTER_OK mismatch=1->0 adapters=1 bridges=match`、
 `SMOKE_CANVAS_ORTHO_OK stations=… artboards=3 gantt=…`、
 `SMOKE_CANVAS_EXPORT_OK json=… build123d=… plc=… ct=…s uph=… pendingQuote=…`。
+
+## 画布 → 整机 3D（assembly-export.ts，2026-10-26）
+
+| 文件 | 职责 |
+| --- | --- |
+| `assembly-export.ts` | 画布工位 → 示意盒 → 二进制 STL → `projects.save` 载荷（纯函数，可 `node --test`） |
+
+- 盒体：`dimsMm` 为尺寸，`ortho.x` 取 X，`ortho.y` **取反**做三维 Y（画布 Y 向下 → 三维 Y 向前），底部贴地 `z = h/2`
+- STL 头 80 字节**只能 ASCII**：中文会被 `setUint8` 截断成乱码（实测 `canvas-assembly-box (:\x0FS…`），示意体说明改放工程记录与 UI 文案
+- `-0` 会污染深比较：`ortho.y = 0` 取反得 `-0`，必须归一成 `0`，否则单测 `deepEqual([0,0,450])` 挂
+- 质量一律 `null`：示意体不是实物，按体积×密度算出来的数字没有工程意义，界面显示「未称重」
+- 打开链路：工作台保存工程 → `canvas:open-project` 事件 → extension `closeCanvasWorkbench()` + `openSavedProject(id)`；
+  **必须先关工作台**，否则工作台遮住经典界面，标题/结构树看着像没刷新（实测 `#spTitle` 空、左树还是演示装配）
+- 结构树分组：`app.js` 的 `projectGroupOf` 支持「类别·工位名」（`直线·入料段`）与「前缀-编号」（`托条-L17-2`）两种命名
+- 打开工程后要让原型 UI 刷新标题/树：`app.js` 暴露 `window.__applyProjectStage(record)`，extension 在 `openSavedProject` 成功后调用

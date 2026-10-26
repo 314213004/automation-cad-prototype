@@ -88,7 +88,7 @@ import { projectGeometryReviewLabel, reopenedGeometryReviewMessage, type DesignS
 import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLayoutBounds, renderProjectLayoutSvg } from './design/project-layout.ts';
 import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
 import type { Placement } from './enclosure/layout.ts';
-import { installCanvasWorkbench, openCanvasWorkbench } from './canvas/workbench.ts';
+import { closeCanvasWorkbench, installCanvasWorkbench, openCanvasWorkbench } from './canvas/workbench.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -1753,6 +1753,8 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     }
     setEmptyVisible(false);
     toggleProjectMenu(false);
+    // 让原型 UI 刷新标题/元信息/工程零件树（分组渲染在 app.js 里）
+    (window as unknown as { __applyProjectStage?: (record: unknown) => void }).__applyProjectStage?.(result.record);
     const project = projectMenuRecordOf(result.record, merged.meshes.length);
     setCurrentProject(project);
     // 右侧属性面板改由工程数据驱动（否则仍显示原型里的演示气缸）
@@ -3184,6 +3186,14 @@ function initAgentBridge(): void {
 }
 
 function bindWindowEvents(): void {
+  // 画布工作台「生成整机 3D」保存工程后，用事件回主界面打开（避免 canvas 直接依赖 extension）
+  window.addEventListener('canvas:open-project', (event) => {
+    const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+    if (typeof id !== 'string' || !id) return;
+    closeCanvasWorkbench();
+    homeHandle?.close();
+    void openSavedProject(id);
+  });
   window.addEventListener('dragover', (event) => {
     event.preventDefault();
     event.stopPropagation();

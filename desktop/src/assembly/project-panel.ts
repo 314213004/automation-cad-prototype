@@ -151,8 +151,10 @@ function syncTree(name: string | null): void {
 }
 
 export function groupOfPartName(name: string): string {
-  const match = /^([^-]+)-/.exec(name);
-  return match?.[1] ?? '其他';
+  const dot = /^([^·]+)·/.exec(name);
+  if (dot) return dot[1] ?? '其他';
+  const dash = /^([^-]+)-/.exec(name);
+  return dash?.[1] ?? '其他';
 }
 
 /** 手动触发一次重绘（点结构树后立刻生效，不等 500ms 轮询）。 */

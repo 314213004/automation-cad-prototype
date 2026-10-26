@@ -1316,8 +1316,12 @@ function applyProjectStage(record) {
 
 /** 左侧结构树改成工程零件清单：按名称前缀分组、全部列出、可点选（演示装配的 6 件不再冒充） */
 function projectGroupOf(name) {
-  const m = /^([^-]+)-/.exec(String(name || ''));
-  return m ? m[1] : '其他';
+  // 支持两种前缀：「直线·入料段」（画布示意装配）与「托条-L17-2」（工程逐件 STL）
+  const text = String(name || '');
+  const dot = /^([^·]+)·/.exec(text);
+  if (dot) return dot[1];
+  const dash = /^([^-]+)-/.exec(text);
+  return dash ? dash[1] : '其他';
 }
 function renderProjectTree(record) {
   const left = $('[data-panel="left"][data-for="assembly"]');
@@ -1368,6 +1372,12 @@ window.__projectTreeSetSelected = function (name) {
 function currentProjectPartName() {
   try { return window.__AgentBridge?.getSelection?.()?.name ?? null; } catch { return null; }
 }
+
+/** 供扩展在打开工程后刷新标题/元信息/工程零件树（结构树分组依赖这里） */
+window.__applyProjectStage = function (record) {
+  if (!record) return;
+  try { applyProjectStage(record); } catch (e) { /* 原型 UI 未就绪时忽略 */ }
+};
 
 function esc(v) {
   return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

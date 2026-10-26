@@ -65,3 +65,8 @@ test('groupOfPartName：按第一个连字符前缀分组，与结构树分组�
   assert.equal(groupOfPartName('驱动座'), '其他', '没有分隔符的件归「其他」');
   assert.equal(groupOfPartName(''), '其他');
 });
+
+test('groupOfPartName：也支持画布示意装配的「类别·工位名」前缀', () => {
+  assert.equal(groupOfPartName('直线·入料检测段'), '直线');
+  assert.equal(groupOfPartName('视觉·贴合相机'), '视觉');
+});

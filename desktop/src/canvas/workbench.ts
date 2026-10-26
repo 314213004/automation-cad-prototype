@@ -52,6 +52,7 @@ import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { buildLayoutDxf, describeLayoutDxf } from './layout-dxf.ts';
 import { buildSchemeReport } from './summary-report.ts';
+import { buildAssemblyProject } from './assembly-export.ts';
 import {
   emptySchemeLibrary,
   listSchemes,
@@ -428,6 +429,7 @@ function buildShell(): void {
         <button type="button" class="cw-btn" data-action="undo" title="撤销 Ctrl+Z" disabled>↶ 撤销</button>
         <button type="button" class="cw-btn" data-action="redo" title="重做 Ctrl+Y" disabled>↷ 重做</button>
         <button type="button" class="cw-btn primary" data-action="auto-adapters">⚡ 全部生成转接板</button>
+        <button type="button" class="cw-btn" data-action="assembly-3d" title="按工位尺寸与排布生成三维示意装配，并作为工程打开">🏭 生成整机 3D</button>
         <button type="button" class="cw-btn" data-action="export">导出</button>
         <button type="button" class="cw-btn" data-action="open-schemes">方案库</button>
         <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
@@ -2015,6 +2017,33 @@ function bindEvents(): void {
     }
     if (action === 'delete-node') {
       deleteSelected();
+      return;
+    }
+    if (action === 'assembly-3d') {
+      const draft = buildAssemblyProject(state.graph, state.graph.title);
+      if (!draft) {
+        toast('画布是空的：先从模组库加件，或重置演示拓扑', true);
+        return;
+      }
+      const api = window.desktop?.projects;
+      if (!api?.save) {
+        toast('当前环境不支持保存工程（缺少 projects 接口）', true);
+        return;
+      }
+      toast(`正在生成 ${draft.parts} 个工位示意体…`);
+      void api
+        .save(draft)
+        .then((result) => {
+          if (!result.ok || !result.record) {
+            toast(`生成失败：${result.message ?? '未知原因'}`, true);
+            return;
+          }
+          toast(`已生成工程「${result.record.name}」：${draft.note}`);
+          window.dispatchEvent(new CustomEvent('canvas:open-project', { detail: { id: result.record.id } }));
+        })
+        .catch((error: unknown) => {
+          toast(`生成失败：${error instanceof Error ? error.message : String(error)}`, true);
+        });
       return;
     }
     if (action === 'export') {
