@@ -1797,20 +1797,14 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         if (process.env.AUTOMATIONCAD_AUTOCONFIRM === '1') return true;
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
-        const detail = request.steps
-          .map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`)
-          .join('\n');
-        const response = await dialog.showMessageBox(window, {
-          type: 'question',
+        // 多步计划同样走页面卡片（原生对话框在无人值守/远程调试下点不到）
+        return await requestWriteConfirmation(window, {
+          tool: `计划 · ${request.steps.length} 步`,
+          args: request.steps.map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`),
+          detail: request.message,
           title: '智能体多步计划确认',
-          message: request.message,
-          detail: detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail,
-          buttons: ['全部允许', '取消'],
-          defaultId: 1,
-          cancelId: 1,
-          noLink: true
+          steps: request.steps.map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`)
         });
-        return response.response === 0;
       },
       execute: async (step, stepIndex, signal) => {
         const stepStarted = Date.now();

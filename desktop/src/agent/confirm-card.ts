@@ -14,6 +14,8 @@ interface ConfirmRequest {
   summary: string;
   detail?: string;
   bypassNotice?: string;
+  /** 多步计划：每行一条「n. 工具 参数摘要」 */
+  steps?: string[];
 }
 
 const STYLE_ID = 'agent-confirm-styles';
@@ -37,6 +39,8 @@ function ensureStyles(): void {
   .acw-confirm-body p { margin: 0 0 8px; color: #9aa8b8; }
   .acw-confirm-args { margin: 0; padding: 10px; border-radius: 6px; background: #0e141b; border: 1px solid #1f2a36;
     font-family: ui-monospace, SFMono-Regular, monospace; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; color: #c7d3e2; max-height: 240px; overflow: auto; }
+  .acw-confirm-steps { margin: 0 0 10px; padding: 0 0 0 18px; color: #c7d3e2; font-size: 12px; }
+  .acw-confirm-steps li { margin: 2px 0; font-family: ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
   .acw-confirm-warn { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: #3a2a1c; border: 1px solid #6a4a24; color: #ffcf8f; font-size: 12px; }
   .acw-confirm-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px; border-top: 1px solid #232f3b; background: #101820; }
   .acw-confirm-btn { padding: 7px 14px; border-radius: 6px; border: 1px solid #2b3846; background: #1a232e; color: #dfe7f3; cursor: pointer; font-size: 12.5px; }
@@ -75,14 +79,16 @@ function showCard(request: ConfirmRequest): void {
       </div>
       <div class="acw-confirm-body">
         <p>${escapeHtml(request.detail ?? '该操作会修改当前装配体。')}</p>
-        <pre class="acw-confirm-args">${escapeHtml(request.summary)}</pre>
+        ${request.steps && request.steps.length > 0
+          ? `<ol class="acw-confirm-steps">${request.steps.map((step) => `<li>${escapeHtml(step)}</li>`).join('')}</ol>`
+          : `<pre class="acw-confirm-args">${escapeHtml(request.summary)}</pre>`}
         ${request.bypassNotice ? `<div class="acw-confirm-warn">${escapeHtml(request.bypassNotice)}</div>` : ''}
       </div>
       <div class="acw-confirm-foot">
         <span class="acw-confirm-hint">120 秒不答复按拒绝处理</span>
         <button type="button" class="acw-confirm-btn danger" data-acw="deny">拒绝</button>
         <button type="button" class="acw-confirm-btn" data-acw="session">本会话允许「${escapeHtml(request.tool)}」</button>
-        <button type="button" class="acw-confirm-btn primary" data-acw="once">允许一次</button>
+        <button type="button" class="acw-confirm-btn primary" data-acw="once">${request.steps && request.steps.length > 0 ? '全部允许' : '允许一次'}</button>
       </div>
     </div>`;
   document.body.appendChild(mask);

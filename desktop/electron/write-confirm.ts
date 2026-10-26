@@ -22,6 +22,8 @@ export interface WriteConfirmRequest {
   bypassNotice?: string;
   /** 卡片标题，区分「智能体」与「外部客户端」。 */
   title?: string;
+  /** 多步计划的步骤摘要（有值时卡片按「全部允许/取消」呈现）。 */
+  steps?: string[];
 }
 
 export async function requestWriteConfirmation(
@@ -59,7 +61,8 @@ export async function requestWriteConfirmation(
     summary,
     detail: request.detail ?? '该操作会修改当前装配体。',
     bypassNotice: request.bypassNotice,
-    title: request.title ?? '智能体请求写操作'
+    title: request.title ?? '智能体请求写操作',
+    ...(request.steps && request.steps.length > 0 ? { steps: request.steps } : {})
   });
   return (await answer).allow;
 }
