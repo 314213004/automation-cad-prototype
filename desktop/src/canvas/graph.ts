@@ -787,3 +787,49 @@ export function graphConsistencyIssues(graph: MachineGraph): GraphIssue[] {
   }
   return issues;
 }
+
+// ---------------------------------------------------------------------------
+// 复制工位
+// ---------------------------------------------------------------------------
+
+export interface DuplicateNodeResult {
+  graph: MachineGraph;
+  /** 新节点 id（未插入时为 null）。 */
+  newNodeId: string | null;
+  reason: string;
+}
+
+/**
+ * 复制一个工位：新 id、名称加「副本」，沿用全部端口/尺寸/节拍/IO，坐标按 offset 偏移。
+ * 新节点**不带边**（孤立）——复制出来的工位挂到哪儿由人决定，自动接线等于替人做装配决策。
+ * 转接板不复制：转接板是「某一对端口」的产物，复制它必然造成两端对不上。
+ */
+export function duplicateNode(graph: MachineGraph, nodeId: string, offsetMm: { x: number; y: number } = { x: 0, y: 120 }): DuplicateNodeResult {
+  const source = findNode(graph, nodeId);
+  if (!source) return { graph, newNodeId: null, reason: `节点 ${nodeId} 不存在，无法复制` };
+  if (isAdapterNode(source)) {
+    return { graph, newNodeId: null, reason: '转接板不能复制：它只对特定一对端口有效，复制会立刻不匹配' };
+  }
+  const ids = new Set(graph.nodes.map((node) => node.id));
+  // 副本的副本不要变成 -copy-copy：先剥掉已有后缀，再从 -copy / -copy2 往上加
+  const stem = nodeId.replace(/-copy\d*$/, '');
+  const baseId = `${stem}-copy`;
+  let newNodeId = baseId;
+  let counter = 2;
+  while (ids.has(newNodeId)) {
+    newNodeId = `${baseId}${counter}`;
+    counter += 1;
+  }
+  const copy: CanvasNode = {
+    ...cloneNode(source),
+    id: newNodeId,
+    name: `${source.name} 副本`,
+    pos: { x: source.pos.x + 40, y: source.pos.y + 60 },
+    ortho: { x: source.ortho.x + offsetMm.x, y: source.ortho.y + offsetMm.y }
+  };
+  return {
+    graph: { ...cloneGraph(graph), nodes: [...graph.nodes.map(cloneNode), copy] },
+    newNodeId,
+    reason: `已复制 ${source.name} → ${copy.name}（孤立节点，需手动连线）`
+  };
+}

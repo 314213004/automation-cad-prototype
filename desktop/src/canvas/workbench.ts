@@ -13,6 +13,7 @@ import { buildEntryButton } from '../ui/panels.ts';
 import {
   findMismatchedEdges,
   insertAdapterForEdge,
+  duplicateNode,
   insertAdaptersForAllMismatches,
   isAdapterNode,
   portDiff,
@@ -73,6 +74,7 @@ import {
   createOverrideLookup,
   emptyManualPrices,
   parseManualPrices,
+  removeManualPrice,
   setManualPrice,
   summarizeOverrides,
   type ManualPriceBook
@@ -1110,6 +1112,7 @@ function inspectorProp(node: CanvasNode): string {
     <section class="cw-section">
       <h4>操作</h4>
       <div class="cw-inspector-actions">
+        <button type="button" class="cw-btn" data-action="duplicate-node" data-node-id="${escapeHtml(node.id)}">复制该工位（Ctrl+D）</button>
         <button type="button" class="cw-btn danger" data-action="delete-node">删除该节点</button>
       </div>
       <p class="cw-hint">删除转接板会恢复上下游直连；若两端仍不匹配，会重新标橙。</p>
@@ -1233,6 +1236,39 @@ function downstreamMass(nodeId: string): number {
   return Math.round(mass * 1000) / 1000;
 }
 
+/** 手工报价清单：可从清单里删，删掉后该行回到价格簿或待询价。 */
+function manualPriceList(): string {
+  const entries = Object.values(manualPrices.items);
+  if (entries.length === 0) return '';
+  return `
+    <h4 style="margin-top:10px">已填报价（${entries.length}）</h4>
+    ${entries
+      .map(
+        (entry) => `
+      <div class="cw-field cw-price-entry">
+        <span title="${escapeHtml(entry.note ?? '')}">${escapeHtml(entry.partId)} · ¥${entry.unitPriceYuan}
+          <small style="opacity:.6">${escapeHtml(entry.updatedAt.slice(5, 16).replace('T', ' '))}</small>
+        </span>
+        <button type="button" class="cw-btn" data-action="remove-price" data-part-id="${escapeHtml(entry.partId)}">删除</button>
+      </div>`
+      )
+      .join('')}`;
+}
+
+function duplicateSelected(nodeId: string): void {
+  const result = duplicateNode(state.graph, nodeId);
+  if (!result.newNodeId) {
+    toast(result.reason, true);
+    return;
+  }
+  state.graph = result.graph;
+  state.selectedId = result.newNodeId;
+  recordHistory('复制工位');
+  renderAll();
+  markDirty();
+  toast(result.reason);
+}
+
 /** 中心距编辑器：填「到上游中心距」→ 只沿 X 移动本节点，上游不动。 */
 function pitchEditor(node: CanvasNode): string {
   const upstream = upstreamOf(state.graph, node.id);
@@ -1271,14 +1307,16 @@ function inspectorBom(node: CanvasNode): string {
         manualPriceError || `手工报价 ${summarizeOverrides(manualPrices).count} 项（优先于价格簿，存工程目录）`
       )}</p>
       ${
-        node.partId && !costLinePriced(node)
+        node.partId
           ? `<div class="cw-field cw-price-entry">
-              <span>填报价（${escapeHtml(node.partId)}）</span>
-              <input type="number" min="0.01" step="0.01" id="cwPriceInput" placeholder="元" />
+              <span>${manualPrices.items[node.partId] ? '改报价' : '填报价'}（${escapeHtml(node.partId)}）</span>
+              <input type="number" min="0.01" step="0.01" id="cwPriceInput" placeholder="元"
+                     value="${manualPrices.items[node.partId]?.unitPriceYuan ?? ''}" />
               <button type="button" class="cw-btn" data-action="save-price" data-part-id="${escapeHtml(node.partId)}">保存</button>
             </div>`
-          : ''
+          : '<p class="cw-hint">该节点没有 partId（模组模板），价格只能通过型号化后再询价。</p>'
       }
+      ${manualPriceList()}
     </section>
     <section class="cw-section">
       <h4>当前节点 IO</h4>
@@ -1370,6 +1408,34 @@ function renderExport(): void {
     saveButton.disabled = !target.supported;
     saveButton.title = target.supported ? `保存为 ${target.name}` : target.reason;
   }
+}
+
+async function removeManualPriceAndSave(partId: string): Promise<void> {
+  if (!partId || !manualPrices.items[partId]) return;
+  const previous = manualPrices;
+  manualPrices = removeManualPrice(manualPrices, partId);
+  priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+  const api = window.desktop?.canvasPricing;
+  if (api) {
+    try {
+      const saved = await api.save(manualPrices);
+      if (!saved.ok) {
+        manualPrices = previous;
+        priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+        toast(`删报价失败：${saved.message ?? '写盘失败'}`, true);
+        renderAll();
+        return;
+      }
+    } catch (error) {
+      manualPrices = previous;
+      priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+      toast(`删报价失败：${error instanceof Error ? error.message : String(error)}`, true);
+      renderAll();
+      return;
+    }
+  }
+  renderAll();
+  toast(`已删除 ${partId} 的报价，该行回到价格簿或待询价`);
 }
 
 /** 保存一条手工报价到工程目录；写盘失败要明说，不能只在内存里生效。 */
@@ -1854,6 +1920,10 @@ function bindEvents(): void {
       renderOrtho();
       return;
     }
+    if (action === 'duplicate-node') {
+      duplicateSelected(target.dataset.nodeId ?? state.selectedId ?? '');
+      return;
+    }
     if (action === 'set-pitch') {
       const nodeId = target.dataset.nodeId ?? state.selectedId ?? '';
       const input = document.getElementById('cwPitchInput') as HTMLInputElement | null;
@@ -1877,6 +1947,10 @@ function bindEvents(): void {
           result.reordered ? '（已跨过相邻工位，尺寸链顺序重排）' : ''
         }`
       );
+      return;
+    }
+    if (action === 'remove-price') {
+      void removeManualPriceAndSave(target.dataset.partId ?? '');
       return;
     }
     if (action === 'save-price') {
@@ -1972,6 +2046,11 @@ function bindEvents(): void {
     if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
       event.preventDefault();
       redoCanvas();
+      return;
+    }
+    if (!typing && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && state.selectedId) {
+      event.preventDefault();
+      duplicateSelected(state.selectedId);
       return;
     }
     if (event.key === 'Delete' && state.selectedId) {

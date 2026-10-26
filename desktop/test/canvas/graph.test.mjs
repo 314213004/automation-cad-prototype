@@ -9,8 +9,10 @@ import {
   normalizeGraph,
   portDiff,
   portsCompatible,
-  removeNode
+  removeNode,
+  duplicateNode
 } from '../../src/canvas/graph.ts';
+import { demoCanvasGraph } from '../../src/canvas/demo-graph.ts';
 
 // ---------------------------------------------------------------------------
 // 夹具：端口全结构化，任何"字符串端口"都不允许出现在测试里
@@ -330,4 +332,58 @@ test('graphConsistencyIssues：缺一端连接的转接板被报出', () => {
   const degree = issues.find((issue) => issue.code === 'ADAPTER_DEGREE');
   assert.ok(degree, '缺少 ADAPTER_DEGREE 报出');
   assert.match(degree.message, /1 进 1 出/);
+});
+
+// ---------------------------------------------------------------------------
+// duplicateNode
+// ---------------------------------------------------------------------------
+
+test('duplicateNode：新 id、名称加副本、坐标偏移、沿用端口与节拍', () => {
+  const graph = demoCanvasGraph();
+  const result = duplicateNode(graph, 'AXIS-X');
+  assert.ok(result.newNodeId);
+  assert.equal(result.newNodeId, 'AXIS-X-copy');
+  const copy = result.graph.nodes.find((node) => node.id === 'AXIS-X-copy');
+  const source = graph.nodes.find((node) => node.id === 'AXIS-X');
+  assert.equal(copy.name, `${source.name} 副本`);
+  assert.deepEqual(copy.portIn, source.portIn);
+  assert.deepEqual(copy.portOut, source.portOut);
+  assert.equal(copy.stepSec, source.stepSec);
+  assert.equal(copy.ortho.x, source.ortho.x);          // 默认 X 不偏移
+  assert.equal(copy.ortho.y, source.ortho.y + 120);    // 默认往下错开
+  assert.equal(result.graph.nodes.length, graph.nodes.length + 1);
+  assert.equal(graph.nodes.length, 6, '入参不变');
+});
+
+test('duplicateNode：副本是孤立节点，不带任何边', () => {
+  const graph = demoCanvasGraph();
+  const result = duplicateNode(graph, 'AXIS-Y');
+  const copyEdges = result.graph.edges.filter((edge) => edge.from === 'AXIS-Y-copy' || edge.to === 'AXIS-Y-copy');
+  assert.deepEqual(copyEdges, []);
+  assert.equal(result.graph.edges.length, graph.edges.length);
+});
+
+test('duplicateNode：重复复制会递增 id 后缀，避免撞号', () => {
+  const first = duplicateNode(demoCanvasGraph(), 'CAM');
+  const second = duplicateNode(first.graph, 'CAM');
+  assert.equal(second.newNodeId, 'CAM-copy2');
+  const third = duplicateNode(second.graph, 'CAM-copy');
+  assert.equal(third.newNodeId, 'CAM-copy3', '副本的副本不应该变成 -copy-copy');
+});
+
+test('duplicateNode：转接板拒绝复制并说明原因', () => {
+  const inserted = insertAdapterForEdge(demoCanvasGraph(), 'e-y-z', factory());
+  const adapterId = inserted.graph.nodes.find((node) => node.kind === 'adapter').id;
+  const result = duplicateNode(inserted.graph, adapterId);
+  assert.equal(result.newNodeId, null);
+  assert.match(result.reason, /转接板不能复制/);
+  assert.equal(result.graph.nodes.length, inserted.graph.nodes.length);
+});
+
+test('duplicateNode：不存在的节点返回原因不改图', () => {
+  const graph = demoCanvasGraph();
+  const result = duplicateNode(graph, 'NOPE');
+  assert.equal(result.newNodeId, null);
+  assert.match(result.reason, /不存在/);
+  assert.equal(result.graph, graph);
 });
