@@ -182,3 +182,20 @@
   font-size: 11px; font-weight: 600; color: #8b959d; letter-spacing: .06em;
 }
 .cw-palette-group-head em { font-style: normal; font-weight: 400; color: #6f797f; }
+
+/* 3D 预览 PiP（P4） */
+.cw-pip {
+  position: absolute; right: 12px; bottom: 12px; width: 300px; height: 214px;
+  display: flex; flex-direction: column; border: 1px solid #3a4248; border-radius: 6px;
+  background: #171b1e; overflow: hidden; box-shadow: 0 10px 24px rgba(0, 0, 0, .45); z-index: 4;
+}
+.cw-pip[hidden] { display: none !important; }
+.cw-pip-head {
+  display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 8px;
+  border-bottom: 1px solid #2c3338; font-size: 11px; color: #9aa5ad; background: #1c2124;
+}
+.cw-pip-actions { margin-left: auto; display: flex; gap: 4px; }
+.cw-pip-actions .cw-btn { height: 20px; padding: 0 6px; font-size: 10px; }
+.cw-pip-host { flex: 1 1 auto; min-height: 0; position: relative; background: #161a1d; }
+.cw-pip-note { margin: 0; padding: 3px 8px; font-size: 10px; color: #6f797f; border-top: 1px solid #2c3338; }
+.cw-pip-fallback { margin: 0; padding: 10px; font-size: 11px; color: #ffb86b; line-height: 1.5; }

@@ -21,6 +21,9 @@
 | `demo-graph.ts` | 演示拓扑（6 节点 5 边，含 1 条真实端口不匹配）+ 模组库（可绑真实型号，价格仍只由价格簿给） |
 | `persistence.ts` | 草稿序列化/校验（schema 版本、normalizeGraph 清理、存储注入），localStorage 由 workbench 注入 |
 | `price-source.ts` | 价格簿 → `PriceLookup`（排除示例条码、阶梯价、过期统计）+ 一句话价格源说明 |
+| `packs-source.ts` | packs 元件 → 画布模组（品类规则、通用端口、品类默认质量），纯电气件不进画布 |
+| `candidates-source.ts` | 画布反推 brief → `generateCandidates` → 三套真实候选汇总（形态/CT/成本/缺价/警告） |
+| `pip3d.ts` | 3D 预览：`buildPipBoxes`（纯几何，mm→m）+ 轻量 three 场景（占位盒/包络线框/选中聚焦） |
 
 ## 数据结构与口径
 
@@ -92,6 +95,12 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 13. **草稿版本不猜、不迁移**：`schema` 不匹配就拒绝加载并提示，旧图宁可让用户重画，也不要读成半成品；草稿里的脏数据（重复 id / 孤儿边）必须回报 `issues`，不能静默丢边。
 14. **价格源失败不影响画布**：`cost:pricebook` 被模块门控关掉或浏览器模式下没有接口时，只把 KPI 变成「全部待询价」，不许编价、也不许把面板整块隐藏。
 15. **默认转接板工厂价格恒为 null**：尺寸/质量可算（孔距 + 余量、体积×密度），价格必须询价；P2 没有接价格簿，所以 KPI 显示「¥0（N 项待询价）」是正确状态，不是 bug。
+
+## 坑点（P4 追加）
+
+16. **PiP 画的是占位盒，不是零件**：盒子尺寸取 `dimsMm`、位置取 `ortho`，没有圆角/孔/装配关系；界面与 MODULE 都必须写「概念占位体，无 B-Rep」。
+17. **WebGL 不可用是正常路径**：smoke 用 `--disable-webgl` 跑，此时 `pip3d` 返回 `status='unavailable'` 并在面板里显示原因；不要把「没有 3D」当成失败，更不要在断言里假设一定 ready。
+18. **3D 里 mm→m**：`buildPipBoxes` 统一除 1000，盒心 y 取 `h/2` 落地；混用单位会让盒子和相机距离差三个数量级。
 
 ## 验证命令
 

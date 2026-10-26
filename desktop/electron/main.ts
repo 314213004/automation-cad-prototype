@@ -4892,6 +4892,8 @@ function createWindow(): BrowserWindow {
           unitsPerHour: number;
           pendingQuote: number;
           exportLengths: { json: number; build123d: number; plc: number };
+          pipStatus: string;
+          pipBoxes: number;
         };
         if (!canvas) throw new Error('画布工作台未挂载（window.__CanvasWorkbench 缺失）');
         if (canvas.nodes < 2 || canvas.edges < 1) throw new Error(`画布拓扑为空 ${JSON.stringify(canvas)}`);
@@ -4903,6 +4905,11 @@ function createWindow(): BrowserWindow {
         console.log(`SMOKE_CANVAS_ADAPTER_OK mismatch=${canvas.mismatchBefore}->${canvas.mismatchAfterInsert} adapters=${canvas.adaptersAfterInsert} bridges=match`);
         if (canvas.stations < canvas.nodes) throw new Error(`2D 正交站点数不足 ${JSON.stringify(canvas)}`);
         console.log(`SMOKE_CANVAS_ORTHO_OK stations=${canvas.stations} artboards=${canvas.artboards} gantt=${canvas.ganttRows}`);
+        if (canvas.pipStatus !== 'ready' && canvas.pipStatus !== 'unavailable') {
+          throw new Error(`3D 预览状态异常 ${JSON.stringify(canvas)}`);
+        }
+        if (canvas.pipBoxes < 1) throw new Error(`3D 预览没有盒子 ${JSON.stringify(canvas)}`);
+        console.log(`SMOKE_CANVAS_PIP_OK boxes=${canvas.pipBoxes} status=${canvas.pipStatus}`);
         if (canvas.exportLengths.json < 200 || canvas.exportLengths.build123d < 200 || canvas.exportLengths.plc < 200) {
           throw new Error(`导出文本为空 ${JSON.stringify(canvas.exportLengths)}`);
         }

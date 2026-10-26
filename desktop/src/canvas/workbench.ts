@@ -39,6 +39,7 @@ import {
   candidateHeadline,
   type CandidateSummary
 } from './candidates-source.ts';
+import { createPipScene, type PipScene } from './pip3d.ts';
 import {
   CANVAS_DRAFT_KEY,
   clearDraft,
@@ -311,6 +312,17 @@ function buildShell(): void {
         </div>
         <div class="cw-view" data-mode="ortho" id="cwOrtho" hidden></div>
         <div class="cw-view" data-mode="artboard" id="cwArtboards" hidden></div>
+        <div class="cw-pip" id="cwPip">
+          <header class="cw-pip-head">
+            <span>3D 预览 · 概念占位体</span>
+            <span class="cw-pip-actions">
+              <button type="button" class="cw-btn" data-action="pip-wire" title="线框">线框</button>
+              <button type="button" class="cw-btn" data-action="pip-reset" title="重置视角">视角</button>
+            </span>
+          </header>
+          <div class="cw-pip-host" id="cwPipHost"></div>
+          <p class="cw-pip-note" id="cwPipNote">占位盒按节点外形/坐标生成，不是型号级几何；无 B-Rep / 干涉结论。</p>
+        </div>
         <div class="cw-gantt" id="cwGantt"></div>
       </main>
       <aside class="cw-inspector">
@@ -551,6 +563,33 @@ function renderOrtho(): void {
 // ---------------------------------------------------------------------------
 
 let candidateCache: { key: string; items: CandidateSummary[] } | null = null;
+let pipScene: PipScene | null = null;
+let pipWireframe = false;
+let pipFocusId: string | null = null;
+
+/** 懒创建 PiP 场景；WebGL 不可用时 createPipScene 自己会写降级说明。 */
+function ensurePip(): PipScene | null {
+  const host = document.getElementById('cwPipHost');
+  if (!host) return null;
+  if (pipScene) return pipScene;
+  pipScene = createPipScene(host);
+  const note = document.getElementById('cwPipNote');
+  if (note && pipScene.status === 'unavailable') {
+    note.textContent = pipScene.reason;
+    note.classList.add('cw-warn');
+  }
+  return pipScene;
+}
+
+function renderPip(): void {
+  const scene = ensurePip();
+  if (!scene || scene.status !== 'ready') return;
+  scene.update(state.graph, state.selectedId);
+  if (pipFocusId !== state.selectedId) {
+    pipFocusId = state.selectedId;
+    scene.focus(state.selectedId);
+  }
+}
 
 /** 候选按「画布形态」缓存：节点数/目标/布局变了才重算（synthMachine 是同步计算）。 */
 function candidatesForGraph(): CandidateSummary[] {
@@ -944,6 +983,8 @@ function renderMode(): void {
   }
   const gantt = document.getElementById('cwGantt');
   if (gantt) gantt.hidden = state.mode === 'artboard';
+  const pip = document.getElementById('cwPip');
+  if (pip) pip.hidden = state.mode === 'artboard';
 }
 
 function exportContent(tab: ExportTab): string {
@@ -979,6 +1020,7 @@ function renderAll(): void {
   renderArtboards();
   renderGantt();
   renderInspector();
+  renderPip();
   renderMode();
   if (!document.getElementById('cwExportModal')?.hidden) renderExport();
 }
@@ -1266,6 +1308,16 @@ function bindEvents(): void {
       toast('已清除本地草稿并重置为演示拓扑');
       return;
     }
+    if (action === 'pip-reset') {
+      pipScene?.resetView();
+      return;
+    }
+    if (action === 'pip-wire') {
+      pipWireframe = !pipWireframe;
+      pipScene?.setWireframe(pipWireframe);
+      target.classList.toggle('is-active', pipWireframe);
+      return;
+    }
     if (action === 'close') {
       closeCanvasWorkbench();
     }
@@ -1368,6 +1420,8 @@ export interface CanvasSelfTestResult {
   artboards: number;
   ganttRows: number;
   exportLengths: { json: number; build123d: number; plc: number };
+  pipStatus: string;
+  pipBoxes: number;
   cycleSeconds: number;
   unitsPerHour: number;
   pendingQuote: number;
@@ -1423,7 +1477,10 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
 
   section.querySelector<HTMLElement>('[data-action="mode"][data-mode="topology"]')?.click();
   const data = summary();
+  const pip = ensurePip();
   const result: CanvasSelfTestResult = {
+    pipStatus: pip?.status ?? 'missing',
+    pipBoxes: state.graph.nodes.length,
     nodes,
     edges,
     mismatchBefore,
