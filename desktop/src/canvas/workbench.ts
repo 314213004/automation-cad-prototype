@@ -35,6 +35,7 @@ import {
 } from './view-model.ts';
 import { buildDimensions, selectionToBounds } from './dimensions.ts';
 import { currentPitchMm, shiftToPitch, upstreamOf } from './spacing.ts';
+import { autoLayout } from './auto-layout.ts';
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
 import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
@@ -431,6 +432,7 @@ function buildShell(): void {
         <button type="button" class="cw-btn" data-action="open-schemes">方案库</button>
         <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
         <span class="cw-draft-state" id="cwDraftState" role="status" aria-live="polite">—</span>
+        <button type="button" class="cw-btn" data-action="auto-layout">自动布局</button>
         <button type="button" class="cw-btn" data-action="new-blank">新建空白</button>
         <button type="button" class="cw-btn" data-action="reset-demo">重置演示</button>
         <button type="button" class="cw-btn" data-action="close">关闭 Esc</button>
@@ -2043,6 +2045,23 @@ function bindEvents(): void {
       void navigator.clipboard?.writeText(code).then(done).catch(() => {
         toast('剪贴板不可用，请手动全选复制', true);
       });
+      return;
+    }
+    if (action === 'auto-layout') {
+      if (state.graph.nodes.length === 0) {
+        toast('画布是空的，没有可布局的节点', true);
+        return;
+      }
+      const result = autoLayout(state.graph);
+      if (result.moved === 0) {
+        toast('布局已经是最新状态，没有节点需要移动');
+        return;
+      }
+      state.graph = result.graph;
+      recordHistory('自动布局');
+      renderAll();
+      markDirty();
+      toast(`已按拓扑重排 ${result.moved} 个节点（${result.layers} 层）；尺寸/端口/节拍未改`);
       return;
     }
     if (action === 'new-blank') {
