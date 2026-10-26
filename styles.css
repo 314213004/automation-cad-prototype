@@ -704,3 +704,9 @@ kbd{display:inline-flex; align-items:center; justify-content:center; min-width:1
 .pt-row{cursor:pointer}
 .pt-idx{color:var(--text-3);width:20px;flex:0 0 auto}
 .pt-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 结构树搜索 */
+.pt-search-wrap{display:flex;align-items:center;gap:8px;padding:6px 8px 4px}
+.pt-search{flex:1;min-width:0;padding:4px 8px;border-radius:5px;border:1px solid var(--line,rgba(255,255,255,.12));background:rgba(0,0,0,.22);color:var(--text-1,#dfe7f3);font-size:12px}
+.pt-search::placeholder{color:var(--text-3,#7d8b9c)}
+.pt-search-count{color:var(--text-3,#8b98a9);font-size:11px;white-space:nowrap}

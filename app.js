@@ -1324,6 +1324,7 @@ function projectGroupOf(name) {
   return dash ? dash[1] : '其他';
 }
 let treeProjectId = '';
+let treeSearchQuery = '';
 /** 结构树折叠状态按工程 id 存 localStorage；key = T:顶层 或 S:顶层/子层 */
 function treeCollapseKey(id) { return 'acw.treeCollapsed.' + id; }
 function loadTreeCollapsed(id) {
@@ -1362,7 +1363,8 @@ function renderProjectTree(record) {
 
   const rowHtml = (item) => {
     const title = item.path.length > 0 ? ` title="${attr(item.path.join(' > '))}"` : '';
-    return `<div class="tree-row pt-row" role="button" tabindex="0" data-project-part="${attr(item.name)}"${title}>
+    const search = [item.name, ...item.path].join(' ').toLowerCase();
+    return `<div class="tree-row pt-row" role="button" tabindex="0" data-project-part="${attr(item.name)}" data-pt-search="${attr(search)}"${title}>
       <span class="pt-name">${esc(item.name)}</span>
     </div>`;
   };
@@ -1389,6 +1391,10 @@ function renderProjectTree(record) {
   body.innerHTML = `
     <div class="panel-section">
       <div class="panel-section-head">工程零件 · ${record.parts} 件 · ${byTop.size} 组${hasPath ? ' · 按装配层级' : ''}</div>
+      <div class="pt-search-wrap">
+        <input type="search" class="pt-search" id="projectTreeSearch" placeholder="搜索零件名 / 装配路径（如 托条、机架）" aria-label="搜索工程零件">
+        <span class="pt-search-count" id="projectTreeSearchCount" role="status" aria-live="polite"></span>
+      </div>
       ${sections || '<div class="panel-empty">工程里没有零件记录</div>'}
       ${items.length !== record.parts ? `<div class="panel-empty">工程记录 ${record.parts} 件，清单 ${items.length} 件</div>` : ''}
     </div>`;
@@ -1404,10 +1410,40 @@ function renderProjectTree(record) {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); pick(); }
     });
   });
+  const searchInput = body.querySelector('#projectTreeSearch');
+  const searchCount = body.querySelector('#projectTreeSearchCount');
+  const applySearch = (raw) => {
+    const query = String(raw || '').trim().toLowerCase();
+    let matched = 0;
+    body.querySelectorAll('[data-project-part]').forEach((row) => {
+      const hit = query === '' || (row.dataset.ptSearch || '').includes(query);
+      row.hidden = !hit;
+      if (hit) matched += 1;
+    });
+    // 命中的组自动展开，空组收起，免得搜到了却藏在折叠里
+    body.querySelectorAll('details[data-tree-key]').forEach((node) => {
+      const visible = [...node.querySelectorAll('[data-project-part]')].some((row) => !row.hidden);
+      node.hidden = query !== '' && !visible;
+      if (query !== '' && visible) node.open = true;
+    });
+    if (searchCount) {
+      searchCount.textContent = query === '' ? '' : `匹配 ${matched} / ${items.length} 件`;
+    }
+  };
+  searchInput?.addEventListener('input', () => {
+    treeSearchQuery = searchInput.value;
+    applySearch(searchInput.value);
+  });
+  // 重新渲染后保留搜索词（切工程/选零件会重绘树）
+  if (treeSearchQuery) {
+    if (searchInput) searchInput.value = treeSearchQuery;
+    applySearch(treeSearchQuery);
+  }
   body.querySelectorAll('details[data-tree-key]').forEach((node) => {
     node.addEventListener('toggle', () => {
       const key = node.dataset.treeKey;
       if (!key || treeProjectId !== record.id) return;
+      if (node.hidden) return; // 搜索过滤导致的收起不记进折叠状态
       const next = loadTreeCollapsed(record.id);
       if (node.open) next.delete(key); else next.add(key);
       saveTreeCollapsed(record.id, next);
