@@ -21,7 +21,8 @@ const desktopApi = {
     syncParametricImportEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-cad-parametric-import-enabled', enabled) === true,
     syncAgentResumeEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-agent-resume-enabled', enabled) === true,
     syncProjectPortableEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-project-portable-enabled', enabled) === true,
-    syncSystemUpdateEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-system-update-enabled', enabled) === true
+    syncSystemUpdateEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-system-update-enabled', enabled) === true,
+    syncDrawingsTechdrawEnabled: (enabled: boolean) => ipcRenderer.sendSync('modules:sync-drawings-techdraw-enabled', enabled) === true
   },
   update: {
     state: () => ipcRenderer.invoke('update:state'),
@@ -45,13 +46,38 @@ const desktopApi = {
     exportProject: (snapshot: unknown) => ipcRenderer.invoke('project-archive:export', snapshot),
     preview: () => ipcRenderer.invoke('project-archive:preview')
   },
+  design: {
+    settings: () => ipcRenderer.invoke('design:settings'),
+    loadDraft: () => ipcRenderer.invoke('design:draft-load'),
+    saveDraft: (draft: unknown) => ipcRenderer.invoke('design:draft-save', draft),
+    clearDraft: () => ipcRenderer.invoke('design:draft-clear')
+  },
+  canvasDraft: {
+    load: () => ipcRenderer.invoke('canvas:draft-load'),
+    save: (draft: unknown) => ipcRenderer.invoke('canvas:draft-save', draft),
+    clear: () => ipcRenderer.invoke('canvas:draft-clear')
+  },
+  canvasPricing: {
+    load: () => ipcRenderer.invoke('canvas:pricing-load'),
+    save: (book: unknown) => ipcRenderer.invoke('canvas:pricing-save', book),
+    clear: () => ipcRenderer.invoke('canvas:pricing-clear')
+  },
+  canvasSchemes: {
+    load: () => ipcRenderer.invoke('canvas:scheme-load'),
+    save: (library: unknown) => ipcRenderer.invoke('canvas:scheme-save', library)
+  },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),
     open: (id: string) => ipcRenderer.invoke('projects:open', id),
+    saveLayout: (payload: unknown) => ipcRenderer.invoke('projects:layout-save', payload),
     remove: (id: string) => ipcRenderer.invoke('projects:delete', id)
   },
   exportReport: (payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }) => ipcRenderer.invoke('export:report', payload),
+  brepInterference: (payload: { stepPath: string; timeoutMs?: number; maxParts?: number }) =>
+    ipcRenderer.invoke('interference:brep', payload),
+  exportPartsCsv: (payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }) =>
+    ipcRenderer.invoke('export:partsCsv', payload),
   exportCostFile: (payload: {
     format: 'pdf' | 'csv';
     fileName?: string;
@@ -82,6 +108,12 @@ const desktopApi = {
     getLlmConfig: () => ipcRenderer.invoke('agent:llm:get'),
     saveLlmConfig: (config: unknown) => ipcRenderer.invoke('agent:llm:save', config),
     testLlm: (config?: unknown) => ipcRenderer.invoke('agent:llm:test', config),
+    onConfirmWrite: (handler: (payload: unknown) => void) => {
+      const listener = (_event: unknown, payload: unknown): void => handler(payload);
+      ipcRenderer.on('agent:confirm-write:request', listener);
+      return () => ipcRenderer.removeListener('agent:confirm-write:request', listener);
+    },
+    replyConfirmWrite: (payload: unknown) => ipcRenderer.send('agent:confirm-write:reply', payload),
     chat: {
       send: (text: string) => ipcRenderer.invoke('agent:chat:send', text),
       cancel: () => ipcRenderer.invoke('agent:chat:cancel'),
@@ -114,6 +146,23 @@ const desktopApi = {
   },
   render: {
     stats: (stats: unknown) => ipcRenderer.invoke('render:stats', stats)
+  },
+  drawings: {
+    freecadStatus: () => ipcRenderer.invoke('freecad:status'),
+    detectFreecad: () => ipcRenderer.invoke('freecad:detect'),
+    chooseFreecadPath: () => ipcRenderer.invoke('freecad:choose-path'),
+    setFreecadPath: (path: string | null) => ipcRenderer.invoke('freecad:set-path', path),
+    generate: (request: unknown) => ipcRenderer.invoke('drawings:generate', request),
+    cancel: (jobId: string) => ipcRenderer.invoke('drawings:cancel', jobId),
+    jobs: () => ipcRenderer.invoke('drawings:jobs'),
+    list: (projectKey: string) => ipcRenderer.invoke('drawings:list', { projectKey }),
+    open: (projectKey: string, partKey: string, format: string) => ipcRenderer.invoke('drawings:open', { projectKey, partKey, format }),
+    reveal: (projectKey: string, partKey?: string) => ipcRenderer.invoke('drawings:reveal', { projectKey, partKey }),
+    onJob: (callback: (snapshot: unknown) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, snapshot: unknown) => callback(snapshot);
+      ipcRenderer.on('drawings:job-changed', listener);
+      return () => ipcRenderer.removeListener('drawings:job-changed', listener);
+    }
   },
   parametric: {
     status: () => ipcRenderer.invoke('parametric:status'),
@@ -190,6 +239,11 @@ const desktopApi = {
     diff: (packageId: string) => ipcRenderer.invoke('sync:diff', packageId),
     downloadCandidate: (packageId: string, machineContext?: unknown) =>
       ipcRenderer.invoke('sync:downloadCandidate', packageId, machineContext)
+  },
+  onNewDesign: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('desktop:new-design', listener);
+    return () => ipcRenderer.removeListener('desktop:new-design', listener);
   },
   onOpenCad: (callback: (payload: OpenCadPayload) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: OpenCadPayload) => callback(payload);

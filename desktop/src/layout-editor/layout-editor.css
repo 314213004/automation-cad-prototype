@@ -1,0 +1,45 @@
+.le-root { position: fixed; inset: 0; z-index: 10050; display: grid; grid-template-rows: auto 1fr; background: #f4f7f9; color: #172b3a; font: 13px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+.le-root[hidden] { display: none !important; }
+.le-root * { box-sizing: border-box; }
+.le-bar { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 8px 14px; background: #112f3b; color: #e6f0f2; }
+.le-bar h2 { margin: 0 12px 0 0; font-size: 16px; font-weight: 600; }
+.le-group { display: inline-flex; gap: 4px; align-items: center; padding: 2px 6px; border: 1px solid #36525d; border-radius: 6px; }
+.le-group > span { color: #9fb8c0; font-size: 11px; margin-right: 2px; }
+.le-btn { min-height: 28px; padding: 3px 9px; border: 1px solid #5b7883; border-radius: 4px; background: transparent; color: #e6f0f2; cursor: pointer; font: inherit; }
+.le-btn:hover { background: #1d4756; }
+.le-btn[aria-pressed="true"] { background: #168579; border-color: #22a596; }
+.le-btn:disabled { opacity: .4; cursor: not-allowed; }
+.le-bar select, .le-bar input { min-height: 28px; padding: 2px 6px; border: 1px solid #5b7883; border-radius: 4px; background: #0d2630; color: #e6f0f2; font: inherit; }
+.le-bar input[type="number"] { width: 72px; }
+.le-close { margin-left: auto; }
+.le-body { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+.le-viewport { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.le-canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.le-hud { position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px); padding: 6px 10px; border-radius: 5px; background: #0f2a35e6; color: #f1f7f8; font-variant-numeric: tabular-nums; pointer-events: none; }
+.le-hud:empty { display: none; }
+.le-hint { position: absolute; left: 12px; top: 10px; padding: 4px 8px; border-radius: 4px; background: #ffffffd9; color: #3d5562; font-size: 12px; pointer-events: none; }
+.le-marquee { position: absolute; border: 1px dashed #0f766e; background: #14b8a622; pointer-events: none; }
+.le-measure-label { position: absolute; transform: translate(-50%, -130%); padding: 3px 7px; border-radius: 4px; background: #b45309; color: white; font-size: 12px; white-space: nowrap; pointer-events: none; }
+.le-side { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow-x: hidden; overflow-y: auto; border-left: 1px solid #d4dfe4; background: white; }
+.le-section { padding: 12px 14px; border-bottom: 1px solid #e3eaee; }
+.le-section h3 { margin: 0 0 8px; font-size: 14px; }
+.le-rows { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 3px 8px; margin: 0; }
+.le-rows dt { color: #6a7f89; }
+.le-rows dd { margin: 0; word-break: break-all; }
+.le-pose { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.le-pose label { display: flex; flex-direction: column; gap: 2px; color: #4a6370; font-size: 12px; }
+.le-pose label { min-width: 0; }
+.le-pose input { width: 100%; min-width: 0; min-height: 30px; padding: 3px 6px; border: 1px solid #bdccd4; border-radius: 4px; font: inherit; }
+.le-note { margin: 8px 0 0; color: #6a7f89; font-size: 12px; }
+.le-checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.le-check { padding: 6px 8px; border-left: 3px solid #94a3b8; border-radius: 3px; background: #f5f8fa; cursor: pointer; }
+.le-check b { display: block; font-weight: 600; }
+.le-check small { color: #5b707b; }
+.le-check[data-severity="error"] { border-color: #e11d48; background: #fff1f3; }
+.le-check[data-severity="warning"] { border-color: #d97706; background: #fff8eb; }
+.le-check[data-severity="pass"] { border-color: #16a34a; }
+.le-side-btn { min-height: 30px; padding: 4px 10px; border: 1px solid #b7c7ce; border-radius: 4px; background: white; color: #25434f; cursor: pointer; font: inherit; }
+.le-side-btn:hover { background: #eaf3f3; }
+.le-side-btn:disabled { opacity: .45; cursor: not-allowed; }
+.le-blocked { padding: 40px; color: #8a2d2a; }
+.design-geometry-3d-entry { margin-left: 6px; }

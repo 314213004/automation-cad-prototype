@@ -6,6 +6,8 @@
 // 正式电气设计、报价与节拍分析。
 
 import type { MachineConfig } from '../commission/machine-config.ts';
+import type { StationGeometryLayout } from './station-layout.ts';
+import type { StationIdentity } from './station-identity.ts';
 import type { ComponentPart } from '../shared/types.ts';
 import type { Pricebook } from '../cost/pricebook.ts';
 import { validateMachineConfig } from '../commission/machine-config.ts';
@@ -44,6 +46,10 @@ import {
 export interface MachineCycleEstimate {
   /** 布局模型：single / linear / dial / parallel / cell。 */
   mode: MachineLayout;
+  /** 当前产能数字的来源；方案初算可缺省，向导校核后会明确写入。 */
+  source?: 'model-estimate' | 'engineer-input';
+  /** 用户输入的工位完整周期；输入值来源固定为工程师输入，需实测验证。 */
+  stationCycleInputs?: MachineStationCycleInput[];
   perMin: number;
   /** 目标节拍，60 / perMin。 */
   secondsPerPiece: number;
@@ -51,6 +57,8 @@ export interface MachineCycleEstimate {
   stationSeconds: number;
   /** 估算产能（件/分钟）。 */
   throughputPerMin: number;
+  /** 与 throughputPerMin 同值的对外别名，供向导候选卡片直接展示。 */
+  partsPerMinute: number;
   /** 兼容旧字段：单工位单件时间；parallel 下不再是整机节拍。 */
   estimatedSecondsPerPiece: number;
   baseSeconds: number;
@@ -61,6 +69,16 @@ export interface MachineCycleEstimate {
   requiredTotalStations: number;
   meetsTarget: boolean;
   bottleneck: string;
+}
+
+export interface MachineStationCycleInput {
+  stationId: string;
+  stationName: string;
+  seconds: number;
+  /** 是否已确认周期包含布局相关的公共等待、移载、上下料/分度时间。 */
+  sharedTimeConfirmed: boolean;
+  source: 'engineer-input';
+  verification: 'pending-measurement';
 }
 
 export type MachinePowerEstimate = PowerResult;
@@ -86,6 +104,12 @@ export interface MachineBomItem {
 
 export interface MachineDesign {
   config: MachineConfig;
+  /** 与 config.stations 当前顺序一一对应的持久工位身份；不是几何生成器临时 stN。 */
+  stationIdentities?: StationIdentity[];
+  /** 工程师在真实几何俯视中输入的全局 XY 工位偏移；旧设计缺省等同零偏移。 */
+  stationGeometryLayout?: StationGeometryLayout;
+  /** 安全清除无法可靠迁移的遗留偏移或身份映射时，供工程师界面明确提示。 */
+  stationGeometryWarning?: string;
   points: string[];
   cycle: MachineCycleEstimate;
   power: MachinePowerEstimate;
@@ -112,6 +136,8 @@ export interface SynthOptions {
   pricingAssumptions?: readonly string[];
   /** 供电制式；缺省沿用 brief.voltage，再缺省 380VAC。 */
   voltage?: MachineVoltage;
+  /** 强制整机形态；方案对比用，仍由 synthMachine 统一计算节拍/功率/成本。 */
+  formId?: string;
 }
 
 const PROCESS_LABEL: Record<MachineProcess, string> = {
@@ -399,6 +425,7 @@ function applyConveyorRefinement(
   const meetsTarget = throughput + 1e-9 >= targetPerMin;
   design.cycle.perMin = targetPerMin;
   design.cycle.throughputPerMin = throughput;
+  design.cycle.partsPerMinute = throughput;
   design.cycle.secondsPerPiece = round(60 / targetPerMin);
   design.cycle.stationSeconds = round(60 / throughput);
   design.cycle.estimatedSecondsPerPiece = design.cycle.stationSeconds;
@@ -464,7 +491,11 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
   const requestedStations = assertStations(options.stationCount ?? brief.stations);
   const cyclePerMin = assertCycle(options.cyclePerMin ?? brief.cyclePerMin ?? MACHINE_DEFAULT_CYCLE_PER_MIN);
   const process = brief.process;
-  const formPick = pickForm(brief, TEMPLATES, { stationCount: requestedStations, cyclePerMin });
+  const formPick = pickForm(brief, TEMPLATES, {
+    stationCount: requestedStations,
+    cyclePerMin,
+    ...(options.formId ? { formId: options.formId } : {})
+  });
   const stations = formPick.stations;
   const resolvedLayout = resolveLayout(brief, requestedStations);
   const selectedForm = formPick.form;
@@ -485,6 +516,13 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     '节拍按 evaluateFlow 模型估算（single / linear / dial / parallel / cell），由工位、工序时间与布局公式求值；均未计入上下料、通讯、人工干预与调试损失。',
     '三维几何由配置按规则生成标准件外形（机架、工位底板、门架、气缸/夹爪/旋转台、传感器、输送线或分度转盘，单位 mm），不包含结构强度、干涉与真实运动学校核。'
   ];
+  if (brief.footprint && Number.isFinite(brief.footprint.lengthMm) && brief.footprint.lengthMm > 0 &&
+      Number.isFinite(brief.footprint.widthMm) && brief.footprint.widthMm > 0) {
+    assumptions.push(
+      `占地需求已结构化记录：长度 ≤ ${brief.footprint.lengthMm} mm、宽度 ≤ ${brief.footprint.widthMm} mm；` +
+      '须与完整整机实际几何包络复核，超限只提示，不自动缩放实体。'
+    );
+  }
 
   if (stations !== requestedStations) {
     const [min, max] = selectedForm.stationRange;
@@ -563,6 +601,16 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
     actuatorBuckets = actuatorBuckets;
     warnings.push(
       `执行机构数量不足：${emptyActuatorStations.length} 个工位没有动作，已补 ${ACTUATOR_LABEL[fillKind]}；建议至少为每工位配置 1 个动作。`
+    );
+  }
+
+  // 大件告警：模板几何按标准小件排，工件超过 1.5m 时包络/工位间距必须按工件重做
+  const workpiece = brief.workpiece;
+  const bigPart = Math.max(workpiece?.lengthMm ?? 0, workpiece?.widthMm ?? 0);
+  if (bigPart >= 1500) {
+    warnings.push(
+      `工件 ${workpiece?.lengthMm ?? '?'}×${workpiece?.widthMm ?? '?'} mm 属于大件：模板工位间距与机架包络按标准小件排，` +
+        '不含大件夹持/缓存空间，方案包络不能作为占地与验收依据；需按工件尺寸重做输送段与缓存工位。'
     );
   }
 
@@ -769,6 +817,7 @@ export function synthMachine(brief: MachineBrief, options: SynthOptions = {}): M
       secondsPerPiece,
       stationSeconds,
       throughputPerMin,
+      partsPerMinute: throughputPerMin,
       estimatedSecondsPerPiece: stationSeconds,
       baseSeconds,
       slowestStation: bottleneckStation,

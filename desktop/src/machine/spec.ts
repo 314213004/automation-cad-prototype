@@ -39,14 +39,32 @@ export interface ConveyorSpec {
   loadKg: number | null;
 }
 
+/** 工程师明确输入的整机占地边界；仅用于与实际几何包络比较，不缩放实体。 */
+export interface MachineFootprintRequirement {
+  lengthMm: number;
+  widthMm: number;
+}
+
+/** 需求里显式写出的工件尺寸/重量（只认写明的数字，缺的留 null）。 */
+export interface WorkpieceSpec {
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  massKg: number | null;
+}
+
 export interface MachineBrief {
   process: MachineProcess;
   stations: number;
   cyclePerMin: number | null;
   layout: MachineLayout;
   conveyor?: ConveyorSpec;
+  /** 可选占地限制；未填写时沿用形态的推荐尺寸。 */
+  footprint?: MachineFootprintRequirement | null;
   /** 需求中显式列出的工序名，按出现顺序去重。 */
   processes?: string[];
+  /** 工件尺寸；大件（≥1.5m）会触发「模板几何不含工件夹持空间」告警。 */
+  workpiece?: WorkpieceSpec;
   actuators: { kind: MachineActuatorKind; count: number }[];
   sensors: { kind: MachineSensorKind; count: number }[];
   brand: string | null;
@@ -251,6 +269,30 @@ export function detectConveyorSpec(text: string): ConveyorSpec | null {
     speedMps: speed ? toMps(speed[1] ?? '0', speed[2] ?? 'm/s') : null,
     loadKg: load ? Number(load[1]) : null
   };
+}
+
+/**
+ * 工件尺寸：只认「2400×1200×35mm」「2400x1200」这类显式写法 + 「32kg」。
+ * 大件信息不能丢：丢了会让模板按小件出包络（实测 1900mm 机长装 2400mm 光伏板）。
+ */
+export function detectWorkpiece(text: string): WorkpieceSpec | null {
+  const sizePattern = /(\d{2,5}(?:\.\d+)?)\s*[×xX*]\s*(\d{2,5}(?:\.\d+)?)(?:\s*[×xX*]\s*(\d{1,4}(?:\.\d+)?))?\s*(mm|毫米)?/;
+  const match = sizePattern.exec(text);
+  const massPattern = /(?:单件|工件|负载|重量|重)?\s*(?:约|大约)?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克)/i;
+  const massMatch = massPattern.exec(text);
+  const lengthMm = match?.[1] ? Number(match[1]) : null;
+  const widthMm = match?.[2] ? Number(match[2]) : null;
+  const heightMm = match?.[3] ? Number(match[3]) : null;
+  const massKg = massMatch?.[1] ? Number(massMatch[1]) : null;
+  if (lengthMm === null && widthMm === null && massKg === null) return null;
+  // 语义校验：只写了两个数（如「占地 6000×3000mm」）且没有工件/重量线索时，不当工件尺寸
+  const context = match ? text.slice(Math.max(0, match.index - 24), match.index + match[0].length) : '';
+  const workpieceCue = /工件|产品|光伏板|板|组件|单件|料片|杯|壳|箱|托盘|负载|载重|重量/.test(context);
+  const hasThreeDims = heightMm !== null;
+  const hasMass = massKg !== null;
+  if (!workpieceCue && !hasThreeDims && !hasMass) return null;
+  if (!(lengthMm && lengthMm >= 50) && !(widthMm && widthMm >= 50) && !(massKg && massKg > 0)) return null;
+  return { lengthMm, widthMm, heightMm, massKg };
 }
 
 function detectProcess(text: string): MachineProcess {
@@ -575,6 +617,14 @@ export function parseMachineBrief(text: string): MachineBrief {
   }
 
   const conveyor = process === 'conveyor' ? detectConveyorSpec(source) : null;
+  const workpiece = detectWorkpiece(source);
+  if (workpiece) {
+    const dims = [workpiece.lengthMm, workpiece.widthMm, workpiece.heightMm]
+      .filter((value): value is number => typeof value === 'number')
+      .join('×');
+    const mass = workpiece.massKg ? `，单件约 ${workpiece.massKg} kg` : '';
+    notes.push(`工件：${dims} mm${mass}（按需求原文识别）`);
+  }
 
   return {
     process,
@@ -583,6 +633,7 @@ export function parseMachineBrief(text: string): MachineBrief {
     layout: inferred.layout,
     ...(conveyor ? { conveyor } : {}),
     ...(processNames.length > 0 ? { processes: processNames } : {}),
+    ...(workpiece ? { workpiece } : {}),
     actuators,
     sensors,
     brand,

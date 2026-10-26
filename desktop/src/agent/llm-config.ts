@@ -29,8 +29,12 @@ export const DEFAULT_LLM_CONFIG: AgentLlmConfig = {
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   model: 'gpt-4o-mini',
-  maxIterations: 6,
-  maxToolCalls: 24
+  /**
+   * 设计类任务（查库 → 选型 → 核算 → 出 BOM → 成本）实测 14 轮仍不够
+   * （光伏缓存堆叠机：30+ 次工具调用、2 次建模写操作）；默认给到上限。
+   */
+  maxIterations: 50,
+  maxToolCalls: 200
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

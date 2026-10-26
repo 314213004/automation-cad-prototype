@@ -6,7 +6,7 @@
 
 ## 上一轮（已归档）
 
-- 0.4.2（`bfdaa37`）：CDP 内网转发 / token 生命周期 / 渲染指标，原文见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
+- 2026-10-25 整机设计向导首轮及 0.4.2（`bfdaa37`）：详情见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 
 ## 待办（按优先级）
 
@@ -14,6 +14,8 @@
 - **P1：PLC 同步扩展外部联调**：服务端先兼容 `manifest.plc` 与 `plc/` 文件，再验证真实上传/下载；补目标 PLC 平台选择、下载候选 UI 与显式应用流程，并决定机型安全 IO mapping 的持久化口径。
 - **P1：可移植工程档案恢复**：在只读严格预览后设计用户确认的显式应用、备份与事务回滚；补跨机器 CAD 几何复核，并继续定义尚未纳入的 PLC/工厂/Agent 数据迁移。
 - **P1/P2：扩展模块化边界**：继续迁移尚未门控的机械、CAD 只读/运动学、工厂、同步和通用导出能力；当前开关不卸载应用内代码。真正的按需下载须另行设计签名包、兼容性、离线安装和回滚。
+
+- **P1：FreeCAD 后台任务后续**（第 1 步零件工程图已交付，见下节）：② 钣金展开 DXF（SheetMetal 为第三方工作台，需先评估 1.x 自带能力或自写展开，仍走同一作业队列/清单/过期机制）；③ 总装图 + BOM 明细表（多零件 STEP + 摆位 → TechDraw 装配视图与序号/明细栏）；④ FEM（CalculiX 随 FreeCAD 安装，先做单件静力校核）；⑤ 孔中心线/孔径标注、DXF 隐藏线分层、设置页统一入口；⑥ Windows 真机验收 FreeCAD 1.0/1.1 安装路径与 PDF 中文字体。
 
 ## 待决策（需要老王拍板，不阻塞其他开发）
 
@@ -23,12 +25,12 @@
 | D2 | 智慧工厂生产环境谁来部署 0.22.0 | A 对方运维；B 我们远程部署；C 只在测试环境验证 | 端到端联调能否做 | A，我们提供验收清单 | 待定 |
 | D3 | PLC 程序生成首期目标平台 | A 通用 ST 优先；B 西门子 S7 优先；C 汇川/三菱优先 | 模板与变量表格式 | A，其次按现场实际 | 待定 |
 | D4 | 委外加工数据智能系统是否立项 | A 立项并定义接口；B 先只做数据导出；C 暂缓 | 路线图与汇报口径 | B 过渡，接口按 A 设计 | 待定 |
-| D5 | 元件库缺失尺寸（180/371）能否用「同系列壳体推定」 | A 允许并标注推定；B 只用实测/官方值，缺的留空 | 底板布置覆盖率 | A + 标注，人工复核 | ✅ 已按 A 执行：244/371（65.8%），官方 37 + 推定 16；剩余 127 条留空，清单见 `docs/desktop/DIMS-GAPS.md` |
+| D5 | 缺失尺寸是否按同系列推定 | — | 底板布置覆盖率 | — | ✅ 已定 A 并标注推定：244/371；余项见 `DIMS-GAPS.md` |
 | D6 | 参数化建模首期范围 | A 只做单件结构件；B 单件+多体装配；C 直接上草图约束 | 工期（A≈3 周，B≈6 周） | A 先交付，B/C 分期 | 待定 |
 | D7 | 成本面板如何拿到 BOM（CAD 零件名 → 元器件物料号映射口径） | A 由底板画布/电气元件库直接给 partId，成本面板只读；B 允许「零件名规则匹配 + 人工确认」自动填 partId；C 保持手工导入 BOM JSON | 影响成本能否一键算；B 需要命名规范（如 `QF1:LC1D09`），否则匹配率低 | A 长期方向，短期用 C + 预留 B | 待定 |
-| D8 | Agent 的 `run_cost_report` 是否允许落盘导出报告 | A 保持只读，只回摘要；B 增加写工具 `export_cost_report`（PDF/CSV，走现有二次确认）；C 由面板导出，Agent 只给「点哪里」 | 影响「一句话出报价单」的体验；B 需要确认文件名/目录规则与覆盖策略 | B：`export_cost_report` 固定写 `userData/exports/`，默认不覆盖、冲突追加序号 | 已定 B，已实现（`23cd284`） |
+| D8 | Agent 是否允许导出成本报告 | — | 「一句话出报价单」 | — | ✅ 已定 B：写入 `userData/exports/`，默认不覆盖（`23cd284`） |
 | D9 | 离线规则路由是否要在「模型可用时」也前置生效 | A 仅在模型失败时降级（现状）；B 高置信度只读指令直接走规则，省一次模型调用；C 全走模型 | B 更快更省 token，但规则误判时用户得不到语义纠正，且两套路径要长期保持一致 | A 先稳定；若要 B，先攒 40 条评估集对比准确率再开 | 待定 |
-| D10 | 中文评估集用哪条通道跑基线 | A 只用离线规则路由（零成本、可离线、但只覆盖规则能判的句式）；B 规则 + 真实模型双跑（能测语义理解，按 token 付费）；C 只跑模型 | 决定评估结论代表「规则上限」还是「产品上限」；B 需要一把可用的付费/自建模型 key 与预算口径 | A 先立基线并进 CI 友好（无网络），B 作为发布前手动回归；已落地离线 61 条 + 真实模型 30 条（`agent:live`，30/30；拒绝/澄清 6/6） | ✅ 已按 B 执行 |
+| D10 | 中文评估集基线通道 | — | 区分规则基线与模型能力 | — | ✅ 已定 B：离线 61 条 + 真实模型 30 条（30/30；拒绝/澄清 6/6） |
 
 ## 已知问题（记录，不阻塞）
 
@@ -45,21 +47,33 @@
 > 历史问题原文见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md#历史已知问题原文2026-10-24)。
 
 
-## 夜间执行约束
+> 长期迭代与仓库推送约定见 [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md#夜间迭代与仓库操作约定)。
 
-- 只做代码与文档，不打包、不触发 CI、不发版
-- 每轮只推进一步；改完必须 `npm test` + `npm run smoke` 全绿才提交
-- 失败则回滚本次改动（`git checkout -- <改动文件>`），把原因写入本文件
-- 不修改 `index.html` / `app.js` / `styles.css` / `electrical.*`，除非该任务明确要求
-- 不删除既有测试来「变绿」；不放宽断言规避失败
+## 整机设计向导改进（2026-10-26）
 
-## 仓库双推约定（GitHub + Gitee，2026-10-24 起）
+本节记录该向导实现的功能行为、版本化身份规则与当前工程边界。
+- 第 4 步真实 `MachineGeometry.parts` 俯视支持选站、X/Y mm 输入与网格拖动；示意 `placements` 仍独立。
+- `MachineDesign.stationIdentities` 保存不可变工位身份；`stationGeometryLayout` v2 按身份键关联偏移。改名/重排在同一身份仍可对应时保留偏移；删除或无法对应的身份只清除相应偏移，新工位按零偏移处理；候选/需求重算不按名称或序号猜测迁移。旧 v1 只记录序号/名称，无法证明实体连续性，读取时保留工程但安全清除全部旧偏移并告警。
+- 偏移纳入 review 签名；坐标或映射异常 fail-closed。不改尺寸/形状/行程。空场景与概念保存规则不变。
+**边界**：仍是概念占位体，AABB 非精检；型号 CAD、结构/干涉/节拍签核和 Windows 发布验收未完成。超出机架/占地需人工复核。测试与 KB 容量见 [STATUS.md](STATUS.md)，不等同生产验收。
+- **概念运动包络提示**：偏移后的当前几何输入；不支持轴显式未覆盖，候选只供人工复核，不改 review 或签核。限制见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)。
 
-- 主仓库：`origin` = GitHub `owlco001/automation-cad-prototype`；镜像：`gitee` = Gitee 同名仓库（公开）
-- `origin` 配置了两个 push URL（GitHub 在前、Gitee 在后），因此 `git push origin main` 会自动双推；任一远端失败则整体失败，**不允许只推成功一边**
-- 推 tag 必须用 `git bothpush`（等价于 `git push origin main && git push origin --tags`），普通 push 不带 tag
-- 新增 tag 后必须核对：`git ls-remote origin refs/tags/<tag>` 与 `git ls-remote gitee refs/tags/<tag>` 都存在且指向同一提交
-- 发版/合并后复核三方 HEAD 一致：
-  `git rev-parse HEAD`、`git ls-remote origin refs/heads/main`、`git ls-remote gitee refs/heads/main`
-- Gitee 偶发 5xx 或超时：重试一次即可，不要改成只推 GitHub 了事；连续失败要在本文件记录时间与错误码
-- 凭据只存在 `~/.git-credentials`，禁止写进仓库、提交信息或日志
+## 整机布局 3D 编辑（2026-10-26，feat/layout-editor）
+
+- ✅ 向导第 4 步「3D 布局编辑」：点选/Ctrl/框选工位、属性面板、平移 X/Y/XY 与绕 Z 旋转 gizmo（拖动中键入数值、Esc 取消）、网格/角度/包络边吸附与参考线、对齐/分布/阵列排布、OBB 包络干涉标红 + 截面求交精检、运动包络去基线、临时测量；写回同一份 `stationGeometryLayout`（有旋转时 schemaVersion 3），撤销并入 `UnifiedHistory` 的 `'layout'` 令牌。详见 `desktop/src/layout-editor/MODULE.md`。
+- ⏳ 未做：复制/新增工位（需改机型配置）；已保存工程重开后的 3D 布局编辑（需 IPC 写 design.json 并重生成 STL）；build123d 布尔精检；通电联调 3D 未应用位姿；编辑器 DOM 自动化测试。
+
+## 无限画布工作台（2026-10-26）
+
+- 📄 归档：`docs/desktop/mockups/canvas-workbench.html`（老王给的交互原型，Tailwind CDN + three r128，106 KB）；配套架构评审原文 `docs/desktop/reviews/2026-10-25-architecture-review.md`。
+- 📐 方案：`docs/desktop/CANVAS-WORKBENCH.md` —— 模板 → 现有模块映射、数据契约（MountPort/CanvasNode/Edge）、5 处必须纠正的偏差（CDN 依赖、CT 串行口径、写死价格、端口只比字符串、假 B-Rep 干涉）、P1–P4 分期与验收。
+- ⏳ P1（核心纯函数 + 单测）：`src/canvas/graph.ts`（端口兼容 / 插转接板 / 删节点）、`metrics.ts`（CT 走 `evaluateFlow`、伺服选型）、`export.ts`（build123d 脚本 / ST / Graph JSON）。
+- ⏳ P2（三视图 UI + smoke）、P3（接真实候选/元件库/价格簿）、P4（3D PiP 联动）按方案推进，未开工。
+
+## FreeCAD 零件工程图（2026-10-26，`feat/freecad-techdraw`）
+
+- ✅ `drawings.techdraw` 可选模块（依赖 `cad.parametric-import`）：参数化抽屉「工程图（FreeCAD）」分区——选中零件/全部/重出过期、进度与取消、PDF/DXF/目录、过期徽标、未安装提示与「指定 freecadcmd 路径」。
+- ✅ 主进程 `freecad.ts` 运行器 + `drawings-service.ts`（逐件 STEP → freecadcmd → 工程目录 + manifest），IPC 走受信 sender + 模块 fail-closed，renderer 不传路径。
+- ✅ `techdraw_job.py`：第一角投影三视图 + 轴测、自动 A4/A3 与 GB 比例、外形尺寸、国标标题栏，PDF/DXF/SVG；沙箱 FreeCAD 1.0.0（conda-forge）+ build123d 0.13 真机跑通，两件批量约 1 s。
+- 测试：协议/过期/运行器（假 freecadcmd：成功、单件失败、崩溃、超时、取消、PDF 兜底、伪造路径、未安装）/服务/模块/脚本自检，+45 条。
+- 边界：DXF 隐藏线未分层；只标外形总尺寸，无孔位/公差/技术要求；PDF 中文依赖本机字体；Windows 实机未验收。

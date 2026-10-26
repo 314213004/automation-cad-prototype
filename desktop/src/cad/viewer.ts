@@ -14,6 +14,7 @@ import {
 } from './render-batch.ts';
 import { assertBomRowCount } from '../shared/input-limits.ts';
 import { stageCadLoad, type LoadedPart } from './load-candidate.ts';
+import { geometryToBinaryStl, uniquePartNames } from './stl-export.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -768,6 +769,15 @@ export class CadViewer {
   }
 
   getSceneParts(): CadScenePart[] {
+    // 降级模式（无 WebGL / 软件渲染被禁）只建 modelParts，不建 three 网格；
+    // 此时零件数仍应可见，否则 Agent 的 get_bom / get_project_context 会把已打开工程当空。
+    if (this.parts.length === 0 && this.modelParts.length > 0) {
+      return this.modelParts.map((part) => ({
+        name: part.name,
+        triangles: 0,
+        bbox: { min: [...part.bbox.min], max: [...part.bbox.max] }
+      }));
+    }
     return this.parts.map((part) => {
       const box = this.partBounds(part);
       return {
@@ -1221,6 +1231,41 @@ export class CadViewer {
       this.camera.position.copy(center).add(offset);
       this.controls.update();
     }
+    return true;
+  }
+
+  /** 按零件名选中（工程结构树 / 面板联动用）；找不到返回 false，不猜下标。 */
+  /**
+   * 把当前场景逐件导出成 STL（"存为工程"用）。
+   * 直接读 three 的 position/index 属性；没有几何（降级模式）时返回空数组，调用方要如实提示。
+   */
+  exportPartsForStl(): Array<{ name: string; data: Uint8Array; path?: string[] }> {
+    const names = uniquePartNames(this.parts.map((part) => part.data.name));
+    const out: Array<{ name: string; data: Uint8Array; path?: string[] }> = [];
+    this.parts.forEach((part, index) => {
+      const geometry = part.mesh.geometry;
+      const position = geometry.getAttribute('position');
+      if (!position) return;
+      const indexAttr = geometry.getIndex();
+      const data = geometryToBinaryStl(
+        position.array as unknown as ArrayLike<number>,
+        indexAttr ? (indexAttr.array as unknown as ArrayLike<number>) : null
+      );
+      if (!data) return;
+      const path = Array.isArray(part.data.path) ? part.data.path.filter((segment) => typeof segment === 'string' && segment.trim()) : [];
+      out.push({
+        name: names[index] ?? `零件-${index + 1}`,
+        data,
+        ...(path.length > 0 ? { path } : {})
+      });
+    });
+    return out;
+  }
+
+  selectPartByName(name: string, focus = false): boolean {
+    const index = this.parts.findIndex((part) => part.data.name === name);
+    if (index < 0) return false;
+    this.selectPart(index, focus);
     return true;
   }
 

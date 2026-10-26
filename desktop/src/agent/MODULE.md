@@ -81,7 +81,7 @@ interface Bridge {
 | `place_component` | `partId / x / y / rotate? / railSnap?` | `place_component` | ✅ 底板放置，可撤销；越界/重叠只告警 |
 | `update_component` | `partId? / ref? / model? / qty? / remark? / target?` | `update_component` | ✅ 改型号/数量/备注，可撤销；无尺寸返回 `NO_DIMENSIONS` 告警 |
 | `remove_component` | `partId? / ref? / target?` | `remove_component` | ✅ 从底板或 BOM 移除，可撤销；不存在返回 `NOT_PLACED` |
-| `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条 |
+| `run_electrical_check` | `wires / loads / circuits / options` | `run_electrical_check` | ✅ 只读，问题清单前 50 条；三者都不传时经 `getElecDocument` 校验当前电气图纸 |
 | `run_cost_report` | `bom? / pricebook? / placements? / plate? / plc? / options? / overrides? / wireSection? / now?` | `run_cost_report` | ✅ 只读，明细前 50 行、缺价/告警各 20 条 |
 | `run_plc_generate` | `config? / target? / namePrefix? / sequenceTimeoutMs?` | `run_plc_generate` | ✅ 写：11 文件 + ZIP 落盘 `userData/exports/plc/`；预检失败不落盘 |
 | `export_files` | `kind / fileName? / overwrite?` | `export_files` | ✅ 写：pdf/dxf/glb/bom(CSV)，与成本导出一套命名净化/冲突规则 |
@@ -579,3 +579,34 @@ parseFallbackCandidates(text): string[]
 
 1. 为 MCP 增加 `resources`（当前装配树、数据包清单），让 Agent 能先读后写。
 2. 把剩余属性编辑（几何参数 / 装配层级）接入命令总线与撤销栈；元件型号/数量/备注与移除已完成。
+
+## 工具：build_canvas_assembly（2026-10-26）
+
+- 位置：`tools.ts` 注册（写工具，`router.ts` 的 `WRITE_TOOLS` 里，执行前要用户确认）
+- 命令：`commands.ts` 的 `registerBuildCanvasAssemblyCommand` → 渲染桥 `buildCanvasAssembly`
+- 入参：`{ name?, open?, graph? }`；不给 `graph` 就读当前画布草稿 `userData/canvas-workbench-draft.json`
+- 行为：`normalizeGraph` 规范化 → `buildAssemblyProject`（示意盒 + 自写 STL）→ `projects.save` → 默认打开到视口
+- 返回：`{ ok, projectId, name, parts, envelope, massKg: null, source: 'draft'|'graph', graphIssues, note, caveats }`
+- 失败码：`EMPTY_CANVAS`（画布无工位）、`INVALID_GRAPH`、`SAVE_FAILED`、`UNAVAILABLE`
+- **不要**拿它替代 `build_machine_model` / `apply_machine_design`：这里只有占位盒，没有孔/导轨/皮带，AABB 只能初筛
+
+## 写操作确认：页面内卡片（2026-10-26）
+
+- 原生 `dialog.showMessageBox` 在无人值守/CDP 调试时不可见，智能体会卡死十几分钟；改成渲染进程卡片
+- 链路：`electron/ipc.ts` 的 `confirmWrite` → 生成 requestId → `webContents.send('agent:confirm-write:request')`
+  → 渲染进程 `src/agent/confirm-card.ts` 弹卡片 → `ipcRenderer.send('agent:confirm-write:reply', {id, allow, remember})`
+  → 主进程按 id 匹配 resolve；**120 秒无答复按拒绝**，窗口销毁/渲染进程不回也按拒绝
+- 三个选项：拒绝 / 本会话允许「工具名」/ 允许一次；Esc = 拒绝
+- 「本会话允许」只存在渲染进程的 Set 里，不落盘，刷新即失效；同名工具后续调用直接放行不再弹卡
+- 卡片显示：工具名徽标、`detail`、参数 JSON（>600 字符截断）、bypass 警告
+- 未做单测（DOM 交互），靠真机跑智能体验证：允许一次 → 工程生成；本会话允许 → 第二次不再弹卡、工程照常生成
+
+## 工具：save_scene_as_project（2026-10-26）
+
+- 用途：把**当前视口里的模型**逐件存成工程（导入 CAD 后落库），写工具需确认
+- 链路：`tools.ts` → `registerSaveSceneAsProjectCommand` → 渲染桥 `saveSceneAsProject` →
+  `viewer.exportPartsForStl()`（three position/index → 二进制 STL）+ `unionEnvelope` → `projects.save`
+- 返回：`{ ok, projectId, name, parts, triangles, envelope, massKg: null, note }`
+- 失败码：`NO_SCENE`（没有视口）/ `EMPTY_SCENE`（无网格）/ `SAVE_FAILED` / `UNAVAILABLE`
+- 质量恒 null：导入网格没有材料与密度，按体积×密度算出来是假数
+- 与 `build_canvas_assembly` 的区别：那个从画布工位尺寸生成盒体，这个忠实搬运视口里已有网格

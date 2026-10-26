@@ -121,7 +121,7 @@ test('错误 token 访问返回 401', async () => {
   assert.equal(response.status, 401);
 });
 
-test('有 token 能列出 23 个工具与健康信息', async () => {
+test('有 token 能列出 25 个工具与健康信息', async () => {
   const response = await fetch(`${url}/rpc`, {
     method: 'POST',
     headers: {
@@ -132,14 +132,14 @@ test('有 token 能列出 23 个工具与健康信息', async () => {
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.result.tools.length, 23);
+  assert.equal(body.result.tools.length, 25);
 
   const health = await fetch(`${url}/health`, {
     headers: { authorization: `Bearer ${token}` }
   });
   assert.equal(health.status, 200);
   const healthBody = await health.json();
-  assert.equal(healthBody.toolCount, 23);
+  assert.equal(healthBody.toolCount, 25);
   assert.equal(healthBody.version, '0.1.0-test');
 });
 
@@ -303,4 +303,36 @@ test('rotate 后旧 token 401、新 token 200', async () => {
   } finally {
     await rpc.stop();
   }
+});
+
+test('MCP resources：list 出三个只读资源，read 返回 contents', async () => {
+  const listBody = await postRpc(url, token, { jsonrpc: '2.0', id: 1, method: 'resources/list' });
+  const uris = listBody.result.resources.map((item) => item.uri);
+  assert.deepEqual(uris, [
+    'automationcad://project/current/summary',
+    'automationcad://project/current/parts',
+    'automationcad://project/current/bom'
+  ]);
+
+  const summary = await postRpc(url, token, {
+    jsonrpc: '2.0', id: 2, method: 'resources/read',
+    params: { uri: 'automationcad://project/current/summary' }
+  });
+  assert.equal(summary.result.contents[0].mimeType, 'application/json');
+  assert.equal(typeof JSON.parse(summary.result.contents[0].text), 'object');
+
+  const parts = await postRpc(url, token, {
+    jsonrpc: '2.0', id: 3, method: 'resources/read',
+    params: { uri: 'automationcad://project/current/parts' }
+  });
+  assert.deepEqual(JSON.parse(parts.result.contents[0].text), [], '没注入 sceneParts 时返回空集，不编造');
+});
+
+test('MCP resources：未知 uri 返回 -32602，不读本地文件', async () => {
+  const body = await postRpc(url, token, {
+    jsonrpc: '2.0', id: 9, method: 'resources/read',
+    params: { uri: 'file:///etc/passwd' }
+  });
+  assert.equal(body.error.code, -32602);
+  assert.match(body.error.message, /资源不存在/);
 });

@@ -10,10 +10,12 @@
 | Electron 主进程 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md) | 窗口、菜单、IPC、Agent 启动、打包路径 |
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染、运动学标注层与自动识别建议（名称/型号 + 层级 + 几何，需逐条确认） |
 | CAD 参数化导入与重建 | [desktop/src/parametric/MODULE.md](../../desktop/src/parametric/MODULE.md) | 可选 `cad.parametric-import`（v1.0.0 / API 1）；控制参数化特征树编辑、sidecar 重建与 STEP/STL 导出；关闭不禁用 STEP/IGES/CAD 只读查看，不删除特征树、原 CAD 或叠加体 |
+| FreeCAD 零件工程图 | [desktop/src/drawings/MODULE.md](../../desktop/src/drawings/MODULE.md) | 可选 `drawings.techdraw`（v1.0.0 / API 1，依赖参数化）；特征树逐件 STEP → 独立 freecadcmd TechDraw → PDF/DXF 落工程目录，指纹判过期可一键重出；FreeCAD 未装只禁用出图 |
 | 客户可选模块注册与启停 | [desktop/src/modules/MODULE.md](../../desktop/src/modules/MODULE.md) | 内置模块 ID/API/依赖/能力目录、默认状态、持久化开关与跨 renderer/主进程门控边界 |
 | Windows 应用内更新 | [desktop/docs/update-channel.md](../../desktop/docs/update-channel.md) | 可选 `system.update`（v1.0.0 / API 1）；稳定/测试渠道、显式下载与确认安装、NSIS blockmap 与签名/完整性发布门禁 |
 | 可移植工程档案 | [desktop/src/project-archive/MODULE.md](../../desktop/src/project-archive/MODULE.md) | 可选 `project.portable` v2.0.0；stable project ID/source hash 绑定 schema-v2 状态+CAD 候选档案，strict read-only preview；事务恢复仍未实现 |
 | 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
+| 整机布局 3D 编辑 | [desktop/src/layout-editor/MODULE.md](../../desktop/src/layout-editor/MODULE.md) | 可选 `design.layout-editor`；向导第 4 步 3D 视口直接选/移/绕 Z 旋转工位、吸附、对齐分布、包络干涉与测量，写回 `MachineDesign.stationGeometryLayout`（v2 平移 / v3 含旋转），撤销并入主视口时间线 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | manifest-only 索引、`loadPack/unloadPack` 懒加载、跨包去重、partId 全局索引、检索与面板；`validatePack` 全包校验、`partsSha256` 完整性、schema 迁移、依赖与统计报表 |
 | 内置包数据 | [packs/builtin/MODULE.md](../../packs/builtin/MODULE.md) | 10 个包：iec-cn 377 / smc-cn 8 / servo-cn 25 / sensor-cn 32 / pneumatic-cn 44 / vision-cn 32 / drive-cn 33 / safety-cn 33（28+5 alias）/ frame-cn 33 + pricebook-cn |
 | Agent 接口 | [desktop/src/agent/MODULE.md](../../desktop/src/agent/MODULE.md) | 工具注册表、JSON-RPC、MCP stdio、离线规则路由、多步规划/执行、上下文快照与指代消解、会话记忆、多轮状态/工程指纹/续跑（thread）、本地知识检索（离线 RAG）、结果裁剪、执行进度/取消、失败建议、主动建议（next-best-action）、可复用流程模板（recipes）、模型输出纠错与重试（repair/retry）、确认与导出路径策略（policy）、审计筛选与导出、上下文预算与成本可见性（budget/pricing）、同轮去重（dedupe）、只读并行（parallel）、会话短缓存（cache）、侧栏问答/建议/计划/流程卡片 UI、能力报告与 SVG 一页图（agent-report.mjs） |
@@ -75,34 +77,19 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 
 **边界原则**：渲染层无 fs/net 权限；主进程不做几何计算；Agent 与 UI 共用同一份工具/命令注册表。
 
-## 当前总体进度（2026-10-25）
+## 当前总体进度（2026-10-26）
 
-- ✅ v0.2.0 已发布：GitHub Actions `windows-latest` 产出 NSIS 安装包（手动触发 `workflow_dispatch`）
-- ✅ 最新 `main` 基线上 `TZ=Asia/Shanghai npm test` 1842/1842、`npm run build:ext` 及 fake-sidecar Electron headless smoke 全部通过（最终 `SMOKE_OK`）；本轮详细记录见 [STATUS.md](./STATUS.md)。
-- ✅ CAD 轻量化查看（STEP 实测 18 零件 / 5,040 面 / 559 ms）、WebGL 降级
-- ✅ 数据包机制 + 面板 + Agent 检索；iec-cn 电气元件库（377 型号 / 26 分类 / 219 带符号）；内置包扩至 10 个：servo-cn / sensor-cn / pneumatic-cn / vision-cn（32）/ drive-cn（33）/ safety-cn（33，28 实型号 + 5 alias）/ frame-cn（33），启动只读 manifest，命中包才加载 `parts.json`；`SMOKE_PACKS_LAZY_OK packs=10 loaded=2`、`SMOKE_PACKS_COUNT servo=25 sensor=32 pneumatic=44 vision=32 drive=33 safety=28 frame=33`、`SMOKE_PACKS_VALIDATE_OK packs=10 errors=0`；`npm run packs:stats` 产出 `PACK-STATS.md` / `pack-stats.json`（617 条 / 612 实型号 / 612 唯一型号 / 55 分类，尺寸 55.9%、价格 7.2%）
-- ✅ 机械校核（干涉 AABB + 气缸/悬臂梁/螺栓）与五种导出（PDF / DXF / GLB / OBJ / BOM）
-- ✅ 可选 `elec.validation` 与 `cost.estimation` 默认启用；成本模块关闭时面板/Agent/RPC/MCP/专用 PDF/CSV fail-closed、无报告落盘，既有数据/历史保留；普通 BOM、通用导出、机械/电气设计和机型方案估价不受影响
-- ✅ 成本 Agent 工具 `run_cost_report`（只读，与面板共用同一份 `CostReport`，明细/缺价窄输出）及 `export_cost_report`（PDF/CSV）；均受 `cost.estimation` 开关控制
-- ✅ PLC 抽象 + 仿真/Modbus TCP + 通电联调（6 步 + 3 用例）
-- ✅ 可选模块迭代：`commission.io-test` 独立控制上电与标准 IO 用例；`factory.plc-sync` 独立控制同步包 PLC 源码/IO mapping，依赖 `plcgen`；`cad.parametric-import` 独立控制特征树编辑、sidecar 重建和 STEP/STL 导出，关闭保留 CAD 只读查看及现存数据；`project.portable` v2 使用 stable project ID/source SHA 打包可支持的 feature tree、stable-object 运动学、CAD 视角候选与原件，严格预览但不应用/覆盖当前工程；关闭隐藏入口且主进程拒绝文件副作用；事务恢复、异机 CAD 几何复核及 PLC/工厂/Agent 模块数据仍不支持；普通 BOM/PDF/GLB/DXF 包不受影响；PLC 实时连接、读写、监视与强制写入保持独立
-- ✅ `system.update` 更新通道 MVP 已接入：stable/beta、手动检查/下载、进度、原生确认后非静默安装；关闭模块会隐藏 UI 并由主进程拒绝所有更新 IPC；GitHub Releases/NSIS blockmap 与缺签名 fail-closed 发布门禁已配置。真实 Windows Authenticode 签名、升级、hash 与差分回退尚未实测；见 [update-channel.md](../../desktop/docs/update-channel.md)
-- ✅ PLC 代码生成 P8-1～P8-4：预检 + IO 变量表 + 五个基础块 + 自动序列/报警/安全 FC + mapping + 生成面板 + zip 导出 + 最近 10 次历史；内置模拟器按行程时间执行生成序列，超时/SafeStop/传感器矛盾可验证（11 文件；`SMOKE_PLCGEN_OK files=5 tags=32`、`SMOKE_PLCGEN_SEQ_OK files=11 steps=2`、`SMOKE_PLCGEN_SIM_OK steps=6 ok=1 alarms=0`、`SMOKE_PLCGEN_UI_OK files=11 history=1`）
-- ✅ 智慧工厂三适配器 + 设计包同步客户端 + 设置页（真实服务端待实现）
-- ✅ Agent 写操作（导入/插入/底板放置/修改/移除/撤销/BOM/干涉/PLC 落盘/通用导出）+ MCP 本机代理 + 应用内对话面板
-- ✅ Agent 离线规则路由（7 类意图）+ NDJSON 审计（凭据脱敏）；`SMOKE_AGENT_NL_OK intents=7 tools=22 audit=3 ctx=616`、`SMOKE_MACHINE_DESIGN_OK stations=3 actuators=6 sensors=3 warnings=2 form=linear-4`、`SMOKE_MACHINE_CYCLE_OK mode=cell throughput=32 meets=1`、`SMOKE_MACHINE_TEMPLATES_OK templates=5 clarify=1 multi=1`
-- ✅ 侧栏只读问答 UI：计划预览（只读标可离线 / 写操作标需联网并点名缺参）+ 在线离线统一回执 + 审计面板；`SMOKE_AGENT_READONLY_UI_OK preview=2 offline=1 rows=2`
-- ✅ 数据包懒加载：`scan()` 只读 manifest；`listParts` 按分类/包名预过滤后 `loadPack`；`unloadPack` 释放；同 id 跨包去重（内置优先）；`getPartById` 懒建全局索引并解析 `aliasOf`；`metrics()` 暴露 `packLoadMs/loadedPacks/partsLoaded/searchMs`，`diagnose` 输出 `packMetrics`。目标实测：冷启动 ≈5 ms、10 包全量搜索 ≤25 ms、单包最大 159.1 KB。
-- ✅ P7-B 底板放置：`place_component`（坐标/旋转/导轨吸附、越界与重叠告警）+ 撤销回滚；`SMOKE_AGENT_PLACE_OK placed=1 undo=1`
-- ✅ P7-C 多步规划与执行：`planner.ts` 五类离线组合 + 通用拆句、未知工具过滤/拒绝、`executePlan` 写步骤一次确认与失败停止；侧栏计划卡片支持全部/逐步/取消；`SMOKE_AGENT_PLAN_OK steps=3 confirm=1`
-- ✅ Agent 能力迭代 P7-D～P7-N（工具扩展/上下文指代/交互体验/主动建议/流程模板/输出纠错/多轮续跑/去重并行缓存/上下文预算）：21 个工具、单轮 30/30 多轮 6/6 真实模型评测、审计轮转、会话安全策略；详见 NL-AGENT.md 与 BACKLOG-HISTORY.md
-- ✅ 本地知识检索（离线 RAG）：`src/agent/kb/index.ts` 在构建期按标题切分 13 份文档（≤800 字符/块）、附截图索引与元件分类，输出 `kb.json`（≤400 KB，超限保留前 200 块并记录；BACKLOG 只留最近一轮，历史移入不入索引的 BACKLOG-HISTORY.md，单测守 5% 余量）；`search.ts` 用中文 2-gram + 英文词与简化 BM25/IDF 检索，top 3、无命中返回空、注入 ≤2 KB；工具 `search_docs` 与机型方案 `design_machine` 均为只读，加写工具后总数 21（只读 11 + 写 10，含运动件识别 `suggest_kinematics`），MCP/RPC/UI 共用注册表；`npm run kb:build` 重建，单测比对标题 hash 防止文档改动未重建；`SMOKE_AGENT_KB_OK docs=13 chunks=354 query=D2 hits=1`
-- ✅ 机型方案落盘与联动：`apply_machine_design` 支持 `brief` / 完整 `design` 二选一，校验后写 `userData/machine/<id>.json` 与 `active.json`；默认追加 BOM 行（来源 `machine-design`、缺型号写「模型待定」），可选生成 `exports/plc/<id>/io-map.csv`；渲染层重建 3D 配置，`undo_last` 恢复上一 active 方案、BOM 批次与 PLC 文件；`SMOKE_MACHINE_APPLY_OK machine=design-screw-3st stations=3 bom=5 undo=1`
-- ✅ 整机形态库：`forms.ts` 定义 `dial-6` / `dial-8` / `linear-4` / `linear-8` / `gantry-2` / `dual-lane` / `gantry-4` / `hybrid-dial-linear` / `cell-4` / `linear-12` / `dial-12` 十一种形态，`pickForm` 先把需求夹紧到形态能力再预演，按「覆盖且达标 → 仅覆盖 → 仅达标（确无覆盖时）→ 全量按工位距离」四档选型，返回两条备选与产能缺口 warning；`synthMachine` 用形态 layout/分度/转移/lanes 参数建 FlowModel，按夹紧后的工位数生成配置，几何按 `form.geometry` 生成 dial/linear/gantry/dual/hybrid/cell，落盘写 `form.id`；`SMOKE_MACHINE_FORMS_OK forms=11 picked=dial-12 meets=1`
-- ✅ 迭代 34 机型参数化几何：纯函数 `generateMachineGeometry` 由 `MachineConfig` / `MachineDesign` 生成带 mm 尺寸的整机（分度转盘 / 直线输送 / 龙门 / 双轨 / 单工位），运动件带轴向/行程/点位元数据；3D 联调改为渲染该几何并按 `MachineMotion` 驱动；`apply_machine_design` 默认落盘 geometry.json / model.stl / model.gltf / sidecar-assembly.json，`withSolids` 在 build123d 内核就绪时实体化为 STEP、否则回退 TS 网格；`SMOKE_MACHINE_GEOMETRY_OK layout=linear parts=56 axes=6 envelope=1680x740x1177 chunks=2 scene=56`
-- ✅ 主视口可旋转 3D（35-orbit-view）：`src/orbit/` 注入扩展替换原型装配/干涉视口的固定等轴测（原型零改动）；轨道/缩放/平移、前/顶/右/等轴测、透视↔正交、适合（F）、树↔3D 选择同步、属性编辑（原型缸径/行程 + 桌面版尺寸/位置）沿叠放链改几何、干涉视图问题件高亮 + 剖切裁剪 + 包围盒初筛叠加；WebGL 不可用保留原型 SVG。38 条单测；`SMOKE_ORBIT_VIEW_OK mode=fallback parity=1 pick=1 group=3 bore=40→32 stack=+4 hits=1`；WebGL 路径 `npm run check:orbit-webgl` → `ORBIT_WEBGL_OK`
-- ✅ 机型设计完整案例：六工位锁螺丝机真实解析出 6 工位 / 12 执行机构 / 7 传感器 / 19 点位；按 `dual-lane` 双轨 `cell` 模型，单轨 3.18 秒/件 + 0.60 秒转移、两轨并行后 31.75 件/分钟，满足 20 件/分钟（余量 1.59 倍）；BOM 映射 12 行真实型号（安全光栅初选 F3SG-4SRA0640-14），电气余量均 ≥1.25 倍；新增 CAD 侧栏 BOM / IO 点位页签与 `npm run screenshots:machine` 全流程截图
-- ⏳ 真实 PLC 联调、代码签名、设计同步服务端接口
+> 逐轮验证数字见 [STATUS.md](./STATUS.md)；历史迭代明细已移入 [BACKLOG-HISTORY.md](./BACKLOG-HISTORY.md)，本处只留能力目录。
+
+- ✅ 基线：`main` 上 `npx tsc --noEmit` 0 错误、`npm test` 1967/1967、`npm run build:ext` + xvfb smoke 收尾 `SMOKE_OK`、`npm run eval:agent` 109/109（工具选择率 1.00）。
+- ✅ 设计域：五步向导（`src/design/`：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核/保存工程）；机型方案合成与落盘、11 种整机形态库、参数化整机几何、通用实体建模 `build_machine_model`、标准件拖拽吸附。详见 [DESIGN-WIZARD.md](./DESIGN-WIZARD.md) / [MACHINE-DESIGN.md](./MACHINE-DESIGN.md)。
+- ✅ 几何与视口：STEP/IGES/STL/GLTF 解析（STEP 实测 18 零件 / 5,040 面 / 559 ms）、可旋转/正交/剖切视口、运动学标注、参数化特征树（build123d sidecar）、WebGL 降级。
+- ✅ 电气与电柜：按工程 BOM 出原理图（电路模型 + ERC + 拓扑布局 + A3 渲染，不可交付时图上直接列问题）、线号/功率/截面/断路器校验、底板毫米画布与导轨碰撞、利用率。
+- ✅ 控制：PLC 生成 P8-1～P8-4（预检 / IO 变量表 / 序列·报警·安全 FC / zip / 历史）+ 内置模拟验证；仿真、Modbus TCP、通电联调；OPC UA / MQTT 适配器（仅 SecurityPolicy=None）。
+- ✅ 数据与成本：10 个内置包（启动只读 manifest、按需 `loadPack`、跨包去重）+ 用户 ZIP 导入；价格簿数据包 + 纯函数成本引擎（缺价如实报、示例价自动排除）；五种导出（PDF / DXF / GLB / OBJ / BOM）。
+- ✅ Agent：离线规则路由 7 类意图 + 多步规划 + 写操作确认/撤销 + NDJSON 审计 + 上下文指代 + 离线知识检索（`kb.json`）；工具清单与数量以 `desktop/src/agent/tools.ts` 注册表为准，MCP / RPC / UI 共用。
+- ✅ 可选模块门控（`elec.validation` / `cost.estimation` / `commission.io-test` / `factory.plc-sync` / `cad.parametric-import` / `project.portable` / `system.update` 等）默认启用，关闭时 UI、IPC、Agent、副作用入口一并 fail-closed。
+- ⏳ 未完成/未实测：真实 PLC 联调、Windows Authenticode 签名、设计同步服务端部署（生产 221 未确认）、向导保存后 `__AgentBridge.getScene().parts` 仍为 0（见 BACKLOG 待修项）。
 
 ## 参数化建模（P9）
 
@@ -114,6 +101,13 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - `desktop/src/cad/viewer.ts`：参数化重建后的 STL 载入、旧模型半透明幽灵层（可开关）、特征包围盒高亮
 - `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet；可选 `instances` 多实体独立建模后按 transform 合并）
 - 内核选型与分期见 [PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；实测见 [PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
+
+## FreeCAD 后台任务（工程图第 1 步）
+
+- 分工：build123d sidecar 负责参数化零件/实体化；FreeCAD 1.x 无界面独立进程（`freecadcmd`，LGPL，可选安装）负责 TechDraw 工程图，之后接钣金展开 DXF 与 FEM。两份 OCCT 不进同一 Python 进程，只用 STEP 文件中转；特征树 JSON 是唯一主数据，STEP/PDF/DXF 都是产物。
+- `desktop/electron/freecad.ts`：探测（设置路径 → `AUTOMATIONCAD_FREECAD_CMD` → `C:\Program Files\FreeCAD 1.x\bin\freecadcmd.exe` 等 → PATH）、`--version` ≥ 1.0、串行作业队列（超时/取消/进程树清理/stderr 尾部/临时目录必清）。
+- `desktop/electron/drawings-service.ts` + `drawings-ipc.ts`：逐件 STEP、工程目录 `drawings/manifest.json`（指纹 + STEP SHA-256）、受信 IPC（renderer 不传路径）。
+- `spike/freecad/techdraw_job.py`：A4/A3 自动、GB 比例系列、第一角投影主/俯/左 + 轴测、外形总尺寸、国标标题栏；PDF（Qt）/DXF（TechDraw + 图框标题栏）/SVG。协议与过期判定见 `desktop/src/drawings/`，细节见 [FREECAD-DRAWINGS.md](FREECAD-DRAWINGS.md)。
 
 ## Agent 能力报告（汇报）
 

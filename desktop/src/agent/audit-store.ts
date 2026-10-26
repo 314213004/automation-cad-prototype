@@ -117,7 +117,10 @@ function fileSize(path: string): number {
   try {
     return statSync(path).size;
   } catch (error) {
-    console.warn('[AUDIT_FILE_STAT_FAILED]', { site: 'desktop/src/agent/audit-store.ts', file: path }, error);
+    // 首次写入前文件本来就不存在：ENOENT 是正常路径，不该刷错误日志（真机曾刷出一整屏堆栈）
+    if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn('[AUDIT_FILE_STAT_FAILED]', { site: 'desktop/src/agent/audit-store.ts', file: path }, error);
+    }
     return 0;
   }
 }

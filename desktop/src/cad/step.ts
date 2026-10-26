@@ -1,5 +1,6 @@
 import occtimportjs, { type OcctModule, type OcctNode } from 'occt-import-js';
 import type { CadImportResult, CadMeshData } from '../shared/types';
+import { readablePartNames } from './part-naming.ts';
 
 export interface ParseOcctOptions {
   wasmUrl?: string;
@@ -93,13 +94,37 @@ export async function parseOcctBuffer(
     throw new Error(`CAD 解析失败：${fileName}`);
   }
 
+  // 先按网格自身顶点算包围盒：通用名（COMPOUND/SOLID/Part…）要用「序号 + 尺寸」替换成可读名
+  const boxes = raw.meshes.map((mesh) => {
+    const values = mesh.attributes.position.array;
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    for (let i = 0; i + 2 < values.length; i += 3) {
+      const x = values[i] ?? 0, y = values[i + 1] ?? 0, z = values[i + 2] ?? 0;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (z < minZ) minZ = z;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (z > maxZ) maxZ = z;
+    }
+    const finite = Number.isFinite(minX) && Number.isFinite(maxX);
+    return {
+      name: typeof mesh.name === 'string' ? mesh.name : '',
+      sizeMm: (finite
+        ? [maxX - minX, maxY - minY, maxZ - minZ]
+        : [0, 0, 0]) as [number, number, number]
+    };
+  });
+  const names = readablePartNames(boxes);
+
   const meshes: CadMeshData[] = raw.meshes.map((mesh, index) => {
     const positions = toFloat32Array(mesh.attributes.position.array);
     const normalValues = mesh.attributes.normal?.array;
     const normals = normalValues && normalValues.length > 0 ? toFloat32Array(normalValues) : null;
     const indices = toIndexArray(mesh.index.array, positions.length / 3);
     return {
-      name: mesh.name || `零件 ${index + 1}`,
+      name: names[index] ?? `零件-${String(index + 1).padStart(2, '0')}`,
       positions,
       normals,
       indices,

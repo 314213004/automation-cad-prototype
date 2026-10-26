@@ -74,6 +74,18 @@ export interface FormPick {
 export interface FormPickOptions {
   stationCount?: number;
   cyclePerMin?: number;
+  /** 强制指定形态：供方案对比生成固定候选；仍走同一套流程预演与告警。 */
+  formId?: string;
+}
+
+export interface FormCandidate {
+  form: MachineForm;
+  evaluation: FlowEvaluation;
+  stations: number;
+  score: number;
+  inRange: boolean;
+  processFit: boolean;
+  layoutFit: boolean;
 }
 
 export interface MachineFormSummary {
@@ -640,6 +652,7 @@ export function pickForm(
 ): FormPick {
   const stations = options.stationCount ?? brief.stations;
   const cyclePerMin = options.cyclePerMin ?? brief.cyclePerMin ?? 10;
+  const forcedId = options.formId?.trim();
   const intended = preferredLayout(brief);
   const previewable = MACHINE_FORMS.filter((form) => form.layout !== 'single');
   const formMatchesLayout = (form: MachineForm): boolean =>
@@ -683,7 +696,9 @@ export function pickForm(
     if (covering.length > 0) return compareCoveringGap(left, right, cyclePerMin);
     return compareByStationDistance(left, right);
   });
-  const chosen = ranked[0] as Candidate;
+  const forced = forcedId ? allCandidates.find((candidate) => candidate.form.id === forcedId) : undefined;
+  if (forcedId && !forced) throw new Error(`未知整机形态：${forcedId}`);
+  const chosen = (forced ?? ranked[0]) as Candidate;
   const noCoverage = !chosen.inRange;
 
   const missingCapacity = chosen.evaluation.meetsTarget === false
@@ -742,6 +757,41 @@ export function pickForm(
     evaluation: chosen.evaluation,
     stations: chosen.previewStations
   };
+}
+
+/** 与 pickForm 共用预演和排序口径，用于向导候选补位。 */
+export function rankForms(
+  brief: MachineBrief,
+  templates: Record<string, MachineTemplate> = {},
+  options: FormPickOptions = {}
+): FormCandidate[] {
+  const pick = pickForm(brief, templates, options);
+  const stations = options.stationCount ?? brief.stations;
+  const cyclePerMin = options.cyclePerMin ?? brief.cyclePerMin ?? 10;
+  const intended = preferredLayout(brief);
+  const candidates = MACHINE_FORMS.filter((form) => form.layout !== 'single').map((form) => {
+    const previewStations = clampStations(stations, form);
+    const evaluation = evaluateFlow(previewModel(brief, form, previewStations, cyclePerMin, templates));
+    return {
+      form,
+      evaluation,
+      stations: previewStations,
+      score: scoreCandidate(form, stations, previewStations, brief.process, intended, evaluation, cyclePerMin),
+      inRange: stations >= form.stationRange[0] && stations <= form.stationRange[1],
+      processFit: brief.process === 'unknown' || form.suits.includes(brief.process),
+      layoutFit: intended === 'single' ? form.layout === 'parallel' : form.layout === intended
+    };
+  });
+  candidates.sort((left, right) => {
+    if (left.form.id === pick.form.id) return -1;
+    if (right.form.id === pick.form.id) return 1;
+    if (left.processFit !== right.processFit) return left.processFit ? -1 : 1;
+    if (left.inRange !== right.inRange) return left.inRange ? -1 : 1;
+    if (left.evaluation.meetsTarget !== right.evaluation.meetsTarget) return left.evaluation.meetsTarget ? -1 : 1;
+    if (left.layoutFit !== right.layoutFit) return left.layoutFit ? -1 : 1;
+    return right.score - left.score;
+  });
+  return candidates;
 }
 
 /** 供 design_machine / 落盘 / 方案卡使用的紧凑形态记录。 */

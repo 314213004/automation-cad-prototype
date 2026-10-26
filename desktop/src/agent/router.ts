@@ -172,6 +172,17 @@ export function isMachineDesignRequest(text: string): boolean {
 }
 
 /** 机型方案落盘请求：需要已有 design（通常来自上一轮 design_machine）。 */
+/** 生成整机实体模型（内核逐件导出）而非合成方案/落盘工程。 */
+export function isMachineModelRequest(text: string): boolean {
+  const value = (text ?? '').trim();
+  if (!value) return false;
+  const modelVerb = /(?:建成|生成|建|做|出).{0,6}(?:实体|三维|3d|模型)|实体模型|三维模型|3d\s*模型/i.test(value);
+  const scope = /(?:整机|机型|机器|设备|输送机|工位|当前)/.test(value);
+  // 与 apply_machine_design（落盘工程）区分：出现「应用/写入/落地/保存」交给 apply 规则
+  const apply = /应用|落地|套用|写入|保存|导入|下发/.test(value);
+  return modelVerb && scope && !apply;
+}
+
 export function isMachineApplyRequest(text: string): boolean {
   const value = (text ?? '').trim();
   if (!value) return false;
@@ -264,6 +275,10 @@ export const WRITE_TOOLS = new Set([
   'apply_machine_design',
   // 会替换当前视口里的模型（虽然不写工程文件），仍需确认
   'build_machine_model',
+  // 写工程文件（画布方案 → 示意装配工程），需要确认
+  'build_canvas_assembly',
+  // 把当前视口模型逐件存成工程（导入模型落库），需要确认
+  'save_scene_as_project',
   'import_cad',
   'insert_component',
   'place_component',
@@ -618,6 +633,17 @@ function planToolBase(text: string): ToolPlan | null {
       why: '先预检再生成，并用内置模拟器跑联调序列（不落盘、不写 PLC）'
     };
   }
+  // 「把当前机型建成实体模型」= 走参数化内核出真实实体并装配进视口（写视口、不写工程）
+  if (isMachineModelRequest(value)) {
+    return {
+      tool: 'build_machine_model',
+      args: {},
+      readOnly: false,
+      missing: [],
+      why: '按当前机型参数生成整机实体模型并装配进视口（需确认；只改视口，不写工程文件）'
+    };
+  }
+
   const match = routeIntent(value);
   if (match.intent === 'out_of_scope') return null;
   // 联调/同步工具尚未注册：规则层只能明确说「暂不支持」，不能降级成搜索元件。

@@ -75,7 +75,7 @@ export function initInterferencePanel(options: InterferencePanelOptions): Interf
 
   const render = (): void => {
     list.innerHTML = hits.length === 0
-      ? `<div class="cad-interference-empty">${currentParts.length < 2 ? '当前模型零件不足 2 件' : '未发现包围盒级干涉'}</div>`
+      ? `<div class="cad-interference-empty">${currentParts.length < 2 ? '当前模型零件不足 2 件' : '未发现包围盒级碰撞候选（AABB 初筛，不代表无干涉；螺栓联接/轴孔配合等正常叠层本来就重叠）'}</div>`
       : hits.map((hit, index) => `<div class="cad-interference-hit" data-hit-index="${index}" data-severity="${hit.severity}" tabindex="0" role="button">
           <span class="cad-hit-sev">${severityLabel(hit.severity)}</span>
           <span class="cad-hit-name">${escapeText(hit.a)} ↔ ${escapeText(hit.b)}</span>
@@ -110,7 +110,11 @@ export function initInterferencePanel(options: InterferencePanelOptions): Interf
   options.container.querySelector('[data-interference-run]')?.addEventListener('click', () => {
     try {
       const result = run();
-      options.notify(result.length > 0 ? `干涉检测完成：${result.length} 处候选` : '干涉检测完成：未发现候选');
+      options.notify(
+        result.length > 0
+          ? `干涉初筛完成：${result.length} 处疑似（AABB），需人工确认`
+          : '干涉初筛完成：未发现疑似（AABB 初筛，不代表无干涉）'
+      );
     } catch (error) {
       // run() 已给出中文提示。
       console.warn(`[INTERFERENCE_UI_RUN_FAILED]`, { site: 'desktop/src/mech/interference-ui.ts:114' }, error);

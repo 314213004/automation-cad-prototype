@@ -55,8 +55,8 @@
           "name": "工位1夹爪1",
           "kind": "gripper",
           "station": "工位1",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST1-GRIP-A1",
           "position": [
             0.05,
@@ -69,8 +69,8 @@
           "name": "工位1旋转轴2",
           "kind": "rotary",
           "station": "工位1",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST1-ROT-A2",
           "position": [
             0.76,
@@ -83,8 +83,8 @@
           "name": "工位2夹爪1",
           "kind": "gripper",
           "station": "工位2",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST2-GRIP-A1",
           "position": [
             0.05,
@@ -97,8 +97,8 @@
           "name": "工位2旋转轴2",
           "kind": "rotary",
           "station": "工位2",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST2-ROT-A2",
           "position": [
             0.76,
@@ -111,8 +111,8 @@
           "name": "工位3夹爪1",
           "kind": "gripper",
           "station": "工位3",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST3-GRIP-A1",
           "position": [
             0.05,
@@ -125,8 +125,8 @@
           "name": "工位3旋转轴2",
           "kind": "rotary",
           "station": "工位3",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST3-ROT-A2",
           "position": [
             0.76,
@@ -139,8 +139,8 @@
           "name": "工位4夹爪1",
           "kind": "gripper",
           "station": "工位4",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST4-GRIP-A1",
           "position": [
             0.05,
@@ -153,8 +153,8 @@
           "name": "工位4旋转轴2",
           "kind": "rotary",
           "station": "工位4",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST4-ROT-A2",
           "position": [
             0.76,
@@ -167,8 +167,8 @@
           "name": "工位5夹爪1",
           "kind": "gripper",
           "station": "工位5",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST5-GRIP-A1",
           "position": [
             0.05,
@@ -181,8 +181,8 @@
           "name": "工位5旋转轴2",
           "kind": "rotary",
           "station": "工位5",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST5-ROT-A2",
           "position": [
             0.76,
@@ -195,8 +195,8 @@
           "name": "工位6夹爪1",
           "kind": "gripper",
           "station": "工位6",
-          "travelMm": 20,
           "durationMs": 280,
+          "travelMm": 20,
           "gripPoint": "ST6-GRIP-A1",
           "position": [
             0.05,
@@ -209,8 +209,8 @@
           "name": "工位6旋转轴2",
           "kind": "rotary",
           "station": "工位6",
-          "travelMm": 90,
           "durationMs": 700,
+          "rotationRangeDeg": 90,
           "point": "ST6-ROT-A2",
           "position": [
             0.76,
@@ -285,6 +285,7 @@
       "secondsPerPiece": 3,
       "stationSeconds": 3.18,
       "throughputPerMin": 31.75,
+      "partsPerMinute": 31.75,
       "estimatedSecondsPerPiece": 3.18,
       "baseSeconds": 2.2,
       "slowestStation": 1,
@@ -354,10 +355,20 @@
         "整机连接负载 4662.88 W；经系数折算为输入有功 2176.011 W。"
       ],
       "warnings": [
-        "夹爪缺少额定功率（MHZ2-20D × 6），按类别默认 15 W/件估算。",
-        "传感器缺少额定功率（D-M9B × 6），按类别默认 3 W/件估算。",
-        "电磁阀缺少额定功率（SY5120-5LZD × 6），按类别默认 4 W/件估算。",
-        "PLC缺少额定功率（CP1E-N40DR-A × 1），按类别默认 25 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "夹爪缺少额定功率（smc-cn:MHZ2-20D × 1），按类别默认 15 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "传感器缺少额定功率（smc-cn:D-M9B × 1），按类别默认 3 W/件估算。",
+        "电磁阀缺少额定功率（smc-cn:SY5120-5LZD × 6），按类别默认 4 W/件估算。",
+        "PLC缺少额定功率（iec-cn:CP1E-N40DR-A × 1），按类别默认 25 W/件估算。",
         "已选总进线断路器 16 A 对计算电流 3.673 A 余量 335.6% 超过 60%，可评估降一档。"
       ],
       "voltage": "380VAC",
@@ -1555,32 +1566,32 @@
         "name": "15-machine-design-card.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 506033,
-        "uniqueColors": 7496
+        "bytes": 193039,
+        "uniqueColors": 3236
       },
       {
         "label": "6 工位 3D 联调",
         "name": "16-machine-3d.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 442019,
-        "uniqueColors": 7943
+        "bytes": 193039,
+        "uniqueColors": 3236
       },
       {
         "label": "BOM 真实型号",
         "name": "17-machine-bom.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 138299,
-        "uniqueColors": 2600
+        "bytes": 193039,
+        "uniqueColors": 3236
       },
       {
         "label": "PLC IO 点位",
         "name": "18-machine-iomap.png",
         "width": 1600,
         "height": 1000,
-        "bytes": 129433,
-        "uniqueColors": 2737
+        "bytes": 193039,
+        "uniqueColors": 3236
       }
     ]
   }

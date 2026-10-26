@@ -2,10 +2,37 @@ import { BOM_HEADERS, type BomRow } from './bom.ts';
 import type { InterferenceHit } from '../mech/interference';
 import type { StressResult } from '../mech/stress';
 import type { CommissionReport } from '../commission/types.ts';
+import type { ProjectGeometryReview } from '../design/geometry-review.ts';
+
+export interface ReportStationCycleRow {
+  stationName: string;
+  seconds: number | null;
+  sourceLabel: string;
+  verificationLabel: string;
+  state: 'pending-measurement' | 'invalid' | 'not-entered';
+  bottleneck: boolean;
+}
+
+export interface ReportStationCycle {
+  calculationSource: 'engineer-input' | 'model-estimate';
+  calculationSourceLabel: string;
+  inputStatusLabel: string;
+  throughputPerMin: number;
+  cycleSeconds: number;
+  targetPerMin: number;
+  bottleneckLabel: string;
+  explanation: string;
+  stations: readonly ReportStationCycleRow[];
+}
 
 export interface ReportStressConclusion {
   name: string;
   result: StressResult;
+}
+
+export interface ReportEngineeringNotes {
+  assumptions: readonly string[];
+  warnings: readonly string[];
 }
 
 export interface ReportData {
@@ -19,6 +46,9 @@ export interface ReportData {
   interference: readonly InterferenceHit[];
   stress: readonly ReportStressConclusion[];
   commission?: CommissionReport;
+  stationCycle?: ReportStationCycle;
+  engineeringNotes?: ReportEngineeringNotes;
+  geometryReview?: ProjectGeometryReview;
   note?: string;
 }
 
@@ -42,14 +72,31 @@ export function renderReportHtml(data: ReportData): string {
     <td class="num">${escapeHtml(row.index)}</td><td>${escapeHtml(row.name)}</td><td class="mono">${escapeHtml(row.model)}</td>
     <td class="num">${escapeHtml(row.quantity)}</td><td>${escapeHtml(row.material)}</td><td>${escapeHtml(row.note ?? '')}</td>
   </tr>`).join('');
-  const hitRows = data.interference.length > 0
+  const hitRows = data.geometryReview?.status === 'not-executed'
+    ? '<tr><td colspan="5" class="empty">未执行/未验证：当前没有可检查的 CAD 几何；不得解释为无干涉或校核通过</td></tr>'
+    : data.interference.length > 0
     ? data.interference.map((hit, index) => `<tr>
         <td class="num">${index + 1}</td><td><span class="sev ${hit.severity}">${severityLabel[hit.severity] ?? hit.severity}</span></td>
         <td>${escapeHtml(hit.a)} ↔ ${escapeHtml(hit.b)}</td>
         <td class="mono">${hit.overlap.map((value) => value.toFixed(2)).join(' × ')} mm</td>
         <td class="mono">${hit.volumeApprox.toFixed(1)} mm³</td>
       </tr>`).join('')
-    : '<tr><td colspan="5" class="empty">未发现包围盒级干涉</td></tr>';
+    : data.geometryReview?.status === 'aabb-screened'
+      ? '<tr><td colspan="5" class="empty">本次包围盒级初筛未发现干涉；不等同于 B-rep 精检或工程签核</td></tr>'
+      : '<tr><td colspan="5" class="empty">未发现包围盒级干涉</td></tr>';
+  const geometryReviewSection = data.geometryReview
+    ? data.geometryReview.status === 'not-executed'
+      ? '<section class="geometry-review-state unverified" role="note"><b>3D/干涉校核未执行/未验证 · 概念版</b><p>当前没有可检查的 CAD 几何。未执行不能解释为无干涉、校核通过或型号级实体验证；向导生成的 STL 仅为概念估算占位体。导出文件不代表验收或发布。</p></section>'
+      : `<section class="geometry-review-state screened" role="note"><b>初步版：仅完成包围盒级干涉初筛（${data.geometryReview.partCount} 件）</b><p>来源：${escapeHtml(data.geometryReview.sourceName ?? '当前主视口几何')}。此结果不代表 B-rep 精检、型号级 CAD 验证或工程签核；导出文件不代表验收或发布。</p></section>`
+    : '';
+  const engineeringNotesSection = data.engineeringNotes
+    ? `<h2>CAD 几何假设与工程警告</h2>
+  <p class="engineering-notes-lead">几何精度：概念估算占位体；选型型号未必已反映在三维包络中。安装与制造前请按厂商样本或实际模型复核。</p>
+  <div class="engineering-notes-grid">
+    <section><h3>设计假设</h3><ul>${data.engineeringNotes.assumptions.map((line) => `<li>${escapeHtml(line)}</li>`).join('') || '<li>无</li>'}</ul></section>
+    <section class="engineering-warnings"><h3>需复核警告</h3><ul>${data.engineeringNotes.warnings.map((line) => `<li>${escapeHtml(line)}</li>`).join('') || '<li>无</li>'}</ul></section>
+  </div>`
+    : '';
   const stressCards = data.stress.length > 0
     ? data.stress.map(({ name, result }) => `<article class="stress-card ${result.pass ? 'pass' : 'fail'}">
         <header><b>${escapeHtml(name)}</b><span>${result.pass ? '通过' : '不通过'}</span></header>
@@ -58,6 +105,35 @@ export function renderReportHtml(data: ReportData): string {
         <dl>${result.outputs.map((output) => `<div><dt>${escapeHtml(output.label)}</dt><dd>${escapeHtml(output.value)} ${escapeHtml(output.unit)}</dd></div>`).join('')}</dl>
       </article>`).join('')
     : '<p class="empty">尚未运行受力分析。</p>';
+  const stationCycleSection = data.stationCycle
+    ? `<h2>工位周期输入与产能依据</h2>
+  <section class="cycle-meta">
+    <div><span>产能依据</span><b>${escapeHtml(data.stationCycle.calculationSourceLabel)}</b></div>
+    <div><span>输入状态</span><b>${escapeHtml(data.stationCycle.inputStatusLabel)}</b></div>
+    <div><span>整机节拍</span><b>${Number.isFinite(data.stationCycle.cycleSeconds) ? data.stationCycle.cycleSeconds.toFixed(2) : '—'} 秒/件</b></div>
+    <div><span>计算产能</span><b>${Number.isFinite(data.stationCycle.throughputPerMin) ? data.stationCycle.throughputPerMin.toFixed(2) : '—'} 件/分钟</b></div>
+    <div><span>目标产能</span><b>${Number.isFinite(data.stationCycle.targetPerMin) ? escapeHtml(data.stationCycle.targetPerMin) : '—'} 件/分钟</b></div>
+  </section>
+  <p class="cycle-explanation">${escapeHtml(data.stationCycle.explanation)}</p>
+  <p class="cycle-bottleneck"><b>${escapeHtml(data.stationCycle.bottleneckLabel)}</b></p>
+  <table class="cycle-table">
+    <thead><tr><th>工位</th><th>完整周期（秒/件）</th><th>输入来源</th><th>验证状态与计算用途</th></tr></thead>
+    <tbody>${data.stationCycle.stations.map((station) => {
+      const seconds = station.seconds === null
+        ? '—'
+        : Number.isFinite(station.seconds)
+          ? station.seconds.toFixed(2)
+          : '无效值（非有限数）';
+      const severity = station.state === 'pending-measurement' ? 'info' : 'warning';
+      return `<tr class="${station.bottleneck ? 'cycle-bottleneck-row' : ''}">
+        <td>${escapeHtml(station.stationName)}${station.bottleneck ? ' <span class="sev warning">瓶颈</span>' : ''}</td>
+        <td class="mono">${escapeHtml(seconds)}</td>
+        <td>${escapeHtml(station.sourceLabel)}</td>
+        <td><span class="sev ${severity}">${escapeHtml(station.verificationLabel)}</span></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" class="empty">无工位周期输入</td></tr>'}</tbody>
+  </table>`
+    : '';
   const commissionRows = data.commission
     ? data.commission.powerUp.results.map((result) => `<tr>
         <td>${escapeHtml(result.name)}</td><td><span class="sev ${result.pass ? 'info' : 'error'}">${result.pass ? '通过' : '失败'}</span></td>
@@ -108,6 +184,26 @@ export function renderReportHtml(data: ReportData): string {
   .meta div { border: .25mm solid #c9d1d7; padding: 2.5mm 3mm; background: #f7fafb; }
   .meta span { display: block; color: #71808a; font-size: 8pt; }
   .meta b { font-size: 10pt; }
+  .cycle-meta { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2mm; margin: 3mm 0 2mm; }
+  .cycle-meta div { border: .25mm solid #c9d1d7; padding: 2mm 2.5mm; background: #f7fafb; }
+  .cycle-meta span { display: block; color: #71808a; font-size: 7.5pt; }
+  .cycle-meta b { font-size: 9pt; }
+  .cycle-explanation,.cycle-bottleneck { margin: 1.5mm 0; font-size: 8.5pt; }
+  .cycle-explanation { color: #52616b; }
+  .cycle-bottleneck { color: #14534c; }
+  .cycle-table { margin: 2mm 0 4mm; }
+  .cycle-bottleneck-row td { background: #fff4d6 !important; }
+  .engineering-notes-lead { margin: 2mm 0; padding: 2mm 3mm; border-left: 1mm solid #c58a19; background: #fff8e8; }
+  .engineering-notes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; }
+  .engineering-notes-grid section { border: .25mm solid #c9d1d7; padding: 2mm 3mm; break-inside: avoid; }
+  .engineering-notes-grid h3 { margin: 0 0 1mm; font-size: 9pt; }
+  .engineering-notes-grid ul { margin: 0; padding-left: 5mm; font-size: 8pt; }
+  .engineering-warnings { background: #fff8f7; border-color: #e6b4ad !important; }
+  .geometry-review-state { margin: 4mm 0; padding: 3mm 4mm; border: .4mm solid #c58a19; background: #fff8e8; break-inside: avoid; }
+  .geometry-review-state b { display: block; font-size: 11pt; }
+  .geometry-review-state p { margin: 1.5mm 0 0; }
+  .geometry-review-state.unverified { border-color: #bd665d; background: #fff3f1; color: #78251e; }
+  .geometry-review-state.screened { border-color: #c58a19; background: #fff8e8; color: #66470f; }
   table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
   th { background: #e8f2f0; color: #14534c; text-align: left; }
   th, td { border: .25mm solid #bac5cc; padding: 1.6mm 2.2mm; vertical-align: top; }
@@ -151,6 +247,9 @@ export function renderReportHtml(data: ReportData): string {
     <thead><tr>${BOM_HEADERS.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
     <tbody>${bomRows || `<tr><td colspan="6" class="empty">BOM 为空</td></tr>`}</tbody>
   </table>
+  ${engineeringNotesSection}
+  ${geometryReviewSection}
+  ${stationCycleSection}
   <h2>干涉检查（包围盒级）</h2>
   <table>
     <thead><tr><th>序号</th><th>级别</th><th>零件对</th><th>三轴重叠</th><th>近似重叠体积</th></tr></thead>

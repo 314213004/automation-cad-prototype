@@ -87,6 +87,15 @@ preload.ts → contextBridge 暴露 window.desktop（只转 IPC，无业务逻�
 
 安全边界：token 只存在于主进程内存；子进程 stdout 丢弃；IPC 的 `parametric:start` 在返回前剥离 `port` / `token`；`ipc.ts` 只广播状态，构建结果由主进程代发。
 
+## freecad.ts / drawings-service.ts / drawings-ipc.ts（FreeCAD 后台任务）
+
+职责：调用用户可选安装的 FreeCAD 1.x（`freecadcmd`，LGPL，独立进程）执行后台任务；本轮为零件工程图（TechDraw）。
+
+- `freecad.ts`（不依赖 electron，可单测）：`freecadCandidates()` 按「设置路径 → `AUTOMATIONCAD_FREECAD_CMD` → `Program Files\FreeCAD 1.x\bin\freecadcmd.exe`（新版本优先）/ `%LOCALAPPDATA%\Programs` → PATH」排序；`probeFreecad()` 跑 `--version` 要求 ≥ 1.0；`FreecadRunner` 串行队列：每个作业独立临时目录（`in/` STEP 副本 + SHA-256、`out/` 产物、`job.json`），通过环境变量 `AUTOMATIONCAD_FREECAD_JOB` 传作业路径，解析 stdout `@@ACAD {json}` 进度行，stderr 64 KB 环形缓冲，超时（120 s + 60 s/件，上限 30 min）与取消都杀进程树，结束必删临时目录（`AUTOMATIONCAD_FREECAD_KEEP_TEMP=1` 调试保留）。结果只采信作业约定文件名，PDF 缺失时调用注入的 `svgToPdf` 兜底。
+- `drawings-service.ts`（不依赖 electron）：特征树 → `planDrawingParts`（同 partId 一张图）→ 逐件让参数化内核导出单件 STEP → 入队 → 产物写工程目录（命中工程库 `projects/<id>/project.json` 时为 `projects/<id>/drawings/`，否则 `userData/drawings/<slug-hash>/`）→ `manifest.json`（指纹、几何哈希、STEP 哈希、FreeCAD 版本）。失败零件保留旧图并记 `lastError`。
+- `drawings-ipc.ts`：`freecad:status|detect|choose-path|set-path`、`drawings:generate|cancel|jobs|list|open|reveal`，广播 `drawings:job-changed`；全部经 `createTrustedIpcHandler`，模块状态经 `modules:sync-drawings-techdraw-enabled` 同步并在每个副作用前复核。renderer 不传任何文件路径（打开/定位按 projectKey+partKey+format 查清单）；设置只接受绝对路径的 `freecadcmd[.exe]` 且版本探测通过才生效，存 `userData/freecad.json`。SVG→PDF 兜底用隐藏、沙箱、禁 JS 的 BrowserWindow 打印。
+- 打包：`package.json` `extraResources` 登记 `../spike/freecad/techdraw_job.py → freecad/techdraw_job.py`；FreeCAD 本体不随包分发。
+
 ## 自检（参数化 sidecar）
 
 ```bash

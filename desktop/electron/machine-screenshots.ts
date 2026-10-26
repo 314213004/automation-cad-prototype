@@ -63,6 +63,27 @@ async function waitFor(
   if (!ok) throw new Error(`等待超时：${label}`);
 }
 
+/** 同 waitFor，但超时返回 false 而不是抛错——需要在超时时自己诊断的步骤用这个。 */
+async function waitForSoft(
+  window: BrowserWindow,
+  expression: string,
+  timeoutMs = 20_000
+): Promise<boolean> {
+  return await window.webContents.executeJavaScript(
+    `new Promise((resolve) => {
+      const started = Date.now();
+      const check = () => {
+        let value = false;
+        try { value = Boolean(${expression}); } catch { value = false; }
+        if (value) return resolve(true);
+        if (Date.now() - started > ${timeoutMs}) return resolve(false);
+        setTimeout(check, 120);
+      };
+      check();
+    })`
+  ) as boolean;
+}
+
 async function settle(window: BrowserWindow, extraMs = 220): Promise<void> {
   await window.webContents.executeJavaScript(
     `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() =>
@@ -227,6 +248,22 @@ export async function captureMachineScreenshots(
     }
     shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡'));
 
+    // 写操作确认现在是页面卡片：截图脚本无人值守，必须在点「应用」前装自动确认
+    // （只点「允许一次」，不写死 remember；计数回读写进日志，免得看不出到底弹没弹）
+    await window.webContents.executeJavaScript(
+      `(() => {
+        if (window.__machineShotAutoConfirm) return true;
+        const state = { count: 0 };
+        window.__machineShotAutoConfirm = state;
+        const accept = () => {
+          const button = document.querySelector('#acwConfirmMask [data-acw="once"]');
+          if (button) { button.click(); state.count += 1; }
+        };
+        new MutationObserver(accept).observe(document.body, { childList: true, subtree: true });
+        accept();
+        return true;
+      })()`
+    );
     await window.webContents.executeJavaScript(
       `(async () => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -236,15 +273,31 @@ export async function captureMachineScreenshots(
         return true;
       })()`
     );
-    await waitFor(
+    const applied = await waitForSoft(
       window,
       `(() => {
         const pill = document.querySelector('.acp-machine-card .acp-pill.is-ok');
         return pill && (pill.textContent || '').includes('已应用');
       })()`,
-      '机型方案应用完成',
       30_000
     );
+    if (!applied) {
+      // 超时不能只说"等待超时"：把卡片状态/反馈/确认次数都打出来，否则没法判断卡在哪一步
+      const diagnosis = await window.webContents.executeJavaScript(
+        `(() => {
+          const pill = document.querySelector('.acp-machine-card .acp-pill');
+          return {
+            pill: pill ? pill.textContent : '(无 pill)',
+            pillOk: Boolean(document.querySelector('.acp-machine-card .acp-pill.is-ok')),
+            feedback: (document.querySelector('#agentChatFeedback')?.textContent || '').slice(0, 200),
+            confirmMask: Boolean(document.getElementById('acwConfirmMask')),
+            confirms: window.__machineShotAutoConfirm?.count ?? 0,
+            buttonDisabled: document.querySelector('.acp-machine-card [data-apply-machine]')?.disabled ?? null
+          };
+        })()`
+      );
+      throw new Error(`机型方案应用完成超时：${JSON.stringify(diagnosis)}`);
+    }
     const applyState = await window.webContents.executeJavaScript(
       `(() => {
         const pill = document.querySelector('.acp-machine-card .acp-pill.is-ok');
@@ -252,7 +305,10 @@ export async function captureMachineScreenshots(
         return { applied: pill?.textContent || '', feedback };
       })()`
     ) as { applied: string; feedback: string };
-    console.log(`MACHINE_APPLY_OK ${applyState.applied} feedback=${applyState.feedback}`);
+    const confirmCount = await window.webContents.executeJavaScript(
+      `(() => window.__machineShotAutoConfirm?.count ?? 0)()`
+    ) as number;
+    console.log(`MACHINE_APPLY_OK ${applyState.applied} feedback=${applyState.feedback} confirms=${confirmCount}`);
 
     await window.webContents.executeJavaScript(
       `(async () => {

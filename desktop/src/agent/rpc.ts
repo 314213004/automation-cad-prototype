@@ -24,6 +24,8 @@ export interface AgentRpcOptions {
   cdpPort?: number | null;
   /** 主进程缓存的最新渲染指标；/health 读取时按调用取快照。 */
   renderStats?: () => unknown;
+  /** 当前视口零件清单（MCP resources 用）；主进程注入，失败返回空数组。 */
+  sceneParts?: () => Promise<unknown> | unknown;
   audit?: (record: AgentAuditRecord) => void;
   /**
    * 覆盖来源地址解析。默认取 `request.socket.remoteAddress`；
@@ -94,6 +96,28 @@ async function readBody(request: IncomingMessage, limit = 2 * 1024 * 1024): Prom
   });
 }
 
+/** 只读资源清单（MCP resources/list）。URI 固定，读不到就是空集，不猜。 */
+const RESOURCE_LIST = [
+  {
+    uri: 'automationcad://project/current/summary',
+    name: '当前工程摘要',
+    description: '设计域/视图/选中对象/机型概要/底板/单位制/最近操作（get_project_context 同源）',
+    mimeType: 'application/json'
+  },
+  {
+    uri: 'automationcad://project/current/parts',
+    name: '当前视口零件清单',
+    description: '零件名 + 三角面数 + 包围盒；视口为空时返回 []',
+    mimeType: 'application/json'
+  },
+  {
+    uri: 'automationcad://project/current/bom',
+    name: '当前工程 BOM',
+    description: '与 get_bom 工具同源；缺价/缺型号照实标注',
+    mimeType: 'application/json'
+  }
+] as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -109,6 +133,7 @@ export class AgentRpcServer {
   private allowlistValue: string[];
   private cdpPortValue: number | null;
   private readonly renderStats: (() => unknown) | undefined;
+  private readonly sceneParts: (() => Promise<unknown> | unknown) | undefined;
   private readonly audit: ((record: AgentAuditRecord) => void) | undefined;
   private readonly resolveRemoteAddress: ((request: IncomingMessage) => string | undefined) | undefined;
   private server: Server | null = null;
@@ -126,6 +151,7 @@ export class AgentRpcServer {
     this.allowlistValue = [...(options.allowlist ?? [])];
     this.cdpPortValue = options.cdpPort ?? null;
     this.renderStats = options.renderStats;
+    this.sceneParts = options.sceneParts;
     this.audit = options.audit;
     this.resolveRemoteAddress = options.resolveRemoteAddress;
   }
@@ -310,6 +336,11 @@ export class AgentRpcServer {
       let result: unknown;
       if (payload.method === 'tools/list') {
         result = { tools: this.tools.summaries() };
+      } else if (payload.method === 'resources/list') {
+        result = { resources: RESOURCE_LIST };
+      } else if (payload.method === 'resources/read') {
+        const uri = typeof params.uri === 'string' ? params.uri : '';
+        result = await this.readResource(uri);
       } else if (payload.method === 'tools/call') {
         const name = typeof params.name === 'string' ? params.name : '';
         if (!this.tools.has(name)) throw new RpcError(-32601, `工具不存在：${name || '(空)'}`);
@@ -340,6 +371,31 @@ export class AgentRpcServer {
         }
       };
     }
+  }
+
+  /**
+   * MCP resources：让外部 Agent 先读后写。
+   * 只暴露只读投影（工程摘要 / 零件清单 / BOM），不暴露可写句柄；读不到时如实返回空集，不编。
+   */
+  private async readResource(uri: string): Promise<unknown> {
+    if (!RESOURCE_LIST.some((item) => item.uri === uri)) {
+      throw new RpcError(-32602, `资源不存在：${uri || '(空)'}`);
+    }
+    let payload: unknown = null;
+    if (uri === 'automationcad://project/current/summary') {
+      payload = await this.tools.call('get_project_context', {});
+    } else if (uri === 'automationcad://project/current/parts') {
+      payload = typeof this.sceneParts === 'function' ? await this.sceneParts() : [];
+    } else if (uri === 'automationcad://project/current/bom') {
+      payload = await this.tools.call('get_bom', {});
+    }
+    return {
+      contents: [{
+        uri,
+        mimeType: 'application/json',
+        text: JSON.stringify(payload ?? null)
+      }]
+    };
   }
 
   private async callTool(

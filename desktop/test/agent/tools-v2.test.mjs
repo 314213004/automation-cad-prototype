@@ -159,13 +159,13 @@ function toolCall(id, name, args = {}) {
   return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
 }
 
-test('注册表共 23 个工具且包含 v1 新增的 5 个', () => {
+test('注册表共 25 个工具且包含 v1 新增的 5 个', () => {
   const names = tools.list().map((tool) => tool.name);
-  assert.equal(names.length, 23);
+  assert.equal(names.length, 25);
   for (const name of ['get_project_context', 'update_component', 'remove_component', 'run_plc_generate', 'export_files']) {
     assert.ok(names.includes(name), `缺少 ${name}`);
   }
-  assert.equal(new Set(names).size, 23);
+  assert.equal(new Set(names).size, 25);
 });
 
 test('全部工具 schema 完整：object、additionalProperties=false、required 字段存在、中文描述', () => {

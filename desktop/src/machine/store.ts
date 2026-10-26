@@ -6,12 +6,17 @@ import { recordDiagnosticError } from '../shared/diagnostics.ts';
 import { dirname, join } from 'node:path';
 import { validateMachineConfig, type MachineConfig } from '../commission/machine-config.ts';
 import type { MachineBomItem, MachineCycleEstimate, MachinePowerEstimate } from './synth.ts';
+import { normalizeStationGeometryLayout, type StationGeometryLayout } from './station-layout.ts';
+import { baselineStationIdentities, isStationIdentityList, type StationIdentity } from './station-identity.ts';
 import type { PowerResult } from './power.ts';
 import type { MachineCostEstimate } from './cost-model.ts';
 import { MACHINE_FORMS, type MachineFormGeometry, type MachineFormSummary } from './forms.ts';
 
 export interface NormalizedMachineDesign {
   config: MachineConfig;
+  stationIdentities: StationIdentity[];
+  stationGeometryLayout?: StationGeometryLayout;
+  stationGeometryWarning?: string;
   points: string[];
   cycle?: MachineCycleEstimate;
   power?: MachinePowerEstimate;
@@ -204,6 +209,26 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
   if (!isRecord(value)) throw new Error('design 必须是对象');
   if (!isRecord(value.config)) throw new Error('design.config 必须是对象');
   const config = validateMachineConfig(value.config);
+  const stationIdentityMapValid = isStationIdentityList(value.stationIdentities, config.stations.length);
+  const stationIdentities = stationIdentityMapValid
+    ? [...(value.stationIdentities as StationIdentity[])]
+    : baselineStationIdentities(config.id, config.stations.length);
+  let stationGeometryLayout: StationGeometryLayout | undefined;
+  let stationGeometryWarning = typeof value.stationGeometryWarning === 'string' && value.stationGeometryWarning.trim()
+    ? value.stationGeometryWarning.trim().slice(0, 1000)
+    : undefined;
+  if (value.stationGeometryLayout !== undefined) {
+    if (!stationIdentityMapValid && isRecord(value.stationGeometryLayout) && (value.stationGeometryLayout.schemaVersion === 2 || value.stationGeometryLayout.schemaVersion === 3)) {
+      stationGeometryWarning = '稳定工位身份映射缺失或重复，无法安全关联已有偏移；已清除全部偏移，请重新定位工位。';
+    } else {
+      const resolution = normalizeStationGeometryLayout(value.stationGeometryLayout, config.stations, stationIdentities);
+      stationGeometryLayout = resolution.layout;
+      if (resolution.warning) stationGeometryWarning = resolution.warning;
+    }
+  }
+  if (!stationIdentityMapValid && value.stationIdentities !== undefined && value.stationGeometryLayout === undefined) {
+    stationGeometryWarning = '稳定工位身份映射无效，已为当前配置建立新身份；请检查几何平移。';
+  }
 
   const actuatorIds = new Set<string>();
   for (const actuator of config.actuators) {
@@ -271,7 +296,16 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
   const assumptions = stringArray(value.assumptions, 'design.assumptions');
   const form = value.form === undefined ? undefined : parseMachineForm(value.form);
 
-  const normalized: NormalizedMachineDesign = { config, points, warnings, assumptions, ...(form ? { form } : {}) };
+  const normalized: NormalizedMachineDesign = {
+    config,
+    stationIdentities,
+    points,
+    warnings,
+    assumptions,
+    ...(form ? { form } : {}),
+    ...(stationGeometryLayout ? { stationGeometryLayout } : {}),
+    ...(stationGeometryWarning ? { stationGeometryWarning } : {})
+  };
   if (isRecord(value.cycle)) {
     const perMin = value.cycle.perMin;
     const secondsPerPiece = value.cycle.secondsPerPiece;
@@ -306,12 +340,66 @@ export function validateMachineDesign(value: unknown): NormalizedMachineDesign {
     const stationSeconds = optionalNumber('stationSeconds') ?? estimated;
     const throughputPerMin = optionalNumber('throughputPerMin')
       ?? (stationSeconds > 0 ? Math.round((60 / stationSeconds) * 100) / 100 : 0);
+    const rawCycle = value.cycle as Record<string, unknown>;
+    const source = rawCycle.source;
+    if (source !== undefined && source !== 'model-estimate' && source !== 'engineer-input') {
+      throw new Error('design.cycle.source 必须是 model-estimate/engineer-input');
+    }
+    let stationCycleInputs: MachineCycleEstimate['stationCycleInputs'];
+    if (rawCycle.stationCycleInputs !== undefined) {
+      if (!Array.isArray(rawCycle.stationCycleInputs)) throw new Error('design.cycle.stationCycleInputs 必须是数组');
+      const seenStationIds = new Set<string>();
+      stationCycleInputs = rawCycle.stationCycleInputs.map((raw, index) => {
+        if (!isRecord(raw)) throw new Error(`design.cycle.stationCycleInputs[${index}] 必须是对象`);
+        const stationId = typeof raw.stationId === 'string' ? raw.stationId.trim() : '';
+        const stationName = typeof raw.stationName === 'string' ? raw.stationName.trim() : '';
+        if (!stationId || !stationName || typeof raw.seconds !== 'number' || !Number.isFinite(raw.seconds) ||
+            raw.source !== 'engineer-input' || raw.verification !== 'pending-measurement') {
+          throw new Error(`design.cycle.stationCycleInputs[${index}] 缺少有效工位、周期或来源标识`);
+        }
+        if (source === 'engineer-input' && raw.seconds <= 0) {
+          throw new Error(`design.cycle.stationCycleInputs[${index}].seconds 必须大于 0`);
+        }
+        if (source === 'engineer-input' && raw.sharedTimeConfirmed !== true) {
+          throw new Error(`design.cycle.stationCycleInputs[${index}].sharedTimeConfirmed 必须为 true`);
+        }
+        if (!normalized.config.stations.includes(stationName)) {
+          throw new Error(`design.cycle.stationCycleInputs[${index}] 工位「${stationName}」不在当前配置中`);
+        }
+        if (seenStationIds.has(stationId)) throw new Error(`design.cycle.stationCycleInputs 工位 id 重复：${stationId}`);
+        seenStationIds.add(stationId);
+        return {
+          stationId,
+          stationName,
+          seconds: raw.seconds,
+          sharedTimeConfirmed: raw.sharedTimeConfirmed === true,
+          source: 'engineer-input',
+          verification: 'pending-measurement'
+        };
+      });
+      if (stationCycleInputs.length > normalized.config.stations.length) {
+        throw new Error('design.cycle.stationCycleInputs 数量不能超过配置工位数');
+      }
+    }
+    if (source === 'engineer-input') {
+      const inputNames = new Set(stationCycleInputs?.map((input) => input.stationName) ?? []);
+      if (
+        stationCycleInputs?.length !== normalized.config.stations.length ||
+        inputNames.size !== normalized.config.stations.length ||
+        normalized.config.stations.some((stationName) => !inputNames.has(stationName))
+      ) {
+        throw new Error('工程师输入节拍必须为全部配置工位提供有效且已确认口径的周期');
+      }
+    }
     normalized.cycle = {
       mode,
+      ...(source ? { source } : {}),
+      ...(stationCycleInputs ? { stationCycleInputs } : {}),
       perMin,
       secondsPerPiece,
       stationSeconds,
       throughputPerMin,
+      partsPerMinute: throughputPerMin,
       estimatedSecondsPerPiece: estimated,
       baseSeconds,
       slowestStation: Math.max(1, Math.trunc(optionalNumber('slowestStation') ?? 1)),
@@ -532,7 +620,8 @@ export function machineDesignContent(design: NormalizedMachineDesign): string {
     bomDraft: design.bomDraft ?? null,
     warnings: design.warnings,
     assumptions: design.assumptions,
-    form: design.form ?? null
+    form: design.form ?? null,
+    stationGeometryLayout: design.stationGeometryLayout ?? null
   });
 }
 

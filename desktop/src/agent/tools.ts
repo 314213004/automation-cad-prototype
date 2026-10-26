@@ -13,10 +13,11 @@ import {
   MACHINE_STATIONS_MAX,
   MACHINE_STATIONS_MIN
 } from '../machine/spec.ts';
-import { summarizeMachineDesign, synthMachine } from '../machine/synth.ts';
+import { summarizeMachineDesign } from '../machine/synth.ts';
 import { mapMachineBom } from '../machine/bom-map.ts';
 import { estimatePower } from '../machine/power.ts';
-import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { readMachinePricing } from '../../electron/pricing.ts';
+import { completeDesign } from '../design/synthesis.ts';
 import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import { buildClarify } from '../machine/clarify.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
@@ -713,46 +714,12 @@ export class AgentTools {
           } catch (error) {
             console.warn(`[MACHINE_COST_PRICEBOOK_FAILED]`, { site: 'desktop/src/agent/tools.ts:650' }, error);
           }
-          const design = synthMachine(brief, {
+          const design = completeDesign(brief, parts, {
             ...(stationCount !== undefined ? { stationCount } : {}),
             ...(cyclePerMin !== undefined ? { cyclePerMin } : {}),
-            parts,
-            pricing: pricingLoad.pricing,
-            pricingAssumptions: pricingLoad.assumptions,
+            pricingLoad,
             ...(builtinPricebook ? { builtinPricebook } : {})
           });
-          let mapped = false;
-          try {
-            const bomMapping = mapMachineBom(design, parts);
-            design.bomDraft = { items: bomMapping.items };
-            mapped = true;
-            if (bomMapping.pending.length > 0) {
-              design.warnings.push(...bomMapping.pending.map((entry) => `${entry.name}：${entry.reason}`));
-            }
-            design.warnings.push(...bomMapping.notices);
-          } catch (error) {
-            // 精简测试注册表或自定义元件包可能不含完整型号；保留通用 BOM 草案。
-            console.warn(`[MACHINE_BOM_MAPPING_FAILED]`, { site: 'desktop/src/agent/tools.ts:654' }, error);
-          }
-
-          const selectedBreakerA = mainBreakerRating(design, parts);
-          design.power = estimatePower(design, {
-            parts,
-            voltage: design.power.voltage,
-            simultaneity: pricingLoad.pricing.power.simultaneity,
-            loadFactor: pricingLoad.pricing.power.loadFactor,
-            efficiency: pricingLoad.pricing.power.efficiency,
-            cosPhi: pricingLoad.pricing.power.cosPhi,
-            ...(selectedBreakerA !== undefined ? { selectedBreakerA } : {}),
-            assumptions: pricingLoad.assumptions
-          });
-          design.cost = estimateCost(design, {
-            parts,
-            pricing: pricingLoad.pricing,
-            pricingAssumptions: pricingLoad.assumptions,
-            ...(builtinPricebook ? { builtinPricebook } : {})
-          });
-          design.assumptions.push(...pricingLoad.warnings);
           return {
             ok: true,
             design: {
@@ -869,6 +836,65 @@ export class AgentTools {
           ...(isRecord(args.params) ? { params: args.params } : {}),
           ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
           ...(args.load === false ? { load: false } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'build_canvas_assembly',
+      description:
+        '把当前画布方案（工位拓扑）生成整机 3D 示意装配工程并落盘：按每个工位的 dimsMm 与正交排布生成占位盒，返回工程 id、零件数、包络。' +
+        '不含真实结构（孔/导轨/皮带都没有），质量为 null；要真实可制造几何请用 build_machine_model 或 apply_machine_design。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '工程名（默认取画布标题）' },
+          open: { type: 'boolean', description: '是否生成后立即打开到视口，默认 true' },
+          graph: {
+            type: 'object',
+            description: '可选：直接给 MachineGraph（nodes/edges）；不给则用当前画布草稿'
+          }
+        },
+        additionalProperties: false
+      },
+      handler: async (args) => {
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        if (args.open !== undefined && typeof args.open !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'open 必须是布尔值' };
+        }
+        if (args.graph !== undefined && (typeof args.graph !== 'object' || args.graph === null || Array.isArray(args.graph))) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'graph 必须是 MachineGraph 对象' };
+        }
+        const result = await this.execute('build_canvas_assembly', {
+          ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+          ...(args.open === false ? { open: false } : {}),
+          ...(args.graph !== undefined ? { graph: args.graph } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
+      name: 'save_scene_as_project',
+      description:
+        '把当前视口里的模型逐件存成工程（出现在文件菜单，可再次打开、查零件树与包围盒）：逐件写 STL、包络取零件 AABB 并集。' +
+        '质量恒为 null（导入网格没有材料/密度）。用于「导入 CAD 后落库」，不改动视口几何。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '工程名（默认取当前文件名 +「（导入）」）' }
+        },
+        additionalProperties: false
+      },
+      handler: async (args) => {
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        const result = await this.execute('save_scene_as_project', {
+          ...(typeof args.name === 'string' ? { name: args.name.trim() } : {})
         });
         return result ? commandSuccess(result) : this.unavailable();
       }
@@ -1020,7 +1046,7 @@ export class AgentTools {
 
     this.add({
       name: 'run_electrical_check',
-      description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。',
+      description: '按线号/负载/回路数据执行电气校验：线号合规、功率统计（kW·kVA、分相电流、主断路器与进线建议、24V 余量）、导线截面与断路器配合，按严重级别返回问题清单。wires/loads/circuits 都不传时校验当前电气图纸（与电气域图纸、电气校验面板同源）。',
       inputSchema: ELEC_CHECK_SCHEMA,
       handler: async (args) => {
         const result = await this.execute('run_electrical_check', args);
@@ -1038,7 +1064,8 @@ export class AgentTools {
           },
           summary: isRecord(data.summary) ? data.summary : {},
           findings: findings.slice(0, 50),
-          truncated: findings.length > 50
+          truncated: findings.length > 50,
+          ...(isRecord(data.source) ? { source: data.source } : {})
         };
       }
     });

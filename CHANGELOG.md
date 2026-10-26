@@ -2,6 +2,21 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
+## [未发布] - 2026-10-26
+
+### Added · 整机设计五步向导（`desktop/src/design/`）
+
+需求解析 → 3 套候选方案对比 → 工位与元件 → 毫米级布局 → 选型/干涉校核并保存工程；顶栏「整机设计」与文件菜单「新建设计」入口，草稿可续（`userData/design-draft.json`）。smoke：`SMOKE_DESIGN_ENTRY_OK` / `_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK`。
+
+### Fixed · 降级渲染路径的零件计数
+
+`CadViewer.getSceneParts()` 在无 three 网格（软件渲染/WebGL 降级）时回退 `modelParts`，修「保存工程后 `__AgentBridge.getScene().parts` 为 0」——Agent 的 `get_bom` / `get_project_context` 不再把已打开工程当空；smoke 不再打 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。
+
+### Fixed · 评估集覆盖与知识索引
+
+- `docs/desktop/eval/cases.json` 补 `build_machine_model` 用例（bm01/bm02），评估集 102 → 109 条，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`。
+- `MODULES.md` 迭代明细压成能力目录后重建 `kb.json`（390185 → 383228 B，恢复 5% 余量），修 `kb.json 与源文件标题 hash 同步` 用例。
+
 ## [0.4.9] - 2026-10-25
 
 ### Added · 电气出图引擎（模型 → ERC → 拓扑布局 → 渲染）

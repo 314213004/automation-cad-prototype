@@ -2,7 +2,7 @@
 
 面向非标自动化整机的**机械 + 电气协同设计工作台**：机械域覆盖机构选型 → 标准件调用 → 装配 → 干涉校核 → 受力校核 → 出图 → BOM；电气域覆盖原理图 → IO 规划 → 柜体底板布置 → 合规校验 → 成本统计；桌面版在此基础上叠加 **CAD 轻量化查看与运动学标注、电气元件库、PLC 程序生成、PLC 通电联调、参数化建模、智慧工厂数据同步、智能体（JSON-RPC / MCP / 应用内对话）**，单机离线可用。
 
-- 当前版本：**v0.4.2**（0.4.1 的界面缩放 / 3D 渲染质量 / 局域网联调之上，修 CDP 内网可达、token 持久化与轮换、渲染指标可观测性；新增 Windows 本地 smoke 入口 `npm run smoke:win`。0.4.2 安装包在 Windows 开发机本地构建，未走 CI）
+- 当前版本：**v0.4.9**（0.4.2 之后陆续落地：拖动交互与渲染指标修正、输送机工艺与真实几何、装配吸附、PLC 修正、电气出图引擎、整机设计五步向导；逐版变更见 [CHANGELOG.md](./CHANGELOG.md)。已发布安装包仍停在 **v0.4.2**（Windows 开发机本地构建，未走 CI），0.4.3 之后未出包）
 - 运行环境：Windows 11 x64；Electron 45 + TypeScript + Vite
 - 技术底座：渲染层直接复用仓库根目录的网页原型，桌面能力全部通过**注入扩展**叠加，原型文件（`index.html` / `app.js` / `styles.css` / `electrical.*`）**零改动**
 - 质量基线：**1831 个单元测试全绿**，另有覆盖 CAD / 运动学（含自动识别建议） / 机核 / 导出 / PLC / PLC 代码生成（含 UI 与 zip 导出）/ 联调 / 同步 / 电气库 / 电气校验 / 底板布置 / 参数化装配与 BOM / 成本（引擎 + 面板 + 报告 + Agent）/ 智能体上下文、指代、多轮续跑、本地知识检索、上下文预算与成本可见性、执行效率（去重/并行/缓存）/ 机型方案合成与落盘、并行/流水线节拍模型、工艺模板、11 种整机形态库（工艺 × 布局 × 机型，含预览夹紧与四档选型优先级）、追问策略、统一功率/成本模型（额定功率、系数折算、断路器初选、缺价计数）、BOM/PLC 联动、参数化整机几何（多头龙门 / 混合线 / 单元矩阵 / STL/glTF/sidecar）/ 主视口可旋转 3D（降级路径）/ 工厂的 headless smoke
@@ -402,3 +402,35 @@ smoke 覆盖并断言：
 | [desktop/README.md](desktop/README.md) | 桌面版命令、MCP 接入、JSON-RPC 与各面板细节 |
 
 > `packs/builtin` 中的元器件参数与价格仅用于选型 / 成本演示，定型与报价前请以厂商最新样本、铭牌与正式报价为准。
+
+## 许可证 / License
+
+本项目源码以 [GNU General Public License v3.0](LICENSE) 发布。随安装包分发的第三方组件
+各有其许可证，见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)；其中 LibreDWG WASM
+为 GPL-3.0，这也是本项目选择 GPL-3.0 的原因之一。
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Only official Windows releases built from this public repository by the GitHub Actions
+`windows-build` workflow are submitted for signing. Each signing request is approved
+manually before the signed installer is published to GitHub Releases. Binaries built
+on personal machines are never signed.
+
+### Team roles
+
+- Committers and reviewers: [owlco001](https://github.com/owlco001) — trusted to modify
+  the source code; every change proposed by non-committers is reviewed by the maintainer.
+- Approvers: [owlco001](https://github.com/owlco001) — approves each code signing request.
+
+All team members use multi-factor authentication for both GitHub and SignPath.
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless
+specifically requested by the user or the person installing or operating it.
+User-triggered exceptions, all off or manual by default: checking for application
+updates, synchronizing design packages with a user-configured Smart Factory server,
+and the in-app agent calling a user-configured LLM endpoint. Third-party components
+bundled with the installer are listed in THIRD-PARTY-NOTICES.md.

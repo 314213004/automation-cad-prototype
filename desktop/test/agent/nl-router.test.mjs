@@ -67,7 +67,7 @@ test('写计划永远不会被离线通道执行', () => {
 });
 
 test('只读/写工具清单与注册表一致且互不重叠', () => {
-  assert.equal(READ_ONLY_TOOLS.size + WRITE_TOOLS.size, 23);
+  assert.equal(READ_ONLY_TOOLS.size + WRITE_TOOLS.size, 25);
   assert.equal(READ_ONLY_TOOLS.size, 12);
   assert.equal(WRITE_TOOLS.has('place_component'), true);
   for (const name of READ_ONLY_TOOLS) assert.equal(WRITE_TOOLS.has(name), false, `${name} 同时被标为读写`);

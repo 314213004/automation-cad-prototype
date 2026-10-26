@@ -20,6 +20,16 @@ import {
 import { CAD_EXTENSIONS, DRAWING_EXTENSIONS, isCadExtension, isDrawingExtension } from '../src/shared/cad';
 import { convertDwgToDxf } from './dwg';
 import { assertCadFileSize } from '../src/shared/input-limits.ts';
+import {
+  clearCanvasDraft,
+  clearCanvasPricing,
+  readCanvasDraft,
+  readCanvasPricing,
+  readCanvasSchemes,
+  writeCanvasDraft,
+  writeCanvasPricing,
+  writeCanvasSchemes
+} from '../src/canvas/draft-store.ts';
 import { recordDiagnosticError, setDiagnosticOperation } from '../src/shared/diagnostics.ts';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
 import { CostExportError, planExportName } from '../src/cost/export.ts';
@@ -39,6 +49,7 @@ import { mergeLlmConfig, readLlmConfig, publicLlmConfig, saveLlmConfig } from '.
 import { OpenAiCompatibleClient, testLlmConnection } from '../src/agent/llm.ts';
 import { AgentCancelledError, AgentSession, emptyAgentUsage } from '../src/agent/session.ts';
 import { BYPASS_CONFIRMATION_NOTICE } from '../src/agent/policy.ts';
+import { requestWriteConfirmation } from './write-confirm.ts';
 import { collectAgentContext } from '../src/agent/context.ts';
 import type { AgentPlan, PlanStep } from '../src/agent/planner.ts';
 import { READ_ONLY_TOOLS } from '../src/agent/router.ts';
@@ -73,7 +84,10 @@ import {
 } from '../src/project-archive/desktop.ts';
 import { planPlcExportDirectory } from '../src/plcgen/export.ts';
 import { readActiveMachineDesign } from '../src/machine/store.ts';
-import { deleteProject, listProjects, openProject, saveProject } from './projects.ts';
+import { deleteProject, listProjects, openProject, saveProject, saveProjectLayout } from './projects.ts';
+import { clearDesignDraft, readDesignDraft, writeDesignDraft } from '../src/design/draft-store.ts';
+import { validateMachineDesign } from '../src/machine/store.ts';
+import { readMachinePricing } from './pricing.ts';
 import { buildMachineIoMap } from '../src/machine/io-map.ts';
 import {
   mergePlcHistory,
@@ -468,7 +482,7 @@ export async function disposeIpcRuntime(): Promise<void> {
 
 type IpcHandler = (event: IpcMainInvokeEvent, ...args: any[]) => any;
 
-function createTrustedIpcHandler(
+export function createTrustedIpcHandler(
   getWindow: () => BrowserWindow | null,
   trustedUiPath: string
 ): (channel: string, handler: IpcHandler) => void {
@@ -643,6 +657,71 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     return await previewSelectedPortableArchive(createProjectArchiveDependencies());
   });
 
+  handle('design:settings', () => {
+    try {
+      const pricebookPath = join(context.builtinDir, 'pricebook-cn', 'pricebook.json');
+      const book = existsSync(pricebookPath) ? validatePricebook(JSON.parse(readFileSync(pricebookPath, 'utf8')) as unknown) : undefined;
+      return { ok: true, pricing: readMachinePricing(context.userDataDir), ...(book ? { builtinPricebook: book } : {}) };
+    } catch (error) { return { ok: false, message: error instanceof Error ? error.message : String(error) }; }
+  });
+  handle('design:draft-load', () => readDesignDraft(context.userDataDir));
+  handle('design:draft-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.version !== 1) return { ok: false, message: '设计草稿格式无效' };
+    try {
+      writeDesignDraft(context.userDataDir, payload);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  handle('design:draft-clear', () => {
+    clearDesignDraft(context.userDataDir);
+    return { ok: true };
+  });
+  handle('canvas:draft-load', () => readCanvasDraft(context.userDataDir));
+  handle('canvas:draft-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.schema !== 'canvas-workbench-draft/1') {
+      return { ok: false, message: '画布草稿格式无效（schema 不匹配）' };
+    }
+    try {
+      const written = writeCanvasDraft(context.userDataDir, payload);
+      return { ok: true, path: written.path, bytes: written.bytes };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  handle('canvas:draft-clear', () => {
+    clearCanvasDraft(context.userDataDir);
+    return { ok: true };
+  });
+  handle('canvas:pricing-load', () => readCanvasPricing(context.userDataDir));
+  handle('canvas:pricing-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.schema !== 'canvas-price-overrides/1') {
+      return { ok: false, message: '报价表格式无效（schema 不匹配）' };
+    }
+    try {
+      const written = writeCanvasPricing(context.userDataDir, payload);
+      return { ok: true, path: written.path, bytes: written.bytes };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  handle('canvas:pricing-clear', () => {
+    clearCanvasPricing(context.userDataDir);
+    return { ok: true };
+  });
+  handle('canvas:scheme-load', () => readCanvasSchemes(context.userDataDir));
+  handle('canvas:scheme-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.schema !== 'canvas-scheme-library/1') {
+      return { ok: false, message: '方案库格式无效（schema 不匹配）' };
+    }
+    try {
+      const written = writeCanvasSchemes(context.userDataDir, payload);
+      return { ok: true, path: written.path, bytes: written.bytes };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
   handle('projects:list', () => listProjects(context.userDataDir));
   handle('projects:save', (_event, payload: unknown) => {
     if (typeof payload !== 'object' || payload === null) return { ok: false, message: '工程数据必须是对象' };
@@ -651,6 +730,13 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   handle('projects:open', (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
     return openProject(context.userDataDir, id);
+  });
+  handle('projects:layout-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.id !== 'string' || !payload.id.trim() ||
+        typeof payload.fingerprint !== 'string' || !Array.isArray(payload.placements)) {
+      return { ok: false, message: '布局保存参数无效' };
+    }
+    return saveProjectLayout(context.userDataDir, payload.id, payload.fingerprint, payload.placements);
   });
   handle('projects:delete', (_event, id: unknown) => {
     if (typeof id !== 'string' || !id.trim()) return { ok: false, message: '工程 id 无效' };
@@ -726,6 +812,29 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
       return { ok: true, path: planned.path, bytes };
     } catch (error) {
       return costExportFailure(error);
+    }
+  });
+
+  // 工程零件清单 CSV：只写 userData/exports（不接任意绝对路径），文件名经 planExportName 规划
+  handle('export:partsCsv', (_event, payload: unknown) => {
+    try {
+      if (!isRecord(payload) || typeof payload.data !== 'string' || payload.data.length === 0) {
+        return { ok: false, code: 'INVALID_ARGUMENT', message: '零件清单内容不能为空' };
+      }
+      const directory = join(app.getPath('userData'), 'exports');
+      mkdirSync(directory, { recursive: true });
+      const planned = planExportName({
+        directory,
+        format: 'csv',
+        fileName: typeof payload.fileName === 'string' ? payload.fileName : undefined,
+        suggestedName: typeof payload.suggestedName === 'string' ? payload.suggestedName : '工程零件清单',
+        overwrite: payload.overwrite === true,
+        exists: existsSync
+      });
+      writeFileSync(planned.path, payload.data, 'utf8');
+      return { ok: true, path: planned.path, bytes: Buffer.byteLength(payload.data, 'utf8'), rows: payload.rows ?? null };
+    } catch (error) {
+      return { ok: false, code: 'WRITE_FAILED', message: error instanceof Error ? error.message : String(error) };
     }
   });
 
@@ -975,6 +1084,27 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
     if (!manager) return unavailableStatus;
     await manager.stop();
     return manager.status();
+  });
+
+  // B-Rep 精确干涉：OCP 布尔（真体积），不是 AABB 初筛。只对已存在的文件做只读解析。
+  handle('interference:brep', async (_event, payload: unknown) => {
+    if (!isRecord(payload) || typeof payload.stepPath !== 'string' || !payload.stepPath.trim()) {
+      return { ok: false, code: 'INVALID_ARGUMENT', message: '缺少 stepPath（要检查的 STEP/IGES 文件路径）' };
+    }
+    const manager = getParametric();
+    if (!manager) return { ok: false, code: 'UNAVAILABLE', message: '参数化内核不可用，无法跑 B-Rep 干涉' };
+    const target = resolve(payload.stepPath.trim());
+    if (!existsSync(target)) return { ok: false, code: 'FILE_NOT_FOUND', message: `文件不存在：${target}` };
+    const timeoutMs = typeof payload.timeoutMs === 'number' && Number.isFinite(payload.timeoutMs)
+      ? Math.max(5_000, Math.min(900_000, Math.trunc(payload.timeoutMs)))
+      : undefined;
+    const maxParts = typeof payload.maxParts === 'number' && Number.isFinite(payload.maxParts)
+      ? Math.max(2, Math.min(2000, Math.trunc(payload.maxParts)))
+      : undefined;
+    return await manager.brepInterference(target, {
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      ...(maxParts !== undefined ? { maxParts } : {})
+    });
   });
 
   handle('factory:info', () => ({ ok: true, adapters: factory.list(), status: factory.getStatus() }));
@@ -1335,22 +1465,16 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
       confirmWrite: async (name, args, confirmContext) => {
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
-        const serialized = JSON.stringify(args);
-        const summary = serialized.length > 600 ? `${serialized.slice(0, 600)}…` : serialized;
         const bypassNotice = confirmContext?.bypass
           ? (confirmContext.notice ?? BYPASS_CONFIRMATION_NOTICE)
           : '';
-        const result = await dialog.showMessageBox(window, {
-          type: 'question',
-          title: '智能体写操作确认',
-          message: `智能体请求执行 ${name}，参数：${summary}，是否允许？${bypassNotice ? `（${bypassNotice}）` : ''}`,
+        return await requestWriteConfirmation(window, {
+          tool: name,
+          args,
           detail: bypassNotice ? `该操作会修改当前装配体。${bypassNotice}。` : '该操作会修改当前装配体。',
-          buttons: ['允许', '拒绝'],
-          defaultId: 1,
-          cancelId: 1,
-          noLink: true
+          ...(bypassNotice ? { bypassNotice } : {}),
+          title: '智能体请求写操作'
         });
-        return result.response === 0;
       }
     });
     return session;
@@ -1717,20 +1841,14 @@ export function registerAgentChatIpc(context: AgentChatIpcContext): void {
         if (process.env.AUTOMATIONCAD_AUTOCONFIRM === '1') return true;
         const window = context.getWindow();
         if (!window || window.isDestroyed()) return false;
-        const detail = request.steps
-          .map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`)
-          .join('\n');
-        const response = await dialog.showMessageBox(window, {
-          type: 'question',
+        // 多步计划同样走页面卡片（原生对话框在无人值守/远程调试下点不到）
+        return await requestWriteConfirmation(window, {
+          tool: `计划 · ${request.steps.length} 步`,
+          args: request.steps.map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`),
+          detail: request.message,
           title: '智能体多步计划确认',
-          message: request.message,
-          detail: detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail,
-          buttons: ['全部允许', '取消'],
-          defaultId: 1,
-          cancelId: 1,
-          noLink: true
+          steps: request.steps.map((step, index) => `${index + 1}. ${step.tool} ${JSON.stringify(step.args)}`)
         });
-        return response.response === 0;
       },
       execute: async (step, stepIndex, signal) => {
         const stepStarted = Date.now();

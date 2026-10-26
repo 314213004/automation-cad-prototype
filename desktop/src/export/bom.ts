@@ -11,6 +11,11 @@ export interface BomRow {
 
 export const BOM_HEADERS = ['序号', '名称', '型号', '数量', '材料', '备注'] as const;
 
+export interface CsvOptions {
+  /** Optional context in the existing remarks-column heading; omitted by legacy exporters. */
+  noteHeader?: string;
+}
+
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value);
@@ -21,9 +26,11 @@ function csvCell(value: unknown): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function toCsv(rows: readonly BomRow[]): string {
+export function toCsv(rows: readonly BomRow[], options: CsvOptions = {}): string {
   if (!Array.isArray(rows)) throw new Error('BOM 数据必须是数组');
-  const lines = [BOM_HEADERS.map((header) => csvCell(header)).join(',')];
+  const headers: string[] = [...BOM_HEADERS];
+  if (options.noteHeader) headers[5] = options.noteHeader;
+  const lines = [headers.map((header) => csvCell(header)).join(',')];
   rows.forEach((row, index) => {
     if (!row || typeof row !== 'object') throw new Error(`第 ${index + 1} 行 BOM 数据不合法`);
     lines.push([

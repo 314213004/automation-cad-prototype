@@ -1572,5 +1572,31 @@
       "machine_form"
     ],
     "note": "同一工艺换布局：锁螺丝 × 双轨并行线（cell）。"
+  },
+  {
+    "id": "bm01",
+    "input": "给当前机型生成三维实体模型",
+    "intent": "generate",
+    "expect": {
+      "tool": "build_machine_model",
+      "argsContains": {}
+    },
+    "tags": [
+      "model-build"
+    ],
+    "note": "走参数化内核出真实实体并装配进视口；不写工程文件，需确认。"
+  },
+  {
+    "id": "bm02",
+    "input": "给这台输送机生成整机实体模型看看",
+    "intent": "generate",
+    "expect": {
+      "tool": "build_machine_model",
+      "argsContains": {}
+    },
+    "tags": [
+      "model-build"
+    ],
+    "note": "与「应用/落地」区分：只装配视口，不落盘。"
   }
 ]

@@ -1,6 +1,6 @@
 # 第三方组件声明 / Third-Party Notices
 
-本仓库的**源码**目前未声明许可证。随安装包分发的下列第三方二进制组件各有自己的许可证，
+本仓库的**源码**以 GNU GPL v3 许可证发布（见根目录 `LICENSE`）。随安装包分发的下列第三方二进制组件各有自己的许可证，
 其条款覆盖对应组件本身，并且对再分发有约束。
 
 ## LibreDWG WASM（DWG 读取）
@@ -29,5 +29,6 @@
 | three.js | MIT | 3D 渲染 |
 | occt-import-js（OCCT WASM） | LGPL-2.1 | STEP / IGES / BREP 解析 |
 | build123d / OCCT（参数化 sidecar） | Apache-2.0 / LGPL-2.1 | 参数化建模与 STEP/STL 导出 |
+| FreeCAD 1.x（可选，用户自行安装，不随包分发） | LGPL-2.1+ | 工程图（TechDraw）等后台任务；仅以独立进程 `freecadcmd` 调用，随包只带作业脚本 `resources/freecad/techdraw_job.py` |
 
 数据包（`packs/builtin`）中的型号与参数为公开样本整理，非厂商授权数据，商用前请自行核对。

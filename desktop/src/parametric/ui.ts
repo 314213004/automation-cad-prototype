@@ -112,6 +112,8 @@ export interface ParametricUiHandle {
   historyState(): ParametricHistoryState;
   refreshHistoryState(): void;
   state(): ParametricUiState;
+  /** 当前选中的装配实体 id（工程图「选中零件出图」用） */
+  selectedInstanceId(): string | null;
 }
 
 export interface ParametricHistoryState {
@@ -1423,6 +1425,9 @@ export function initParametricUi(options: ParametricUiOptions): ParametricUiHand
     },
     refreshHistoryState(): void {
       refreshHistoryButtons();
+    },
+    selectedInstanceId(): string | null {
+      return selectedInstanceId;
     },
     state(): ParametricUiState {
       return {

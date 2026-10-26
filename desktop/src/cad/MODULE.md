@@ -161,3 +161,25 @@ suggestionToMovingPart(suggestion, meshes) → MovingPart   // 复用 draftFromM
 2. 单位识别 + 英寸/毫米切换。
 3. 十万面以上模型的分块加载与 LOD（当前一次性建 geometry）。
 4. 当前 BOM 是查看器快照（零件名/数量 1/材料 `—`），后续接入原型真实装配 BOM。
+
+## 导入零件命名（`part-naming.ts`，2026-10-26）
+
+- 事实先纠正：STEP 导入**已经按 solid 拆件**（occt-import-js 每 solid 一个网格，实测 model.step → 94 网格 / 1392 三角面），不存在"合并成 1 个件"的问题
+- 真正的坑是名字：多数导出把实体名写成 `COMPOUND`/`SOLID`/`Part12` 或空 → 树里 94 行全一样，存成工程也是 `COMPOUND-2…`
+- `readablePartNames(boxes)`：通用名/空名 → `零件-NN（W×D×H）`（尺寸取该网格自身包围盒，0.1mm）；真实名保留；
+  重名统一加 `-2/-3`；序号按网格原始位置，不因跳过真实名而错位
+- 只替换「不可用的名字」，**不猜语义**（不写「立柱/托条」——那需要结构信息，猜就是编数据）
+- 实机：同一 STEP 导入后名字变成 `零件-01（80×80×1800）`…，存为工程 94 件、重开 94 行、分组「零件94」
+
+## 装配层级进结构树（2026-10-26）
+
+- occt 已给 `mesh.path`（根 → 父节点，不含自身名）；一路带到 `project.json` 的 `partsList[].path`
+- `project.json` 侧：`saveProject` 清洗 path（只留字符串、去空段、单段 ≤60 字符、最多 8 级）；无 path 不写字段（旧工程结构不变）
+- 渲染侧 `app.js renderProjectTree`：有 path → 顶层按 `path[0]`、二级按 `path[1]` 嵌套 `<details>`，行 title 显示全路径；
+  无 path → 回退按名字前缀分组（旧行为）
+- **坑**：`projectMenuRecordOf` 把 partsList 映射成 `{file,name}` 时丢了 path，导致树退回按前缀分组——
+  解析出来的层级白费（实测 header 显示「5 组」而不是「按装配层级」）。映射时必须带上 path
+- 右侧面板：`toPanelInfo` 建 零件名 → path 表，零件卡片显示「所属装配」，状态栏层级用完整 path
+- 验证：层级验证工程 9 件 → 1 个总装 + 4 个子装配（机架2/升降2/堆叠3/输送2）；
+  面板「所属装配 光伏缓存堆叠单元（层级验证） > 机架」；状态栏「工程 > … > 机架 > 立柱-左前」
+- 真实 STEP 是否带层级取决于导出方有没有写产品结构；没写就只能靠「序号+尺寸」兜底命名

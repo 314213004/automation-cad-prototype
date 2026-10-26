@@ -6,8 +6,6 @@
 // - 正式报价仍应走 `cost/engine.ts` 的价格簿、阶梯价、缺价清单与导出流程。
 // 因此 total 只能用于方案比较，不是对外报价。
 
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { ComponentPart } from '../shared/types.ts';
 import {
   isUsablePricebookItem,
@@ -60,6 +58,21 @@ export const DEFAULT_MACHINE_PRICING: MachinePricing = {
 
 export const MACHINE_PRICING_FILE = 'machine-pricing.json';
 export const MACHINE_PRICING_DEFAULT_NOTE = '工程默认值，非官方报价';
+
+/**
+ * 「未读取到用户参数文件」时的统一说明。UI 方案卡与 Agent 工具必须产出完全相同的
+ * 文案，否则同一 brief 的两条路径会得到不同的 assumptions（一致性测试会红）。
+ */
+export function defaultPricingAssumptions(providedUserDir: boolean): string[] {
+  return [
+    providedUserDir
+      ? '未找到 machine-pricing.json，功率系数与工时单价使用默认值。'
+      : '未提供用户数据目录，功率系数与工时单价使用默认值。',
+    `默认系数：Ks=${DEFAULT_MACHINE_PRICING.power.simultaneity}、Kf=${DEFAULT_MACHINE_PRICING.power.loadFactor}、` +
+      `η=${DEFAULT_MACHINE_PRICING.power.efficiency}、cosφ=${DEFAULT_MACHINE_PRICING.power.cosPhi}；` +
+      `工时单价 ${DEFAULT_MACHINE_PRICING.labor.ratePerHour} 元/h（${MACHINE_PRICING_DEFAULT_NOTE}）。`
+  ];
+}
 
 export interface MachinePricingLoad {
   pricing: MachinePricing;
@@ -139,51 +152,6 @@ export function parseMachinePricing(value: unknown): {
     }
   };
   return { pricing, warnings };
-}
-
-/**
- * 读取 `<userData>/machine-pricing.json`。文件不存在、不可读或 JSON 非法时回落
- * 默认参数，并把「为什么用默认值」写进 assumptions，供方案卡与文档引用。
- */
-export function readMachinePricing(userDataRoot?: string): MachinePricingLoad {
-  const path = userDataRoot ? join(userDataRoot, MACHINE_PRICING_FILE) : MACHINE_PRICING_FILE;
-  if (!userDataRoot || !existsSync(path)) {
-    return {
-      pricing: DEFAULT_MACHINE_PRICING,
-      source: 'defaults',
-      path,
-      assumptions: [
-        userDataRoot
-          ? `未找到 ${path}，功率系数与工时单价使用默认值。`
-          : '未提供用户数据目录，功率系数与工时单价使用默认值。',
-        `默认系数：Ks=${DEFAULT_MACHINE_PRICING.power.simultaneity}、Kf=${DEFAULT_MACHINE_PRICING.power.loadFactor}、` +
-        `η=${DEFAULT_MACHINE_PRICING.power.efficiency}、cosφ=${DEFAULT_MACHINE_PRICING.power.cosPhi}；` +
-        `工时单价 ${DEFAULT_MACHINE_PRICING.labor.ratePerHour} 元/h（${MACHINE_PRICING_DEFAULT_NOTE}）。`
-      ],
-      warnings: []
-    };
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    const result = parseMachinePricing(parsed);
-    return {
-      pricing: result.pricing,
-      source: 'file',
-      path,
-      assumptions: [`功率与成本参数来自 ${path}。`],
-      warnings: result.warnings
-    };
-  } catch (error) {
-    return {
-      pricing: DEFAULT_MACHINE_PRICING,
-      source: 'defaults',
-      path,
-      assumptions: [
-        `读取 ${path} 失败（${error instanceof Error ? error.message : String(error)}），已回落默认参数。`
-      ],
-      warnings: [`参数文件不可用：${path}`]
-    };
-  }
 }
 
 export interface CostBomItemLike {

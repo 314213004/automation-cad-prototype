@@ -34,6 +34,20 @@ function designFor(options = {}) {
   });
 }
 
+function engineerCycleDesign() {
+  const design = designFor();
+  design.cycle.source = 'engineer-input';
+  design.cycle.stationCycleInputs = design.config.stations.map((stationName, index) => ({
+    stationId: `station-${index + 1}`,
+    stationName,
+    seconds: 2 + index,
+    sharedTimeConfirmed: true,
+    source: 'engineer-input',
+    verification: 'pending-measurement'
+  }));
+  return design;
+}
+
 function setup(options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'cad-machine-apply-'));
   roots.push(root);
@@ -72,7 +86,7 @@ test('apply_machine_design 已注册为写工具，schema 支持 brief/design �
   const { tools } = setup();
   const tool = tools.summaries().find((item) => item.name === 'apply_machine_design');
   assert.ok(tool);
-  assert.equal(tools.list().length, 23);
+  assert.equal(tools.list().length, 25);
   assert.equal(READ_ONLY_TOOLS.has('apply_machine_design'), false);
   assert.equal(WRITE_TOOLS.has('apply_machine_design'), true);
   assert.equal(tool.inputSchema.additionalProperties, false);
@@ -161,6 +175,58 @@ test('design.config 缺失或校验失败返回 INVALID_ARGUMENT', async () => {
   assert.match(result.error.message, /机型方案校验失败/);
   assert.equal(existsSync(activeMachinePath(root)), false);
   assert.throws(() => validateMachineDesign({}), /design.config/);
+});
+
+test('正式工程师周期来源要求每站正有限秒数、确认公共时间且覆盖全部站', () => {
+  const valid = engineerCycleDesign();
+  const normalized = validateMachineDesign(valid);
+  assert.equal(normalized.cycle?.source, 'engineer-input');
+  assert.equal(normalized.cycle?.stationCycleInputs?.length, valid.config.stations.length);
+  assert.ok(normalized.cycle?.stationCycleInputs?.every((item) => item.seconds > 0 && item.sharedTimeConfirmed));
+
+  const invalidCases = [
+    ['缺少确认字段', (design) => { delete design.cycle.stationCycleInputs[0].sharedTimeConfirmed; }, /sharedTimeConfirmed.*必须为 true/],
+    ['确认字段为 false', (design) => { design.cycle.stationCycleInputs[0].sharedTimeConfirmed = false; }, /sharedTimeConfirmed.*必须为 true/],
+    ['零秒周期', (design) => { design.cycle.stationCycleInputs[0].seconds = 0; }, /seconds 必须大于 0/],
+    ['负秒周期', (design) => { design.cycle.stationCycleInputs[0].seconds = -0.1; }, /seconds 必须大于 0/],
+    ['非有限周期', (design) => { design.cycle.stationCycleInputs[0].seconds = Number.NaN; }, /缺少有效工位、周期或来源标识/]
+  ];
+  for (const [label, mutate, expected] of invalidCases) {
+    const invalid = structuredClone(valid);
+    mutate(invalid);
+    assert.throws(() => validateMachineDesign(invalid), expected, label);
+  }
+
+  const missingStation = structuredClone(valid);
+  missingStation.cycle.stationCycleInputs.pop();
+  assert.throws(() => validateMachineDesign(missingStation), /全部配置工位/);
+});
+
+test('模型估算来源可保留部分无效/未确认周期作为 provenance，但不能声明 engineer-input', () => {
+  const modelEstimate = engineerCycleDesign();
+  modelEstimate.cycle.source = 'model-estimate';
+  modelEstimate.cycle.stationCycleInputs = [
+    { ...modelEstimate.cycle.stationCycleInputs[0], seconds: 0, sharedTimeConfirmed: false }
+  ];
+
+  const normalized = validateMachineDesign(modelEstimate);
+  assert.equal(normalized.cycle?.source, 'model-estimate');
+  assert.equal(normalized.cycle?.stationCycleInputs?.length, 1);
+  assert.equal(normalized.cycle?.stationCycleInputs?.[0]?.seconds, 0);
+  assert.equal(normalized.cycle?.stationCycleInputs?.[0]?.sharedTimeConfirmed, false);
+});
+
+test('apply_machine_design 在保存前拒绝未确认的工程师周期，且不写入工程文件', async () => {
+  const { root, bus } = setup();
+  const design = engineerCycleDesign();
+  design.cycle.stationCycleInputs[0].sharedTimeConfirmed = false;
+  const result = await apply(bus, { design });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'INVALID_ARGUMENT');
+  assert.match(result.error.message, /sharedTimeConfirmed.*必须为 true/);
+  assert.equal(existsSync(activeMachinePath(root)), false);
+  assert.equal(existsSync(machineDesignPath(root, design.config.id)), false);
 });
 
 test('执行机构 id 重复被拒绝', async () => {

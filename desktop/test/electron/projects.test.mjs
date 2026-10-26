@@ -3,7 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { deleteProject, listProjects, openProject, projectsRoot, saveProject } from '../../electron/projects.ts';
+import { deleteProject, listProjects, openProject, projectsRoot, saveProject, saveProjectLayout } from '../../electron/projects.ts';
+import { synthMachine } from '../../src/machine/synth.ts';
+import { parseMachineBrief } from '../../src/machine/spec.ts';
 
 const roots = [];
 after(() => {
@@ -139,4 +141,188 @@ test('列表按创建时间倒序，新的在最前', () => {
   const list = listProjects(root);
   assert.equal(list[0].name, '新工程');
   assert.equal(list[1].name, '老工程');
+});
+
+test('重新打开设计工程会恢复二维 placements 且 design.json schema 保持兼容', () => {
+  const { root } = setup();
+  const design = synthMachine(parseMachineBrief('三工位锁螺丝机，10 件/分钟'));
+  const placements = [{ id: 'station:station-1', partId: 'station:station-1', model: '上料工位', x: 123, y: 456, w: 280, h: 140, tag: '工位', note: '进料' }];
+  const saved = save(root, { design, config: design.config, placements });
+  assert.equal(saved.ok, true, saved.message);
+  const path = join(projectsRoot(root), saved.record.id, 'design.json');
+  const designFile = JSON.parse(readFileSync(path, 'utf8'));
+  assert.deepEqual(Object.keys(designFile).sort(), ['design', 'placements']);
+
+  const opened = openProject(root, saved.record.id);
+  assert.equal(opened.ok, true);
+  assert.deepEqual(opened.placements, placements);
+});
+
+test('已保存布局可只改坐标并写回，design.json schema 与机器设计保持不变', () => {
+  const { root } = setup();
+  const design = synthMachine(parseMachineBrief('三工位锁螺丝机，10 件/分钟'));
+  const placements = [{ id: 'station:station-1', partId: 'station:station-1', model: '上料工位', x: 123, y: 456, w: 280, h: 140, tag: '工位', note: '进料' }];
+  const saved = save(root, { design, config: design.config, placements });
+  const path = join(projectsRoot(root), saved.record.id, 'design.json');
+  const beforeBytes = readFileSync(path, 'utf8');
+  const before = JSON.parse(beforeBytes);
+  const opened = openProject(root, saved.record.id);
+  assert.equal(opened.layoutEditable, true);
+  assert.match(opened.layoutFingerprint, /^[a-f0-9]{64}$/);
+
+  const invalid = opened.placements.map((item) => ({ ...item, x: 1_000_000 }));
+  const refused = saveProjectLayout(root, saved.record.id, opened.layoutFingerprint, invalid);
+  assert.equal(refused.ok, false);
+  assert.equal(readFileSync(path, 'utf8'), beforeBytes, '非法坐标不能触碰原工程文件');
+  const outsideEnvelope = opened.placements.map((item) => ({ ...item, x: 2_400 }));
+  const outsideRefused = saveProjectLayout(root, saved.record.id, opened.layoutFingerprint, outsideEnvelope);
+  assert.equal(outsideRefused.ok, false);
+  assert.match(outsideRefused.message ?? '', /超出项目包络/);
+  assert.equal(readFileSync(path, 'utf8'), beforeBytes, '越出项目包络的布局不能触碰原工程文件');
+  const metadataEdit = opened.placements.map((item) => ({ ...item, model: '不允许改名' }));
+  assert.equal(saveProjectLayout(root, saved.record.id, opened.layoutFingerprint, metadataEdit).ok, false);
+  assert.equal(readFileSync(path, 'utf8'), beforeBytes, '布局写回接口只能改变现有项目的坐标');
+
+  const edited = opened.placements.map((item) => ({ ...item, x: 333.5, y: 500.25 }));
+  const result = saveProjectLayout(root, saved.record.id, opened.layoutFingerprint, edited);
+  assert.equal(result.ok, true, result.message);
+  assert.match(result.fingerprint, /^[a-f0-9]{64}$/);
+  const reopened = openProject(root, saved.record.id);
+  assert.deepEqual(reopened.placements, edited);
+  const after = JSON.parse(readFileSync(path, 'utf8'));
+  assert.deepEqual(Object.keys(after).sort(), ['design', 'placements']);
+  assert.deepEqual(after.design, before.design);
+  assert.deepEqual(after.placements, edited);
+});
+
+test('工程包络缺失时布局可以读取但不能写回', () => {
+  const { root } = setup();
+  const design = synthMachine(parseMachineBrief('三工位锁螺丝机，10 件/分钟'));
+  const placements = [{ id: 'station:station-1', partId: 'station:station-1', model: '上料工位', x: 123, y: 456, w: 280, h: 140 }];
+  const saved = save(root, { design, config: design.config, placements, envelope: null });
+  assert.equal(saved.ok, true);
+  const opened = openProject(root, saved.record.id);
+  assert.equal(opened.layoutEditable, true);
+  const path = join(projectsRoot(root), saved.record.id, 'design.json');
+  const beforeBytes = readFileSync(path, 'utf8');
+  const refused = saveProjectLayout(root, saved.record.id, opened.layoutFingerprint, opened.placements.map((item) => ({ ...item, x: 124 })));
+  assert.equal(refused.ok, false);
+  assert.match(refused.message ?? '', /包络尺寸缺失/);
+  assert.equal(readFileSync(path, 'utf8'), beforeBytes);
+});
+
+test('基于旧指纹的布局保存被拒绝，且不覆盖另一窗口已保存的修改', () => {
+  const { root } = setup();
+  const design = synthMachine(parseMachineBrief('三工位锁螺丝机，10 件/分钟'));
+  const placements = [{ id: 'station:station-1', partId: 'station:station-1', model: '上料工位', x: 123, y: 456, w: 280, h: 140 }];
+  const saved = save(root, { design, config: design.config, placements });
+  const path = join(projectsRoot(root), saved.record.id, 'design.json');
+  const firstWindow = openProject(root, saved.record.id);
+  const secondWindow = openProject(root, saved.record.id);
+  const newer = secondWindow.placements.map((item) => ({ ...item, x: 400, y: 500 }));
+  const newerSave = saveProjectLayout(root, saved.record.id, secondWindow.layoutFingerprint, newer);
+  assert.equal(newerSave.ok, true, newerSave.message);
+  const latestBytes = readFileSync(path, 'utf8');
+
+  const stale = firstWindow.placements.map((item) => ({ ...item, x: 700, y: 800 }));
+  const rejected = saveProjectLayout(root, saved.record.id, firstWindow.layoutFingerprint, stale);
+  assert.equal(rejected.ok, false);
+  assert.equal(rejected.conflict, true);
+  assert.match(rejected.message, /已被其他操作修改/);
+  assert.equal(readFileSync(path, 'utf8'), latestBytes);
+  assert.deepEqual(openProject(root, saved.record.id).placements, newer);
+});
+
+test('旧工程、损坏 design.json 与无效坐标都不能被布局保存覆盖', () => {
+  const { root } = setup();
+  const legacy = save(root);
+  const legacyPath = join(projectsRoot(root), legacy.record.id, 'design.json');
+  const legacyProjectBytes = readFileSync(join(projectsRoot(root), legacy.record.id, 'project.json'), 'utf8');
+  const legacyOpened = openProject(root, legacy.record.id);
+  assert.equal(legacyOpened.layoutEditable, false);
+  assert.equal(existsSync(legacyPath), false);
+  const legacySave = saveProjectLayout(root, legacy.record.id, 'a'.repeat(64), []);
+  assert.equal(legacySave.ok, false);
+  assert.equal(existsSync(legacyPath), false);
+  assert.equal(readFileSync(join(projectsRoot(root), legacy.record.id, 'project.json'), 'utf8'), legacyProjectBytes);
+
+  const design = synthMachine(parseMachineBrief('三工位锁螺丝机，10 件/分钟'));
+  const placements = [{ id: 'station:station-1', partId: 'station:station-1', model: '上料工位', x: 123, y: 456, w: 280, h: 140 }];
+  const bad = save(root, { name: '坏布局工程', design, config: design.config, placements });
+  const badPath = join(projectsRoot(root), bad.record.id, 'design.json');
+  writeFileSync(badPath, '{坏 JSON');
+  const damagedBytes = readFileSync(badPath, 'utf8');
+  const damagedOpen = openProject(root, bad.record.id);
+  assert.equal(damagedOpen.ok, true, '坏布局不应阻止工程重新打开');
+  assert.equal(damagedOpen.layoutEditable, false);
+  assert.equal(saveProjectLayout(root, bad.record.id, 'b'.repeat(64), placements).ok, false);
+  assert.equal(readFileSync(badPath, 'utf8'), damagedBytes);
+
+  const invalid = { design, placements: [{ ...placements[0], x: 1_000_000 }] };
+  writeFileSync(badPath, JSON.stringify(invalid));
+  const invalidBytes = readFileSync(badPath, 'utf8');
+  const invalidOpen = openProject(root, bad.record.id);
+  assert.equal(invalidOpen.layoutEditable, false);
+  assert.deepEqual(invalidOpen.placements, []);
+  assert.equal(saveProjectLayout(root, bad.record.id, 'c'.repeat(64), placements).ok, false);
+  assert.equal(readFileSync(badPath, 'utf8'), invalidBytes);
+});
+
+test('旧工程或损坏的 design.json 以空布局打开，不影响三维工程', () => {
+  const { root } = setup();
+  const saved = save(root);
+  assert.deepEqual(openProject(root, saved.record.id).placements, []);
+  assert.equal(openProject(root, saved.record.id).layoutEditable, false);
+  writeFileSync(join(projectsRoot(root), saved.record.id, 'design.json'), '{坏 JSON');
+  const opened = openProject(root, saved.record.id);
+  assert.equal(opened.ok, true);
+  assert.deepEqual(opened.placements, []);
+  assert.equal(opened.layoutEditable, false);
+});
+
+test('saveProject：partData 带装配层级路径时写进 partsList，脏数据被清洗', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-path-'));
+  roots.push(root);
+  const stl = new Uint8Array([1, 2, 3, 4]);
+  const result = saveProject(root, {
+    name: '层级工程',
+    process: 'cad-import',
+    parts: 2,
+    partData: [
+      { name: '立柱-左前', data: stl, path: ['光伏缓存堆叠单元', '机架'] },
+      { name: '托条-01', data: stl, path: ['光伏缓存堆叠单元', '', 42, '堆叠单元'] }
+    ]
+  });
+  assert.equal(result.ok, true);
+  const list = result.record.partsList;
+  assert.deepEqual(list[0].path, ['光伏缓存堆叠单元', '机架']);
+  assert.deepEqual(list[1].path, ['光伏缓存堆叠单元', '堆叠单元'], '空段与非字符串被剔除');
+});
+
+test('saveProject：没有 path 时不写该字段（旧工程结构不变）', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-nopath-'));
+  roots.push(root);
+  const result = saveProject(root, {
+    name: '无层级工程',
+    process: 'cad-import',
+    parts: 1,
+    partData: [{ name: '件', data: new Uint8Array([9]) }]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(Object.hasOwn(result.record.partsList[0], 'path'), false);
+});
+
+test('saveProject：路径超过 8 级只保留前 8 级', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-deep-'));
+  roots.push(root);
+  const deep = Array.from({ length: 12 }, (_, index) => `L${index + 1}`);
+  const result = saveProject(root, {
+    name: '深层级工程',
+    process: 'cad-import',
+    parts: 1,
+    partData: [{ name: '件', data: new Uint8Array([7]), path: deep }]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.record.partsList[0].path.length, 8);
+  assert.equal(result.record.partsList[0].path[7], 'L8');
 });

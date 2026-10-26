@@ -9,6 +9,8 @@
  * 计算结果只依赖入参，方便单测，也便于 Agent 工具与 UI 面板共用同一套判定。
  */
 
+import { DEFAULT_WIRE_NO_SCHEME, describeScheme, matchesScheme, uses, type WireNoCategory, type WireNoScheme } from './wireno.ts';
+
 export type Severity = 'error' | 'warning' | 'info';
 
 export interface Finding {
@@ -30,6 +32,8 @@ export interface Wire {
   to: string;
   sectionMm2?: number;
   currentA?: number;
+  /** 线号类别（出图按线号方案分配时给出；校验按该类别模板判断格式） */
+  category?: WireNoCategory;
 }
 
 export type Phase = '3P' | 'L1' | 'L2' | 'L3' | 'DC24';
@@ -81,6 +85,8 @@ export interface ElecDocument {
   loads?: Load[];
   circuits?: CircuitCheck[];
   options?: PowerOptions;
+  /** 这份图用的线号方案；缺省按“数字连续”预设判断线号格式 */
+  wireScheme?: WireNoScheme;
 }
 
 export interface ElecCheckResult {
@@ -129,6 +135,9 @@ export const WIRE_NO_RULES: ReadonlyArray<{ id: string; label: string; pattern: 
   { id: 'digital', label: '数字线号 3~4 位', pattern: /^\d{3,4}$/ }
 ];
 
+const PHASE_NOS = new Set(['L1', 'L2', 'L3', 'N', 'PE']);
+
+/** 旧口径（数字连续预设）的线号粗分类：phase / dc / digital / invalid */
 export function classifyWireNo(no: string): string {
   const text = (no ?? '').trim();
   const hit = WIRE_NO_RULES.find((rule) => rule.pattern.test(text));
@@ -141,11 +150,16 @@ function round(value: number, digits = 2): number {
   return Math.round(value * factor) / factor;
 }
 
-/** 线号合规检查。 */
-export function checkWireNumbers(wires: readonly Wire[]): Finding[] {
+/**
+ * 线号合规检查——方案即规则：格式按线号方案（缺省“数字连续”）判断，导线带类别时按该类别的模板判。
+ * 缺号 → 警告；格式不合规 → 警告；同网重复 → 警告；跨网同号 → 严重；L1/L2/L3/N/PE 与电位不一致 → 严重；
+ * 纯 {num} 流水号跳号 → 一条汇总警告。
+ */
+export function checkWireNumbers(wires: readonly Wire[], scheme: WireNoScheme = DEFAULT_WIRE_NO_SCHEME): Finding[] {
   const findings: Finding[] = [];
   const byNo = new Map<string, Wire[]>();
   const numeric: number[] = [];
+  const numCategories = new Set(Object.entries(scheme.templates).filter(([, tpl]) => tpl === '{num}').map(([id]) => id));
 
   for (const wire of wires) {
     const no = (wire.no ?? '').trim();
@@ -156,19 +170,19 @@ export function checkWireNumbers(wires: readonly Wire[]): Finding[] {
       );
       continue;
     }
-    const kind = classifyWireNo(no);
-    if (kind === 'invalid') {
+    if (!matchesScheme(no, scheme, wire.category)) {
       findings.push(
         finding(
           'WIRE_NO_FORMAT',
           'warning',
-          `线号格式不合规：${no}（${location}）`,
+          `线号格式不合规：${no}（${location}）${wire.category ? `，类别模板 ${scheme.templates[wire.category]}` : ''}`,
           location,
-          '改为 L1/L2/L3/N/PE、24V/0V 或 3~4 位数字线号'
+          `按线号方案改写：${describeScheme(scheme)}`
         )
       );
     }
-    if (kind === 'digital') numeric.push(Number(no));
+    const pureNum = /^\d+$/.test(no) && (wire.category ? numCategories.has(wire.category) : Object.values(scheme.templates).some((tpl) => uses(tpl, 'num')));
+    if (pureNum) numeric.push(Number(no));
     const key = no.toUpperCase();
     const list = byNo.get(key);
     if (list) list.push(wire);
@@ -200,8 +214,7 @@ export function checkWireNumbers(wires: readonly Wire[]): Finding[] {
       );
     }
     for (const wire of list) {
-      const expected = classifyWireNo(no);
-      if (expected === 'phase' && wire.potential !== no) {
+      if (PHASE_NOS.has(no) && wire.potential !== no) {
         findings.push(
           finding(
             'WIRE_NO_POTENTIAL_MISMATCH',
@@ -498,7 +511,7 @@ export function checkWireSections(circuits: readonly CircuitCheck[]): Finding[] 
 export function runElectricalCheck(doc: ElecDocument): ElecCheckResult {
   const summary = powerSummary(doc.loads ?? [], doc.options ?? {});
   const findings = [
-    ...checkWireNumbers(doc.wires ?? []),
+    ...checkWireNumbers(doc.wires ?? [], doc.wireScheme ?? DEFAULT_WIRE_NO_SCHEME),
     ...summary.findings,
     ...checkWireSections(doc.circuits ?? [])
   ].sort((a, b) => SEVERITY_WEIGHT[a.severity] - SEVERITY_WEIGHT[b.severity]);

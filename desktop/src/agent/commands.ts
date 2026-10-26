@@ -13,6 +13,7 @@ import {
   type PowerOptions,
   type Wire
 } from '../elec/check.ts';
+import { isWireNoCategory, validateWireNoScheme, type WireNoScheme } from '../elec/wireno.ts';
 import { runCostTool, CostToolError } from '../cost/agent.ts';
 import type { Issue, PlcGenConfig } from '../plcgen/types.ts';
 import { summarizeVerification, verifyGenerated, type VerifyOptions } from '../plcgen/verify.ts';
@@ -31,7 +32,8 @@ import { checkExportTargetPath } from './policy.ts';
 import { parseMachineBrief } from '../machine/spec.ts';
 import { synthMachine } from '../machine/synth.ts';
 import { estimatePower } from '../machine/power.ts';
-import { estimateCost, readMachinePricing } from '../machine/cost-model.ts';
+import { estimateCost } from '../machine/cost-model.ts';
+import { readMachinePricing } from '../../electron/pricing.ts';
 import { validatePricebook, type Pricebook } from '../cost/pricebook.ts';
 import {
   activeMachinePath,
@@ -62,6 +64,8 @@ import { AGENT_COMMAND_MODULES, moduleDisabledResult, moduleIsEnabled, type Modu
 import { COST_ESTIMATION_MODULE_ID } from '../modules/cost-estimation-gate.ts';
 import { PARAMETRIC_IMPORT_MODULE_ID, PARAMETRIC_MODULE_DISABLED_MESSAGE } from '../modules/parametric-gate.ts';
 import { generateMachineGeometry, summarizeGeometry } from '../machine/geometry.ts';
+import { stationIdentitiesFor } from '../machine/station-identity.ts';
+import { applyStationGeometryLayout } from '../machine/station-layout.ts';
 import {
   buildMachineSolids,
   geometryToGltf,
@@ -230,7 +234,13 @@ const BRIDGE_METHODS = new Set([
   'exportArtifact',
   'applyMachineConfig',
   'appendMachineBomRows',
-  'removeMachineBomRows'
+  'removeMachineBomRows',
+  // 以下三项命令层早已在调，白名单漏了：真实渲染桥会以 INVALID_METHOD 拒绝（fake bridge 测不出来）
+  'buildMachineModel',
+  'buildCanvasAssembly',
+  'saveSceneAsProject',
+  'markPlcGenerated',
+  'getElecDocument'
 ]);
 
 export const SIMPLE_BOM_NOTE = '简化 BOM：由当前 CAD 零件与已插入占位件生成；型号取零件名称，材料统一记为“—”。';
@@ -739,7 +749,8 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
       from: textOf(item.from),
       to: textOf(item.to),
       ...(section !== undefined ? { sectionMm2: section } : {}),
-      ...(current !== undefined ? { currentA: current } : {})
+      ...(current !== undefined ? { currentA: current } : {}),
+      ...(isWireNoCategory(item.category) ? { category: item.category } : {})
     };
   });
 
@@ -802,19 +813,45 @@ function parseElecDocument(args: Record<string, unknown>): ElecDocument {
     throw new CommandFailure('INVALID_ARGUMENT', 'options 必须是对象');
   }
 
+  // 线号方案：当前电气图纸带上它（getElecDocument），校验按该图的方案判断线号格式；不合法整体拒绝
+  let wireScheme: WireNoScheme | undefined;
+  if (args.wireScheme !== undefined && args.wireScheme !== null) {
+    const checked = validateWireNoScheme(args.wireScheme);
+    if (!checked.ok) throw new CommandFailure('INVALID_ARGUMENT', `wireScheme 不合法：${checked.errors.join('；')}`);
+    wireScheme = checked.scheme;
+  }
+
   return {
     wires,
     loads,
     circuits,
-    ...(options !== undefined ? { options } : {})
+    ...(options !== undefined ? { options } : {}),
+    ...(wireScheme !== undefined ? { wireScheme } : {})
   };
 }
 
 function registerElectricalCheckCommand(bus: CommandBus): void {
   bus.register({
     name: 'run_electrical_check',
-    async run(args) {
-      const doc = parseElecDocument(args);
+    async run(args, ctx) {
+      let doc = parseElecDocument(args);
+      let source: unknown;
+      const noData = args.wires === undefined && args.loads === undefined && args.circuits === undefined;
+      if (noData) {
+        // 不传数据：校验当前电气图纸（与电气域画布、电气校验面板同一份 __ElecDocProvider 数据）
+        try {
+          const current = await ctx.bridge.call<{ ok?: boolean; document?: unknown; source?: unknown }>('getElecDocument');
+          if (current?.ok === true && isRecord(current.document)) {
+            doc = parseElecDocument({
+              ...current.document,
+              ...(args.options !== undefined ? { options: args.options } : {})
+            });
+            source = current.source;
+          }
+        } catch (error) {
+          recordDiagnosticError('ELEC_DOC_BRIDGE_FAILED', error, { site: 'run_electrical_check' });
+        }
+      }
       if (doc.wires?.length === 0 && doc.loads?.length === 0 && doc.circuits?.length === 0) {
         throw new CommandFailure(
           'INVALID_ARGUMENT',
@@ -827,7 +864,8 @@ function registerElectricalCheckCommand(bus: CommandBus): void {
         data: {
           counts: result.counts,
           summary: result.summary,
-          findings: result.findings
+          findings: result.findings,
+          ...(source !== undefined ? { source } : {})
         }
       };
     }
@@ -1222,12 +1260,42 @@ interface MachineApplyUndoToken {
   plcText?: string | null;
   previousConfig: StoredMachineDesign['config'] | null;
   previousLayout: string | null;
+  /** 上一版方案的电气出图数据（BOM 草稿 + 功率）；撤销时随 config 一起送回渲染层 */
+  previousElec?: MachineElecDesign | null;
   batchId: string;
   withBom: boolean;
   /** 几何产物撤销快照：路径 + 旧内容 base64（null 表示原先不存在）。 */
   geometryFiles?: { path: string; previous: string | null }[];
 }
 
+
+/** 渲染层出电气图需要的方案部分（IO 表由 config 现算，与 PLC 包同一地址分配） */
+interface MachineElecDesign {
+  bomDraft: StoredMachineDesign['bomDraft'];
+  power: StoredMachineDesign['power'];
+}
+
+function machineElecDesign(design: Pick<StoredMachineDesign, 'bomDraft' | 'power'> | null | undefined): MachineElecDesign | null {
+  if (!design || !design.bomDraft || !design.power) return null;
+  return { bomDraft: design.bomDraft, power: design.power };
+}
+
+/**
+ * applyMachineConfig 载荷：config 驱动 3D 联调视图；design（BOM 草稿 + 功率）驱动电气出图。
+ * 只传 config 时电气图会退回缺省伺服 0.4 kW 与通用型号。
+ */
+function machineScenePayload(
+  config: StoredMachineDesign['config'] | null,
+  options: { machineId?: string | null; name: string | null; layout: string | null; design: MachineElecDesign | null }
+): Record<string, unknown> {
+  return {
+    config,
+    ...(options.machineId ? { machineId: options.machineId } : {}),
+    name: options.name,
+    layout: options.layout,
+    ...(options.design ? { design: options.design } : {})
+  };
+}
 
 function machineMainBreakerRating(
   design: NormalizedMachineDesign,
@@ -1252,6 +1320,75 @@ function machineMainBreakerRating(
  * 整机模型构建：机型经 MODEL_BUILDERS 注册表分发，渲染层负责生成几何与装配。
  * 与 apply_machine_design 的区别：这里只产出"当前视口里的模型"，不写工程文件。
  */
+/**
+ * 画布方案 → 整机 3D 示意装配工程（智能体工具 build_canvas_assembly）。
+ * 与 build_machine_model 的区别：不跑参数化内核，只按画布工位的 dimsMm/ortho 生成占位盒，
+ * 结果能落成工程（零件树/包围盒可查），但明确是示意体、不给质量。
+ */
+function registerBuildCanvasAssemblyCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'build_canvas_assembly',
+    async run(args, ctx) {
+      const allowed = ['name', 'open', 'graph'];
+      for (const key of Object.keys(args)) {
+        if (!allowed.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      if (args.open !== undefined && typeof args.open !== 'boolean') {
+        throw new CommandFailure('INVALID_ARGUMENT', 'open 必须是布尔值');
+      }
+      if (args.graph !== undefined && (typeof args.graph !== 'object' || args.graph === null || Array.isArray(args.graph))) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'graph 必须是对象（MachineGraph）');
+      }
+      const payload = {
+        ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+        ...(args.open === false ? { open: false } : {}),
+        ...(args.graph !== undefined ? { graph: args.graph } : {})
+      };
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string; code?: string }>('buildCanvasAssembly', [payload]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure(
+          typeof result?.code === 'string' && result.code ? result.code : 'RENDERER_ERROR',
+          result?.message ?? '画布装配生成失败'
+        );
+      }
+      return { ok: true, data: result };
+    }
+  });
+}
+
+/**
+ * 当前视口模型 → 工程（智能体工具 save_scene_as_project）。
+ * 用于导入 CAD 后落库：逐件 STL 写盘、零件树/包围盒可查；质量恒 null。
+ */
+function registerSaveSceneAsProjectCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'save_scene_as_project',
+    async run(args, ctx) {
+      const allowed = ['name'];
+      for (const key of Object.keys(args)) {
+        if (!allowed.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      const payload = {
+        ...(typeof args.name === 'string' ? { name: args.name.trim() } : {})
+      };
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string; code?: string }>('saveSceneAsProject', [payload]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure(
+          typeof result?.code === 'string' && result.code ? result.code : 'RENDERER_ERROR',
+          result?.message ?? '存为工程失败'
+        );
+      }
+      return { ok: true, data: result };
+    }
+  });
+}
+
 function registerBuildMachineModelCommand(bus: CommandBus): void {
   bus.register({
     name: 'build_machine_model',
@@ -1388,12 +1525,10 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         // 相同方案重复应用：不重写文件、不追加 BOM、不动 appliedAt；只确保当前渲染层已切到该方案。
         let sceneRefreshed = false;
         try {
-          const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
-            config: normalized.config,
-            machineId,
-            name: normalized.config.name,
-            layout: normalized.form?.geometry?.kind ?? null
-          });
+          const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', machineScenePayload(
+            normalized.config,
+            { machineId, name: normalized.config.name, layout: normalized.form?.geometry?.kind ?? null, design: machineElecDesign(normalized) }
+          ));
           sceneRefreshed = refreshed?.ok !== false;
         } catch (error) {
           recordDiagnosticError('MACHINE_SCENE_REFRESH_FAILED', error, { machineId, phase: 'idempotent-apply' });
@@ -1527,7 +1662,12 @@ function registerMachineApplyCommand(bus: CommandBus): void {
           }
         };
         try {
-          const geometry = generateMachineGeometry(normalized);
+          const generatedGeometry = generateMachineGeometry(normalized);
+          const geometry = applyStationGeometryLayout(
+            generatedGeometry,
+            normalized.stationGeometryLayout,
+            stationIdentitiesFor(normalized.config.id, normalized.config.stations.length, normalized.stationIdentities)
+          );
           const bundle = geometryToSidecarAssemblies(geometry, { updatedAt: appliedAt });
           for (const path of [paths.json, paths.stl, paths.gltf, paths.sidecar]) snapshot(path);
           writeText(paths.json, `${JSON.stringify(geometry, null, 2)}\n`);
@@ -1595,12 +1735,10 @@ function registerMachineApplyCommand(bus: CommandBus): void {
 
       let sceneRefreshed = false;
       try {
-        const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', {
-          config: normalized.config,
-          machineId,
-          name: stored.name,
-          layout: normalized.form?.geometry?.kind ?? null
-        });
+        const refreshed = await ctx.bridge.call<{ ok?: boolean; message?: string }>('applyMachineConfig', machineScenePayload(
+          normalized.config,
+          { machineId, name: stored.name, layout: normalized.form?.geometry?.kind ?? null, design: machineElecDesign(normalized) }
+        ));
         if (refreshed?.ok === false) {
           warnings.push(`3D 联调视图刷新失败：${refreshed.message ?? '渲染层未返回原因'}`);
         } else {
@@ -1618,6 +1756,7 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         designText,
         previousConfig: previousDesign?.config ?? null,
         previousLayout: previousDesign?.form?.geometry?.kind ?? null,
+        previousElec: machineElecDesign(previousDesign),
         batchId,
         withBom,
         ...(bomPath !== undefined ? { bomPath } : {}),
@@ -1671,11 +1810,13 @@ function registerMachineApplyCommand(bus: CommandBus): void {
         }
       }
       try {
-        await ctx.bridge.call('applyMachineConfig', {
-          config: undo.previousConfig,
+        await ctx.bridge.call('applyMachineConfig', machineScenePayload(undo.previousConfig, {
+          machineId: undo.previousConfig?.id ?? null,
           name: undo.previousConfig?.name ?? null,
-          layout: undo.previousLayout
-        });
+          layout: undo.previousLayout,
+          // 旧版撤销令牌没有 previousElec：渲染层只拿到 config，会在图纸说明里标注“未携带 BOM/功率”
+          design: undo.previousElec ?? null
+        }));
       } catch (error) {
         // 3D 刷新失败不回滚已恢复的文件状态。
         recordDiagnosticError('MACHINE_SCENE_RESTORE_FAILED', error, { machineId: undo.machineId });
@@ -1892,6 +2033,8 @@ export function createAgentCommandBus(
   registerPlcVerifyCommand(bus);
   registerPlcGenerateCommand(bus);
   registerBuildMachineModelCommand(bus);
+  registerBuildCanvasAssemblyCommand(bus);
+  registerSaveSceneAsProjectCommand(bus);
   registerMachineApplyCommand(bus);
   registerExportFilesCommand(bus);
   return bus;

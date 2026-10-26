@@ -1,5 +1,12 @@
 import { normalizePointKey } from '../plcgen/io.ts';
 
+export const DEFAULT_ACTUATOR_TRAVEL_MM = 40;
+export const MIN_ACTUATOR_TRAVEL_MM = 0.1;
+export const MAX_ACTUATOR_TRAVEL_MM = 2000;
+export const DEFAULT_ROTATION_RANGE_DEG = 90;
+export const MIN_ROTATION_RANGE_DEG = 0.1;
+export const MAX_ROTATION_RANGE_DEG = 360;
+
 // 边界说明：STEP 导入结果只包含几何/装配信息，不包含执行机构定义与运动学。
 // 本文件描述的是联调原型的“点位 → 执行机构/工位”配置映射，不代表可从任意 STEP
 // 自动推导机构类型、行程或轴关系。后续若接入机器人/伺服模型，需要额外的运动学数据源。
@@ -12,12 +19,22 @@ export interface ActuatorConfig {
   extendPoint?: string;
   retractPoint?: string;
   gripPoint?: string;
-  /** 旋转轴的驱动点位；true 时转到 90°，false 时回零。 */
+  /** 旋转轴的驱动点位；true 时转到 rotationRangeDeg，false 时回零。 */
   point?: string;
   travelMm?: number;
+  /** 向导手工输入的直线行程来源；始终待复核，缺省表示方案/系统估算值。 */
+  travelSource?: 'engineer-input';
+  /** rotary 分度角；缺省按 90° 方案/系统估算。 */
+  rotationRangeDeg?: number;
+  /** 向导手工输入的旋转分度角来源；始终待复核，缺省表示方案/系统估算值。 */
+  rotationRangeSource?: 'engineer-input';
   durationMs?: number;
   /** 场景布局偏移；相对所属工位基座中心，单位为场景单位。 */
   position?: [number, number, number];
+  /** 元件库绑定；仅向导编辑使用，旧配置可缺省。 */
+  model?: string;
+  partId?: string;
+  packId?: string;
 }
 
 export interface SensorConfig {
@@ -25,6 +42,10 @@ export interface SensorConfig {
   station: string;
   part: string;
   color?: string;
+  /** 元件库绑定；仅向导编辑使用，旧配置可缺省。 */
+  model?: string;
+  partId?: string;
+  packId?: string;
 }
 
 export interface MachineConfig {
@@ -62,6 +83,27 @@ function positiveNumber(value: unknown, fallback: number, label: string): number
   const number = value === undefined ? fallback : value;
   if (typeof number !== 'number' || !Number.isFinite(number) || number <= 0) {
     throw new Error(`${label} 必须大于 0`);
+  }
+  return number;
+}
+
+function actuatorTravel(value: unknown, id: string): number {
+  const number = value === undefined ? DEFAULT_ACTUATOR_TRAVEL_MM : value;
+  if (typeof number !== 'number' || !Number.isFinite(number)) throw new Error(`执行机构「${id}」行程必须是有限数`);
+  if (number <= 0) throw new Error(`执行机构「${id}」travelMm 必须大于 0`);
+  if (number < MIN_ACTUATOR_TRAVEL_MM || number > MAX_ACTUATOR_TRAVEL_MM) {
+    throw new Error(`执行机构「${id}」行程必须在 ${MIN_ACTUATOR_TRAVEL_MM}–${MAX_ACTUATOR_TRAVEL_MM} mm 范围内`);
+  }
+  return number;
+}
+
+function actuatorRotationRange(value: unknown, id: string): number {
+  const number = value === undefined ? DEFAULT_ROTATION_RANGE_DEG : value;
+  if (typeof number !== 'number' || !Number.isFinite(number)) {
+    throw new Error(`执行机构「${id}」旋转分度角必须是有限数`);
+  }
+  if (number < MIN_ROTATION_RANGE_DEG || number > MAX_ROTATION_RANGE_DEG) {
+    throw new Error(`执行机构「${id}」旋转分度角必须在 ${MIN_ROTATION_RANGE_DEG}–${MAX_ROTATION_RANGE_DEG}° 范围内`);
   }
   return number;
 }
@@ -127,15 +169,39 @@ export function validateMachineConfig(value: unknown): MachineConfig {
       name,
       kind,
       station,
-      travelMm: positiveNumber(raw.travelMm, 40, `执行机构「${id}」travelMm`),
       durationMs: positiveNumber(raw.durationMs, 400, `执行机构「${id}」durationMs`)
     };
+    if (kind === 'rotary') {
+      normalized.rotationRangeDeg = actuatorRotationRange(raw.rotationRangeDeg, id);
+      if (raw.rotationRangeSource !== undefined) {
+        if (raw.rotationRangeSource !== 'engineer-input') throw new Error(`执行机构「${id}」rotationRangeSource 必须是 engineer-input`);
+        if (raw.rotationRangeDeg === undefined) throw new Error(`执行机构「${id}」标记为工程师输入时必须显式填写 rotationRangeDeg`);
+        normalized.rotationRangeSource = 'engineer-input';
+      }
+      if (raw.travelSource !== undefined) throw new Error(`执行机构「${id}」旋转轴不能携带直线行程来源 travelSource`);
+    } else {
+      normalized.travelMm = actuatorTravel(raw.travelMm, id);
+      if (raw.travelSource !== undefined) {
+        if (raw.travelSource !== 'engineer-input') throw new Error(`执行机构「${id}」travelSource 必须是 engineer-input`);
+        if (raw.travelMm === undefined) throw new Error(`执行机构「${id}」标记为工程师输入时必须显式填写 travelMm`);
+        normalized.travelSource = 'engineer-input';
+      }
+      if (raw.rotationRangeDeg !== undefined || raw.rotationRangeSource !== undefined) {
+        throw new Error(`执行机构「${id}」非旋转轴不能携带 rotationRangeDeg/rotationRangeSource`);
+      }
+    }
     if (extendPoint !== undefined) normalized.extendPoint = extendPoint;
     if (retractPoint !== undefined) normalized.retractPoint = retractPoint;
     if (gripPoint !== undefined) normalized.gripPoint = gripPoint;
     if (point !== undefined) normalized.point = point;
     const position = readPosition(raw.position, `执行机构「${id}」`);
     if (position !== undefined) normalized.position = position;
+    const model = optionalString(raw, 'model', `执行机构「${id}」model`);
+    const partId = optionalString(raw, 'partId', `执行机构「${id}」partId`);
+    const packId = optionalString(raw, 'packId', `执行机构「${id}」packId`);
+    if (model !== undefined) normalized.model = model;
+    if (partId !== undefined) normalized.partId = partId;
+    if (packId !== undefined) normalized.packId = packId;
     return normalized;
   });
 
@@ -149,6 +215,12 @@ export function validateMachineConfig(value: unknown): MachineConfig {
     const color = optionalString(raw, 'color', `传感器「${point}」color`);
     const normalized: SensorConfig = { point, station, part };
     if (color !== undefined) normalized.color = color;
+    const model = optionalString(raw, 'model', `传感器「${point}」model`);
+    const partId = optionalString(raw, 'partId', `传感器「${point}」partId`);
+    const packId = optionalString(raw, 'packId', `传感器「${point}」packId`);
+    if (model !== undefined) normalized.model = model;
+    if (partId !== undefined) normalized.partId = partId;
+    if (packId !== undefined) normalized.packId = packId;
     return normalized;
   });
 

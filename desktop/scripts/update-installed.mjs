@@ -60,6 +60,8 @@ const copies = [
   ['dir', join(unpacked, 'resources', 'packs'), join(installDir, 'resources', 'packs')],
   // 参数化建模 sidecar（Python）：修它就得重新拷，否则应用跑的仍是旧脚本。
   ['dir', join(unpacked, 'resources', 'parametric'), join(installDir, 'resources', 'parametric')],
+  // FreeCAD 后台作业脚本（工程图 TechDraw；FreeCAD 本体由用户另行安装）
+  ['dir', join(unpacked, 'resources', 'freecad'), join(installDir, 'resources', 'freecad')],
   // DWG 转换器（GPL-3.0，独立目录，见 scripts/vendor-dwg.mjs）
   ['dir', join(unpacked, 'resources', 'dwg'), join(installDir, 'resources', 'dwg')]
 ];

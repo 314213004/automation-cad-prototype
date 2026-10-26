@@ -202,6 +202,13 @@ test('预检：BOM 文本 16DI/16DO 可解析且容量足够', () => {
   assert.deepEqual(result.errors, []);
 });
 
+test('预检：BOM 文本多种点数写法都能解析（输入8 输出6 / 8 IN / 6 OUT / 8×DI 6×DO）', () => {
+  for (const model of ['输入8 输出6', '8 IN / 6 OUT', '8入/6出', '8×DI 6×DO', 'DI:8 DO:6']) {
+    const result = precheck(makeConfig(), [{ name: 'PLC IO 模块', model, quantity: 1 }]);
+    assert.deepEqual(codes(result), [], `${model} 应解析出 8 入 / 6 出且容量够`);
+  }
+});
+
 test('预检：BOM 文本 DI 16/DO 16 与点数别名可解析', () => {
   const textResult = precheck(makeConfig(), [
     { name: 'PLC IO 模块', model: 'DI 16/DO 16', quantity: 1 }

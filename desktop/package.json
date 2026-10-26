@@ -2,6 +2,7 @@
   "name": "automation-cad-desktop",
   "version": "0.4.9",
   "private": true,
+  "license": "GPL-3.0-only",
   "description": "非标自动化整机设计软件 · Windows 11 桌面版",
   "author": "owlco",
   "type": "module",
@@ -17,6 +18,7 @@
     "build:machine-case": "node scripts/build-machine-case.mjs",
     "bench:render": "node scripts/bench-render-plan.mjs",
     "smoke": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --headless-smoke",
+    "smoke:design:webgl": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a -s \"-screen 0 1920x1200x24\" electron . --headless-design-webgl-smoke",
     "smoke:win": "electron . --headless-smoke --disable-gpu --disable-gpu-compositing --disable-software-rasterizer",
     "update:installed": "node scripts/update-installed.mjs",
     "diagnose": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a electron . --diagnose",
@@ -99,6 +101,10 @@
       {
         "from": "../spike/build123d/app.py",
         "to": "parametric/app.py"
+      },
+      {
+        "from": "../spike/freecad/techdraw_job.py",
+        "to": "freecad/techdraw_job.py"
       },
       {
         "from": "vendor/dwg",

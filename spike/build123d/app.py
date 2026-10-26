@@ -81,17 +81,44 @@ def build(ops: list[dict]):
             if not positions:
                 raise ValueError("holes.positions 不能为空")
             depth = op.get("depth")
+            top = shape.bounding_box().max.Z
             for x, y in positions:
-                z0 = -1.0
-                height = 1e3 if depth in (None, "through") else _num(depth, "depth") + 2
-                shape = shape - (bd.Pos(float(x), float(y), z0) * bd.Cylinder(d / 2, height))
+                if depth in (None, "through"):
+                    shape = shape - (bd.Pos(float(x), float(y), -1.0) * bd.Cylinder(d / 2, 1e3))
+                else:
+                    # 盲孔/螺纹底孔：从顶面向下切，孔深 = depth（与工程图「↧depth」一致；顶面上方多切 1mm 保证切净）
+                    dep = _num(depth, "depth")
+                    shape = shape - (bd.Pos(float(x), float(y), top - dep / 2 + 0.5) * bd.Cylinder(d / 2, dep + 1))
+        elif kind == "counterbore":
+            if shape is None:
+                raise ValueError("counterbore 之前必须有实体")
+            d = _num(op.get("diameter"), "diameter")
+            cbd = _num(op.get("cbDiameter"), "cbDiameter")
+            cbdepth = _num(op.get("cbDepth"), "cbDepth")
+            if cbd <= d:
+                raise ValueError(f"cbDiameter（{cbd}）必须大于 diameter（{d}）")
+            positions = op.get("positions") or []
+            if not positions:
+                raise ValueError("counterbore.positions 不能为空")
+            depth = op.get("depth")
+            top = shape.bounding_box().max.Z
+            for x, y in positions:
+                # 通孔：从顶面上方 1mm 一路切下去
+                # 定深时孔深从顶面量起 = depth（与工程图标注一致）
+                height = 1e3 if depth in (None, "through") else _num(depth, "depth") + 1
+                shape = shape - (bd.Pos(float(x), float(y), top - height / 2 + 1) * bd.Cylinder(d / 2, height))
+                # 沉窝：从顶面上方 0.5mm 起切 cbDepth（多切 0.5 保证顶面切净，不吃到台阶以下）
+                shape = shape - (
+                    bd.Pos(float(x), float(y), top - cbdepth / 2 + 0.5) * bd.Cylinder(cbd / 2, cbdepth + 1)
+                )
         elif kind == "slot":
             if shape is None:
                 raise ValueError("slot 之前必须有实体")
             length = _num(op.get("length"), "length")
             width = _num(op.get("width"), "width")
             cut = bd.extrude(bd.SlotOverall(length, width), amount=1e3)
-            shape = shape - (bd.Pos(0, 0, -1) * cut)
+            # 腰形槽为通槽：从实体底面下方 1mm 起切（原来从 z=-1 起切，居中板只切穿上半部分）
+            shape = shape - (bd.Pos(0, 0, shape.bounding_box().min.Z - 1) * cut)
         elif kind == "fillet":
             if shape is None:
                 raise ValueError("fillet 之前必须有实体")

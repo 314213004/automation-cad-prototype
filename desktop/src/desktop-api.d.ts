@@ -227,6 +227,93 @@ interface DesktopParametricBuildResult {
   files?: Record<string, unknown>;
 }
 
+interface DesktopFreecadInfo {
+  available: boolean;
+  path: string | null;
+  version: string | null;
+  source: 'configured' | 'env' | 'detected' | null;
+  reason: string;
+  installHint: string;
+  checkedAt: string | null;
+}
+
+type DesktopDrawingFormat = 'pdf' | 'dxf' | 'svg' | 'fcstd';
+
+interface DesktopDrawingsFailure {
+  ok: false;
+  code: string;
+  message: string;
+  info?: DesktopFreecadInfo;
+}
+
+interface DesktopDrawingPartResult {
+  partId: string;
+  ok: boolean;
+  files: Partial<Record<DesktopDrawingFormat, string>>;
+  warnings: string[];
+  error?: string;
+  paper?: string;
+  scale?: string;
+}
+
+interface DesktopDrawingJobSnapshot {
+  jobId: string;
+  label: string;
+  state: 'queued' | 'preparing' | 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'timeout';
+  total: number;
+  done: number;
+  currentPartId: string | null;
+  message: string;
+  createdAt: string;
+  finishedAt: string | null;
+  outcome?: {
+    jobId: string;
+    state: string;
+    message: string;
+    freecadVersion?: string;
+    parts: Array<{ part: { partKey: string; partId: string; name: string }; result: DesktopDrawingPartResult; stepSha256?: string }>;
+    stderrTail: string;
+    durationMs: number;
+  };
+}
+
+interface DesktopDrawingManifestEntry {
+  partKey: string;
+  partId: string;
+  name: string;
+  fingerprint: string;
+  geometryHash: string;
+  fileStem: string;
+  files: Partial<Record<DesktopDrawingFormat, string>>;
+  stepSha256?: string;
+  paper?: string;
+  scale?: string;
+  bbox?: [number, number, number];
+  warnings: string[];
+  generatedAt: string;
+  freecadVersion?: string;
+  scriptVersion: string;
+  jobId: string;
+  lastError?: string;
+}
+
+interface DesktopDrawingManifest {
+  schemaVersion: 1;
+  projectKey: string;
+  updatedAt: string;
+  entries: Record<string, DesktopDrawingManifestEntry>;
+}
+
+interface DesktopDrawingsGenerateRequest {
+  projectKey: string;
+  doc: unknown;
+  instanceIds?: string[];
+  onlyStale?: boolean;
+  meta?: Record<string, { material?: string; drawingNo?: string; scale?: string; paper?: 'auto' | 'A4' | 'A3' }>;
+  titleBlock?: { designer?: string; company?: string; date?: string };
+  options?: { formats?: DesktopDrawingFormat[]; paper?: 'auto' | 'A4' | 'A3'; scale?: string; iso?: boolean; hiddenLines?: boolean };
+}
+
 interface DesktopAgentToolInfo {
   name: string;
   description: string;
@@ -521,6 +608,9 @@ interface AgentBridgeApi {
   getScene(): { parts: AgentBridgeScenePart[]; source: string | null } | AgentBridgeFailure;
   getSelection(): { name: string; bbox: number[] } | AgentBridgeFailure | null;
   getBom(): AgentBridgeBomRow[] | AgentBridgeFailure;
+  getSceneParts(): import('./mech/interference').InterferencePart[];
+  appendMachineBomRows(payload: unknown): { ok: boolean; added?: number; total?: number; message?: string } | Promise<{ ok: boolean; added?: number; total?: number; message?: string }>;
+  applyMachineConfig(payload: unknown): { ok: boolean; message?: string };
   getPlcGenConfig(): import('./plcgen/types').PlcGenConfig | AgentBridgeFailure | null;
   getProjectContext(): {
     domain: string | null;
@@ -557,6 +647,8 @@ interface AgentBridgeApi {
   getProjectCheckpointFingerprint(): Promise<string | null>;
   getAdvisorState(): import('./agent/advisor').AdvisorProjectState | AgentBridgeFailure;
   markPlcGenerated(): { ok: boolean };
+  /** 当前电气图纸的校验数据（与电气域画布、__ElecDocProvider 同源）；Agent run_electrical_check 不传数据时用 */
+  getElecDocument?(): { ok: true; document: import('./elec/check').ElecDocument; source: Record<string, unknown> } | AgentBridgeFailure;
   insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
@@ -620,6 +712,27 @@ interface AgentBridgeApi {
   /** 运动件自动识别：只生成建议并刷新标注抽屉的建议列表，从不写入标注。 */
   suggestKinematics(): AgentKinematicsSuggestBridgeResult | AgentBridgeFailure;
   importPath(path: string): Promise<{ ok: boolean; meshCount?: number; triangleCount?: number; message?: string }>;
+  /** B-Rep 精确干涉（OCP 布尔，真体积）；不做 AABB 初筛。 */
+  brepInterference(payload: { stepPath: string; timeoutMs?: number; maxParts?: number }): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    parts?: number;
+    candidates?: number;
+    checks?: number;
+    hits?: Array<{ a: string; b: string; volumeMm3: number; ratio: number; severity: string }>;
+    elapsedMs?: number;
+    tolerances?: { volumeMm3: number; ratio: number };
+  }>;
+  /** 工程零件清单 CSV → userData/exports（不接任意绝对路径）。 */
+  exportPartsCsv(payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }): Promise<{
+    ok: boolean;
+    path?: string;
+    bytes?: number;
+    rows?: number | null;
+    code?: string;
+    message?: string;
+  }>;
   exportCostFile(payload: {
     format: 'pdf' | 'csv';
     fileName?: string;
@@ -733,6 +846,61 @@ interface DesktopAgentLanAccess {
   message?: string;
 }
 
+type DesktopProjectGeometryReview =
+  | { status: 'not-executed'; partCount: 0 }
+  | { status: 'aabb-screened'; partCount: number; method: 'AABB'; sourceName?: string; checkedAt: string };
+
+interface DesktopDesignProjectSaveInput {
+  name: string;
+  process: string;
+  params?: Record<string, number>;
+  parts: number;
+  massKg?: number | null;
+  envelope?: [number, number, number] | null;
+  material?: string[];
+  stepPath?: string | null;
+  stlPath?: string | null;
+  partPaths?: Array<{ name: string; path: string }>;
+  design?: unknown;
+  config?: unknown;
+  geometryReview?: DesktopProjectGeometryReview;
+  stlData?: Uint8Array;
+  partData?: Array<{ name: string; data: Uint8Array; path?: string[] }>;
+  placements?: unknown[];
+}
+
+interface DesktopDesignProjectRecord {
+  id: string;
+  name: string;
+  process: string;
+  params: Record<string, number>;
+  parts: number;
+  massKg: number | null;
+  envelope: [number, number, number] | null;
+  material: string[];
+  createdAt: string;
+  partsList: Array<{ file: string; name: string }>;
+  hasStep: boolean;
+  hasStl: boolean;
+  bytes: number;
+  design?: unknown;
+  geometryReview?: DesktopProjectGeometryReview;
+}
+
+interface DesktopProjectLayoutPlacement {
+  id: string;
+  partId: string;
+  model: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  railId?: string;
+  tag?: string;
+  qty?: number;
+  note?: string;
+}
+
 interface Window {
   desktop?: {
     version(): Promise<DesktopVersion>;
@@ -762,7 +930,28 @@ interface Window {
     getPathForFile(file: File): string;
     exportFile(name: string, data: Uint8Array | string): Promise<{ canceled: boolean; path: string | null }>;
     exportReport(payload: { html: string; projectName?: string; page?: { size?: 'A3' | 'A4'; landscape?: boolean } }): Promise<{ path: string; htmlPath: string }>;
-    exportCostFile(payload: {
+    /** B-Rep 精确干涉（OCP 布尔，真体积）；不做 AABB 初筛。 */
+  brepInterference(payload: { stepPath: string; timeoutMs?: number; maxParts?: number }): Promise<{
+    ok: boolean;
+    code?: string;
+    message?: string;
+    parts?: number;
+    candidates?: number;
+    checks?: number;
+    hits?: Array<{ a: string; b: string; volumeMm3: number; ratio: number; severity: string }>;
+    elapsedMs?: number;
+    tolerances?: { volumeMm3: number; ratio: number };
+  }>;
+  /** 工程零件清单 CSV → userData/exports（不接任意绝对路径）。 */
+  exportPartsCsv(payload: { fileName?: string; suggestedName?: string; data: string; rows?: number }): Promise<{
+    ok: boolean;
+    path?: string;
+    bytes?: number;
+    rows?: number | null;
+    code?: string;
+    message?: string;
+  }>;
+  exportCostFile(payload: {
       format: 'pdf' | 'csv';
       fileName?: string;
       overwrite?: boolean;
@@ -823,10 +1012,34 @@ interface Window {
       remove(id: string): Promise<{ ok: boolean }>;
       listParts(filter?: { q?: string; category?: string; packId?: string }): Promise<DesktopComponentPart[]>;
     };
+    design: {
+      settings(): Promise<{ ok: boolean; message?: string; pricing?: import('./machine/cost-model').MachinePricingLoad; builtinPricebook?: import('./cost/pricebook').Pricebook }>;
+      loadDraft(): Promise<{ draft: unknown | null; recovered: boolean }>;
+      saveDraft(draft: unknown): Promise<{ ok: boolean; message?: string }>;
+      clearDraft(): Promise<{ ok: boolean }>;
+    };
+    /** 画布工作台草稿（userData/canvas-workbench-draft.json，0600，1.5MB 上限）。 */
+    canvasDraft: {
+      load(): Promise<{ draft: unknown | null; recovered: boolean; path: string }>;
+      save(draft: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
+      clear(): Promise<{ ok: boolean }>;
+    };
+    /** 手工询价覆盖（userData/canvas-price-overrides.json，0600，256KB 上限）。 */
+    canvasPricing: {
+      load(): Promise<{ book: unknown | null; recovered: boolean; path: string }>;
+      save(book: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
+      clear(): Promise<{ ok: boolean }>;
+    };
+    /** 画布方案库（userData/canvas-schemes.json，0600，4MB 上限）。 */
+    canvasSchemes: {
+      load(): Promise<{ library: unknown | null; recovered: boolean; path: string }>;
+      save(library: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
+    };
     projects: {
-      list(): Promise<DesktopProjectRecord[]>;
-      save(payload: DesktopProjectSaveInput): Promise<{ ok: boolean; record?: DesktopProjectRecord; message?: string }>;
-      open(id: string): Promise<{ ok: boolean; record?: DesktopProjectRecord; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      list(): Promise<DesktopDesignProjectRecord[]>;
+      save(payload: DesktopDesignProjectSaveInput): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; message?: string }>;
+      open(id: string): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; placements?: DesktopProjectLayoutPlacement[]; layoutEditable?: boolean; layoutFingerprint?: string; layoutMessage?: string; partPaths?: Array<{ name: string; path: string }>; stepPath?: string | null; message?: string }>;
+      saveLayout(payload: { id: string; fingerprint: string; placements: DesktopProjectLayoutPlacement[] }): Promise<{ ok: boolean; conflict?: boolean; fingerprint?: string; message?: string }>;
       remove(id: string): Promise<{ ok: boolean; message?: string }>;
     };
     projectArchive: {
@@ -851,9 +1064,14 @@ interface Window {
       syncAgentResumeEnabled(enabled: boolean): boolean;
       syncProjectPortableEnabled(enabled: boolean): boolean;
       syncSystemUpdateEnabled(enabled: boolean): boolean;
+      syncDrawingsTechdrawEnabled?(enabled: boolean): boolean;
     };
     agent: {
       info(): Promise<DesktopAgentInfo>;
+      /** 写操作确认请求（主进程 → 渲染进程）；返回取消订阅函数。 */
+      onConfirmWrite(handler: (payload: { id: string; tool: string; summary: string; detail?: string; bypassNotice?: string }) => void): () => void;
+      /** 回答写确认；remember=true 表示本会话内同名工具不再询问。 */
+      replyConfirmWrite(payload: { id: string; allow: boolean; remember?: boolean }): void;
       getLlmConfig(): Promise<DesktopAgentLlmConfig>;
       saveLlmConfig(config: Record<string, unknown>): Promise<DesktopAgentLlmConfig>;
       testLlm(config?: Record<string, unknown>): Promise<DesktopAgentLlmTestResult>;
@@ -906,6 +1124,22 @@ interface Window {
     };
     render: {
       stats(stats: DesktopRenderStats): Promise<{ ok: boolean; message?: string }>;
+    };
+    drawings?: {
+      freecadStatus(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      detectFreecad(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      chooseFreecadPath(): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      setFreecadPath(path: string | null): Promise<{ ok: true; info: DesktopFreecadInfo } | DesktopDrawingsFailure>;
+      generate(request: DesktopDrawingsGenerateRequest): Promise<
+        | { ok: true; jobId: string; partKeys: string[]; skipped: Array<{ instanceId: string; name: string; reason: string }>; warnings: string[] }
+        | DesktopDrawingsFailure
+      >;
+      cancel(jobId: string): Promise<{ ok: boolean }>;
+      jobs(): Promise<{ ok: true; jobs: DesktopDrawingJobSnapshot[] } | DesktopDrawingsFailure>;
+      list(projectKey: string): Promise<{ ok: true; projectKey: string; directory: string; manifest: DesktopDrawingManifest } | DesktopDrawingsFailure>;
+      open(projectKey: string, partKey: string, format: DesktopDrawingFormat): Promise<{ ok: true } | DesktopDrawingsFailure>;
+      reveal(projectKey: string, partKey?: string): Promise<{ ok: true } | DesktopDrawingsFailure>;
+      onJob(callback: (snapshot: DesktopDrawingJobSnapshot) => void): () => void;
     };
     parametric: {
       status(): Promise<DesktopParametricStatusInfo>;
@@ -962,6 +1196,7 @@ interface Window {
       diff(packageId: string): Promise<DesktopSyncDiffResult>;
       downloadCandidate(packageId: string, machineContext?: unknown): Promise<DesktopSyncDownloadCandidateResult>;
     };
+    onNewDesign(callback: () => void): () => void;
     onOpenCad(callback: (payload: { path: string; source: string }) => void): () => void;
     onImportPack(callback: (payload: { path: string }) => void): () => void;
     onSetDomain(callback: (domain: 'mech' | 'elec') => void): () => void;
@@ -1167,6 +1402,23 @@ interface Window {
   __Parametric?: {
     status(): Promise<DesktopParametricStatusInfo>;
     build(doc: unknown): Promise<DesktopParametricBuildResult>;
+  };
+  AutomationCadDrawings?: {
+    state(): {
+      enabled: boolean;
+      freecadAvailable: boolean;
+      freecadVersion: string | null;
+      freecadReason: string;
+      projectKey: string;
+      parts: number;
+      fresh: number;
+      stale: number;
+      missing: number;
+      job: { jobId: string; state: string; done: number; total: number; message: string } | null;
+      autoRegenerate: boolean;
+    } | null;
+    refresh(): Promise<void>;
+    generate(scope: 'selected' | 'all' | 'stale'): Promise<{ ok: boolean; message: string; jobId?: string }>;
   };
   AutomationCadParametric?: {
     open(): void;
