@@ -29,5 +29,6 @@
 | three.js | MIT | 3D 渲染 |
 | occt-import-js（OCCT WASM） | LGPL-2.1 | STEP / IGES / BREP 解析 |
 | build123d / OCCT（参数化 sidecar） | Apache-2.0 / LGPL-2.1 | 参数化建模与 STEP/STL 导出 |
+| FreeCAD 1.x（可选，用户自行安装，不随包分发） | LGPL-2.1+ | 工程图（TechDraw）等后台任务；仅以独立进程 `freecadcmd` 调用，随包只带作业脚本 `resources/freecad/techdraw_job.py` |
 
 数据包（`packs/builtin`）中的型号与参数为公开样本整理，非厂商授权数据，商用前请自行核对。

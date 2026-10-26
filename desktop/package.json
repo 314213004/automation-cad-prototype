@@ -102,6 +102,10 @@
         "to": "parametric/app.py"
       },
       {
+        "from": "../spike/freecad/techdraw_job.py",
+        "to": "freecad/techdraw_job.py"
+      },
+      {
         "from": "vendor/dwg",
         "to": "dwg"
       }

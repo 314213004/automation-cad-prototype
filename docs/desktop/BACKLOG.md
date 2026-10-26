@@ -15,6 +15,8 @@
 - **P1：可移植工程档案恢复**：在只读严格预览后设计用户确认的显式应用、备份与事务回滚；补跨机器 CAD 几何复核，并继续定义尚未纳入的 PLC/工厂/Agent 数据迁移。
 - **P1/P2：扩展模块化边界**：继续迁移尚未门控的机械、CAD 只读/运动学、工厂、同步和通用导出能力；当前开关不卸载应用内代码。真正的按需下载须另行设计签名包、兼容性、离线安装和回滚。
 
+- **P1：FreeCAD 后台任务后续**（第 1 步零件工程图已交付，见下节）：② 钣金展开 DXF（SheetMetal 为第三方工作台，需先评估 1.x 自带能力或自写展开，仍走同一作业队列/清单/过期机制）；③ 总装图 + BOM 明细表（多零件 STEP + 摆位 → TechDraw 装配视图与序号/明细栏）；④ FEM（CalculiX 随 FreeCAD 安装，先做单件静力校核）；⑤ 孔中心线/孔径标注、DXF 隐藏线分层、设置页统一入口；⑥ Windows 真机验收 FreeCAD 1.0/1.1 安装路径与 PDF 中文字体。
+
 ## 待决策（需要老王拍板，不阻塞其他开发）
 
 | # | 问题 | 选项 | 影响 | 建议 | 状态 |
@@ -62,3 +64,11 @@
 - 📐 方案：`docs/desktop/CANVAS-WORKBENCH.md` —— 模板 → 现有模块映射、数据契约（MountPort/CanvasNode/Edge）、5 处必须纠正的偏差（CDN 依赖、CT 串行口径、写死价格、端口只比字符串、假 B-Rep 干涉）、P1–P4 分期与验收。
 - ⏳ P1（核心纯函数 + 单测）：`src/canvas/graph.ts`（端口兼容 / 插转接板 / 删节点）、`metrics.ts`（CT 走 `evaluateFlow`、伺服选型）、`export.ts`（build123d 脚本 / ST / Graph JSON）。
 - ⏳ P2（三视图 UI + smoke）、P3（接真实候选/元件库/价格簿）、P4（3D PiP 联动）按方案推进，未开工。
+
+## FreeCAD 零件工程图（2026-10-26，`feat/freecad-techdraw`）
+
+- ✅ `drawings.techdraw` 可选模块（依赖 `cad.parametric-import`）：参数化抽屉「工程图（FreeCAD）」分区——选中零件/全部/重出过期、进度与取消、PDF/DXF/目录、过期徽标、未安装提示与「指定 freecadcmd 路径」。
+- ✅ 主进程 `freecad.ts` 运行器 + `drawings-service.ts`（逐件 STEP → freecadcmd → 工程目录 + manifest），IPC 走受信 sender + 模块 fail-closed，renderer 不传路径。
+- ✅ `techdraw_job.py`：第一角投影三视图 + 轴测、自动 A4/A3 与 GB 比例、外形尺寸、国标标题栏，PDF/DXF/SVG；沙箱 FreeCAD 1.0.0（conda-forge）+ build123d 0.13 真机跑通，两件批量约 1 s。
+- 测试：协议/过期/运行器（假 freecadcmd：成功、单件失败、崩溃、超时、取消、PDF 兜底、伪造路径、未安装）/服务/模块/脚本自检，+45 条。
+- 边界：DXF 隐藏线未分层；只标外形总尺寸，无孔位/公差/技术要求；PDF 中文依赖本机字体；Windows 实机未验收。

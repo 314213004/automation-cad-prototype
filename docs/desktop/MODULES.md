@@ -10,6 +10,7 @@
 | Electron 主进程 | [desktop/electron/MODULE.md](../../desktop/electron/MODULE.md) | 窗口、菜单、IPC、Agent 启动、打包路径 |
 | CAD 查看 | [desktop/src/cad/MODULE.md](../../desktop/src/cad/MODULE.md) | STEP/IGES/STL/OBJ/GLTF 解析与 three.js 渲染、运动学标注层与自动识别建议（名称/型号 + 层级 + 几何，需逐条确认） |
 | CAD 参数化导入与重建 | [desktop/src/parametric/MODULE.md](../../desktop/src/parametric/MODULE.md) | 可选 `cad.parametric-import`（v1.0.0 / API 1）；控制参数化特征树编辑、sidecar 重建与 STEP/STL 导出；关闭不禁用 STEP/IGES/CAD 只读查看，不删除特征树、原 CAD 或叠加体 |
+| FreeCAD 零件工程图 | [desktop/src/drawings/MODULE.md](../../desktop/src/drawings/MODULE.md) | 可选 `drawings.techdraw`（v1.0.0 / API 1，依赖参数化）；特征树逐件 STEP → 独立 freecadcmd TechDraw → PDF/DXF 落工程目录，指纹判过期可一键重出；FreeCAD 未装只禁用出图 |
 | 客户可选模块注册与启停 | [desktop/src/modules/MODULE.md](../../desktop/src/modules/MODULE.md) | 内置模块 ID/API/依赖/能力目录、默认状态、持久化开关与跨 renderer/主进程门控边界 |
 | Windows 应用内更新 | [desktop/docs/update-channel.md](../../desktop/docs/update-channel.md) | 可选 `system.update`（v1.0.0 / API 1）；稳定/测试渠道、显式下载与确认安装、NSIS blockmap 与签名/完整性发布门禁 |
 | 可移植工程档案 | [desktop/src/project-archive/MODULE.md](../../desktop/src/project-archive/MODULE.md) | 可选 `project.portable` v2.0.0；stable project ID/source hash 绑定 schema-v2 状态+CAD 候选档案，strict read-only preview；事务恢复仍未实现 |
@@ -99,6 +100,13 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - `desktop/src/cad/viewer.ts`：参数化重建后的 STL 载入、旧模型半透明幽灵层（可开关）、特征包围盒高亮
 - `spike/build123d/app.py`：Python sidecar（`/health`、`/build`，算子白名单 box/cylinder/holes/slot/fillet；可选 `instances` 多实体独立建模后按 transform 合并）
 - 内核选型与分期见 [PARAMETRIC-CAD.md](PARAMETRIC-CAD.md)；实测见 [PARAMETRIC-CAD-SPIKE.md](PARAMETRIC-CAD-SPIKE.md)
+
+## FreeCAD 后台任务（工程图第 1 步）
+
+- 分工：build123d sidecar 负责参数化零件/实体化；FreeCAD 1.x 无界面独立进程（`freecadcmd`，LGPL，可选安装）负责 TechDraw 工程图，之后接钣金展开 DXF 与 FEM。两份 OCCT 不进同一 Python 进程，只用 STEP 文件中转；特征树 JSON 是唯一主数据，STEP/PDF/DXF 都是产物。
+- `desktop/electron/freecad.ts`：探测（设置路径 → `AUTOMATIONCAD_FREECAD_CMD` → `C:\Program Files\FreeCAD 1.x\bin\freecadcmd.exe` 等 → PATH）、`--version` ≥ 1.0、串行作业队列（超时/取消/进程树清理/stderr 尾部/临时目录必清）。
+- `desktop/electron/drawings-service.ts` + `drawings-ipc.ts`：逐件 STEP、工程目录 `drawings/manifest.json`（指纹 + STEP SHA-256）、受信 IPC（renderer 不传路径）。
+- `spike/freecad/techdraw_job.py`：A4/A3 自动、GB 比例系列、第一角投影主/俯/左 + 轴测、外形总尺寸、国标标题栏；PDF（Qt）/DXF（TechDraw + 图框标题栏）/SVG。协议与过期判定见 `desktop/src/drawings/`，细节见 [FREECAD-DRAWINGS.md](FREECAD-DRAWINGS.md)。
 
 ## Agent 能力报告（汇报）
 
