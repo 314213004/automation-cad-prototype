@@ -31,7 +31,8 @@ import {
   formatPort,
   type WorkbenchSummary
 } from './view-model.ts';
-import { CANVAS_PALETTE, demoCanvasGraph, paletteNode } from './demo-graph.ts';
+import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
+import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
   CANVAS_DRAFT_KEY,
   clearDraft,
@@ -288,6 +289,7 @@ function buildShell(): void {
     <div class="cw-body">
       <aside class="cw-palette">
         <h3>模组库</h3>
+        <input type="search" id="cwPaletteSearch" class="cw-palette-search" placeholder="搜索型号 / 品类" aria-label="搜索模组" />
         <div id="cwPalette"></div>
         <p class="cw-palette-note">
           通用模组模板，不是具体型号：<code>partId</code> 留空，价格必然「待询价」。
@@ -336,16 +338,90 @@ function buildShell(): void {
   document.body.appendChild(section);
 }
 
-function fillPalette(): void {
+// ---- 模组库（P3：优先读 packs 真实元件，读不到回落到通用模板） ----
+
+let paletteSections: PaletteSection[] = [];
+let paletteIndex = new Map<string, PaletteItem>();
+let paletteSourceNote = '通用模板（packs 未接入）：型号/质量/端口均为品类默认值';
+
+function paletteItemMarkup(item: PaletteItem): string {
+  const bound = item.partId ? '' : ' · 待选型';
+  return `
+    <button type="button" class="cw-palette-item" data-action="add-module" data-item="${escapeHtml(item.id)}"
+            title="${escapeHtml(`${item.spec}${item.partId ? ` · partId=${item.partId}` : ''}`)}">
+      ${escapeHtml(item.label)}
+      <small>${escapeHtml(item.spec)}${bound}</small>
+    </button>`;
+}
+
+function renderPalette(filter = ''): void {
   const host = document.getElementById('cwPalette');
   if (!host) return;
-  host.innerHTML = CANVAS_PALETTE.map(
-    (item) => `
-      <button type="button" class="cw-palette-item" data-action="add-module" data-item="${escapeHtml(item.id)}">
-        ${escapeHtml(item.label)}
-        <small>${escapeHtml(item.spec)}</small>
-      </button>`
-  ).join('');
+  const keyword = filter.trim().toLowerCase();
+  const match = (item: PaletteItem): boolean =>
+    keyword === '' ||
+    item.label.toLowerCase().includes(keyword) ||
+    item.spec.toLowerCase().includes(keyword) ||
+    (item.partId ?? '').toLowerCase().includes(keyword);
+
+  if (paletteSections.length === 0) {
+    const items = CANVAS_PALETTE.filter(match);
+    host.innerHTML = `
+      <div class="cw-palette-group">
+        <div class="cw-palette-group-head">通用模组 <em>${items.length}</em></div>
+        ${items.map(paletteItemMarkup).join('') || '<p class="cw-hint">没有匹配的模组</p>'}
+      </div>
+      <p class="cw-palette-note">${escapeHtml(paletteSourceNote)}</p>`;
+    return;
+  }
+
+  host.innerHTML = [
+    ...paletteSections.map((section) => {
+      const items = section.items.filter(match);
+      if (items.length === 0) return '';
+      return `
+        <div class="cw-palette-group">
+          <div class="cw-palette-group-head">${escapeHtml(section.label)} <em>${section.total}</em></div>
+          ${items.map(paletteItemMarkup).join('')}
+        </div>`;
+    }),
+    `<p class="cw-palette-note">${escapeHtml(paletteSourceNote)}</p>`
+  ]
+    .filter(Boolean)
+    .join('');
+}
+
+function rebuildPaletteIndex(): void {
+  paletteIndex = new Map<string, PaletteItem>();
+  for (const item of CANVAS_PALETTE) paletteIndex.set(item.id, item);
+  for (const section of paletteSections) {
+    for (const item of section.items) paletteIndex.set(item.id, item);
+  }
+}
+
+/** 读 packs（主进程 packs.listParts）。失败只影响模组库来源，不影响画布。 */
+async function loadPacksPalette(): Promise<void> {
+  const api = window.desktop?.packs;
+  if (!api || typeof api.listParts !== 'function') {
+    rebuildPaletteIndex();
+    renderPalette();
+    return;
+  }
+  try {
+    const parts = await api.listParts({});
+    const coverage = summarizePackCoverage(parts);
+    paletteSections = buildPaletteSections(parts);
+    paletteSourceNote =
+      coverage.mountable > 0
+        ? `来自 packs：${coverage.total} 件元件中 ${coverage.mountable} 件可上画布（${paletteSections.length} 类）；质量取品类默认值，端口为品类通用接口，价格按 partId 查价格簿`
+        : `packs 里没有可上画布的机械件（共 ${coverage.total} 件），回落到通用模板`;
+    rebuildPaletteIndex();
+    renderPalette((document.getElementById('cwPaletteSearch') as HTMLInputElement | null)?.value ?? '');
+  } catch (error) {
+    paletteSourceNote = `packs 读取失败：${error instanceof Error ? error.message : String(error)}；使用通用模板`;
+    rebuildPaletteIndex();
+    renderPalette();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -898,7 +974,7 @@ function insertAllAdapters(): void {
 }
 
 function addModule(itemId: string): void {
-  const item = CANVAS_PALETTE.find((entry) => entry.id === itemId);
+  const item = paletteIndex.get(itemId) ?? CANVAS_PALETTE.find((entry) => entry.id === itemId);
   if (!item) return;
   const current = selectedNode();
   const idBase = `n-${item.kind}-${state.graph.nodes.length + 1}`;
@@ -1140,6 +1216,12 @@ function bindEvents(): void {
     }
   });
 
+  section.addEventListener('input', (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.id !== 'cwPaletteSearch') return;
+    renderPalette((target as HTMLInputElement).value);
+  });
+
   window.addEventListener('keydown', (event) => {
     if (!state.open) return;
     if (event.key === 'Escape') {
@@ -1184,7 +1266,9 @@ export function installCanvasWorkbench(): void {
   mounted = true;
   ensureStyles();
   buildShell();
-  fillPalette();
+  rebuildPaletteIndex();
+  renderPalette();
+  void loadPacksPalette();
   bindEvents();
   bindSelection();
   bindDrag();
