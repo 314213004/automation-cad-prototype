@@ -55,6 +55,7 @@ import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
 import { initHomeScreen, type HomeScreenHandle } from './home/home-screen.ts';
+import { attachProjectPanel, detachProjectPanel, toPanelInfo } from './assembly/project-panel.ts';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
 import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
@@ -1733,6 +1734,8 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     toggleProjectMenu(false);
     const project = projectMenuRecordOf(result.record, merged.meshes.length);
     setCurrentProject(project);
+    // 右侧属性面板改由工程数据驱动（否则仍显示原型里的演示气缸）
+    attachProjectPanel(toPanelInfo(result.record));
     if (scenePartCount === 0) {
       const reason = webglFallback
         ? '当前环境不支持 WebGL，仅显示解析统计，不能进行 3D 校核'
