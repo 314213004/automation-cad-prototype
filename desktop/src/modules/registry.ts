@@ -208,6 +208,18 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = Object.freeze([
     implemented: true
   }),
   Object.freeze({
+    id: 'design.layout-editor',
+    name: '整机布局 3D 编辑',
+    version: '1.0.0',
+    apiCompatibility: Object.freeze({ min: 1, max: 1 }),
+    dependencies: Object.freeze(['core']),
+    requiredCapabilities: Object.freeze(['design.layout-editor.viewport']),
+    description: '整机设计向导第 4 步的 3D 视口直接编辑：点选/多选工位、移动/绕 Z 旋转 gizmo、网格/角度/包络边吸附、对齐分布阵列、包络干涉提示、临时测量，结果写回同一份 MachineDesign.stationGeometryLayout 并并入统一撤销时间线。默认启用；关闭只隐藏 3D 编辑入口并关闭已打开的编辑器，不删除或改动已保存的工位位姿，俯视 X/Y 数值编辑仍可用。',
+    kind: 'optional' as const,
+    defaultEnabled: true,
+    implemented: true
+  }),
+  Object.freeze({
     id: 'system.update',
     name: '更新通道',
     version: '1.0.0',
@@ -229,6 +241,7 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = Object.freeze([
 
 const RUNTIME_CAPABILITIES = Object.freeze([
   'workspace.project-storage',
+  'design.layout-editor.viewport',
   'workspace.extension-host',
   'agent.plan.checkpoint',
   'agent.plan.cross-restart-resume',

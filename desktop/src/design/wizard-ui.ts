@@ -31,6 +31,9 @@ import { assessMachineFootprint, footprintAssessmentText, geometryForDesign, wit
 import { geometryPlanRoleColor, geometryPlanStationColor, projectMachineGeometryTopView, renderGeometryTopViewSvg } from './geometry-plan-view.ts';
 import { analyzeConceptMotionEnvelopes, motionEnvelopeColor, renderMotionEnvelopePanel } from './motion-envelope.ts';
 import { withStationGeometryOffset } from '../machine/station-layout.ts';
+import { layoutHistory } from '../orbit/ui.ts';
+import { applyLayoutSnapshot, layoutSnapshot } from '../layout-editor/model.ts';
+import { closeLayoutEditor, isLayoutEditorEnabled, openLayoutEditor, refreshLayoutEditor } from '../layout-editor/ui.ts';
 import { createStationIdentity, stationIdentitiesFor } from '../machine/station-identity.ts';
 import {
   briefToMachineBrief, canAdvance, DESIGN_STEPS, DESIGN_STEP_LABELS, shanghaiIso,
@@ -386,6 +389,7 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
           <label>Y 平移（mm）<input type="number" step="any" data-geometry-station-offset="y" aria-label="所选工位 Y 平移毫米" value="${numberText(offset.yMm)}"></label>
           <button type="button" class="design-button primary" data-geometry-offset-apply>应用到当前几何</button>
           <button type="button" class="design-button" data-preview-current>预览当前 3D 几何</button>
+          ${isLayoutEditorEnabled() ? '<button type="button" class="design-button primary design-geometry-3d-entry" data-layout-editor-open title="在 3D 视口中直接拖动/旋转工位、对齐分布、吸附与干涉提示">3D 布局编辑</button>' : ''}
           <small>拖动标尺：SVG 坐标单位为 mm；图中网格按比例显示。偏移是相对生成器原始工位位置的绝对 X/Y 值。</small>
         </div>
         ${identityNotice ? `<div class="design-notice" role="status">${escapeHtml(identityNotice)}</div>` : ''}
@@ -697,6 +701,46 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
       return false;
     }
   }
+  /** 整机布局写回：与 X/Y 输入、俯视拖动、3D 布局编辑共用同一份 MachineDesign 主数据。 */
+  function applyLayoutDesign(updated: MachineDesign): void {
+    const geometry = geometryFor(updated);
+    draft.design = withGeometryAssessment(withFootprintAssessment(updated, assessMachineFootprint(draft.brief.footprint, geometry.envelope)));
+    review = null;
+  }
+  /** 记入与主视口共用的撤销时间线（快照只含工位位姿，绑定方案与稳定身份）。 */
+  function recordLayoutEdit(before: MachineDesign | null, label: string, mergeKey?: string): void {
+    if (!before || !draft.design) return;
+    layoutHistory.record({ label, before: layoutSnapshot(before), after: layoutSnapshot(draft.design), at: Date.now(), ...(mergeKey ? { mergeKey } : {}) });
+  }
+  function openLayoutEditorForDraft(): void {
+    if (!draft.design) { options.notify('请先选择方案，再编辑整机布局。', true); return; }
+    openLayoutEditor({
+      getDesign: () => draft.design ?? null,
+      commit: (next, label, mergeKey) => {
+        const before = draft.design ?? null;
+        if (!before) return false;
+        applyLayoutDesign(next);
+        recordLayoutEdit(before, label, mergeKey);
+        notice = `3D 布局编辑：${label}；旧校核已失效，保存与 STL 使用当前几何。`;
+        markDraftChanged(true);
+        render();
+        return true;
+      },
+      footprintRequirement: () => draft.brief.footprint ?? null,
+      notify: options.notify
+    });
+  }
+  layoutHistory.setApplier((snapshot, label) => {
+    if (!draft.design) return false;
+    const next = applyLayoutSnapshot(draft.design, snapshot);
+    if (!next) return false;
+    applyLayoutDesign(next);
+    notice = `已撤销/重做布局：${label}`;
+    markDraftChanged(true);
+    render();
+    refreshLayoutEditor();
+    return true;
+  });
   function currentSceneParts() {
     const source = options.sceneInfo().source;
     if (source === 'empty' || source === 'concept-placeholder') return [];
@@ -782,6 +826,8 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
       const result = await window.desktop.design.clearDraft();
       if (!result.ok) throw new Error('草稿删除失败');
       persistence.reset();
+      layoutHistory.clear();
+      closeLayoutEditor();
       draft = initialDraft();
       savedDraft = false;
       review = null;
@@ -1036,11 +1082,13 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
     });
     root.querySelectorAll<HTMLElement>('[data-preview]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const design = draft.candidates?.[Number(button.dataset.preview)]; if (design) openPreview(design); }));
     root.querySelectorAll<HTMLElement>('[data-preview-current]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); if (draft.design) openPreview(draft.design); }));
+    root.querySelector<HTMLElement>('[data-layout-editor-open]')?.addEventListener('click', (event) => { event.stopPropagation(); openLayoutEditorForDraft(); });
     root.querySelectorAll<HTMLElement>('[data-candidate]').forEach((card) => card.addEventListener('click', () => {
       const index = Number(card.dataset.candidate) as 0 | 1 | 2;
       const preserved = draft.stations;
       const hadGeometryOffsets = (draft.design?.stationGeometryLayout?.offsets.length ?? 0) > 0;
       draft = selectCandidate(draft, index);
+      layoutHistory.clear();
       const merged = mergeStationDrafts(draft.stations, preserved);
       draft = withStations(draft, merged.stations);
       if (hadGeometryOffsets) {
@@ -1202,7 +1250,9 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
         options.notify('请先选择工位，并输入有限的 X/Y 毫米平移。', true);
         return;
       }
+      const beforeApply = draft.design ?? null;
       if (!updateGeometryStationOffset(stationId, xMm, yMm)) { render(); return; }
+      recordLayoutEdit(beforeApply, `${stationId} X/Y = ${xMm}, ${yMm}`);
       notice = `已更新 ${stationId} 的真实几何平移；旧校核已失效。保存与 STL 将使用当前 MachineGeometry。`;
       markDraftChanged(true);
       render();
@@ -1230,6 +1280,7 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
       const existing = draft.design.stationGeometryLayout?.offsets.find((item) => item.stationIdentity === stationIdentity);
       const baseX = existing?.xMm ?? 0;
       const baseY = existing?.yMm ?? 0;
+      const dragBefore = draft.design ?? null;
       let changed = false;
       let lastX = baseX;
       let lastY = baseY;
@@ -1268,6 +1319,7 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
         try { if (geometryCanvas.hasPointerCapture(pointerId)) geometryCanvas.releasePointerCapture(pointerId); } catch { /* Ignore a detached capture target. */ }
         if (finishActiveGeometryDrag === finish) finishActiveGeometryDrag = null;
         if (!changed) return;
+        recordLayoutEdit(dragBefore, `拖动 ${station?.name ?? stationId}（俯视）`);
         notice = `已拖动 ${station?.name ?? stationId}：X ${lastX} mm / Y ${lastY} mm；旧校核已失效。`;
         markDraftChanged(true);
         render();
@@ -1353,6 +1405,7 @@ export function initDesignWizard(options: DesignWizardOptions): { open(): void; 
   }
   async function close(): Promise<void> {
     if (root.hidden) return;
+    closeLayoutEditor();
     if (isLoading) {
       loadVersion += 1;
       isLoading = false;

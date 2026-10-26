@@ -58,6 +58,11 @@
 **边界**：仍是概念占位体，AABB 非精检；型号 CAD、结构/干涉/节拍签核和 Windows 发布验收未完成。超出机架/占地需人工复核。测试与 KB 容量见 [STATUS.md](STATUS.md)，不等同生产验收。
 - **概念运动包络提示**：偏移后的当前几何输入；不支持轴显式未覆盖，候选只供人工复核，不改 review 或签核。限制见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)。
 
+## 整机布局 3D 编辑（2026-10-26，feat/layout-editor）
+
+- ✅ 向导第 4 步「3D 布局编辑」：点选/Ctrl/框选工位、属性面板、平移 X/Y/XY 与绕 Z 旋转 gizmo（拖动中键入数值、Esc 取消）、网格/角度/包络边吸附与参考线、对齐/分布/阵列排布、OBB 包络干涉标红 + 截面求交精检、运动包络去基线、临时测量；写回同一份 `stationGeometryLayout`（有旋转时 schemaVersion 3），撤销并入 `UnifiedHistory` 的 `'layout'` 令牌。详见 `desktop/src/layout-editor/MODULE.md`。
+- ⏳ 未做：复制/新增工位（需改机型配置）；已保存工程重开后的 3D 布局编辑（需 IPC 写 design.json 并重生成 STL）；build123d 布尔精检；通电联调 3D 未应用位姿；编辑器 DOM 自动化测试。
+
 ## 无限画布工作台（2026-10-26）
 
 - 📄 归档：`docs/desktop/mockups/canvas-workbench.html`（老王给的交互原型，Tailwind CDN + three r128，106 KB）；配套架构评审原文 `docs/desktop/reviews/2026-10-25-architecture-review.md`。

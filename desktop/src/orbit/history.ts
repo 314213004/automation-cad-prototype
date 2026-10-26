@@ -15,7 +15,11 @@
  */
 import type { ParamOverrides } from './model.ts';
 
-export type HistoryToken = 'proto' | 'orbit';
+/**
+ * 'layout' = 整机布局 3D 编辑（src/layout-editor/）写入 MachineDesign.stationGeometryLayout 的一步；
+ * 快照内容由布局编辑器解释，时间线只负责排序与撤销/重做归属。
+ */
+export type HistoryToken = 'proto' | 'orbit' | 'layout';
 
 export interface ProtoCounts {
   undo: number;
@@ -34,11 +38,23 @@ export interface OrbitEdit {
   at: number;
 }
 
+/** 整机布局编辑的一步：before/after 是布局编辑器自己的不可变快照（工位位姿表）。 */
+export interface LayoutEdit {
+  label: string;
+  before: unknown;
+  after: unknown;
+  /** 同一字段连续输入合并用；拖动/对齐等离散动作留空 */
+  mergeKey?: string;
+  at: number;
+}
+
 export interface HistorySnapshot {
   undoTimeline: HistoryToken[];
   redoTimeline: HistoryToken[];
   orbitUndo: string[];
   orbitRedo: string[];
+  layoutUndo: string[];
+  layoutRedo: string[];
   proto: ProtoCounts;
   protoRedoOrphans: number;
 }
@@ -99,6 +115,8 @@ export class UnifiedHistory {
   private redoTimeline: HistoryToken[] = [];
   private orbitUndo: OrbitEdit[] = [];
   private orbitRedo: OrbitEdit[] = [];
+  private layoutUndo: LayoutEdit[] = [];
+  private layoutRedo: LayoutEdit[] = [];
   private proto: ProtoCounts = { undo: 0, redo: 0 };
   /** 原型重做栈里已被 3D 新动作「作废」、但扩展无法清除的条目数 */
   private protoRedoOrphans = 0;
@@ -110,9 +128,9 @@ export class UnifiedHistory {
   /** 以当前原型计数为起点（扩展挂载时原型可能已有历史，全部视为更早的 'proto' 动作）。 */
   resetProto(counts: ProtoCounts): void {
     this.proto = { ...counts };
-    this.undoTimeline = this.undoTimeline.filter((t) => t === 'orbit');
+    this.undoTimeline = this.undoTimeline.filter((t) => t !== 'proto');
     this.undoTimeline.unshift(...Array.from({ length: counts.undo }, () => 'proto' as const));
-    this.redoTimeline = this.redoTimeline.filter((t) => t === 'orbit');
+    this.redoTimeline = this.redoTimeline.filter((t) => t !== 'proto');
     this.protoRedoOrphans = counts.redo;
   }
 
@@ -141,6 +159,78 @@ export class UnifiedHistory {
     this.dropRedo();
     this.trimOrbit();
     return true;
+  }
+
+  /**
+   * 记录一次整机布局编辑（与 3D/原型动作同一条时间线）。同 mergeKey 800 ms 内合并；
+   * sameSnapshot 判定前后相同（无效编辑不入栈）。
+   */
+  recordLayout(edit: LayoutEdit, sameSnapshot: (a: unknown, b: unknown) => boolean = (a, b) => JSON.stringify(a) === JSON.stringify(b)): boolean {
+    const top = this.layoutUndo[this.layoutUndo.length - 1];
+    const topToken = this.undoTimeline[this.undoTimeline.length - 1];
+    if (edit.mergeKey && top && topToken === 'layout' && top.mergeKey === edit.mergeKey &&
+        this.redoTimeline.length === 0 && edit.at - top.at <= MERGE_WINDOW_MS) {
+      top.after = edit.after;
+      top.at = edit.at;
+      top.label = edit.label;
+      if (sameSnapshot(top.before, top.after)) {
+        this.layoutUndo.pop();
+        this.undoTimeline.pop();
+      }
+      return true;
+    }
+    if (sameSnapshot(edit.before, edit.after)) return false;
+    this.layoutUndo.push({ ...edit });
+    this.undoTimeline.push('layout');
+    this.dropRedo();
+    this.trimLayout();
+    return true;
+  }
+
+  peekLayoutUndo(): LayoutEdit | null {
+    return this.nextUndo() === 'layout' ? this.layoutUndo[this.layoutUndo.length - 1] ?? null : null;
+  }
+
+  peekLayoutRedo(): LayoutEdit | null {
+    return this.nextRedo() === 'layout' ? this.layoutRedo[this.layoutRedo.length - 1] ?? null : null;
+  }
+
+  /** 栈顶是布局编辑时弹出它（调用方把工位位姿换回 `before`）。 */
+  takeLayoutUndo(): LayoutEdit | null {
+    if (this.nextUndo() !== 'layout') return null;
+    const edit = this.layoutUndo.pop();
+    this.undoTimeline.pop();
+    if (!edit) return null;
+    this.layoutRedo.push(edit);
+    this.redoTimeline.push('layout');
+    return edit;
+  }
+
+  /** 重做栈顶是布局编辑时弹出它（调用方把工位位姿换成 `after`）。 */
+  takeLayoutRedo(): LayoutEdit | null {
+    if (this.nextRedo() !== 'layout') return null;
+    const edit = this.layoutRedo.pop();
+    this.redoTimeline.pop();
+    if (!edit) return null;
+    this.layoutUndo.push(edit);
+    this.undoTimeline.push('layout');
+    this.trimLayout();
+    return edit;
+  }
+
+  /**
+   * 布局主数据被布局编辑器以外的路径整体替换（换方案、需求重算、关闭草稿）时调用：
+   * 旧快照已不对应当前设计，丢弃全部布局条目，避免撤销把旧方案的位姿写进新方案。
+   */
+  clearLayout(): void {
+    this.layoutUndo = [];
+    this.layoutRedo = [];
+    this.undoTimeline = this.undoTimeline.filter((t) => t !== 'layout');
+    this.redoTimeline = this.redoTimeline.filter((t) => t !== 'layout');
+  }
+
+  layoutCounts(): { undo: number; redo: number } {
+    return { undo: this.layoutUndo.length, redo: this.layoutRedo.length };
   }
 
   /** 下一次撤销该由谁执行；null = 两边都没有可撤销项。 */
@@ -257,6 +347,7 @@ export class UnifiedHistory {
     this.protoRedoOrphans += countOf(this.redoTimeline, 'proto');
     this.redoTimeline = [];
     this.orbitRedo = [];
+    this.layoutRedo = [];
     this.protoRedoOrphans = Math.min(this.protoRedoOrphans, this.proto.redo);
   }
 
@@ -264,6 +355,14 @@ export class UnifiedHistory {
     while (this.orbitUndo.length > ORBIT_HISTORY_LIMIT) {
       this.orbitUndo.shift();
       const index = this.undoTimeline.indexOf('orbit');
+      if (index >= 0) this.undoTimeline.splice(index, 1);
+    }
+  }
+
+  private trimLayout(): void {
+    while (this.layoutUndo.length > ORBIT_HISTORY_LIMIT) {
+      this.layoutUndo.shift();
+      const index = this.undoTimeline.indexOf('layout');
       if (index >= 0) this.undoTimeline.splice(index, 1);
     }
   }
@@ -279,6 +378,8 @@ export class UnifiedHistory {
       redoTimeline: [...this.redoTimeline],
       orbitUndo: this.orbitUndo.map((e) => e.label),
       orbitRedo: this.orbitRedo.map((e) => e.label),
+      layoutUndo: this.layoutUndo.map((e) => e.label),
+      layoutRedo: this.layoutRedo.map((e) => e.label),
       proto: { ...this.proto },
       protoRedoOrphans: this.protoRedoOrphans
     };
