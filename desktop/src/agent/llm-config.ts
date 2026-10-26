@@ -30,12 +30,11 @@ export const DEFAULT_LLM_CONFIG: AgentLlmConfig = {
   apiKey: '',
   model: 'gpt-4o-mini',
   /**
-   * 设计类任务（查库 → 选型 → 核算 → 出 BOM → 成本）实测要 8~12 轮：
-   * 6 轮会在「查完库还没开始设计」时被掐断（真实案例：光伏缓存堆叠机只做了 14 次
-   * 组件查询就被判定「达到最大工具调用轮数」）。
+   * 设计类任务（查库 → 选型 → 核算 → 出 BOM → 成本）实测 14 轮仍不够
+   * （光伏缓存堆叠机：30+ 次工具调用、2 次建模写操作）；默认给到上限。
    */
-  maxIterations: 14,
-  maxToolCalls: 40
+  maxIterations: 50,
+  maxToolCalls: 200
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

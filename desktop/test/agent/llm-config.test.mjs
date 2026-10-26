@@ -29,8 +29,8 @@ test('模型配置缺失时返回约定的默认值', () => {
     baseUrl: 'https://api.openai.com/v1',
     apiKey: '',
     model: 'gpt-4o-mini',
-    maxIterations: 14,
-    maxToolCalls: 40
+    maxIterations: 50,
+    maxToolCalls: 200
   });
   assert.deepEqual(readLlmConfig(sandbox), DEFAULT_LLM_CONFIG);
 });
@@ -61,7 +61,7 @@ test('agent-llm.json 写入权限为 600 且只保存四个配置字段', { skip
   assert.deepEqual(readLlmConfig(sandbox), {
     ...config,
     baseUrl: 'http://127.0.0.1:9999/v1',
-    maxToolCalls: 40
+    maxToolCalls: 200
   });
   const file = join(sandbox, 'agent-llm.json');
   assert.equal(statSync(file).mode & 0o777, 0o600);
@@ -107,7 +107,7 @@ test('空或掩码 apiKey 保存时保留原密钥，新密钥才覆盖', () => 
 
 test('maxToolCalls：默认 24，可配置 1~200，越界报中文错', () => {
   const fallback = normalizeLlmConfig({});
-  assert.equal(fallback.maxToolCalls, 40, '默认值应足够跑完设计类任务（14 轮 × 多次查询）');
+  assert.equal(fallback.maxToolCalls, 200, '默认值应足够跑完设计类任务（50 轮 × 多次查询）');
   assert.equal(normalizeLlmConfig({ maxToolCalls: 30 }).maxToolCalls, 30);
   assert.equal(normalizeLlmConfig({ maxToolCalls: '40' }).maxToolCalls, 40);
   assert.throws(() => normalizeLlmConfig({ maxToolCalls: 0 }), /maxToolCalls/);
