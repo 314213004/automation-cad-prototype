@@ -154,3 +154,38 @@ test('parseDrawingManifest：丢弃伪造文件名与不匹配 fileStem 的条�
   assert.deepEqual(manifest.entries.A.warnings, ['w']);
   assert.deepEqual(parseDrawingManifest('garbage', 'p').entries, {});
 });
+
+const threaded = (params = {}) => [
+  { id: 'c1', type: 'cylinder', name: '法兰', params: { diameter: 130, height: 16 } },
+  { id: 'c2', type: 'holes', name: '螺纹孔', params: { diameter: 5, depth: 12, thread: 'M6', threadDepth: 10, positions: [[0, 30], [0, -30]], ...params } }
+];
+
+test('drawingStatus：只改螺纹规格/螺纹深 → 判过期且原因是孔规格；改孔径 → 几何过期', () => {
+  const doc = (params) => assembly([inst('p1', 'P-FLG-003', threaded(params), '法兰')]);
+  const plan = planDrawingParts(doc());
+  assert.deepEqual(plan.parts[0].holes.map((spec) => spec.thread), ['M6']);
+  const manifest = applyJobResults(emptyManifest('proj-1'), {
+    jobId: 'fc-1', parts: plan.parts.map((part) => ({ plan: part, result: okResult(part) }))
+  });
+  assert.equal(drawingStatus(manifest, plan).parts[0].status, 'fresh');
+  assert.equal(manifest.entries['P-FLG-003'].holesHash, plan.parts[0].holesHash);
+
+  for (const params of [{ thread: 'M8' }, { threadDepth: 8 }]) {
+    const report = drawingStatus(manifest, planDrawingParts(doc(params)));
+    assert.deepEqual(report.staleKeys, ['P-FLG-003'], JSON.stringify(params));
+    assert.match(report.parts[0].reason, /孔规格/, JSON.stringify(params));
+  }
+  const bigger = drawingStatus(manifest, planDrawingParts(doc({ diameter: 5.2 })));
+  assert.deepEqual(bigger.staleKeys, ['P-FLG-003']);
+  assert.match(bigger.parts[0].reason, /几何/);
+});
+
+test('parseDrawingManifest：旧清单条目没有 holesHash 也能读入（按指纹判定）', () => {
+  const plan = planDrawingParts(assembly([inst('p1', 'P-001', plate(), '转接板')]));
+  const manifest = applyJobResults(emptyManifest('proj-1'), { jobId: 'fc-1', parts: [{ plan: plan.parts[0], result: okResult(plan.parts[0]) }] });
+  const legacy = JSON.parse(JSON.stringify(manifest));
+  delete legacy.entries['P-001'].holesHash;
+  const parsed = parseDrawingManifest(legacy, 'proj-1');
+  assert.equal(parsed.entries['P-001'].holesHash, undefined);
+  assert.equal(drawingStatus(parsed, plan).parts[0].status, 'fresh');
+});

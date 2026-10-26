@@ -145,3 +145,32 @@ test('partFileStem：稳定、唯一、只含安全字符；localDate 用本地�
   assert.match(partFileStem('转接板'), /^part-[0-9a-f]{8}$/);
   assert.equal(localDate(new Date(2026, 0, 5, 23, 59)), '2026-01-05');
 });
+
+test('作业 holes[] 可选：旧作业（无 holes）照常通过；带孔语义往返保留，非法孔语义报错', () => {
+  const legacy = job();
+  assert.equal('holes' in legacy.parts[0], false, '未提供孔语义时不写 holes 字段（旧脚本/旧作业兼容）');
+  assert.deepEqual(validateDrawingJob(JSON.parse(serializeDrawingJob(legacy))), []);
+  const holes = [
+    { featureId: 'f2', kind: 'counterbore', positions: [[-85, -45], [85, 45]], diameter: 6.6, through: true, cbDiameter: 11, cbDepth: 6.5 },
+    { featureId: 'c3', kind: 'hole', positions: [[0, 30]], diameter: 5, through: false, depth: 12, thread: 'M6', threadDepth: 10 }
+  ];
+  const withHoles = job([part({ holes })]);
+  assert.deepEqual(withHoles.parts[0].holes, holes);
+  assert.notEqual(withHoles.parts[0].holes[0].positions, holes[0].positions, '孔位数组被复制，不与调用方共享');
+  assert.deepEqual(validateDrawingJob(JSON.parse(serializeDrawingJob(withHoles))), []);
+  assert.throws(() => job([part({ holes: [{ ...holes[1], thread: 'm6' }] })]), /thread 非法/);
+  const raw = JSON.parse(serializeDrawingJob(legacy));
+  raw.parts[0].holes = 'x';
+  assert.ok(validateDrawingJob(raw).some((error) => error.includes('holes 必须是数组')));
+});
+
+test('parseDrawingJobResult：holes 摘要只采信合法来源/模式，标注文字截断，旧脚本无 holes 字段兼容', () => {
+  const built = job();
+  const base = { partId: 'P-001', ok: true, files: { pdf: 'P-001-abcd1234.pdf' } };
+  const parse = (holes) => parseDrawingJobResult({ protocol: DRAWING_RESULT_PROTOCOL, jobId: built.jobId, parts: [{ ...base, ...(holes === undefined ? {} : { holes }) }] }, built).parts[0];
+  assert.equal(parse(undefined).holes, undefined);
+  assert.deepEqual(parse({ source: 'features', mode: 'dims', callouts: ['4×Ø6.6 沉孔Ø11深6.5', 7, 'x'.repeat(100)], section: 'A-A' }).holes,
+    { source: 'features', mode: 'dims', callouts: ['4×Ø6.6 沉孔Ø11深6.5', 'x'.repeat(80)], section: 'A-A' });
+  assert.equal(parse({ source: 'magic', mode: 'dims', callouts: [] }).holes, undefined);
+  assert.deepEqual(parse({ source: 'geometry', mode: 'table', callouts: [], section: '<b>' }).holes, { source: 'geometry', mode: 'table', callouts: [] });
+});

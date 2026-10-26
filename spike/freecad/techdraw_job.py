@@ -32,7 +32,7 @@ import traceback
 
 PROTOCOL = "automationcad.drawing-job/1"
 RESULT_PROTOCOL = "automationcad.drawing-result/1"
-SCRIPT_VERSION = "1.1.0"
+SCRIPT_VERSION = "1.1.1"
 EVENT_PREFIX = "@@ACAD "
 
 # ---------------------------------------------------------------------------
@@ -628,8 +628,10 @@ MAX_ORDINATES = 9
 MAX_CALLOUTS = 7
 TABLE_ROW = 6.0
 TABLE_COLS = (12.0, 18.0, 18.0, 42.0)
-SYM_CB = "\u2334"       # ⌴ 沉孔
-SYM_DEPTH = "\u21a7"    # ↧ 深度
+# 沉孔/深度用中文文字而不是 GB/ISO 符号（U+2334 / U+21A7）：图纸默认字体 Noto Sans CJK SC 等常见中文字体
+# 没有这两个字形，真机出图会显示成方块；Ø（U+00D8）与 ×（U+00D7）各字体都有，保留符号。
+TXT_CB = "沉孔"
+TXT_DEPTH = "深"
 SYM_DIA = "\u00d8"      # Ø
 
 
@@ -749,27 +751,27 @@ def group_holes(specs):
 
 
 def callout_text(g) -> str:
-    """GB 风格孔标注：4×Ø6.6 ⌴Ø11↧6.5、2×M6-6H↧10 孔↧12、6×Ø9 通孔 均布、腰形槽 60×12 通。"""
+    """GB 风格孔标注（文字版）：4×Ø6.6 沉孔Ø11深6.5、2×M6-6H深10 孔深12、6×Ø9 通孔 均布、腰形槽 60×12 通。"""
     n = len(g["positions"])
     pre = f"{n}×" if n > 1 else ""
     fm = format_mm
     if g["kind"] == "slot":
-        text = f"{pre}腰形槽 {fm(g['length'])}×{fm(g['width'])}" + (" 通" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}")
+        text = f"{pre}腰形槽 {fm(g['length'])}×{fm(g['width'])}" + (" 通" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}")
     elif g.get("thread"):
         thr = f"{g['thread']}-6H"
         if g.get("through"):
             text = f"{pre}{thr} 通孔"
         elif g.get("threadDepth") and abs(g["threadDepth"] - g["depth"]) > 1e-6:
-            text = f"{pre}{thr}{SYM_DEPTH}{fm(g['threadDepth'])} 孔{SYM_DEPTH}{fm(g['depth'])}"
+            text = f"{pre}{thr}{TXT_DEPTH}{fm(g['threadDepth'])} 孔{TXT_DEPTH}{fm(g['depth'])}"
         else:
-            text = f"{pre}{thr}{SYM_DEPTH}{fm(g['depth'])}"
+            text = f"{pre}{thr}{TXT_DEPTH}{fm(g['depth'])}"
     else:
         base = f"{pre}{SYM_DIA}{fm(g['diameter'])}"
         if g["kind"] == "counterbore":
-            depth = "" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}"
-            text = f"{base}{depth} {SYM_CB}{SYM_DIA}{fm(g['cbDiameter'])}{SYM_DEPTH}{fm(g['cbDepth'])}"
+            depth = "" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}"
+            text = f"{base}{depth} {TXT_CB}{SYM_DIA}{fm(g['cbDiameter'])}{TXT_DEPTH}{fm(g['cbDepth'])}"
         else:
-            text = base + (" 通孔" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}")
+            text = base + (" 通孔" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}")
     if g.get("pattern") and g["pattern"]["type"] == "circular":
         text += " 均布"
     return text
@@ -2324,6 +2326,123 @@ def main() -> int:
     return 0
 
 
+def _adapter_specs():
+    """自检样例：转接板 200×120（4×Ø6.6 沉孔、2×Ø8 通孔、腰形槽 60×12）。"""
+    raw = [
+        {"kind": "counterbore", "featureId": "f2", "positions": [[-85, -45], [85, -45], [-85, 45], [85, 45]],
+         "diameter": 6.6, "through": True, "cbDiameter": 11, "cbDepth": 6.5},
+        {"kind": "hole", "featureId": "f3", "positions": [[-40, 0], [40, 0]], "diameter": 8, "through": True},
+        {"kind": "slot", "featureId": "f4", "positions": [[0, 0]], "through": True, "length": 60, "width": 12},
+    ]
+    specs, warn = normalize_hole_specs(raw)
+    assert warn == [], warn
+    return specs
+
+
+def _flange_specs():
+    """自检样例：法兰 Ø130（Ø40 中心通孔、6×Ø9 节圆 Ø90 均布、2×M6 底孔 Ø5 深 12 螺纹深 10）。"""
+    pcd = [[round(45 * math.cos(math.radians(a)), 6), round(45 * math.sin(math.radians(a)), 6)] for a in range(0, 360, 60)]
+    raw = [
+        {"kind": "hole", "featureId": "c", "positions": [[0, 0]], "diameter": 40, "through": True},
+        {"kind": "hole", "featureId": "p", "positions": pcd, "diameter": 9, "through": True},
+        {"kind": "hole", "featureId": "t", "positions": [[0, 30], [0, -30]], "diameter": 5, "through": False,
+         "depth": 12, "thread": "M6", "threadDepth": 10},
+    ]
+    specs, warn = normalize_hole_specs(raw)
+    assert warn == [], warn
+    return specs
+
+
+def _self_test_holes() -> None:
+    # 清洗：非法条目丢弃并给出警告；None = 未提供
+    assert normalize_hole_specs(None) == (None, [])
+    bad, warn = normalize_hole_specs([{"kind": "x"}, {"kind": "hole", "positions": []},
+                                      {"kind": "hole", "positions": [[0, 0]], "through": False, "diameter": 5},
+                                      {"kind": "hole", "positions": [[0, 0]], "diameter": 5, "thread": "6"}])
+    assert len(bad) == 2 and len(warn) == 3, (bad, warn)
+    assert bad[0]["through"] is True and "thread" not in bad[1], bad
+
+    # 分组：跨特征同规格合并、去重孔位，字母顺序、阵列识别
+    a = _adapter_specs()
+    dup = a + [{**a[1], "featureId": "f9", "positions": [(40.0, 0.0), (0.0, 30.0)]}]
+    g = group_holes(dup)
+    assert [x["kind"] for x in g] == ["counterbore", "hole", "slot"], g
+    assert len(g[1]["positions"]) == 3 and g[1]["featureIds"] == ["f3", "f9"], g[1]
+    assert [x["letter"] for x in g] == ["A", "B", "C"]
+    assert g[0]["pattern"]["type"] == "grid"
+    f = group_holes(_flange_specs())
+    assert f[1]["pattern"]["type"] == "circular" and f[1]["pattern"]["count"] == 6 and abs(f[1]["pattern"]["radius"] - 45) < 1e-3
+
+    # 文字标注：沉孔/深度用中文文字（常见中文字体无 ⌴ ↧ 字形），Ø × 保留
+    ga = group_holes(a)
+    assert [x["callout"] for x in ga] == ["4×Ø6.6 沉孔Ø11深6.5", "2×Ø8 通孔", "腰形槽 60×12 通"], [x["callout"] for x in ga]
+    assert [x["callout"] for x in f] == ["Ø40 通孔", "6×Ø9 通孔 均布", "2×M6-6H深10 孔深12"], [x["callout"] for x in f]
+    for x in ga + f:
+        assert "\u2334" not in x["callout"] and "\u21a7" not in x["callout"], x["callout"]
+    blind = group_holes(normalize_hole_specs([
+        {"kind": "hole", "positions": [[0, 0]], "diameter": 5, "through": False, "depth": 8},
+        {"kind": "hole", "positions": [[10, 0]], "diameter": 5, "through": False, "depth": 8, "thread": "M6", "threadDepth": 8},
+        {"kind": "counterbore", "positions": [[20, 0]], "diameter": 6.6, "through": False, "depth": 12, "cbDiameter": 11, "cbDepth": 6.5},
+        {"kind": "hole", "positions": [[30, 0]], "diameter": 8.5, "through": True, "thread": "M10"},
+    ])[0])
+    assert [x["callout"] for x in blind] == ["Ø5深8", "M6-6H深8", "Ø6.6深12 沉孔Ø11深6.5", "M10-6H 通孔"], [x["callout"] for x in blind]
+    assert single_callout(ga[0]) == "Ø6.6 沉孔Ø11深6.5"
+
+    # 孔位尺寸方案：对称（孔距）/ 基准坐标（左下为 0）；圆周阵列只标节圆
+    bbox = (-100.0, -60.0, 100.0, 60.0)
+    pa = plan_hole_positions(ga, bbox)
+    assert pa["x"]["mode"] == "sym" and [d["text"] for d in pa["x"]["dims"]] == ["80", "170"], pa["x"]
+    assert pa["y"]["mode"] == "sym" and [d["text"] for d in pa["y"]["dims"]] == ["90"], pa["y"]
+    asym = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[-80, 10], [30, 10], [50, -40]], "diameter": 6}])[0])
+    po = plan_hole_positions(asym, bbox)
+    assert po["x"]["mode"] == "ord" and [d["text"] for d in po["x"]["dims"]] == ["0", "20", "130", "150"], po["x"]
+    assert po["y"]["mode"] == "ord" and [d["text"] for d in po["y"]["dims"]] == ["0", "20", "70"], po["y"]
+    pf = plan_hole_positions(f, (-65.0, -65.0, 65.0, 65.0))
+    assert pf["circles"] and pf["circles"][0]["text"] == "节圆Ø90", pf["circles"]
+    assert [d["text"] for d in pf["y"]["dims"]] == ["60"] and pf["x"]["dims"] == [], pf
+
+    # 一维避让：保序、间距、总位移最小
+    got = spread([0.0, 1.0, 2.0, 20.0], 5.0)
+    assert all(got[i + 1] - got[i] >= 5.0 - 1e-9 for i in range(3)) and abs(got[1] - 1.0) < 1e-9, got
+
+    # 过密退化孔位表
+    assert crowding_reason(ga, pa, 1.0) is None
+    many = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[i * 1.0 - 50, 0]], "diameter": 1 + i * 0.1}
+                                             for i in range(9)])[0])
+    assert "超过" in (crowding_reason(many, plan_hole_positions(many, bbox), 1.0) or ""), "9 种规格应退孔位表"
+    dense = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[-99 + i * 1.3, -59 + i * 0.7] for i in range(8)], "diameter": 1}])[0])
+    assert crowding_reason(dense, plan_hole_positions(dense, bbox), 0.5), "孔心坐标过密应退孔位表"
+    tbl = hole_table_prims(ga, bbox, (0.0, 0.0))
+    texts = [p["text"] for p in tbl if p["t"] == "text"]
+    assert "A1" in texts and "C1" in texts and "Ø6.6 沉孔Ø11深6.5" in texts, texts
+
+    # 剖切线：过沉孔/盲孔孔心；全通孔不剖
+    assert choose_section_line(ga) in (-45.0, 45.0)
+    assert choose_section_line(f) in (30.0, -30.0)
+    assert choose_section_line(group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[0, 0]], "diameter": 5}])[0])) is None
+
+    # DXF 分层：孔标注图元按 cls 进 DIM/CENTER/THREAD/NOTES 图层，图层表补齐
+    rect = (50.0, 50.0, 250.0, 170.0)
+    prims, info = layout_hole_annotations(f, pf, (100.0, 100.0, 230.0, 230.0), (-65.0, -65.0, 65.0, 65.0), 1.0)
+    dxf = "\n".join([
+        "  0", "SECTION", "  2", "HEADER", "  9", "$HANDSEED", "  5", "100", "  0", "ENDSEC",
+        "  0", "SECTION", "  2", "TABLES", "  0", "TABLE", "  2", "LAYER", "  5", "2", "  0", "ENDTAB",
+        "  0", "TABLE", "  2", "LTYPE", "  5", "5", "  0", "ENDTAB",
+        "  0", "TABLE", "  2", "BLOCK_RECORD", "  0", "BLOCK_RECORD", "  5", "1F", "  2", "*Model_Space", "  0", "ENDTAB", "  0", "ENDSEC",
+        "  0", "SECTION", "  2", "ENTITIES", "  0", "LINE", "  5", "A6", "  8", "Visible", "  10", "0", "  20", "0", "  11", "5", "  21", "0",
+        "  0", "ENDSEC", "  0", "EOF", ""])
+    out = dxf_postprocess(dxf, prims + cut_line_prims(rect, 60.0))
+    pairs = _dxf_pairs(out)
+    layers = {v.strip() for c, v in pairs if c == "8"}
+    assert {"DIM", "CENTER", "THREAD", "OUTLINE"} <= layers, layers
+    table_names = {next(v2.strip() for c2, v2 in pairs[i + 1:i + 10] if c2 == "2")
+                   for i, (c, v) in enumerate(pairs) if c == "0" and v.strip() == "LAYER"}
+    assert {n for n, _, _ in DXF_LAYERS} <= table_names, table_names
+    assert any(c == "1" and "M6-6H" in v for c, v in pairs), "螺纹标注应写进 DXF TEXT"
+    assert any(c == "6" and v.strip() == "CENTER" for c, v in pairs), "CENTER 图层应用点画线线型"
+    assert info["callouts"] == ["Ø40 通孔", "6×Ø9 通孔 均布", "2×M6-6H深10 孔深12", "节圆Ø90"], info
+
+
 def self_test() -> int:
     """纯逻辑自检：比例/图幅/布局/DXF 句柄追加。供 node --test 在有 python3 时调用。"""
     assert parse_scale("1:2") == 0.5 and parse_scale("2:1") == 2.0 and parse_scale("auto") is None
@@ -2364,6 +2483,7 @@ def self_test() -> int:
     assert validate_job({"protocol": "x", "kind": "techdraw", "outputDir": "/x", "parts": []})
     svg = compose_svg("A3", {**plate, "scaleLabel": "1:1"}, {}, [], {"name": "转接板"}, "Noto Sans CJK SC")
     assert svg.startswith("<svg") and "转接板" in svg and "420mm" in svg
+    _self_test_holes()
     sys.stdout.write("SELF_TEST_OK\n")
     return 0
 
