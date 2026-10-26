@@ -54,6 +54,7 @@ import { toDxf, type DxfShape } from './export/dxf';
 import { toMeshBlob } from './export/mesh';
 import { renderReportHtml } from './export/report';
 import { initOrbitView } from './orbit/ui';
+import { initHomeScreen, type HomeScreenHandle } from './home/home-screen.ts';
 import { initAssemblyUi, assemblyStyles } from './assembly/ui';
 import { initDrawingUi, drawingStyles, type DrawingHandle } from './cad/drawing';
 import { renderElecDrawing, type ElecDrawing } from './elec/drawing';
@@ -86,7 +87,7 @@ import { projectGeometryReviewLabel, reopenedGeometryReviewMessage, type DesignS
 import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLayoutBounds, renderProjectLayoutSvg } from './design/project-layout.ts';
 import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
 import type { Placement } from './enclosure/layout.ts';
-import { installCanvasWorkbench } from './canvas/workbench.ts';
+import { installCanvasWorkbench, openCanvasWorkbench } from './canvas/workbench.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -1619,6 +1620,71 @@ function setCurrentProject(project: ProjectMenuRecord): void {
   lastOpenedProject = project;
   elecSources.useProject(project);
   elecSourceChanged();
+}
+
+let homeHandle: HomeScreenHandle | null = null;
+
+/**
+ * 启动首页：首屏不展示原型里的「滑台气缸」示例装配。
+ * 关掉首页才露出 #app；示例装配仍可从「进入经典原型界面」看。
+ */
+function mountHomeScreen(): void {
+  if (homeHandle) return;
+  const app = document.getElementById('app');
+  /** 关首页时把原型界面恢复成可见且可交互（含可访问树）。 */
+  const reveal = (): void => {
+    homeHandle?.close();
+    if (app) {
+      app.removeAttribute('aria-hidden');
+      app.inert = false;
+    }
+  };
+  homeHandle = initHomeScreen({
+    onNewBlank: () => {
+      reveal();
+      openCanvasWorkbench({ blank: true });
+    },
+    onNewDemo: () => {
+      reveal();
+      openCanvasWorkbench({ demo: true });
+    },
+    onOpenCanvas: () => {
+      reveal();
+      openCanvasWorkbench();
+    },
+    onOpenProject: async (id: string) => {
+      reveal();
+      const record = await openSavedProject(id);
+      if (!record) homeHandle?.open();
+    },
+    onEnterClassic: () => {
+      reveal();
+    }
+  });
+  if (app) {
+    app.setAttribute('data-home-hidden', 'true');
+    app.setAttribute('aria-hidden', 'true');
+    app.inert = true;
+  }
+  homeHandle.open();
+  // 顶栏加「首页」入口，随时回到最近工程/新建
+  const left = document.querySelector('.topbar .tb-left');
+  if (left && !document.getElementById('homeEntryButton')) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.id = 'homeEntryButton';
+    button.className = 'tbtn';
+    button.textContent = '首页';
+    button.title = '回到首页（最近工程 / 新建）';
+    button.addEventListener('click', () => homeHandle?.open());
+    left.appendChild(button);
+  }
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && homeHandle?.isOpen()) {
+      event.preventDefault();
+      homeHandle.close();
+    }
+  });
 }
 
 async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
@@ -3594,6 +3660,7 @@ function init(): void {
   });
   initAgentBridge();
   initElecSourceWiring();
+  mountHomeScreen();
   void window.desktop?.machine?.active?.().then((result) => {
     if (!result?.ok || !result.design || typeof result.design !== 'object') return;
     const config = (result.design as Record<string, unknown>).config;

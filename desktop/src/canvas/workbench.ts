@@ -2328,12 +2328,52 @@ function bindEvents(): void {
 // 对外
 // ---------------------------------------------------------------------------
 
-export function openCanvasWorkbench(): void {
+/**
+ * 打开画布工作台。blank=true 时清成空图（首页「空白画布」用），否则按草稿恢复。
+ */
+export function openCanvasWorkbench(options: { blank?: boolean; demo?: boolean } = {}): void {
   ensureStyles();
   buildShell();
   const section = root();
   section.hidden = false;
   state.open = true;
+  if (options.demo) {
+    state.graph = demoCanvasGraph();
+    state.selectedId = 'AXIS-Y';
+    state.mode = 'topology';
+    draftLoaded = true;
+    history = createHistory({ graph: state.graph, selectedId: state.selectedId }, '演示拓扑');
+    renderHistoryButtons();
+    renderAll();
+    markDirty();
+    void loadManualPrices().then(() => {
+      if (state.open) renderAll();
+    });
+    void loadSchemes();
+    return;
+  }
+  if (options.blank) {
+    state.graph = {
+      schemeId: 'scheme-unnamed',
+      title: '未命名方案',
+      layout: 'linear',
+      transferSeconds: 0.2,
+      nodes: [],
+      edges: []
+    };
+    state.selectedId = null;
+    state.mode = 'topology';
+    draftLoaded = true; // 不要被磁盘草稿顶掉
+    history = createHistory({ graph: state.graph, selectedId: null }, '空白画布');
+    renderHistoryButtons();
+    renderAll();
+    markDirty();
+    void loadManualPrices().then(() => {
+      if (state.open) renderAll();
+    });
+    void loadSchemes();
+    return;
+  }
   void restoreDraft();
   void loadManualPrices().then(() => {
     if (state.open) renderAll();
