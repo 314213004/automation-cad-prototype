@@ -41,6 +41,7 @@ import {
 } from './candidates-source.ts';
 import { createPipScene, type PipScene } from './pip3d.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
+import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
 import {
   CANVAS_DRAFT_KEY,
   clearDraft,
@@ -746,6 +747,19 @@ function renderInspector(): void {
   else host.innerHTML = inspectorBom(node);
 }
 
+function editRow(node: CanvasNode, meta: (typeof EDITABLE_FIELDS)[number]): string {
+  const raw = meta.field === 'name' ? node.name : String(node[meta.field]);
+  const numeric =
+    meta.kind === 'number'
+      ? ` type="number" min="${meta.min ?? 0}" step="${meta.step ?? 1}" inputmode="decimal"`
+      : ' type="text" maxlength="80"';
+  return `
+    <label class="cw-field cw-field-edit">
+      <span>${escapeHtml(meta.label)}</span>
+      <b><input${numeric} data-edit-field="${meta.field}" value="${escapeHtml(raw)}" title="${escapeHtml(meta.hint)}" />${meta.unit ? `<em>${escapeHtml(meta.unit)}</em>` : ''}</b>
+    </label>`;
+}
+
 function inspectorProp(node: CanvasNode): string {
   const outgoing = state.graph.edges.filter((edge) => edge.from === node.id);
   const incoming = state.graph.edges.filter((edge) => edge.to === node.id);
@@ -792,9 +806,9 @@ function inspectorProp(node: CanvasNode): string {
       <div class="cw-field"><span>类型</span><b>${escapeHtml(node.kind)}${isAdapterNode(node) ? '（转接板）' : ''}</b></div>
       <div class="cw-field"><span>型号</span><b>${node.partId ? escapeHtml(node.partId) : '待选型'}</b></div>
       <div class="cw-field"><span>规格</span><b title="${escapeHtml(node.spec)}">${escapeHtml(node.spec || '—')}</b></div>
-      <div class="cw-field"><span>行程 / 导程</span><b>${node.strokeMm} / ${node.leadMm} mm</b></div>
-      <div class="cw-field"><span>质量</span><b>${node.massKg} kg</b></div>
-      <div class="cw-field"><span>单步时间</span><b>${node.stepSec} s（仅甘特）</b></div>
+      ${EDITABLE_FIELDS.map((meta) => editRow(node, meta)).join('')}
+      <p class="cw-hint" id="cwEditError" hidden></p>
+      <p class="cw-hint">数值改完按回车或点空白处生效；行程/导程/质量/单步时间会立即重算 CT、选型与 2D 包络。</p>
       <div class="cw-field"><span>外形</span><b>${node.dimsMm.join(' × ')} mm</b></div>
       <div class="cw-field"><span>正交坐标</span><b>${node.ortho.x}, ${node.ortho.y} mm</b></div>
     </section>
@@ -1395,6 +1409,39 @@ function bindEvents(): void {
     if (action === 'close') {
       closeCanvasWorkbench();
     }
+  });
+
+  section.addEventListener('change', (event) => {
+    const input = (event.target as HTMLElement | null)?.closest<HTMLInputElement>('[data-edit-field]');
+    if (!input) return;
+    const field = input.dataset.editField as EditableField | undefined;
+    const node = selectedNode();
+    if (!field || !node) return;
+    const patch = { [field]: input.value } as Partial<Record<EditableField, string>>;
+    const result = applyNodePatch(node, patch);
+    const error = document.getElementById('cwEditError');
+    if (result.errors.length > 0) {
+      if (error) {
+        error.hidden = false;
+        error.textContent = result.errors.join('；');
+      }
+      input.classList.add('is-invalid');
+      return;
+    }
+    input.classList.remove('is-invalid');
+    if (error) {
+      error.hidden = true;
+      error.textContent = '';
+    }
+    if (!patchChangesNode(node, patch)) return;
+    state.graph = {
+      ...state.graph,
+      nodes: state.graph.nodes.map((item) => (item.id === node.id ? result.node : item))
+    };
+    renderAll();
+    markDirty();
+    const label = EDITABLE_FIELDS.find((meta) => meta.field === field)?.label ?? field;
+    toast(`${node.id} 的${label}已更新`);
   });
 
   section.addEventListener('input', (event) => {
