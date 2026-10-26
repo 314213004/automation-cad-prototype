@@ -49,6 +49,7 @@ import type { InterferencePart } from '../mech/interference.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { buildLayoutDxf, describeLayoutDxf } from './layout-dxf.ts';
+import { buildSchemeReport } from './summary-report.ts';
 import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
 import {
   createHistory,
@@ -84,7 +85,7 @@ import type { CanvasNode, MachineGraph } from './types.ts';
 
 type ViewMode = CanvasViewMode;
 type InspectorTab = 'prop' | 'mech' | 'bom';
-type ExportTab = 'json' | 'build123d' | 'plc' | 'bom' | 'dxf' | 'layout-dxf';
+type ExportTab = 'json' | 'build123d' | 'plc' | 'bom' | 'dxf' | 'layout-dxf' | 'report';
 
 interface WorkbenchState {
   graph: MachineGraph;
@@ -478,6 +479,7 @@ function buildShell(): void {
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="bom">BOM CSV</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="dxf">转接板 DXF</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="layout-dxf">2D 排布 DXF</button>
+          <button type="button" class="cw-btn" data-action="export-tab" data-tab="report">方案摘要</button>
         </div>
         <pre class="cw-pre" id="cwExportCode"></pre>
         <div class="cw-modal-foot">
@@ -1386,6 +1388,7 @@ function exportContent(tab: ExportTab): string {
   if (tab === 'json') return buildMachineGraphJson(state.graph);
   if (tab === 'build123d') return build123dScript(state.graph);
   if (tab === 'bom') return buildBomCsv(state.graph, priceLookup).csv;
+  if (tab === 'report') return buildSchemeReport(state.graph, priceLookup).text;
   if (tab === 'layout-dxf') {
     const result = buildLayoutDxf(state.graph, buildOrthoView(state.graph));
     return `# ${describeLayoutDxf(result)}\n${result.dxf}`;
@@ -2188,7 +2191,15 @@ export interface CanvasSelfTestResult {
   stations: number;
   artboards: number;
   ganttRows: number;
-  exportLengths: { json: number; build123d: number; plc: number; bom: number; dxf: number; layoutDxf: number };
+  exportLengths: {
+    json: number;
+    build123d: number;
+    plc: number;
+    bom: number;
+    dxf: number;
+    layoutDxf: number;
+    report: number;
+  };
   pipStatus: string;
   pipBoxes: number;
   modelCheck: string;
@@ -2248,8 +2259,8 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   const ganttRows = Number(document.getElementById('cwGantt')?.dataset.rows ?? 0);
 
   section.querySelector<HTMLElement>('[data-action="export"]')?.click();
-  const lengths = { json: 0, build123d: 0, plc: 0, bom: 0, dxf: 0, layoutDxf: 0 };
-  for (const tab of ['json', 'build123d', 'plc', 'bom', 'dxf', 'layout-dxf'] as const) {
+  const lengths = { json: 0, build123d: 0, plc: 0, bom: 0, dxf: 0, layoutDxf: 0, report: 0 };
+  for (const tab of ['json', 'build123d', 'plc', 'bom', 'dxf', 'layout-dxf', 'report'] as const) {
     section.querySelector<HTMLElement>(`[data-action="export-tab"][data-tab="${tab}"]`)?.click();
     const length = document.getElementById('cwExportCode')?.textContent?.length ?? 0;
     if (tab === 'layout-dxf') lengths.layoutDxf = length;

@@ -4891,7 +4891,15 @@ function createWindow(): BrowserWindow {
           cycleSeconds: number;
           unitsPerHour: number;
           pendingQuote: number;
-          exportLengths: { json: number; build123d: number; plc: number; bom: number; dxf: number; layoutDxf: number };
+          exportLengths: {
+            json: number;
+            build123d: number;
+            plc: number;
+            bom: number;
+            dxf: number;
+            layoutDxf: number;
+            report: number;
+          };
           pipStatus: string;
           pipBoxes: number;
           modelCheck: string;
@@ -4931,12 +4939,13 @@ function createWindow(): BrowserWindow {
           canvas.exportLengths.plc < 200 ||
           canvas.exportLengths.bom < 80 ||
           canvas.exportLengths.dxf < 500 ||
-          canvas.exportLengths.layoutDxf < 500
+          canvas.exportLengths.layoutDxf < 500 ||
+          canvas.exportLengths.report < 300
         ) {
           throw new Error(`导出文本为空 ${JSON.stringify(canvas.exportLengths)}`);
         }
         if (!(canvas.cycleSeconds > 0) || !(canvas.unitsPerHour > 0)) throw new Error(`CT/UPH 异常 ${JSON.stringify(canvas)}`);
-        console.log(`SMOKE_CANVAS_EXPORT_OK json=${canvas.exportLengths.json} build123d=${canvas.exportLengths.build123d} plc=${canvas.exportLengths.plc} bom=${canvas.exportLengths.bom} dxf=${canvas.exportLengths.dxf} layoutDxf=${canvas.exportLengths.layoutDxf} ct=${canvas.cycleSeconds}s uph=${canvas.unitsPerHour} pendingQuote=${canvas.pendingQuote}`);
+        console.log(`SMOKE_CANVAS_EXPORT_OK json=${canvas.exportLengths.json} build123d=${canvas.exportLengths.build123d} plc=${canvas.exportLengths.plc} bom=${canvas.exportLengths.bom} dxf=${canvas.exportLengths.dxf} layoutDxf=${canvas.exportLengths.layoutDxf} report=${canvas.exportLengths.report} ct=${canvas.cycleSeconds}s uph=${canvas.unitsPerHour} pendingQuote=${canvas.pendingQuote}`);
       } catch (error) {
         console.error('SMOKE_FAIL canvas_workbench', error);
         setTimeout(() => app.exit(1), 100);

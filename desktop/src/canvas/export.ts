@@ -479,7 +479,7 @@ export interface ExportFileName {
  */
 export function exportFileName(
   graph: MachineGraph,
-  tab: 'json' | 'build123d' | 'plc' | 'bom' | 'dxf' | 'layout-dxf'
+  tab: 'json' | 'build123d' | 'plc' | 'bom' | 'dxf' | 'layout-dxf' | 'report'
 ): ExportFileName {
   const base = (graph.schemeId || 'canvas').replace(/[^A-Za-z0-9_-]/g, '_');
   if (tab === 'json') return { name: `${base}-graph.json`, supported: true, reason: '' };
@@ -490,6 +490,13 @@ export function exportFileName(
     return { name: `${base}-adapter${suffix}.dxf`, supported: true, reason: '' };
   }
   if (tab === 'layout-dxf') return { name: `${base}-layout.dxf`, supported: true, reason: '' };
+  if (tab === 'report') {
+    return {
+      name: '',
+      supported: false,
+      reason: '方案摘要（.md）不在导出白名单（.json/.dxf/.csv/.step/.stl/.obj/.glb/.pdf/.xlsx），请复制到文档里'
+    };
+  }
   return {
     name: '',
     supported: false,
