@@ -1,11 +1,14 @@
 // FreeCAD 后台作业协议：内核无关 JSON，与 build123d sidecar 的 ops 协议同一风格。
 // 纯函数层：无 DOM、无 node:fs、无 child_process；主进程运行器与单测共用。
 import { sha256Hex } from '../plcgen/hash.ts';
+import { validateHoleSpecs, type DrawingHoleSpec } from './holes.ts';
+
+export type { DrawingHoleSpec } from './holes.ts';
 
 export const DRAWING_JOB_PROTOCOL = 'automationcad.drawing-job/1';
 export const DRAWING_RESULT_PROTOCOL = 'automationcad.drawing-result/1';
 /** 与 spike/freecad/techdraw_job.py 的 SCRIPT_VERSION 保持一致；变更会使已出图纸全部过期。 */
-export const TECHDRAW_SCRIPT_VERSION = '1.0.0';
+export const TECHDRAW_SCRIPT_VERSION = '1.1.0';
 export const DRAWING_PROGRESS_PREFIX = '@@ACAD ';
 
 export const DRAWING_FORMATS = ['pdf', 'dxf', 'svg', 'fcstd'] as const;
@@ -31,6 +34,11 @@ export interface DrawingJobPart {
   step: string;
   scale?: string;
   paper?: DrawingPaper;
+  /**
+   * 可选（协议 /1 向后兼容扩展）：特征树里的孔语义。缺省 = 旧主进程/外部 STEP，脚本按圆柱面几何识别兜底；
+   * 空数组 = 特征树声明无孔（脚本仍会把几何里多出的孔按「几何识别」补上并给出警告）。
+   */
+  holes?: DrawingHoleSpec[];
 }
 
 export interface DrawingJobOptions {
@@ -71,6 +79,16 @@ export interface DrawingPartResult {
   views?: string[];
   pdfFallback?: boolean;
   elapsedMs?: number;
+  holes?: DrawingHoleSummary;
+}
+
+/** 结果里的孔标注摘要（脚本 1.1.0 起）：来源、合并后的标注文本、孔位尺寸方式、剖视。 */
+export interface DrawingHoleSummary {
+  source: 'features' | 'geometry' | 'mixed' | 'none';
+  callouts: string[];
+  /** dims = 视图上标孔位尺寸；table = 过密退化为孔位表；none = 无孔 */
+  mode: 'dims' | 'table' | 'none';
+  section?: string;
 }
 
 export interface DrawingJobResult {
@@ -164,7 +182,8 @@ export function buildDrawingJob(input: BuildDrawingJobInput): DrawingJob {
       quantity: Number.isInteger(part.quantity) && part.quantity > 0 ? part.quantity : 1,
       step: part.step,
       ...(part.scale && SCALE_PATTERN.test(part.scale) ? { scale: part.scale } : {}),
-      ...(part.paper && (DRAWING_PAPERS as readonly string[]).includes(part.paper) ? { paper: part.paper } : {})
+      ...(part.paper && (DRAWING_PAPERS as readonly string[]).includes(part.paper) ? { paper: part.paper } : {}),
+      ...(Array.isArray(part.holes) ? { holes: part.holes.map((spec) => ({ ...spec, positions: spec.positions.map(([x, y]) => [x, y] as [number, number]) })) } : {})
     }))
   };
   const errors = validateDrawingJob(job);
@@ -213,6 +232,7 @@ export function validateDrawingJob(job: unknown): string[] {
     else stems.add(part.fileStem.toLowerCase());
     if (typeof part.step !== 'string' || !/\.(step|stp)$/i.test(part.step)) errors.push(`${label} step 必须是 .step/.stp 路径`);
     if (typeof part.quantity !== 'number' || !Number.isInteger(part.quantity) || part.quantity < 1) errors.push(`${label} quantity 非法`);
+    errors.push(...validateHoleSpecs(part.holes, label));
   });
   return errors;
 }
@@ -302,6 +322,8 @@ export function parseDrawingJobResult(raw: unknown, job: DrawingJob): DrawingJob
     }
     if (Array.isArray(item.views)) result.views = item.views.filter((entry): entry is string => typeof entry === 'string').slice(0, 8);
     if (item.pdfFallback === true) result.pdfFallback = true;
+    const holes = parseHoleSummary(item.holes);
+    if (holes) result.holes = holes;
     if (typeof item.elapsedMs === 'number' && Number.isFinite(item.elapsedMs)) result.elapsedMs = item.elapsedMs;
     return result;
   });
@@ -315,6 +337,21 @@ export function parseDrawingJobResult(raw: unknown, job: DrawingJob): DrawingJob
   if (typeof raw.error === 'string' && raw.error) result.error = raw.error.slice(0, 500);
   if (typeof raw.elapsedMs === 'number' && Number.isFinite(raw.elapsedMs)) result.elapsedMs = raw.elapsedMs;
   return result;
+}
+
+function parseHoleSummary(value: unknown): DrawingHoleSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  const sources = ['features', 'geometry', 'mixed', 'none'] as const;
+  const modes = ['dims', 'table', 'none'] as const;
+  const source = sources.find((item) => item === value.source);
+  const mode = modes.find((item) => item === value.mode);
+  if (!source || !mode) return undefined;
+  const callouts = Array.isArray(value.callouts)
+    ? value.callouts.filter((item): item is string => typeof item === 'string').map((item) => item.slice(0, 80)).slice(0, 50)
+    : [];
+  const summary: DrawingHoleSummary = { source, callouts, mode };
+  if (typeof value.section === 'string' && /^[A-Z]-[A-Z]$/.test(value.section)) summary.section = value.section;
+  return summary;
 }
 
 /** 解析 stdout 中的进度行；不是进度行或格式不对返回 null。 */

@@ -12,6 +12,7 @@ import {
   type DrawingPaper,
   type DrawingPartResult
 } from './protocol.ts';
+import { holeSpecsOf, holesHashOf, type DrawingHoleSpec } from './holes.ts';
 
 export const DRAWING_MANIFEST_SCHEMA_VERSION = 1;
 
@@ -31,6 +32,9 @@ export interface PlannedDrawingPart {
   /** 参与出图的实体（同 partId 取第一个） */
   features: FeatureNode[];
   geometryHash: string;
+  /** 孔语义（随作业下发）及其哈希；螺纹规格等不进 sidecar 算子，必须单独纳入指纹 */
+  holes: DrawingHoleSpec[];
+  holesHash: string;
   fingerprint: string;
   material: string;
   drawingNo: string;
@@ -53,6 +57,7 @@ export interface DrawingManifestEntry {
   name: string;
   fingerprint: string;
   geometryHash: string;
+  holesHash?: string;
   fileStem: string;
   files: Partial<Record<DrawingFormat, string>>;
   stepSha256?: string;
@@ -144,9 +149,10 @@ export function cleanMeta(meta: DrawingPartMeta | undefined): Required<Pick<Draw
   return { material, drawingNo, ...(scale && scale !== 'auto' ? { scale } : {}), ...(paper && paper !== 'auto' ? { paper } : {}) };
 }
 
-/** 指纹 = 几何 + 标题栏字段 + 出图脚本版本；任一变化都使图纸过期。 */
+/** 指纹 = 几何 + 孔语义 + 标题栏字段 + 出图脚本版本；任一变化都使图纸过期。 */
 export function drawingFingerprint(input: {
   geometryHash: string;
+  holesHash?: string;
   name: string;
   partId: string;
   quantity: number;
@@ -156,6 +162,7 @@ export function drawingFingerprint(input: {
   return sha256Hex(canonicalJson({
     v: input.scriptVersion ?? TECHDRAW_SCRIPT_VERSION,
     geometry: input.geometryHash,
+    holes: input.holesHash ?? '',
     name: input.name,
     partId: input.partId,
     quantity: input.quantity,
@@ -211,8 +218,10 @@ export function planDrawingParts(
     const meta = cleanMeta(options.meta?.[partKey]);
     const name = first.name.trim() || partId;
     const quantity = instances.length;
+    const holes = holeSpecsOf(first.features);
+    const holesHash = holesHashOf(holes);
     const fingerprintInput = {
-      geometryHash, name, partId, quantity, meta,
+      geometryHash, holesHash, name, partId, quantity, meta,
       ...(options.scriptVersion ? { scriptVersion: options.scriptVersion } : {})
     };
     parts.push({
@@ -223,6 +232,8 @@ export function planDrawingParts(
       quantity,
       features: JSON.parse(JSON.stringify(first.features)) as FeatureNode[],
       geometryHash,
+      holes,
+      holesHash,
       fingerprint: drawingFingerprint(fingerprintInput),
       material: meta.material,
       drawingNo: meta.drawingNo || partId,
@@ -269,6 +280,7 @@ export function parseDrawingManifest(raw: unknown, projectKey: string): DrawingM
       jobId: typeof value.jobId === 'string' ? value.jobId : ''
     };
     if (typeof value.stepSha256 === 'string') entry.stepSha256 = value.stepSha256;
+    if (typeof value.holesHash === 'string') entry.holesHash = value.holesHash;
     if (typeof value.paper === 'string') entry.paper = value.paper;
     if (typeof value.scale === 'string') entry.scale = value.scale;
     if (Array.isArray(value.bbox) && value.bbox.length === 3 && value.bbox.every((item) => typeof item === 'number')) {
@@ -297,7 +309,9 @@ export function drawingStatus(manifest: DrawingManifest, plan: DrawingPlan): Dra
     if (entry.fingerprint !== part.fingerprint) {
       const reason = entry.geometryHash && entry.geometryHash !== part.geometryHash
         ? '几何参数已变更'
-        : entry.scriptVersion && entry.scriptVersion !== TECHDRAW_SCRIPT_VERSION
+        : entry.holesHash !== undefined && entry.holesHash !== part.holesHash
+          ? '孔规格（螺纹/孔深等）已变更'
+          : entry.scriptVersion && entry.scriptVersion !== TECHDRAW_SCRIPT_VERSION
           ? '出图脚本已升级'
           : '名称/材料/图号/比例等标题栏字段已变更';
       return { ...base, status: 'stale' as const, reason, entry };
@@ -350,6 +364,7 @@ export function applyJobResults(
         name: plan.name,
         fingerprint: plan.fingerprint,
         geometryHash: plan.geometryHash,
+        holesHash: plan.holesHash,
         fileStem: plan.fileStem,
         files: { ...result.files },
         warnings: [...result.warnings, ...(plan.conflict ? ['同物料号实体几何不一致，按第一个实体出图'] : [])],

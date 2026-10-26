@@ -20,6 +20,7 @@ import {
   parseProgressLine,
   serializeDrawingJob,
   type DrawingFormat,
+  type DrawingHoleSpec,
   type DrawingJob,
   type DrawingJobOptions,
   type DrawingJobPart,
@@ -345,6 +346,8 @@ export interface FreecadJobPartSpec {
   quantity: number;
   scale?: string;
   paper?: DrawingPaper;
+  /** 特征树孔语义（随作业 JSON 下发）；缺省时 FreeCAD 侧按圆柱面几何识别 */
+  holes?: DrawingHoleSpec[];
 }
 
 export interface FreecadJobSpec {
@@ -688,7 +691,8 @@ export class FreecadRunner {
         quantity: part.quantity,
         step,
         ...(part.scale ? { scale: part.scale } : {}),
-        ...(part.paper ? { paper: part.paper } : {})
+        ...(part.paper ? { paper: part.paper } : {}),
+        ...(part.holes ? { holes: part.holes } : {})
       }));
       const drawingJob: DrawingJob = buildDrawingJob({
         jobId: snapshot.jobId,

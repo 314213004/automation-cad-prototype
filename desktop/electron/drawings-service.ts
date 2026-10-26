@@ -232,7 +232,9 @@ export class DrawingsService {
         drawingNo: part.drawingNo,
         quantity: part.quantity,
         ...(part.scale ? { scale: part.scale } : {}),
-        ...(part.paper ? { paper: part.paper } : {})
+        ...(part.paper ? { paper: part.paper } : {}),
+        // 孔语义随作业下发（特征树是唯一主数据）；FreeCAD 侧据此合并标注孔，缺省才按几何识别
+        holes: part.holes
       })),
       resolveStep: async (part, signal) => {
         if (!this.enabled()) throw new Error(DRAWINGS_MODULE_DISABLED_MESSAGE);

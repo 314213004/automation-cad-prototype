@@ -56,7 +56,9 @@ export const FEATURE_SPECS: Readonly<Record<FeatureType, FeatureTypeSpec>> = {
     defaultName: '安装孔',
     fields: [
       { key: 'diameter', label: '孔径', kind: 'number', unit: 'mm', step: 0.5, min: 0.01 },
-      { key: 'depth', label: '深度', kind: 'text', unit: 'mm / through' }
+      { key: 'depth', label: '深度', kind: 'text', unit: 'mm / through' },
+      { key: 'thread', label: '螺纹', kind: 'text', unit: '如 M6，空=光孔' },
+      { key: 'threadDepth', label: '螺纹深', kind: 'number', unit: 'mm', step: 1, min: 0.01 }
     ]
   },
   slot: {
