@@ -25,8 +25,10 @@ import {
   clearCanvasPricing,
   readCanvasDraft,
   readCanvasPricing,
+  readCanvasSchemes,
   writeCanvasDraft,
-  writeCanvasPricing
+  writeCanvasPricing,
+  writeCanvasSchemes
 } from '../src/canvas/draft-store.ts';
 import { recordDiagnosticError, setDiagnosticOperation } from '../src/shared/diagnostics.ts';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
@@ -706,6 +708,18 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   handle('canvas:pricing-clear', () => {
     clearCanvasPricing(context.userDataDir);
     return { ok: true };
+  });
+  handle('canvas:scheme-load', () => readCanvasSchemes(context.userDataDir));
+  handle('canvas:scheme-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.schema !== 'canvas-scheme-library/1') {
+      return { ok: false, message: '方案库格式无效（schema 不匹配）' };
+    }
+    try {
+      const written = writeCanvasSchemes(context.userDataDir, payload);
+      return { ok: true, path: written.path, bytes: written.bytes };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
   });
   handle('projects:list', () => listProjects(context.userDataDir));
   handle('projects:save', (_event, payload: unknown) => {

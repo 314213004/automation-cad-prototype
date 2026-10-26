@@ -15,6 +15,7 @@ import {
   insertAdapterForEdge,
   duplicateNode,
   insertAdaptersForAllMismatches,
+  normalizeGraph,
   isAdapterNode,
   portDiff,
   removeNode
@@ -50,6 +51,14 @@ import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { buildLayoutDxf, describeLayoutDxf } from './layout-dxf.ts';
 import { buildSchemeReport } from './summary-report.ts';
+import {
+  emptySchemeLibrary,
+  listSchemes,
+  parseSchemeLibrary,
+  removeScheme,
+  upsertScheme,
+  type SchemeLibrary
+} from './scheme-library.ts';
 import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
 import {
   createHistory,
@@ -124,6 +133,9 @@ let restorePending = false;
 let showDimensions = true;
 /** 「新建空白」的二次确认计时器（画布非空时要求连点两次）。 */
 let pendingNewBlank = 0;
+/** 方案库（userData/canvas-schemes.json）。 */
+let schemeLibrary: SchemeLibrary = emptySchemeLibrary();
+let schemeError = '';
 const adapterFactory = createDefaultAdapterFactory({ dowelDiaMm: 4 });
 
 // ---------------------------------------------------------------------------
@@ -416,6 +428,7 @@ function buildShell(): void {
         <button type="button" class="cw-btn" data-action="redo" title="重做 Ctrl+Y" disabled>↷ 重做</button>
         <button type="button" class="cw-btn primary" data-action="auto-adapters">⚡ 全部生成转接板</button>
         <button type="button" class="cw-btn" data-action="export">导出</button>
+        <button type="button" class="cw-btn" data-action="open-schemes">方案库</button>
         <span class="cw-draft-state" id="cwPriceSource" title="">价格源：未接入</span>
         <span class="cw-draft-state" id="cwDraftState" role="status" aria-live="polite">—</span>
         <button type="button" class="cw-btn" data-action="new-blank">新建空白</button>
@@ -464,6 +477,27 @@ function buildShell(): void {
         </div>
         <div class="cw-inspector-body" id="cwInspector"></div>
       </aside>
+    </div>
+    <div class="cw-modal" id="cwSchemeModal" hidden>
+      <div class="cw-modal-box" role="dialog" aria-modal="true" aria-label="方案库">
+        <div class="cw-modal-head">
+          <b>方案库</b>
+          <span class="cw-hint">同一台机器的几个版本并存；同名保存即覆盖</span>
+          <button type="button" class="cw-btn" data-action="close-schemes">关闭</button>
+        </div>
+        <div class="cw-modal-body" style="padding:12px;overflow:auto">
+          <div class="cw-field cw-price-entry">
+            <span>另存当前方案为</span>
+            <input type="text" id="cwSchemeName" maxlength="40" placeholder="方案名（≤40 字）"
+                   value="${escapeHtml((state.graph.title ?? state.graph.schemeId).slice(0, 40))}" />
+            <button type="button" class="cw-btn primary" data-action="save-scheme">保存</button>
+          </div>
+          <p class="cw-hint ${schemeError ? 'cw-warn' : ''}">${escapeHtml(
+            schemeError || `已保存 ${schemeLibrary.schemes.length} 个方案（存工程目录）`
+          )}</p>
+          <div id="cwSchemeList"></div>
+        </div>
+      </div>
     </div>
     <div class="cw-modal" id="cwExportModal" hidden>
       <div class="cw-modal-box" role="dialog" aria-modal="true" aria-label="导出预览">
@@ -1255,6 +1289,131 @@ function downstreamMass(nodeId: string): number {
   return Math.round(mass * 1000) / 1000;
 }
 
+/** 读方案库（工程目录）；坏文件保留现场并提示，不阻断编辑。 */
+async function loadSchemes(): Promise<void> {
+  const api = window.desktop?.canvasSchemes;
+  if (!api) return;
+  try {
+    const file = await api.load();
+    if (!file.library) {
+      if (file.recovered) schemeError = '方案库文件损坏（现场已保留），本次按空库处理';
+      renderSchemeList();
+      return;
+    }
+    const parsed = parseSchemeLibrary(file.library);
+    schemeLibrary = parsed.library;
+    schemeError = parsed.rejected ? parsed.issues[0] ?? '方案库不可用' : parsed.issues.join('；');
+    renderSchemeList();
+  } catch (error) {
+    schemeError = `方案库读取失败：${error instanceof Error ? error.message : String(error)}`;
+    renderSchemeList();
+  }
+}
+
+function renderSchemeList(): void {
+  const host = document.getElementById('cwSchemeList');
+  const stateLabel = document.querySelector<HTMLElement>('#cwSchemeModal .cw-hint');
+  if (stateLabel) {
+    stateLabel.textContent = schemeError || `已保存 ${schemeLibrary.schemes.length} 个方案（存工程目录）`;
+    stateLabel.classList.toggle('cw-warn', Boolean(schemeError));
+  }
+  if (!host) return;
+  const rows = listSchemes(schemeLibrary);
+  host.innerHTML =
+    rows.length === 0
+      ? '<p class="cw-hint">还没有保存过方案：起个名字点「保存」，当前画布就会存进这里。</p>'
+      : rows
+          .map(
+            (row) => `
+        <div class="cw-field cw-price-entry">
+          <span>${escapeHtml(row.name)} <small style="opacity:.6">${escapeHtml(
+            row.savedAt.slice(5, 16).replace('T', ' ')
+          )} · ${row.nodes} 节点 / ${row.edges} 边</small></span>
+          <button type="button" class="cw-btn" data-action="load-scheme" data-name="${escapeHtml(row.name)}">载入</button>
+          <button type="button" class="cw-btn danger" data-action="delete-scheme" data-name="${escapeHtml(row.name)}">删除</button>
+        </div>`
+          )
+          .join('');
+}
+
+async function persistSchemes(): Promise<boolean> {
+  const api = window.desktop?.canvasSchemes;
+  if (!api) return true;
+  try {
+    const saved = await api.save(schemeLibrary);
+    if (!saved.ok) {
+      schemeError = `方案库写入失败：${saved.message ?? '未知原因'}`;
+      renderSchemeList();
+      return false;
+    }
+    return true;
+  } catch (error) {
+    schemeError = `方案库写入失败：${error instanceof Error ? error.message : String(error)}`;
+    renderSchemeList();
+    return false;
+  }
+}
+
+async function saveCurrentScheme(): Promise<void> {
+  const input = document.getElementById('cwSchemeName') as HTMLInputElement | null;
+  const name = (input?.value ?? state.graph.title ?? state.graph.schemeId).trim();
+  const previous = schemeLibrary;
+  const result = upsertScheme(schemeLibrary, name, state.graph, new Date().toISOString());
+  if (result.error) {
+    toast(`方案未保存：${result.error}`, true);
+    return;
+  }
+  schemeLibrary = result.library;
+  schemeError = '';
+  if (!(await persistSchemes())) {
+    schemeLibrary = previous;
+    return;
+  }
+  renderSchemeList();
+  toast(result.replaced ? `已覆盖方案「${name}」` : `已保存方案「${name}」（${state.graph.nodes.length} 节点）`);
+}
+
+function loadScheme(name: string): void {
+  const entry = schemeLibrary.schemes.find((item) => item.name === name);
+  if (!entry) {
+    toast('方案不存在，可能已被删除', true);
+    return;
+  }
+  let normalized;
+  try {
+    normalized = normalizeGraph(entry.graph);
+  } catch (error) {
+    toast(`方案「${name}」无法载入：${error instanceof Error ? error.message : String(error)}`, true);
+    return;
+  }
+  state.graph = normalized.graph;
+  state.selectedId = null;
+  history = createHistory({ graph: state.graph, selectedId: null }, `载入方案 ${name}`);
+  renderHistoryButtons();
+  renderAll();
+  markDirty();
+  const modal = document.getElementById('cwSchemeModal');
+  if (modal) modal.hidden = true;
+  toast(
+    `已载入方案「${name}」：${normalized.graph.nodes.length} 节点${
+      normalized.issues.length > 0 ? `，清理 ${normalized.issues.length} 处结构问题` : ''
+    }`
+  );
+}
+
+async function deleteScheme(name: string): Promise<void> {
+  const previous = schemeLibrary;
+  const next = removeScheme(schemeLibrary, name);
+  if (next === schemeLibrary) return;
+  schemeLibrary = next;
+  if (!(await persistSchemes())) {
+    schemeLibrary = previous;
+    return;
+  }
+  renderSchemeList();
+  toast(`已删除方案「${name}」`);
+}
+
 /** 手工报价清单：可从清单里删，删掉后该行回到价格簿或待询价。 */
 function manualPriceList(): string {
   const entries = Object.values(manualPrices.items);
@@ -1976,6 +2135,31 @@ function bindEvents(): void {
       renderOrtho();
       return;
     }
+    if (action === 'open-schemes') {
+      const modal = document.getElementById('cwSchemeModal');
+      if (modal) modal.hidden = false;
+      const input = document.getElementById('cwSchemeName') as HTMLInputElement | null;
+      if (input) input.value = (state.graph.title ?? state.graph.schemeId).slice(0, 40);
+      renderSchemeList();
+      return;
+    }
+    if (action === 'close-schemes') {
+      const modal = document.getElementById('cwSchemeModal');
+      if (modal) modal.hidden = true;
+      return;
+    }
+    if (action === 'save-scheme') {
+      void saveCurrentScheme();
+      return;
+    }
+    if (action === 'load-scheme') {
+      loadScheme(target.dataset.name ?? '');
+      return;
+    }
+    if (action === 'delete-scheme') {
+      void deleteScheme(target.dataset.name ?? '');
+      return;
+    }
     if (action === 'duplicate-node') {
       duplicateSelected(target.dataset.nodeId ?? state.selectedId ?? '');
       return;
@@ -2089,6 +2273,11 @@ function bindEvents(): void {
         if (modal) modal.hidden = true;
         return;
       }
+      if (!document.getElementById('cwSchemeModal')?.hidden) {
+        const modal = document.getElementById('cwSchemeModal');
+        if (modal) modal.hidden = true;
+        return;
+      }
       closeCanvasWorkbench();
     }
     const targetElement = event.target instanceof HTMLElement ? event.target : null;
@@ -2130,6 +2319,7 @@ export function openCanvasWorkbench(): void {
   void loadManualPrices().then(() => {
     if (state.open) renderAll();
   });
+  void loadSchemes();
   renderAll();
 }
 

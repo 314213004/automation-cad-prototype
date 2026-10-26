@@ -81,6 +81,50 @@ export function readCanvasPricing(userDataDir: string): { book: unknown | null; 
   }
 }
 
+// ---------------------------------------------------------------------------
+// 方案库（canvas-schemes.json）
+// ---------------------------------------------------------------------------
+
+export const CANVAS_SCHEMES_FILE = 'canvas-schemes.json';
+/** 4MB：50 个方案 × 每个几十节点，足够；只挡异常放大。 */
+export const CANVAS_SCHEMES_MAX_BYTES = 4_000_000;
+
+export function canvasSchemesPath(userDataDir: string): string {
+  return join(userDataDir, CANVAS_SCHEMES_FILE);
+}
+
+export function readCanvasSchemes(userDataDir: string): { library: unknown | null; recovered: boolean; path: string } {
+  const path = canvasSchemesPath(userDataDir);
+  if (!existsSync(path)) return { library: null, recovered: false, path };
+  try {
+    if (statSync(path).size > CANVAS_SCHEMES_MAX_BYTES) return { library: null, recovered: true, path };
+    return { library: JSON.parse(readFileSync(path, 'utf8')) as unknown, recovered: false, path };
+  } catch {
+    return { library: null, recovered: true, path };
+  }
+}
+
+export function writeCanvasSchemes(userDataDir: string, library: unknown): { path: string; bytes: number } {
+  const text = `${JSON.stringify(library, null, 2)}\n`;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > CANVAS_SCHEMES_MAX_BYTES) {
+    throw new Error(`方案库 ${bytes} 字节，超过 ${CANVAS_SCHEMES_MAX_BYTES} 上限`);
+  }
+  mkdirSync(userDataDir, { recursive: true });
+  const path = canvasSchemesPath(userDataDir);
+  const temporary = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, text, { encoding: 'utf8', mode: 0o600 });
+    chmodSync(temporary, 0o600);
+    if (process.platform === 'win32') rmSync(path, { force: true });
+    renameSync(temporary, path);
+    chmodSync(path, 0o600);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+  return { path, bytes };
+}
+
 export function clearCanvasPricing(userDataDir: string): void {
   rmSync(canvasPricingPath(userDataDir), { force: true });
 }

@@ -901,6 +901,11 @@ interface Window {
       save(book: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
       clear(): Promise<{ ok: boolean }>;
     };
+    /** 画布方案库（userData/canvas-schemes.json，0600，4MB 上限）。 */
+    canvasSchemes: {
+      load(): Promise<{ library: unknown | null; recovered: boolean; path: string }>;
+      save(library: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
+    };
     projects: {
       list(): Promise<DesktopDesignProjectRecord[]>;
       save(payload: DesktopDesignProjectSaveInput): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; message?: string }>;
