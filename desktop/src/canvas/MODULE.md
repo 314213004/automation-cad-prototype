@@ -129,7 +129,9 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 28. **DXF 不是 3D 模型**：开孔图只保证孔位/孔径与端口一致，沉头、公差、粗糙度、材料热处理都要靠工序与图纸说明，界面文案不许省略。
 29. **落盘扩展名有白名单**：`.pdf/.dxf/.glb/.obj/.csv/.xlsx/.step/.stl/.json`，`.py`/`.st` 不在其中；`exportFileName` 如实返回 supported=false，不要改成 .txt 骗过校验。
 30. **保存对话框会阻塞**：`exportFile()` 弹原生保存框，自动化里只验证按钮启用/禁用与文件名，不要真去点（会挂住会话）。
-31. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
+31. **`draft-store.ts` 不能进渲染进程**：它 import `node:fs`，被 `canvas/index` 或 workbench 间接引用会让前端打不开；只给 `electron/ipc.ts` 用，渲染侧走 `window.desktop.canvasDraft`。
+32. **重置演示后草稿会立刻重建**：`reset-demo` 先清磁盘再 `persistNow()`，落盘的是新演示图——这是预期，「清空」不等于「不再保存」。
+33. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
 
 ## 验证命令
 

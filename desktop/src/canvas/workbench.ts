@@ -56,7 +56,9 @@ import {
   CANVAS_DRAFT_KEY,
   clearDraft,
   loadDraft,
+  parseDraft,
   saveDraft,
+  serializeDraft,
   type CanvasViewMode,
   type DraftStorage
 } from './persistence.ts';
@@ -177,15 +179,54 @@ function setDraftState(text: string, error = false): void {
   element.classList.toggle('cw-warn', error);
 }
 
+function draftPayload(): { graph: typeof state.graph; selectedId: string | null; mode: typeof state.mode } {
+  return { graph: state.graph, selectedId: state.selectedId, mode: state.mode };
+}
+
 function persistNow(): void {
-  const storage = getDraftStorage();
-  if (!storage) {
-    setDraftState('无本地存储，改动不会保存', true);
-    return;
-  }
   const savedAt = new Date().toISOString();
-  const result = saveDraft(storage, { graph: state.graph, selectedId: state.selectedId, mode: state.mode }, savedAt);
-  setDraftState(result.ok ? `已保存 ${savedAt.slice(11, 19)}` : result.reason ?? '保存失败', !result.ok);
+  const storage = getDraftStorage();
+  const result = storage
+    ? saveDraft(storage, draftPayload(), savedAt)
+    : { ok: false, reason: '无本地存储，改动只在内存里' };
+  setDraftState(
+    result.ok ? `已保存 ${savedAt.slice(11, 19)}（工程目录 + 本地缓存）` : result.reason ?? '保存失败',
+    !result.ok
+  );
+  void mirrorDraftToFile(savedAt);
+}
+
+/**
+ * 同时写一份到工程目录（userData），localStorage 只当快速缓存：
+ * 清缓存 / 换机器后仍能从磁盘恢复。写失败不阻断编辑，只在状态栏说明。
+ */
+async function mirrorDraftToFile(savedAt: string): Promise<void> {
+  const api = window.desktop?.canvasDraft;
+  if (!api) return;
+  try {
+    const payload = JSON.parse(serializeDraft(draftPayload(), savedAt)) as unknown;
+    const result = await api.save(payload);
+    if (!result.ok) setDraftState(`工程目录草稿写入失败：${result.message ?? '未知原因'}`, true);
+    else setDraftState(`已保存 ${savedAt.slice(11, 19)}（工程目录 ${Math.round((result.bytes ?? 0) / 1024)}KB + 本地缓存）`);
+  } catch (error) {
+    setDraftState(`工程目录草稿写入失败：${error instanceof Error ? error.message : String(error)}`, true);
+  }
+}
+
+/** 把解析好的草稿装进状态（localStorage 与磁盘共用）。 */
+function applyDraft(loaded: { draft: { graph: typeof state.graph; selectedId: string | null; mode: typeof state.mode; savedAt: string } | null; issues: unknown[]; reason?: string }): boolean {
+  if (!loaded.draft) return false;
+  state.graph = loaded.draft.graph;
+  state.selectedId = loaded.draft.selectedId;
+  state.mode = loaded.draft.mode;
+  history = createHistory({ graph: state.graph, selectedId: state.selectedId }, '恢复草稿');
+  renderHistoryButtons();
+  const savedAt = loaded.draft.savedAt.slice(11, 19);
+  setDraftState(savedAt ? `已恢复草稿 ${savedAt}` : '已恢复草稿');
+  if (loaded.issues.length > 0) {
+    toast(`草稿已清理 ${loaded.issues.length} 处结构问题（重复 id / 孤儿边等）`);
+  }
+  return true;
 }
 
 /** 改动后 400ms 落草稿；连续拖拽只在停手后写一次。 */
@@ -235,21 +276,31 @@ async function loadPriceSource(): Promise<void> {
   }
 }
 
-function restoreDraft(): void {
+async function restoreDraft(): Promise<void> {
   if (draftLoaded) return;
   draftLoaded = true;
-  const loaded = loadDraft(getDraftStorage());
-  if (loaded.draft) {
-    state.graph = loaded.draft.graph;
-    state.selectedId = loaded.draft.selectedId;
-    state.mode = loaded.draft.mode;
-    history = createHistory({ graph: state.graph, selectedId: state.selectedId }, '恢复草稿');
-    renderHistoryButtons();
-    const savedAt = loaded.draft.savedAt.slice(11, 19);
-    setDraftState(savedAt ? `已恢复草稿 ${savedAt}` : '已恢复草稿');
-    if (loaded.issues.length > 0) {
-      toast(`草稿已清理 ${loaded.issues.length} 处结构问题（重复 id / 孤儿边等）`);
+  // 先读工程目录（跨会话/清缓存仍在），坏了再退回 localStorage
+  const api = window.desktop?.canvasDraft;
+  if (api) {
+    try {
+      const file = await api.load();
+      if (file.draft) {
+        const parsed = parseDraft(JSON.stringify(file.draft));
+        if (applyDraft(parsed)) {
+          renderAll();
+          return;
+        }
+        setDraftState(`工程目录草稿不可用：${parsed.reason ?? '格式不匹配'}`, true);
+      } else if (file.recovered) {
+        setDraftState('工程目录草稿损坏（现场已保留），改用本地缓存', true);
+      }
+    } catch (error) {
+      setDraftState(`工程目录草稿读取失败：${error instanceof Error ? error.message : String(error)}`, true);
     }
+  }
+  const loaded = loadDraft(getDraftStorage());
+  if (applyDraft(loaded)) {
+    renderAll();
     return;
   }
   if (loaded.reason && loaded.reason !== '没有本地草稿') setDraftState(loaded.reason, true);
@@ -1528,6 +1579,7 @@ function bindEvents(): void {
     }
     if (action === 'reset-demo') {
       clearDraft(getDraftStorage());
+      void window.desktop?.canvasDraft?.clear().catch(() => undefined);
       state.graph = demoCanvasGraph();
       state.selectedId = 'AXIS-Y';
       state.mode = 'topology';
@@ -1680,7 +1732,7 @@ export function openCanvasWorkbench(): void {
   const section = root();
   section.hidden = false;
   state.open = true;
-  restoreDraft();
+  void restoreDraft();
   renderAll();
 }
 

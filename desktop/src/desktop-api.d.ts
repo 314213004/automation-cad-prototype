@@ -889,6 +889,12 @@ interface Window {
       saveDraft(draft: unknown): Promise<{ ok: boolean; message?: string }>;
       clearDraft(): Promise<{ ok: boolean }>;
     };
+    /** 画布工作台草稿（userData/canvas-workbench-draft.json，0600，1.5MB 上限）。 */
+    canvasDraft: {
+      load(): Promise<{ draft: unknown | null; recovered: boolean; path: string }>;
+      save(draft: unknown): Promise<{ ok: boolean; path?: string; bytes?: number; message?: string }>;
+      clear(): Promise<{ ok: boolean }>;
+    };
     projects: {
       list(): Promise<DesktopDesignProjectRecord[]>;
       save(payload: DesktopDesignProjectSaveInput): Promise<{ ok: boolean; record?: DesktopDesignProjectRecord; message?: string }>;

@@ -51,6 +51,11 @@ const desktopApi = {
     saveDraft: (draft: unknown) => ipcRenderer.invoke('design:draft-save', draft),
     clearDraft: () => ipcRenderer.invoke('design:draft-clear')
   },
+  canvasDraft: {
+    load: () => ipcRenderer.invoke('canvas:draft-load'),
+    save: (draft: unknown) => ipcRenderer.invoke('canvas:draft-save', draft),
+    clear: () => ipcRenderer.invoke('canvas:draft-clear')
+  },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),

@@ -20,6 +20,7 @@ import {
 import { CAD_EXTENSIONS, DRAWING_EXTENSIONS, isCadExtension, isDrawingExtension } from '../src/shared/cad';
 import { convertDwgToDxf } from './dwg';
 import { assertCadFileSize } from '../src/shared/input-limits.ts';
+import { clearCanvasDraft, readCanvasDraft, writeCanvasDraft } from '../src/canvas/draft-store.ts';
 import { recordDiagnosticError, setDiagnosticOperation } from '../src/shared/diagnostics.ts';
 import { isUsablePricebookItem, validatePricebook } from '../src/cost/pricebook.ts';
 import { CostExportError, planExportName } from '../src/cost/export.ts';
@@ -665,6 +666,22 @@ export function registerIpcHandlers(context: IpcContext): PackRegistry {
   });
   handle('design:draft-clear', () => {
     clearDesignDraft(context.userDataDir);
+    return { ok: true };
+  });
+  handle('canvas:draft-load', () => readCanvasDraft(context.userDataDir));
+  handle('canvas:draft-save', (_event, payload: unknown) => {
+    if (!isRecord(payload) || payload.schema !== 'canvas-workbench-draft/1') {
+      return { ok: false, message: '画布草稿格式无效（schema 不匹配）' };
+    }
+    try {
+      const written = writeCanvasDraft(context.userDataDir, payload);
+      return { ok: true, path: written.path, bytes: written.bytes };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  handle('canvas:draft-clear', () => {
+    clearCanvasDraft(context.userDataDir);
     return { ok: true };
   });
   handle('projects:list', () => listProjects(context.userDataDir));
