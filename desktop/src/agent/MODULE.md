@@ -579,3 +579,13 @@ parseFallbackCandidates(text): string[]
 
 1. 为 MCP 增加 `resources`（当前装配树、数据包清单），让 Agent 能先读后写。
 2. 把剩余属性编辑（几何参数 / 装配层级）接入命令总线与撤销栈；元件型号/数量/备注与移除已完成。
+
+## 工具：build_canvas_assembly（2026-10-26）
+
+- 位置：`tools.ts` 注册（写工具，`router.ts` 的 `WRITE_TOOLS` 里，执行前要用户确认）
+- 命令：`commands.ts` 的 `registerBuildCanvasAssemblyCommand` → 渲染桥 `buildCanvasAssembly`
+- 入参：`{ name?, open?, graph? }`；不给 `graph` 就读当前画布草稿 `userData/canvas-workbench-draft.json`
+- 行为：`normalizeGraph` 规范化 → `buildAssemblyProject`（示意盒 + 自写 STL）→ `projects.save` → 默认打开到视口
+- 返回：`{ ok, projectId, name, parts, envelope, massKg: null, source: 'draft'|'graph', graphIssues, note, caveats }`
+- 失败码：`EMPTY_CANVAS`（画布无工位）、`INVALID_GRAPH`、`SAVE_FAILED`、`UNAVAILABLE`
+- **不要**拿它替代 `build_machine_model` / `apply_machine_design`：这里只有占位盒，没有孔/导轨/皮带，AABB 只能初筛

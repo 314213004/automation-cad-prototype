@@ -842,6 +842,42 @@ export class AgentTools {
     });
 
     this.add({
+      name: 'build_canvas_assembly',
+      description:
+        '把当前画布方案（工位拓扑）生成整机 3D 示意装配工程并落盘：按每个工位的 dimsMm 与正交排布生成占位盒，返回工程 id、零件数、包络。' +
+        '不含真实结构（孔/导轨/皮带都没有），质量为 null；要真实可制造几何请用 build_machine_model 或 apply_machine_design。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '工程名（默认取画布标题）' },
+          open: { type: 'boolean', description: '是否生成后立即打开到视口，默认 true' },
+          graph: {
+            type: 'object',
+            description: '可选：直接给 MachineGraph（nodes/edges）；不给则用当前画布草稿'
+          }
+        },
+        additionalProperties: false
+      },
+      handler: async (args) => {
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        if (args.open !== undefined && typeof args.open !== 'boolean') {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'open 必须是布尔值' };
+        }
+        if (args.graph !== undefined && (typeof args.graph !== 'object' || args.graph === null || Array.isArray(args.graph))) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'graph 必须是 MachineGraph 对象' };
+        }
+        const result = await this.execute('build_canvas_assembly', {
+          ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+          ...(args.open === false ? { open: false } : {}),
+          ...(args.graph !== undefined ? { graph: args.graph } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
       name: 'get_render_stats',
       description:
         '读取当前 3D 视口的渲染指标：渲染器名称、是否软件渲染、像素比、质量档、零件/三角形数量，以及最近一次拖动的帧数、平均/最大帧时间。只读，用于定位「鼠标不跟手」是软件渲染、帧率还是装配体规模。',

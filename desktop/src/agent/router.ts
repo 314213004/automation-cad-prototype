@@ -275,6 +275,8 @@ export const WRITE_TOOLS = new Set([
   'apply_machine_design',
   // 会替换当前视口里的模型（虽然不写工程文件），仍需确认
   'build_machine_model',
+  // 写工程文件（画布方案 → 示意装配工程），需要确认
+  'build_canvas_assembly',
   'import_cad',
   'insert_component',
   'place_component',

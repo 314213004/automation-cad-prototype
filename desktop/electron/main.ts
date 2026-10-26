@@ -2641,10 +2641,11 @@ function createWindow(): BrowserWindow {
         if (!activeTools) throw new Error('Agent 工具尚未启动');
         const summaries = activeTools.summaries();
         if (
-          summaries.length !== 23 ||
+          summaries.length !== 24 ||
           !summaries.some((tool) => tool.name === 'design_machine') ||
           !summaries.some((tool) => tool.name === 'suggest_kinematics') ||
           !summaries.some((tool) => tool.name === 'apply_machine_design') ||
+          !summaries.some((tool) => tool.name === 'build_canvas_assembly') ||
           !summaries.some((tool) => tool.name === 'search_docs') ||
           !summaries.some((tool) => tool.name === 'run_electrical_check') ||
           !summaries.some((tool) => tool.name === 'run_cost_report') ||

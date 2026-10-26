@@ -89,6 +89,9 @@ import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLay
 import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
 import type { Placement } from './enclosure/layout.ts';
 import { closeCanvasWorkbench, installCanvasWorkbench, openCanvasWorkbench } from './canvas/workbench.ts';
+import { buildAssemblyProject } from './canvas/assembly-export.ts';
+import { normalizeGraph } from './canvas/graph.ts';
+import type { MachineGraph } from './canvas/types.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -1966,6 +1969,84 @@ async function openDrawingPath(path: string): Promise<boolean> {
 }
 
 /**
+ * 画布方案 → 整机 3D 示意装配工程（智能体工具 build_canvas_assembly 与工作台按钮共用）。
+ *
+ * 只按工位 dimsMm/ortho 生成占位盒：件数/包络可核对，但没有孔、导轨、皮带，质量为 null。
+ * 不传 graph 时读当前画布草稿（userData/canvas-workbench-draft.json）。
+ */
+async function buildCanvasAssembly(input: unknown): Promise<Record<string, unknown>> {
+  const request = (typeof input === 'object' && input !== null ? input : {}) as {
+    name?: unknown;
+    open?: unknown;
+    graph?: unknown;
+  };
+  if (typeof request.name === 'string' && !request.name.trim()) {
+    return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+  }
+  if (request.open !== undefined && typeof request.open !== 'boolean') {
+    return { ok: false, code: 'INVALID_ARGUMENT', message: 'open 必须是布尔值' };
+  }
+  if (!window.desktop?.projects?.save) {
+    return { ok: false, code: 'UNAVAILABLE', message: '工程接口不可用，无法生成装配工程' };
+  }
+  let rawGraph: unknown = request.graph;
+  let source = 'graph';
+  if (rawGraph === undefined) {
+    source = 'draft';
+    const draft = await window.desktop.canvasDraft?.load?.().catch(() => null);
+    rawGraph = (draft?.draft as { graph?: unknown } | null)?.graph;
+  }
+  if (!rawGraph || typeof rawGraph !== 'object') {
+    return { ok: false, code: 'EMPTY_CANVAS', message: '当前画布没有方案数据：先在画布工作台加模块或载入草稿' };
+  }
+  let graph: MachineGraph;
+  let graphIssues: string[] = [];
+  try {
+    const normalized = normalizeGraph(rawGraph as MachineGraph);
+    graph = normalized.graph;
+    graphIssues = normalized.issues.map((issue) => `${issue.code}: ${issue.message}`);
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'INVALID_GRAPH',
+      message: `画布数据无效：${error instanceof Error ? error.message : String(error)}`
+    };
+  }
+  if (graph.nodes.length === 0) {
+    return { ok: false, code: 'EMPTY_CANVAS', message: '画布是空的：需要至少一个工位才能生成装配' };
+  }
+  const draft = buildAssemblyProject(graph, typeof request.name === 'string' ? request.name : undefined);
+  if (!draft) {
+    return { ok: false, code: 'EMPTY_CANVAS', message: '画布里没有带有效尺寸的工位，无法生成装配' };
+  }
+  const saved = await window.desktop.projects.save(draft);
+  if (!saved.ok || !saved.record) {
+    return { ok: false, code: 'SAVE_FAILED', message: saved.message ?? '工程保存失败' };
+  }
+  if (request.open !== false) {
+    closeCanvasWorkbench();
+    homeHandle?.close();
+    await openSavedProject(saved.record.id);
+  }
+  return {
+    ok: true,
+    projectId: saved.record.id,
+    name: saved.record.name,
+    parts: draft.parts,
+    envelope: draft.envelope,
+    massKg: null,
+    source,
+    graphIssues,
+    note: draft.note,
+    caveats: [
+      '示意体：每个工位一个占位盒，没有孔、导轨、皮带、焊缝',
+      '质量为 null（示意体不等于实物）',
+      'AABB 只能做包络/初筛，不能当装配干涉结论'
+    ]
+  };
+}
+
+/**
  * 整机模型构建入口（智能体工具 build_machine_model 与脚本 API 共用）。
  *
  * 机型经 MODEL_BUILDERS 注册表分发；输送机走参数化内核：28 件真实零件逐件导出 STL，
@@ -3139,6 +3220,7 @@ function initAgentBridge(): void {
       }
     },
     buildMachineModel: async (payload: unknown) => await buildMachineModel(payload),
+    buildCanvasAssembly: async (payload: unknown) => await buildCanvasAssembly(payload),
     importPath: async (path: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };

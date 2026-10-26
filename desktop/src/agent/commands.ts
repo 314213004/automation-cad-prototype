@@ -237,6 +237,7 @@ const BRIDGE_METHODS = new Set([
   'removeMachineBomRows',
   // 以下三项命令层早已在调，白名单漏了：真实渲染桥会以 INVALID_METHOD 拒绝（fake bridge 测不出来）
   'buildMachineModel',
+  'buildCanvasAssembly',
   'markPlcGenerated',
   'getElecDocument'
 ]);
@@ -1318,6 +1319,45 @@ function machineMainBreakerRating(
  * 整机模型构建：机型经 MODEL_BUILDERS 注册表分发，渲染层负责生成几何与装配。
  * 与 apply_machine_design 的区别：这里只产出"当前视口里的模型"，不写工程文件。
  */
+/**
+ * 画布方案 → 整机 3D 示意装配工程（智能体工具 build_canvas_assembly）。
+ * 与 build_machine_model 的区别：不跑参数化内核，只按画布工位的 dimsMm/ortho 生成占位盒，
+ * 结果能落成工程（零件树/包围盒可查），但明确是示意体、不给质量。
+ */
+function registerBuildCanvasAssemblyCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'build_canvas_assembly',
+    async run(args, ctx) {
+      const allowed = ['name', 'open', 'graph'];
+      for (const key of Object.keys(args)) {
+        if (!allowed.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      if (args.open !== undefined && typeof args.open !== 'boolean') {
+        throw new CommandFailure('INVALID_ARGUMENT', 'open 必须是布尔值');
+      }
+      if (args.graph !== undefined && (typeof args.graph !== 'object' || args.graph === null || Array.isArray(args.graph))) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'graph 必须是对象（MachineGraph）');
+      }
+      const payload = {
+        ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
+        ...(args.open === false ? { open: false } : {}),
+        ...(args.graph !== undefined ? { graph: args.graph } : {})
+      };
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string; code?: string }>('buildCanvasAssembly', [payload]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure(
+          typeof result?.code === 'string' && result.code ? result.code : 'RENDERER_ERROR',
+          result?.message ?? '画布装配生成失败'
+        );
+      }
+      return { ok: true, data: result };
+    }
+  });
+}
+
 function registerBuildMachineModelCommand(bus: CommandBus): void {
   bus.register({
     name: 'build_machine_model',
@@ -1962,6 +2002,7 @@ export function createAgentCommandBus(
   registerPlcVerifyCommand(bus);
   registerPlcGenerateCommand(bus);
   registerBuildMachineModelCommand(bus);
+  registerBuildCanvasAssemblyCommand(bus);
   registerMachineApplyCommand(bus);
   registerExportFilesCommand(bus);
   return bus;
