@@ -1,4 +1,4 @@
-export type FeatureType = 'box' | 'cylinder' | 'holes' | 'slot' | 'fillet';
+export type FeatureType = 'box' | 'cylinder' | 'holes' | 'counterbore' | 'slot' | 'fillet';
 
 export interface FeatureNode {
   id: string;
@@ -59,7 +59,7 @@ export const MAX_ASSEMBLY_INSTANCES = 50;
 
 type UnknownRecord = Record<string, unknown>;
 
-const FEATURE_TYPES: readonly FeatureType[] = ['box', 'cylinder', 'holes', 'slot', 'fillet'];
+const FEATURE_TYPES: readonly FeatureType[] = ['box', 'cylinder', 'holes', 'counterbore', 'slot', 'fillet'];
 const TIMEZONE_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/;
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -319,6 +319,58 @@ function validateFeatureDoc(doc: FeatureDoc): string[] {
       return;
     }
 
+    if (type === 'counterbore') {
+      // 沉头孔 = 通孔（或定深孔）+ 顶面下沉的沉窝；几何上两条圆柱相减，必须保证沉窝比通孔大。
+      const diameter = paramNumber(params, 'diameter', label, errors);
+      const cbDiameter = paramNumber(params, 'cbDiameter', label, errors);
+      const cbDepth = paramNumber(params, 'cbDepth', label, errors);
+      const positions = positionsOf(params.positions);
+      if (params.positions === undefined) {
+        errors.push(`缺少必填参数：${label}.positions`);
+      } else if (!Array.isArray(params.positions)) {
+        errors.push(`${label}：参数「positions」必须是孔位数组`);
+      } else if (params.positions.length === 0) {
+        errors.push(`${label}：孔位不能为空`);
+      } else if (positions === null) {
+        errors.push(`${label}：参数「positions」必须是 [x, y] 二元数组`);
+      }
+      if (params.depth !== undefined && params.depth !== 'through' && !positiveNumber(params.depth)) {
+        errors.push(`${label}：参数「depth」必须是 through 或大于 0 的数字`);
+      }
+      if (diameter !== null && cbDiameter !== null && cbDiameter <= diameter) {
+        errors.push(
+          `${label}：沉头直径 ${formatMm(cbDiameter)} mm 必须大于通孔直径 ${formatMm(diameter)} mm（否则切不出台阶）`
+        );
+      }
+      if (cbDepth !== null && plate && cbDepth >= plate.thickness) {
+        errors.push(
+          `${label}：沉头深 ${formatMm(cbDepth)} mm 不小于板厚 ${formatMm(plate.thickness)} mm，会切穿板面`
+        );
+      }
+      if (positions && plate) {
+        const oversized = positions.find(([x, y]) => {
+          const radius = (cbDiameter ?? diameter ?? 0) / 2;
+          return x - radius < plate.minX || x + radius > plate.maxX || y - radius < plate.minY || y + radius > plate.maxY;
+        });
+        if (oversized) {
+          errors.push(`${label}：沉窝 (${formatMm(oversized[0])}, ${formatMm(oversized[1])}) 超出底板边界（含沉头半径）`);
+        }
+      }
+      if (positions && cbDiameter !== null) {
+        for (let first = 0; first < positions.length; first += 1) {
+          for (let second = first + 1; second < positions.length; second += 1) {
+            const a = positions[first]!;
+            const b = positions[second]!;
+            const distance = Math.hypot(a[0] - b[0], a[1] - b[1]);
+            if (distance < cbDiameter) {
+              errors.push(`${label}：沉窝间距 ${formatMm(distance)} mm 小于沉头直径 ${formatMm(cbDiameter)} mm，台阶会相互切穿`);
+            }
+          }
+        }
+      }
+      return;
+    }
+
     if (type === 'slot') {
       paramNumber(params, 'length', label, errors);
       paramNumber(params, 'width', label, errors);
@@ -411,6 +463,15 @@ function compileFeatureOps(features: readonly FeatureNode[]): Array<Record<strin
       ops.push({
         op: 'holes',
         diameter: params.diameter,
+        positions: clone(params.positions),
+        ...(params.depth !== undefined ? { depth: params.depth } : {})
+      });
+    } else if (type === 'counterbore') {
+      ops.push({
+        op: 'counterbore',
+        diameter: params.diameter,
+        cbDiameter: params.cbDiameter,
+        cbDepth: params.cbDepth,
         positions: clone(params.positions),
         ...(params.depth !== undefined ? { depth: params.depth } : {})
       });

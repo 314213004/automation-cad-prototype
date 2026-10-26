@@ -84,7 +84,9 @@ export function adapterPlateDxf(node: CanvasNode): AdapterDxfResult | null {
     `ADAPTER ${node.id}  ${width}x${height}x${thickness}mm  ${params.material}`,
     `A/FROM ${from.family} D${from.holeDiaMm} PITCH ${from.pitchXMm}x${from.pitchYMm} x${from.count}`,
     `B/TO   ${to.family} D${to.holeDiaMm} PITCH ${to.pitchXMm}x${to.pitchYMm} x${to.count}`,
-    params.counterBore ? 'COUNTERBORE: 图纸标注，DXF 只画通孔（沉头待工序）' : 'THROUGH HOLES ONLY',
+    params.counterBore
+      ? 'COUNTERBORE: 2D 只画通孔，沉窝尺寸见 3D 模型/工序卡（DXF 不带锥面）'
+      : 'THROUGH HOLES ONLY',
     params.dowelDiaMm > 0 ? `DOWEL D${params.dowelDiaMm} x2` : 'NO DOWEL',
     'UNIT mm  SCALE 1:1  NOT FOR B-REP / 仅开孔图，不含公差与粗糙度'
   ];

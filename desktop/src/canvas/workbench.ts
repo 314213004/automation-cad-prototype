@@ -952,7 +952,7 @@ function inspectorProp(node: CanvasNode): string {
         <p class="cw-hint ${adapterBuildState.get(node.id)?.error ? 'cw-warn' : ''}" id="cwAdapterBuildState">
           ${escapeHtml(adapterBuildState.get(node.id)?.text ?? describeAdapterModel(adapterFeatureDoc(node)))}
         </p>
-        <p class="cw-hint">孔位由两端 MountPort 决定；沉头孔在 feature 协议里没有算子，先出通孔。</p>
+        <p class="cw-hint">孔位由两端 MountPort 决定；母件侧沉头按 ISO 4762 头部尺寸推定（Ø 与深度需按实物螺钉复核），查不到对应螺钉时退回通孔。</p>
       </section>`
     : '';
 

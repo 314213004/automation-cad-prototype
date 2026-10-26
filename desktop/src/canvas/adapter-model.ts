@@ -4,8 +4,8 @@
 // （box / holes / fillet），交给主进程 parametric.build 走 build123d sidecar。
 //
 // 协议边界（必须写清楚）：
-//   - feature 协议只有 box / cylinder / holes(slot/fillet)，**没有沉头孔算子**；
-//     所以这里出通孔，沉头在图纸/后续工序体现，不在 3D 里假装做出来了。
+//   - feature 协议现已支持 counterbore（通孔 + 顶面沉窝）；母件侧有沉头需求时出沉头孔，
+//     沉头直径/深度取 ISO 4762 内六角圆柱头螺钉的头部尺寸（按通孔直径推定），并在说明里写清依据。
 //   - 孔位是对称阵列的近似（按孔距铺 2×n 网格），不是厂商图纸逐孔坐标。
 //   - 建模失败（内核未装 / 模块被门控 / 超时）一律按「仅参数」降级，不伪造成功。
 import type { FeatureDoc, FeatureNode } from '../parametric/features.ts';
@@ -36,6 +36,30 @@ export function holePositions(port: MountPort): Array<[number, number]> {
     }
   }
   return positions;
+}
+
+/** ISO 4762 内六角圆柱头螺钉：按通孔直径推头部直径/高度。查不到就返回 null（不猜）。 */
+export interface ScrewHeadSpec {
+  screw: string;
+  headDiaMm: number;
+  headHeightMm: number;
+}
+
+const ISO4762_HEADS: ReadonlyArray<{ clearanceMm: number; spec: ScrewHeadSpec }> = [
+  { clearanceMm: 4.5, spec: { screw: 'M4', headDiaMm: 7, headHeightMm: 4 } },
+  { clearanceMm: 5.5, spec: { screw: 'M5', headDiaMm: 8.5, headHeightMm: 5 } },
+  { clearanceMm: 6.6, spec: { screw: 'M6', headDiaMm: 10, headHeightMm: 6 } },
+  { clearanceMm: 9, spec: { screw: 'M8', headDiaMm: 13, headHeightMm: 8 } },
+  { clearanceMm: 11, spec: { screw: 'M10', headDiaMm: 16, headHeightMm: 10 } }
+];
+
+export function screwHeadForClearance(holeDiaMm: number): ScrewHeadSpec | null {
+  let best: { delta: number; spec: ScrewHeadSpec } | null = null;
+  for (const entry of ISO4762_HEADS) {
+    const delta = Math.abs(entry.clearanceMm - holeDiaMm);
+    if (delta <= 0.6 && (!best || delta < best.delta)) best = { delta, spec: entry.spec };
+  }
+  return best?.spec ?? null;
 }
 
 function holeFeature(id: string, label: string, port: MountPort): FeatureNode | null {
@@ -71,8 +95,27 @@ export function adapterFeatureDoc(node: CanvasNode): FeatureDoc | null {
       params: { length: width, width: height, height: thickness, centered: true }
     }
   ];
-  const fromHoles = holeFeature('f-holes-in', `母件侧孔阵列（${params.fromPort.family}）`, params.fromPort);
-  if (fromHoles) features.push(fromHoles);
+  // 母件侧：要沉头且能查到标准螺钉头部尺寸 → 出 counterbore；否则退回通孔（不编尺寸）
+  const fromPositions = holePositions(params.fromPort);
+  const head = params.counterBore ? screwHeadForClearance(params.fromPort.holeDiaMm) : null;
+  const cbDepth = head ? Math.min(head.headHeightMm, Math.max(thickness - 1, 0.5)) : 0;
+  if (head && fromPositions.length > 0 && params.fromPort.holeDiaMm > 0 && cbDepth > 0) {
+    features.push({
+      id: 'f-cb-in',
+      type: 'counterbore',
+      name: `母件侧沉头孔 Ø${params.fromPort.holeDiaMm} / Ø${head.headDiaMm}×${cbDepth}（${head.screw}）`,
+      params: {
+        diameter: params.fromPort.holeDiaMm,
+        cbDiameter: head.headDiaMm,
+        cbDepth,
+        depth: 'through',
+        positions: fromPositions
+      }
+    });
+  } else {
+    const fromHoles = holeFeature('f-holes-in', `母件侧孔阵列（${params.fromPort.family}）`, params.fromPort);
+    if (fromHoles) features.push(fromHoles);
+  }
   const toHoles = holeFeature('f-holes-out', `子件侧孔阵列（${params.toPort.family}）`, params.toPort);
   if (toHoles) features.push(toHoles);
   if (params.dowelDiaMm > 0) {
@@ -107,10 +150,18 @@ export function adapterFeatureDoc(node: CanvasNode): FeatureDoc | null {
 /** 建模请求的说明文字：讲清「这次到底能建出什么、缺什么」。 */
 export function describeAdapterModel(doc: FeatureDoc | null): string {
   if (!doc) return '该节点没有转接板参数，无法生成建模请求。';
-  const holes = doc.features.filter((feature) => feature.type === 'holes');
+  const holes = doc.features.filter((feature) => feature.type === 'holes' || feature.type === 'counterbore');
   const count = holes.reduce((sum, feature) => {
     const positions = feature.params.positions;
     return sum + (Array.isArray(positions) ? positions.length : 0);
   }, 0);
-  return `特征树 ${doc.features.length} 个（板体 + ${holes.length} 组孔共 ${count} 孔 + 圆角）；沉头孔协议不支持，先出通孔。`;
+  const counterbores = doc.features.filter((feature) => feature.type === 'counterbore');
+  if (counterbores.length > 0) {
+    const first = counterbores[0]!;
+    const cbDia = typeof first.params.cbDiameter === 'number' ? first.params.cbDiameter : 0;
+    const cbDepth = typeof first.params.cbDepth === 'number' ? first.params.cbDepth : 0;
+    const dia = typeof first.params.diameter === 'number' ? first.params.diameter : 0;
+    return `特征树 ${doc.features.length} 个（板体 + ${holes.length} 组孔共 ${count} 孔 + 圆角）；母件侧 Ø${dia} 通孔带 Ø${cbDia}×${cbDepth} 沉窝（按 ISO 4762 头部尺寸推定，需按实物螺钉复核）。`;
+  }
+  return `特征树 ${doc.features.length} 个（板体 + ${holes.length} 组孔共 ${count} 孔 + 圆角）；沉头关闭或不适用，按通孔出。`;
 }

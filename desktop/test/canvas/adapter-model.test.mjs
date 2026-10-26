@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { validateFeatures } from '../../src/parametric/features.ts';
-import { adapterFeatureDoc, describeAdapterModel, holePositions } from '../../src/canvas/adapter-model.ts';
+import {
+  adapterFeatureDoc,
+  describeAdapterModel,
+  holePositions,
+  screwHeadForClearance
+} from '../../src/canvas/adapter-model.ts';
 import { insertAdapterForEdge } from '../../src/canvas/graph.ts';
 import { createDefaultAdapterFactory } from '../../src/canvas/view-model.ts';
 import { demoCanvasGraph } from '../../src/canvas/demo-graph.ts';
@@ -32,7 +37,7 @@ test('adapterFeatureDoc：板体 + 两端孔阵列 + 圆角，且能通过仓库
   const { node } = demoAdapter();
   const doc = adapterFeatureDoc(node);
   assert.ok(doc);
-  assert.deepEqual(doc.features.map((feature) => feature.type), ['box', 'holes', 'holes', 'fillet']);
+  assert.deepEqual(doc.features.map((feature) => feature.type), ['box', 'counterbore', 'holes', 'fillet']);
   const body = doc.features[0];
   assert.deepEqual(body.params, { length: 90, width: 90, height: 12, centered: true });
   const inHoles = doc.features[1].params.positions;
@@ -64,11 +69,47 @@ test('adapterFeatureDoc：非转接板 / 缺参数返回 null，不给假模型'
   assert.equal(adapterFeatureDoc(emptyAdapter), null);
 });
 
-test('describeAdapterModel：讲清特征数与「沉头不支持」', () => {
+test('screwHeadForClearance：按通孔推定 ISO 4762 头部尺寸，查不到返回 null', () => {
+  assert.deepEqual(screwHeadForClearance(5.5), { screw: 'M5', headDiaMm: 8.5, headHeightMm: 5 });
+  assert.deepEqual(screwHeadForClearance(6.6), { screw: 'M6', headDiaMm: 10, headHeightMm: 6 });
+  assert.equal(screwHeadForClearance(3), null);
+});
+
+test('adapterFeatureDoc：母件侧出 counterbore，参数与特征树合法', () => {
+  const { node } = demoAdapter();
+  const doc = adapterFeatureDoc(node);
+  const cb = doc.features.find((feature) => feature.type === 'counterbore');
+  assert.ok(cb, '沉头默认开启，母件侧应是 counterbore');
+  assert.equal(cb.params.diameter, 5.5);
+  assert.equal(cb.params.cbDiameter, 8.5);
+  assert.equal(cb.params.cbDepth, 5);
+  assert.equal(cb.params.positions.length, 4);
+  assert.equal(doc.features.filter((feature) => feature.type === 'holes').length, 1, '子件侧仍是通孔');
+  assert.deepEqual(validateFeatures(doc), []);
+});
+
+test('adapterFeatureDoc：沉头关闭时退回通孔；孔径查不到标准头部也退回通孔', () => {
+  const { node } = demoAdapter();
+  const off = { ...node, adapterParams: { ...node.adapterParams, counterBore: false } };
+  const offDoc = adapterFeatureDoc(off);
+  assert.equal(offDoc.features.some((feature) => feature.type === 'counterbore'), false);
+  assert.equal(offDoc.features.filter((feature) => feature.type === 'holes').length, 2);
+
+  const weird = {
+    ...node,
+    adapterParams: { ...node.adapterParams, fromPort: { ...node.adapterParams.fromPort, holeDiaMm: 3 } }
+  };
+  const weirdDoc = adapterFeatureDoc(weird);
+  assert.equal(weirdDoc.features.some((feature) => feature.type === 'counterbore'), false);
+  assert.equal(weirdDoc.features.filter((feature) => feature.type === 'holes').length, 2);
+});
+
+test('describeAdapterModel：讲清特征数、孔数与沉头依据', () => {
   const { node } = demoAdapter();
   const text = describeAdapterModel(adapterFeatureDoc(node));
   assert.match(text, /特征树 4 个/);
   assert.match(text, /8 孔/);
-  assert.match(text, /沉头孔协议不支持/);
+  assert.match(text, /Ø8\.5×5 沉窝/);
+  assert.match(text, /ISO 4762/);
   assert.match(describeAdapterModel(null), /无法生成建模请求/);
 });

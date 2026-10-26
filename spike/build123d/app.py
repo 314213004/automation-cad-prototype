@@ -85,6 +85,27 @@ def build(ops: list[dict]):
                 z0 = -1.0
                 height = 1e3 if depth in (None, "through") else _num(depth, "depth") + 2
                 shape = shape - (bd.Pos(float(x), float(y), z0) * bd.Cylinder(d / 2, height))
+        elif kind == "counterbore":
+            if shape is None:
+                raise ValueError("counterbore 之前必须有实体")
+            d = _num(op.get("diameter"), "diameter")
+            cbd = _num(op.get("cbDiameter"), "cbDiameter")
+            cbdepth = _num(op.get("cbDepth"), "cbDepth")
+            if cbd <= d:
+                raise ValueError(f"cbDiameter（{cbd}）必须大于 diameter（{d}）")
+            positions = op.get("positions") or []
+            if not positions:
+                raise ValueError("counterbore.positions 不能为空")
+            depth = op.get("depth")
+            top = shape.bounding_box().max.Z
+            for x, y in positions:
+                # 通孔：从顶面上方 1mm 一路切下去
+                height = 1e3 if depth in (None, "through") else _num(depth, "depth") + 2
+                shape = shape - (bd.Pos(float(x), float(y), top - height / 2 + 1) * bd.Cylinder(d / 2, height))
+                # 沉窝：从顶面上方 0.5mm 起切 cbDepth（多切 0.5 保证顶面切净，不吃到台阶以下）
+                shape = shape - (
+                    bd.Pos(float(x), float(y), top - cbdepth / 2 + 0.5) * bd.Cylinder(cbd / 2, cbdepth + 1)
+                )
         elif kind == "slot":
             if shape is None:
                 raise ValueError("slot 之前必须有实体")

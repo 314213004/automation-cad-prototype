@@ -39,7 +39,7 @@ test('adapterPlateDxf：出 DXF 文本，圆数=孔数，图元分层', () => {
   assert.ok(result.dxf.startsWith('0\nSECTION'));
   assert.ok(result.dxf.trimEnd().endsWith('EOF'));
   assert.ok(result.dxf.includes('仅开孔图'), '必须带「不含公差/不替代 B-Rep」说明');
-  assert.ok(result.dxf.includes('COUNTERBORE'), '沉头必须写明只做标注');
+  assert.ok(result.dxf.includes('COUNTERBORE'), '沉头必须在图纸上标注说明');
 });
 
 test('adapterPlateDxf：非转接板返回 null', () => {

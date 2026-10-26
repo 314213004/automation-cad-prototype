@@ -154,6 +154,59 @@ test('compileOps：按特征树顺序输出且保持参数形状', () => {
   ]);
 });
 
+function counterbore(overrides: Record<string, unknown> = {}, extra: Partial<FeatureNode> = {}): FeatureNode {
+  return {
+    id: 'f3',
+    type: 'counterbore',
+    name: '沉头孔',
+    params: {
+      diameter: 6,
+      cbDiameter: 11,
+      cbDepth: 5,
+      depth: 'through',
+      positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]],
+      ...overrides
+    },
+    ...extra
+  };
+}
+
+test('特征树：counterbore 合法参数无错误', () => {
+  assert.deepEqual(validateFeatures(doc([box(), counterbore()])), []);
+});
+
+test('特征树：沉头直径不大于通孔直径时报错（切不出台阶）', () => {
+  const errors = validateFeatures(doc([box(), counterbore({ cbDiameter: 6 })]));
+  assert.match(errors.join('；'), /沉头直径 6(\.0)? mm 必须大于通孔直径 6(\.0)? mm/);
+});
+
+test('特征树：沉头深度不小于板厚时报错（会切穿板面）', () => {
+  const errors = validateFeatures(doc([box(), counterbore({ cbDepth: 8 })]));
+  assert.match(errors.join('；'), /沉头深 8(\.0)? mm 不小于板厚 8(\.0)? mm/);
+});
+
+test('特征树：沉窝超出底板边界按沉头半径判定', () => {
+  const errors = validateFeatures(doc([box(), counterbore({ positions: [[58, 0]] })]));
+  assert.match(errors.join('；'), /沉窝 \(5?8(\.0)?, 0(\.0)?\) 超出底板边界/);
+});
+
+test('特征树：沉窝间距小于沉头直径时报错（台阶互切）', () => {
+  const errors = validateFeatures(doc([box(), counterbore({ positions: [[-5, 0], [5, 0]] })]));
+  assert.match(errors.join('；'), /沉窝间距 10(\.0)? mm 小于沉头直径 11(\.0)? mm/);
+});
+
+test('compileOps：counterbore 输出孔位与沉头参数', () => {
+  const ops = compileOps(doc([box(), counterbore()]));
+  assert.deepEqual(ops[1], {
+    op: 'counterbore',
+    diameter: 6,
+    cbDiameter: 11,
+    cbDepth: 5,
+    positions: [[-44, -24], [44, -24], [-44, 24], [44, 24]],
+    depth: 'through'
+  });
+});
+
 test('compileOps：跳过 suppressed 特征', () => {
   const source = doc([
     box(),

@@ -87,6 +87,18 @@ export const FEATURE_SPECS: Readonly<Record<FeatureType, FeatureTypeSpec>> = {
       }
     ]
   },
+  counterbore: {
+    type: 'counterbore',
+    label: '沉头孔',
+    icon: '<svg viewBox="0 0 16 16"><path d="M5 2h6v3H5z"/><path d="M6.5 5v9M9.5 5v9"/></svg>',
+    defaultName: '沉头孔',
+    fields: [
+      { key: 'diameter', label: '通孔直径', kind: 'number', unit: 'mm', step: 0.5, min: 0.01 },
+      { key: 'depth', label: '通孔深度', kind: 'text', unit: 'mm / through' },
+      { key: 'cbDiameter', label: '沉头直径', kind: 'number', unit: 'mm', step: 0.5, min: 0.01 },
+      { key: 'cbDepth', label: '沉头深度', kind: 'number', unit: 'mm', step: 0.5, min: 0.01 }
+    ]
+  },
   cylinder: {
     type: 'cylinder',
     label: '圆柱 / 凸台',
@@ -100,7 +112,7 @@ export const FEATURE_SPECS: Readonly<Record<FeatureType, FeatureTypeSpec>> = {
   }
 };
 
-export const FEATURE_TYPES: readonly FeatureType[] = ['box', 'holes', 'slot', 'fillet', 'cylinder'];
+export const FEATURE_TYPES: readonly FeatureType[] = ['box', 'holes', 'counterbore', 'slot', 'fillet', 'cylinder'];
 
 const TYPE_SET = new Set<string>(FEATURE_TYPES);
 
@@ -224,6 +236,8 @@ function defaultParams(type: FeatureType): Record<string, unknown> {
       return { diameter: 20, height: 10, at: [0, 0, 8] };
     case 'holes':
       return { diameter: 6, positions: [[-40, 0], [40, 0]], depth: 'through' };
+    case 'counterbore':
+      return { diameter: 6, cbDiameter: 11, cbDepth: 6, positions: [[-40, 0], [40, 0]], depth: 'through' };
     case 'slot':
       return { length: 50, width: 18 };
     case 'fillet':
