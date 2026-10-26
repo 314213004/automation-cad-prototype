@@ -968,7 +968,7 @@ interface ProjectMenuRecord {
   envelope: [number, number, number] | null;
   createdAt: string;
   /** 零件清单（外壳结构树用） */
-  partsList?: Array<{ file: string; name: string }>;
+  partsList?: Array<{ file: string; name: string; path?: string[] }>;
   /** 机型参数（生成电气图用） */
   params?: Record<string, number>;
   /** 存在时表示由五步设计向导保存；其 STL 是概念估算占位几何，不是型号级实体。 */
@@ -1611,7 +1611,12 @@ function projectMenuRecordOf(record: DesktopProjectRecordLike, parts: number): P
     massKg: record.massKg,
     envelope: record.envelope,
     createdAt: record.createdAt,
-    partsList: (record.partsList ?? []).map((item: { file: string; name: string }) => ({ file: item.file, name: item.name })),
+    // path（装配层级）必须带上：丢了结构树就只能按名字前缀分组，层级信息白解析了
+    partsList: (record.partsList ?? []).map((item: { file: string; name: string; path?: string[] }) => ({
+      file: item.file,
+      name: item.name,
+      ...(Array.isArray(item.path) && item.path.length > 0 ? { path: item.path } : {})
+    })),
     params: record.params ?? {},
     ...(record.process !== undefined && typeof record.process === 'string' ? { process: record.process } : {}),
     // 设计向导保存的工程要带着概念几何与校核状态，外壳冷启动/重开时才能还原提示

@@ -844,7 +844,7 @@ interface DesktopDesignProjectSaveInput {
   config?: unknown;
   geometryReview?: DesktopProjectGeometryReview;
   stlData?: Uint8Array;
-  partData?: Array<{ name: string; data: Uint8Array }>;
+  partData?: Array<{ name: string; data: Uint8Array; path?: string[] }>;
   placements?: unknown[];
 }
 

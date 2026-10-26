@@ -54,7 +54,7 @@ export interface ProjectSaveInput {
   config?: unknown;
   geometryReview?: ProjectGeometryReview;
   stlData?: Uint8Array;
-  partData?: Array<{ name: string; data: Uint8Array }>;
+  partData?: Array<{ name: string; data: Uint8Array; path?: string[] }>;
   placements?: unknown[];
 }
 
@@ -191,7 +191,7 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
     for (const file of readdirSync(join(dir, 'parts'))) rmSync(join(dir, 'parts', file), { force: true });
     for (const item of stagedParts) renameSync(join(temporaryParts, item.file), join(dir, 'parts', item.file));
     rmSync(temporaryParts, { recursive: true, force: true });
-    const partsList: Array<{ file: string; name: string }> = [];
+    const partsList: Array<{ file: string; name: string; path?: string[] }> = [];
     for (const item of input.partPaths ?? []) {
       if (!item?.path || !existsSync(item.path)) continue;
       const safe = sanitizeId(basename(item.path).replace(/\.stl$/i, ''));
@@ -204,7 +204,17 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
       const safe = sanitizeId(item.name);
       const target = join(dir, 'parts', `${safe}.stl`);
       writeFileSync(target, item.data);
-      partsList.push({ file: `${safe}.stl`, name: item.name });
+      // 装配层级路径（根 → 父节点）：可选，最多 8 级、单段 ≤60 字符，脏数据直接丢掉不写坏工程
+      const path = Array.isArray(item.path)
+        ? item.path
+            .filter((segment): segment is string => typeof segment === 'string')
+            .map((segment) => segment.trim().slice(0, 60))
+            .filter(Boolean)
+            .slice(0, 8)
+        : [];
+      partsList.push(path.length > 0
+        ? { file: `${safe}.stl`, name: item.name, path }
+        : { file: `${safe}.stl`, name: item.name });
     }
     let hasStep = false;
     let hasStl = false;

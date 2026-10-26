@@ -1327,27 +1327,51 @@ function renderProjectTree(record) {
   const left = $('[data-panel="left"][data-for="assembly"]');
   const body = left && left.querySelector('.panel-body');
   if (!body) return;
-  const names = Array.isArray(record.partsList) ? record.partsList.map((item) => item.name).filter(Boolean) : [];
-  const groups = new Map();
-  names.forEach((name) => {
-    const group = projectGroupOf(name);
-    if (!groups.has(group)) groups.set(group, []);
-    groups.get(group).push(name);
-  });
-  const sections = Array.from(groups.entries()).map(([group, list], groupIndex) => `
-    <details class="pt-group" ${groupIndex === 0 || list.length <= 8 ? 'open' : ''}>
-      <summary class="pt-group-head">${esc(group)}<span class="pt-count">${list.length}</span></summary>
-      ${list.map((name, index) => `
-        <div class="tree-row pt-row" role="button" tabindex="0" data-project-part="${attr(name)}">
-          <span class="mono pt-idx">${String(index + 1).padStart(2, '0')}</span>
-          <span class="pt-name">${esc(name)}</span>
-        </div>`).join('')}
-    </details>`).join('');
+  const items = (Array.isArray(record.partsList) ? record.partsList : [])
+    .map((item) => ({
+      name: String(item && item.name || '').trim(),
+      path: item && Array.isArray(item.path) ? item.path.filter((p) => typeof p === 'string' && p.trim()).slice(0, 8) : []
+    }))
+    .filter((item) => item.name);
+  const hasPath = items.some((item) => item.path.length > 0);
+
+  /** 路径分组：总装 > 子装配 > 零件；没有路径的件归到「未分层」 */
+  const byTop = new Map();
+  for (const item of items) {
+    const top = hasPath ? (item.path[0] || '未分层') : projectGroupOf(item.name);
+    const sub = hasPath ? (item.path[1] || '') : '';
+    if (!byTop.has(top)) byTop.set(top, new Map());
+    const bucket = byTop.get(top);
+    if (!bucket.has(sub)) bucket.set(sub, []);
+    bucket.get(sub).push(item);
+  }
+
+  const rowHtml = (item) => {
+    const title = item.path.length > 0 ? ` title="${attr(item.path.join(' > '))}"` : '';
+    return `<div class="tree-row pt-row" role="button" tabindex="0" data-project-part="${attr(item.name)}"${title}>
+      <span class="pt-name">${esc(item.name)}</span>
+    </div>`;
+  };
+  const sections = Array.from(byTop.entries()).map(([top, bucket], groupIndex) => {
+    const total = Array.from(bucket.values()).reduce((sum, list) => sum + list.length, 0);
+    const inner = Array.from(bucket.entries()).map(([sub, list]) => {
+      if (!sub) return list.map(rowHtml).join('');
+      return `<details class="pt-group pt-sub" ${list.length <= 12 ? 'open' : ''}>
+        <summary class="pt-group-head">${esc(sub)}<span class="pt-count">${list.length}</span></summary>
+        ${list.map(rowHtml).join('')}
+      </details>`;
+    }).join('');
+    return `<details class="pt-group" ${groupIndex === 0 || total <= 8 ? 'open' : ''}>
+      <summary class="pt-group-head">${esc(top)}<span class="pt-count">${total}</span></summary>
+      ${inner}
+    </details>`;
+  }).join('');
+
   body.innerHTML = `
     <div class="panel-section">
-      <div class="panel-section-head">工程零件 · ${record.parts} 件 · ${groups.size} 组</div>
+      <div class="panel-section-head">工程零件 · ${record.parts} 件 · ${byTop.size} 组${hasPath ? ' · 按装配层级' : ''}</div>
       ${sections || '<div class="panel-empty">工程里没有零件记录</div>'}
-      ${names.length !== record.parts ? `<div class="panel-empty">工程记录 ${record.parts} 件，清单 ${names.length} 件</div>` : ''}
+      ${items.length !== record.parts ? `<div class="panel-empty">工程记录 ${record.parts} 件，清单 ${items.length} 件</div>` : ''}
     </div>`;
   body.querySelectorAll('.pt-row').forEach((row) => {
     const pick = () => {
@@ -1363,7 +1387,6 @@ function renderProjectTree(record) {
   });
   window.__projectTreeSetSelected?.(currentProjectPartName());
 }
-/** 选中态由外部（扩展 / 3D 拾取）同步进树，避免树自己维护第二份真相 */
 window.__projectTreeSetSelected = function (name) {
   document.querySelectorAll('[data-project-part]').forEach((row) => {
     row.classList.toggle('is-sel', !!name && row.dataset.projectPart === name);

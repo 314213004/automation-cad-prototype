@@ -70,3 +70,18 @@ test('groupOfPartName：也支持画布示意装配的「类别·工位名」前
   assert.equal(groupOfPartName('直线·入料检测段'), '直线');
   assert.equal(groupOfPartName('视觉·贴合相机'), '视觉');
 });
+
+test('toPanelInfo：带走装配层级路径，并在零件卡片里显示所属装配', () => {
+  const info2 = toPanelInfo({
+    ...record,
+    partsList: [
+      { name: '立柱-左前', path: ['缓存单元', '机架'] },
+      { name: '无层级件' }
+    ]
+  });
+  assert.deepEqual(info2.partPaths?.['立柱-左前'], ['缓存单元', '机架']);
+  assert.equal(info2.partPaths?.['无层级件'], undefined, '没有路径的零件不进表');
+  const html = __testRenderPart('立柱-左前', [0, 0, 0, 80, 80, 1800], info2);
+  assert.match(html, /所属装配/);
+  assert.match(html, /缓存单元 &gt; 机架/, '层级用 > 连接并做转义');
+});

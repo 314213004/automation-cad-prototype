@@ -279,3 +279,50 @@ test('旧工程或损坏的 design.json 以空布局打开，不影响三维工�
   assert.deepEqual(opened.placements, []);
   assert.equal(opened.layoutEditable, false);
 });
+
+test('saveProject：partData 带装配层级路径时写进 partsList，脏数据被清洗', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-path-'));
+  roots.push(root);
+  const stl = new Uint8Array([1, 2, 3, 4]);
+  const result = saveProject(root, {
+    name: '层级工程',
+    process: 'cad-import',
+    parts: 2,
+    partData: [
+      { name: '立柱-左前', data: stl, path: ['光伏缓存堆叠单元', '机架'] },
+      { name: '托条-01', data: stl, path: ['光伏缓存堆叠单元', '', 42, '堆叠单元'] }
+    ]
+  });
+  assert.equal(result.ok, true);
+  const list = result.record.partsList;
+  assert.deepEqual(list[0].path, ['光伏缓存堆叠单元', '机架']);
+  assert.deepEqual(list[1].path, ['光伏缓存堆叠单元', '堆叠单元'], '空段与非字符串被剔除');
+});
+
+test('saveProject：没有 path 时不写该字段（旧工程结构不变）', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-nopath-'));
+  roots.push(root);
+  const result = saveProject(root, {
+    name: '无层级工程',
+    process: 'cad-import',
+    parts: 1,
+    partData: [{ name: '件', data: new Uint8Array([9]) }]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(Object.hasOwn(result.record.partsList[0], 'path'), false);
+});
+
+test('saveProject：路径超过 8 级只保留前 8 级', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cad-projects-deep-'));
+  roots.push(root);
+  const deep = Array.from({ length: 12 }, (_, index) => `L${index + 1}`);
+  const result = saveProject(root, {
+    name: '深层级工程',
+    process: 'cad-import',
+    parts: 1,
+    partData: [{ name: '件', data: new Uint8Array([7]), path: deep }]
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.record.partsList[0].path.length, 8);
+  assert.equal(result.record.partsList[0].path[7], 'L8');
+});

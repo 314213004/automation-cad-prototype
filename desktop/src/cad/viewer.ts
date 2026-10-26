@@ -1239,9 +1239,9 @@ export class CadViewer {
    * 把当前场景逐件导出成 STL（"存为工程"用）。
    * 直接读 three 的 position/index 属性；没有几何（降级模式）时返回空数组，调用方要如实提示。
    */
-  exportPartsForStl(): Array<{ name: string; data: Uint8Array }> {
+  exportPartsForStl(): Array<{ name: string; data: Uint8Array; path?: string[] }> {
     const names = uniquePartNames(this.parts.map((part) => part.data.name));
-    const out: Array<{ name: string; data: Uint8Array }> = [];
+    const out: Array<{ name: string; data: Uint8Array; path?: string[] }> = [];
     this.parts.forEach((part, index) => {
       const geometry = part.mesh.geometry;
       const position = geometry.getAttribute('position');
@@ -1252,7 +1252,12 @@ export class CadViewer {
         indexAttr ? (indexAttr.array as unknown as ArrayLike<number>) : null
       );
       if (!data) return;
-      out.push({ name: names[index] ?? `零件-${index + 1}`, data });
+      const path = Array.isArray(part.data.path) ? part.data.path.filter((segment) => typeof segment === 'string' && segment.trim()) : [];
+      out.push({
+        name: names[index] ?? `零件-${index + 1}`,
+        data,
+        ...(path.length > 0 ? { path } : {})
+      });
     });
     return out;
   }

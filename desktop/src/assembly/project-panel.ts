@@ -10,6 +10,8 @@ import type { InterferencePart } from '../mech/interference.ts';
 
 export interface ProjectPanelInfo {
   name: string;
+  /** 零件名 → 装配层级路径（STEP 有层级时才有） */
+  partPaths?: Record<string, string[]>;
   parts: number;
   envelopeMm: [number, number, number] | null;
   massKg: number | null;
@@ -106,6 +108,9 @@ function partHtml(name: string, bbox: number[] | null): string {
   <section>
     <h4>属性</h4>
     <div class="pp-row"><span>零件名</span><b>${escapeHtml(name)}</b></div>
+    ${current?.partPaths?.[name]?.length
+      ? `<div class="pp-row"><span>所属装配</span><b>${escapeHtml(current.partPaths[name].join(' > '))}</b></div>`
+      : ''}
     <div class="pp-row"><span>质量</span><b>未称重${current?.massKg != null ? `（工程合计 ${fmt(current.massKg, 1)} kg）` : ''}</b></div>
     <p class="pp-hint">型号/零件号/材料来自工程记录；单件质量与材料表未随 STL 导入，不做估算填充。</p>
   </section>`;
@@ -144,9 +149,14 @@ function syncTree(name: string | null): void {
   }
   const hier = document.getElementById('stHier');
   if (hier && current) {
-    hier.textContent = name
-      ? `当前层级：工程 > ${groupOfPartName(name)} > ${name}`
-      : `当前层级：工程 > ${current.name}`;
+    const path = name ? current.partPaths?.[name] : undefined;
+    if (name && path && path.length > 0) {
+      hier.textContent = `当前层级：工程 > ${path.join(' > ')} > ${name}`;
+    } else {
+      hier.textContent = name
+        ? `当前层级：工程 > ${groupOfPartName(name)} > ${name}`
+        : `当前层级：工程 > ${current.name}`;
+    }
   }
 }
 
@@ -222,6 +232,7 @@ export function __testRenderPart(name: string, bbox: number[] | null, info: Proj
 export function toPanelInfo(record: {
   name: string;
   parts: number;
+  partsList?: Array<{ name: string; path?: string[] }>;
   envelope: [number, number, number] | null;
   massKg: number | null;
   hasStep: boolean;
@@ -229,8 +240,15 @@ export function toPanelInfo(record: {
   createdAt: string;
   material?: string[];
 }): ProjectPanelInfo {
+  const partPaths: Record<string, string[]> = {};
+  for (const item of record.partsList ?? []) {
+    if (item && typeof item.name === 'string' && Array.isArray(item.path) && item.path.length > 0) {
+      partPaths[item.name] = item.path.filter((segment) => typeof segment === 'string' && segment.trim());
+    }
+  }
   return {
     name: record.name,
+    ...(Object.keys(partPaths).length > 0 ? { partPaths } : {}),
     parts: record.parts,
     envelopeMm: record.envelope,
     massKg: record.massKg,
