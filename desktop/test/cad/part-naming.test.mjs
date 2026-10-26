@@ -13,6 +13,12 @@ test('通用名识别：COMPOUND/SOLID/Part12/实体/空串', () => {
   }
 });
 
+test('纯数字长串（≥9 位）视为内部 ID，替换成可读名；带分隔符的型号保留', () => {
+  assert.equal(isGenericPartName('10000083418053019'), true);
+  assert.equal(isGenericPartName('44-0018A053019'), false, '带分隔符的型号是真零件号');
+  assert.equal(isGenericPartName('12345'), false, '短数字可能真是型号，不替换');
+});
+
 test('通用名替换成「序号 + 尺寸」，序号从 01 起、尺寸保留 0.1mm', () => {
   const names = readablePartNames([
     box('COMPOUND', [1400, 40, 3]),

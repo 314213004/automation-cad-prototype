@@ -15,6 +15,8 @@ export interface NamedBox {
 
 /** 通用/无意义名：COMPOUND、SOLID、Part12、未命名、空串等。 */
 const GENERIC = /^(?:(?:compound|solid|shell|body|part|mesh|unnamed|feature|result)(?:[-_ ]?\d+)?|实体|零件|未命名)$/i;
+/** 纯数字长串（≥9 位）：SolidWorks/Inventor 内部对象 ID，不是零件号，读不出任何信息。 */
+const NUMERIC_ID = /^\d{9,}$/;
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -22,7 +24,9 @@ function round1(value: number): number {
 
 function isGeneric(name: string): boolean {
   const trimmed = name.trim();
-  return trimmed === '' || GENERIC.test(trimmed.replace(/\s+/g, ''));
+  if (trimmed === '') return true;
+  const compact = trimmed.replace(/\s+/g, '');
+  return GENERIC.test(compact) || NUMERIC_ID.test(compact);
 }
 
 /**
