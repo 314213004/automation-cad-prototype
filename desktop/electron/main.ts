@@ -4872,6 +4872,48 @@ function createWindow(): BrowserWindow {
         setTimeout(() => app.exit(1), 100);
         return;
       }
+
+      // ---- 画布工作台（P2）：拓扑 / 转接板闭环 / 2D 正交 / 导出 ----
+      try {
+        const canvas = (await window.webContents.executeJavaScript(
+          'window.__CanvasWorkbench && window.__CanvasWorkbench.selfTest()'
+        )) as null | {
+          nodes: number;
+          edges: number;
+          mismatchBefore: number;
+          mismatchAfterInsert: number;
+          adaptersAfterInsert: number;
+          mismatchAfterAll: number;
+          adapterBridgesMatch: boolean;
+          stations: number;
+          artboards: number;
+          ganttRows: number;
+          cycleSeconds: number;
+          unitsPerHour: number;
+          pendingQuote: number;
+          exportLengths: { json: number; build123d: number; plc: number };
+        };
+        if (!canvas) throw new Error('画布工作台未挂载（window.__CanvasWorkbench 缺失）');
+        if (canvas.nodes < 2 || canvas.edges < 1) throw new Error(`画布拓扑为空 ${JSON.stringify(canvas)}`);
+        if (canvas.mismatchBefore < 1) throw new Error(`演示拓扑应至少 1 条端口不匹配 ${JSON.stringify(canvas)}`);
+        console.log(`SMOKE_CANVAS_TOPOLOGY_OK nodes=${canvas.nodes} edges=${canvas.edges} mismatched=${canvas.mismatchBefore}`);
+        if (canvas.mismatchAfterInsert < 0 || canvas.adaptersAfterInsert < 1 || !canvas.adapterBridgesMatch || canvas.mismatchAfterAll !== 0) {
+          throw new Error(`转接板闭环失败 ${JSON.stringify(canvas)}`);
+        }
+        console.log(`SMOKE_CANVAS_ADAPTER_OK mismatch=${canvas.mismatchBefore}->${canvas.mismatchAfterInsert} adapters=${canvas.adaptersAfterInsert} bridges=match`);
+        if (canvas.stations < canvas.nodes) throw new Error(`2D 正交站点数不足 ${JSON.stringify(canvas)}`);
+        console.log(`SMOKE_CANVAS_ORTHO_OK stations=${canvas.stations} artboards=${canvas.artboards} gantt=${canvas.ganttRows}`);
+        if (canvas.exportLengths.json < 200 || canvas.exportLengths.build123d < 200 || canvas.exportLengths.plc < 200) {
+          throw new Error(`导出文本为空 ${JSON.stringify(canvas.exportLengths)}`);
+        }
+        if (!(canvas.cycleSeconds > 0) || !(canvas.unitsPerHour > 0)) throw new Error(`CT/UPH 异常 ${JSON.stringify(canvas)}`);
+        console.log(`SMOKE_CANVAS_EXPORT_OK json=${canvas.exportLengths.json} build123d=${canvas.exportLengths.build123d} plc=${canvas.exportLengths.plc} ct=${canvas.cycleSeconds}s uph=${canvas.unitsPerHour} pendingQuote=${canvas.pendingQuote}`);
+      } catch (error) {
+        console.error('SMOKE_FAIL canvas_workbench', error);
+        setTimeout(() => app.exit(1), 100);
+        return;
+      }
+
       console.log('SMOKE_OK');
       setTimeout(() => app.quit(), 100);
     }

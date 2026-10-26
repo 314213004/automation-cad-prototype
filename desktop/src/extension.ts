@@ -84,6 +84,7 @@ import { projectGeometryReviewLabel, reopenedGeometryReviewMessage, type DesignS
 import { isValidProjectLayoutGeometry, MAX_PROJECT_LAYOUT_COORDINATE, projectLayoutBounds, renderProjectLayoutSvg } from './design/project-layout.ts';
 import { buildProjectLayoutValidationView, canSaveProjectLayout, projectLayoutItemStatus, projectLayoutOverlapConfirmation } from './design/project-layout-validation.ts';
 import type { Placement } from './enclosure/layout.ts';
+import { installCanvasWorkbench } from './canvas/workbench.ts';
 
 const ICONS = {
   cube: '<svg viewBox="0 0 16 16"><path d="M8 1.9l5.4 3.1v6L8 14.1 2.6 11V5z"/><path d="M8 8.1l5.4-3.1M8 8.1L2.6 5M8 8.1V14"/></svg>',
@@ -3123,6 +3124,7 @@ function init(): void {
     }
   });
   initPackPanel();
+  installCanvasWorkbench();
   initElecLibraryPanel();
   const moduleStorage: KeyValueStorage = {
     getItem: (key) => window.localStorage.getItem(key),
