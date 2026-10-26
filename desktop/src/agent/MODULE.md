@@ -589,3 +589,14 @@ parseFallbackCandidates(text): string[]
 - 返回：`{ ok, projectId, name, parts, envelope, massKg: null, source: 'draft'|'graph', graphIssues, note, caveats }`
 - 失败码：`EMPTY_CANVAS`（画布无工位）、`INVALID_GRAPH`、`SAVE_FAILED`、`UNAVAILABLE`
 - **不要**拿它替代 `build_machine_model` / `apply_machine_design`：这里只有占位盒，没有孔/导轨/皮带，AABB 只能初筛
+
+## 写操作确认：页面内卡片（2026-10-26）
+
+- 原生 `dialog.showMessageBox` 在无人值守/CDP 调试时不可见，智能体会卡死十几分钟；改成渲染进程卡片
+- 链路：`electron/ipc.ts` 的 `confirmWrite` → 生成 requestId → `webContents.send('agent:confirm-write:request')`
+  → 渲染进程 `src/agent/confirm-card.ts` 弹卡片 → `ipcRenderer.send('agent:confirm-write:reply', {id, allow, remember})`
+  → 主进程按 id 匹配 resolve；**120 秒无答复按拒绝**，窗口销毁/渲染进程不回也按拒绝
+- 三个选项：拒绝 / 本会话允许「工具名」/ 允许一次；Esc = 拒绝
+- 「本会话允许」只存在渲染进程的 Set 里，不落盘，刷新即失效；同名工具后续调用直接放行不再弹卡
+- 卡片显示：工具名徽标、`detail`、参数 JSON（>600 字符截断）、bypass 警告
+- 未做单测（DOM 交互），靠真机跑智能体验证：允许一次 → 工程生成；本会话允许 → 第二次不再弹卡、工程照常生成

@@ -104,6 +104,12 @@ const desktopApi = {
     getLlmConfig: () => ipcRenderer.invoke('agent:llm:get'),
     saveLlmConfig: (config: unknown) => ipcRenderer.invoke('agent:llm:save', config),
     testLlm: (config?: unknown) => ipcRenderer.invoke('agent:llm:test', config),
+    onConfirmWrite: (handler: (payload: unknown) => void) => {
+      const listener = (_event: unknown, payload: unknown): void => handler(payload);
+      ipcRenderer.on('agent:confirm-write:request', listener);
+      return () => ipcRenderer.removeListener('agent:confirm-write:request', listener);
+    },
+    replyConfirmWrite: (payload: unknown) => ipcRenderer.send('agent:confirm-write:reply', payload),
     chat: {
       send: (text: string) => ipcRenderer.invoke('agent:chat:send', text),
       cancel: () => ipcRenderer.invoke('agent:chat:cancel'),

@@ -43,6 +43,7 @@ import type { MachineConfig } from './commission/machine-config';
 import { buildOptionalSyncPlcPayload } from './sync/plc.ts';
 import { initSyncPanel } from './sync/ui';
 import { initAgentPanel, setAgentResumeModuleEnabled } from './agent/ui';
+import { installAgentConfirmCard } from './agent/confirm-card.ts';
 import { applyAppearance } from './ui/appearance.ts';
 import { bomSignatureFromRows } from './agent/advisor';
 import type { SyncUploadPayload } from './sync/types';
@@ -3564,6 +3565,7 @@ function init(): void {
   initEnclosureUi();
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();
+  installAgentConfirmCard();
   buildOverlay();
   const designWizard = initDesignWizard({
     onSaved: async () => { await refreshProjectMenu(); },

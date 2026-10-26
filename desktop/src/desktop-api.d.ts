@@ -1026,6 +1026,10 @@ interface Window {
     };
     agent: {
       info(): Promise<DesktopAgentInfo>;
+      /** 写操作确认请求（主进程 → 渲染进程）；返回取消订阅函数。 */
+      onConfirmWrite(handler: (payload: { id: string; tool: string; summary: string; detail?: string; bypassNotice?: string }) => void): () => void;
+      /** 回答写确认；remember=true 表示本会话内同名工具不再询问。 */
+      replyConfirmWrite(payload: { id: string; allow: boolean; remember?: boolean }): void;
       getLlmConfig(): Promise<DesktopAgentLlmConfig>;
       saveLlmConfig(config: Record<string, unknown>): Promise<DesktopAgentLlmConfig>;
       testLlm(config?: Record<string, unknown>): Promise<DesktopAgentLlmTestResult>;
