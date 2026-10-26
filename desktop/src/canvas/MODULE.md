@@ -25,6 +25,7 @@
 | `candidates-source.ts` | 画布反推 brief → `generateCandidates` → 三套真实候选汇总（形态/CT/成本/缺价/警告） |
 | `pip3d.ts` | 3D 预览：`buildPipBoxes`（纯几何，mm→m）+ 轻量 three 场景（占位盒/包络线框/选中聚焦） |
 | `adapter-model.ts` | 转接板 → parametric FeatureDoc（board/holes/fillet），走 build123d sidecar |
+| `adapter-dxf.ts` | 转接板开孔图 DXF（单件 1:1 mm，OUTLINE / HOLES-IN / HOLES-OUT / PILOT / TEXT 五层） |
 | `edit-node.ts` | 检查器字段编辑：批量校验（任一非法整批拒绝）、纯函数返回新节点 |
 | `history.ts` | 撤销/重做：有界快照栈（默认 60 步）、undo 后提交丢弃 redo 尾巴、动作名必填 |
 
@@ -125,7 +126,8 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 ## 坑点（P4 第五/六步追加）
 
 27. **成本不可比时别排序**：候选缺价行数不同，总额是「部分统计」，拿它比最低成本会误导；`bestCandidateMarks` 在这种情况下返回 `cheapestFormId=null`，界面写明「不可横向比较」。
-28. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
+28. **DXF 不是 3D 模型**：开孔图只保证孔位/孔径与端口一致，沉头、公差、粗糙度、材料热处理都要靠工序与图纸说明，界面文案不许省略。
+29. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
 
 ## 验证命令
 

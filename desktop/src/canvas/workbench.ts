@@ -42,6 +42,7 @@ import {
 } from './candidates-source.ts';
 import { createPipScene, type PipScene } from './pip3d.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
+import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { EDITABLE_FIELDS, applyNodePatch, patchChangesNode, type EditableField } from './edit-node.ts';
 import {
   createHistory,
@@ -66,7 +67,7 @@ import type { CanvasNode, MachineGraph } from './types.ts';
 
 type ViewMode = CanvasViewMode;
 type InspectorTab = 'prop' | 'mech' | 'bom';
-type ExportTab = 'json' | 'build123d' | 'plc' | 'bom';
+type ExportTab = 'json' | 'build123d' | 'plc' | 'bom' | 'dxf';
 
 interface WorkbenchState {
   graph: MachineGraph;
@@ -361,6 +362,7 @@ function buildShell(): void {
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="build123d">build123d 脚本</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="plc">PLC ST</button>
           <button type="button" class="cw-btn" data-action="export-tab" data-tab="bom">BOM CSV</button>
+          <button type="button" class="cw-btn" data-action="export-tab" data-tab="dxf">转接板 DXF</button>
         </div>
         <pre class="cw-pre" id="cwExportCode"></pre>
         <div class="cw-modal-foot">
@@ -872,6 +874,7 @@ function inspectorProp(node: CanvasNode): string {
         ${platePreview(node)}
         <div class="cw-inspector-actions">
           <button type="button" class="cw-btn primary" data-action="build-adapter">用 build123d 建模</button>
+          <button type="button" class="cw-btn" data-action="adapter-dxf">导出开孔图 DXF</button>
         </div>
         <p class="cw-hint ${adapterBuildState.get(node.id)?.error ? 'cw-warn' : ''}" id="cwAdapterBuildState">
           ${escapeHtml(adapterBuildState.get(node.id)?.text ?? describeAdapterModel(adapterFeatureDoc(node)))}
@@ -1102,6 +1105,14 @@ function exportContent(tab: ExportTab): string {
   if (tab === 'json') return buildMachineGraphJson(state.graph);
   if (tab === 'build123d') return build123dScript(state.graph);
   if (tab === 'bom') return buildBomCsv(state.graph, priceLookup).csv;
+  if (tab === 'dxf') {
+    const adapter =
+      state.graph.nodes.find((node) => node.id === state.selectedId && node.kind === 'adapter') ??
+      state.graph.nodes.find((node) => node.kind === 'adapter');
+    const result = adapter ? adapterPlateDxf(adapter) : null;
+    if (!result) return `# ${describeAdapterDxf(null)}\n# 先在画布上用「⚡ 生成转接板」插一块，再回来导出开孔图。`;
+    return `# ${adapter?.id ?? ''} · ${describeAdapterDxf(result)}\n${result.dxf}`;
+  }
   const result = plcSt(state.graph);
   if (result.supported && result.content) return result.content;
   return [
@@ -1521,6 +1532,13 @@ function bindEvents(): void {
       toast(`已采纳 ${candidate.formName} 的口径：布局 ${layout}，目标 ${candidate.targetPerMin ?? '—'} 件/分钟；模块未导入`);
       return;
     }
+    if (action === 'adapter-dxf') {
+      state.exportTab = 'dxf';
+      const modal = document.getElementById('cwExportModal');
+      if (modal) modal.hidden = false;
+      renderExport();
+      return;
+    }
     if (action === 'build-adapter') {
       void buildAdapterModel();
       return;
@@ -1684,7 +1702,7 @@ export interface CanvasSelfTestResult {
   stations: number;
   artboards: number;
   ganttRows: number;
-  exportLengths: { json: number; build123d: number; plc: number; bom: number };
+  exportLengths: { json: number; build123d: number; plc: number; bom: number; dxf: number };
   pipStatus: string;
   pipBoxes: number;
   adapterModelDoc: number;
@@ -1742,8 +1760,8 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   const ganttRows = Number(document.getElementById('cwGantt')?.dataset.rows ?? 0);
 
   section.querySelector<HTMLElement>('[data-action="export"]')?.click();
-  const lengths = { json: 0, build123d: 0, plc: 0, bom: 0 };
-  for (const tab of ['json', 'build123d', 'plc', 'bom'] as const) {
+  const lengths = { json: 0, build123d: 0, plc: 0, bom: 0, dxf: 0 };
+  for (const tab of ['json', 'build123d', 'plc', 'bom', 'dxf'] as const) {
     section.querySelector<HTMLElement>(`[data-action="export-tab"][data-tab="${tab}"]`)?.click();
     lengths[tab] = document.getElementById('cwExportCode')?.textContent?.length ?? 0;
   }
