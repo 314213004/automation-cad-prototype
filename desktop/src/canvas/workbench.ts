@@ -40,6 +40,7 @@ import {
   type CandidateSummary
 } from './candidates-source.ts';
 import { createPipScene, type PipScene } from './pip3d.ts';
+import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
 import {
   CANVAS_DRAFT_KEY,
   clearDraft,
@@ -564,6 +565,8 @@ function renderOrtho(): void {
 
 let candidateCache: { key: string; items: CandidateSummary[] } | null = null;
 let pipScene: PipScene | null = null;
+/** 转接板建模结果（按节点 id 存，重渲染检查器时仍能看到上次结果）。 */
+const adapterBuildState = new Map<string, { text: string; error: boolean }>();
 let pipWireframe = false;
 let pipFocusId: string | null = null;
 
@@ -765,7 +768,13 @@ function inspectorProp(node: CanvasNode): string {
         <div class="cw-field"><span>质量</span><b>${node.adapterParams.massKg} kg</b></div>
         <div class="cw-field"><span>价格</span><b class="cw-warn">${node.adapterParams.costYuan === null ? '待询价（不计入总额）' : `¥${node.adapterParams.costYuan}`}</b></div>
         ${platePreview(node)}
-        <p class="cw-hint">孔位由两端 MountPort 决定；这只是图纸参数，build123d 实际建模走 parametric sidecar（当前仅导出文本）。</p>
+        <div class="cw-inspector-actions">
+          <button type="button" class="cw-btn primary" data-action="build-adapter">用 build123d 建模</button>
+        </div>
+        <p class="cw-hint ${adapterBuildState.get(node.id)?.error ? 'cw-warn' : ''}" id="cwAdapterBuildState">
+          ${escapeHtml(adapterBuildState.get(node.id)?.text ?? describeAdapterModel(adapterFeatureDoc(node)))}
+        </p>
+        <p class="cw-hint">孔位由两端 MountPort 决定；沉头孔在 feature 协议里没有算子，先出通孔。</p>
       </section>`
     : '';
 
@@ -1035,6 +1044,67 @@ function selectNode(id: string | null): void {
   renderOrtho();
   renderInspector();
   markDirty();
+}
+
+/**
+ * 把当前转接板送进 parametric（build123d sidecar）。
+ * 任何失败都只是「这次没建出来」，参数与文本导出照旧可用。
+ */
+async function buildAdapterModel(): Promise<void> {
+  const node = selectedNode();
+  if (!node || node.kind !== 'adapter') {
+    toast('先选中一个转接板节点', true);
+    return;
+  }
+  const doc = adapterFeatureDoc(node);
+  if (!doc) {
+    adapterBuildState.set(node.id, { text: '该节点没有转接板参数，无法生成建模请求。', error: true });
+    renderInspector();
+    return;
+  }
+  const api = window.desktop?.parametric;
+  if (!api) {
+    adapterBuildState.set(node.id, { text: '浏览器模式没有参数化内核接口，只能保留参数', error: true });
+    renderInspector();
+    return;
+  }
+  adapterBuildState.set(node.id, { text: '建模中…（build123d sidecar）', error: false });
+  renderInspector();
+  try {
+    // 内核是按需启动的：先看状态，没起来就 start 一次（与参数化面板同一个起始流程）
+    const status = await api.status();
+    if (status.status !== 'ready') {
+      const started = await api.start();
+      if (!started.ok) {
+        adapterBuildState.set(node.id, {
+          text: `建模内核启动失败（${started.code ?? started.status}）：${started.message || '未返回原因'}；仅保留参数`,
+          error: true
+        });
+        renderInspector();
+        return;
+      }
+    }
+    const result = await api.build(doc);
+    if (!result.ok) {
+      adapterBuildState.set(node.id, {
+        text: `建模失败（${result.code ?? 'BUILD_FAILED'}）：${result.message ?? '内核未返回原因'}；仅保留参数`,
+        error: true
+      });
+    } else {
+      const stats = result.stats ? JSON.stringify(result.stats).slice(0, 140) : '';
+      adapterBuildState.set(node.id, {
+        text: `建模成功 · ${result.buildMs ?? '?'}ms${stats ? ` · ${stats}` : ''}`,
+        error: false
+      });
+      toast(`转接板 ${node.id} 已建模（build123d）`);
+    }
+  } catch (error) {
+    adapterBuildState.set(node.id, {
+      text: `建模调用失败：${error instanceof Error ? error.message : String(error)}；仅保留参数`,
+      error: true
+    });
+  }
+  renderInspector();
 }
 
 function insertAdapter(edgeId: string): void {
@@ -1308,6 +1378,10 @@ function bindEvents(): void {
       toast('已清除本地草稿并重置为演示拓扑');
       return;
     }
+    if (action === 'build-adapter') {
+      void buildAdapterModel();
+      return;
+    }
     if (action === 'pip-reset') {
       pipScene?.resetView();
       return;
@@ -1422,6 +1496,7 @@ export interface CanvasSelfTestResult {
   exportLengths: { json: number; build123d: number; plc: number };
   pipStatus: string;
   pipBoxes: number;
+  adapterModelDoc: number;
   cycleSeconds: number;
   unitsPerHour: number;
   pendingQuote: number;
@@ -1481,6 +1556,7 @@ export function canvasWorkbenchSelfTest(): CanvasSelfTestResult {
   const result: CanvasSelfTestResult = {
     pipStatus: pip?.status ?? 'missing',
     pipBoxes: state.graph.nodes.length,
+    adapterModelDoc: state.graph.nodes.filter((node) => adapterFeatureDoc(node) !== null).length,
     nodes,
     edges,
     mismatchBefore,

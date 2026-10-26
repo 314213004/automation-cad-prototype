@@ -24,6 +24,7 @@
 | `packs-source.ts` | packs 元件 → 画布模组（品类规则、通用端口、品类默认质量），纯电气件不进画布 |
 | `candidates-source.ts` | 画布反推 brief → `generateCandidates` → 三套真实候选汇总（形态/CT/成本/缺价/警告） |
 | `pip3d.ts` | 3D 预览：`buildPipBoxes`（纯几何，mm→m）+ 轻量 three 场景（占位盒/包络线框/选中聚焦） |
+| `adapter-model.ts` | 转接板 → parametric FeatureDoc（board/holes/fillet），走 build123d sidecar |
 
 ## 数据结构与口径
 
@@ -101,6 +102,12 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 16. **PiP 画的是占位盒，不是零件**：盒子尺寸取 `dimsMm`、位置取 `ortho`，没有圆角/孔/装配关系；界面与 MODULE 都必须写「概念占位体，无 B-Rep」。
 17. **WebGL 不可用是正常路径**：smoke 用 `--disable-webgl` 跑，此时 `pip3d` 返回 `status='unavailable'` 并在面板里显示原因；不要把「没有 3D」当成失败，更不要在断言里假设一定 ready。
 18. **3D 里 mm→m**：`buildPipBoxes` 统一除 1000，盒心 y 取 `h/2` 落地；混用单位会让盒子和相机距离差三个数量级。
+
+## 坑点（P4 第二步追加）
+
+19. **feature 协议没有沉头算子**：只有 box/cylinder/holes/slot/fillet，所以转接板先出通孔；沉头只能进图纸/后续工序，别在 3D 里假装做了。
+20. **build 不会自动拉内核**：`parametric.build` 在 `status!=='ready'` 时直接 UNAVAILABLE；必须先 `status()` → `start()` → `build()`（工作台已按这个顺序做）。
+21. **成功要看 stats 对不对**：仓库自带 `fake-parametric-sidecar.mjs` 返回的是固定假数字（bbox 120×80×8，和请求的 90×90×12 不一致）；用它只能验通路，不能当建模证据。
 
 ## 验证命令
 

@@ -4894,6 +4894,7 @@ function createWindow(): BrowserWindow {
           exportLengths: { json: number; build123d: number; plc: number };
           pipStatus: string;
           pipBoxes: number;
+          adapterModelDoc: number;
         };
         if (!canvas) throw new Error('画布工作台未挂载（window.__CanvasWorkbench 缺失）');
         if (canvas.nodes < 2 || canvas.edges < 1) throw new Error(`画布拓扑为空 ${JSON.stringify(canvas)}`);
@@ -4910,6 +4911,8 @@ function createWindow(): BrowserWindow {
         }
         if (canvas.pipBoxes < 1) throw new Error(`3D 预览没有盒子 ${JSON.stringify(canvas)}`);
         console.log(`SMOKE_CANVAS_PIP_OK boxes=${canvas.pipBoxes} status=${canvas.pipStatus}`);
+        if (canvas.adapterModelDoc < 1) throw new Error(`转接板没有可建模的特征树 ${JSON.stringify(canvas)}`);
+        console.log(`SMOKE_CANVAS_ADAPTER_MODEL_OK docs=${canvas.adapterModelDoc}`);
         if (canvas.exportLengths.json < 200 || canvas.exportLengths.build123d < 200 || canvas.exportLengths.plc < 200) {
           throw new Error(`导出文本为空 ${JSON.stringify(canvas.exportLengths)}`);
         }
