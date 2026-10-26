@@ -5181,6 +5181,19 @@ async function startAgent(
     allowlist: lanConfig.allowlist,
     cdpPort: cdpActive() ? CDP_EXTERNAL_PORT : null,
     renderStats: () => lastRenderStats,
+    // MCP resources: 当前视口零件清单（渲染进程是唯一真源，读不到就返回空集）
+    sceneParts: async () => {
+      const window = mainWindow;
+      if (!window || window.isDestroyed() || window.webContents.isDestroyed()) return [];
+      try {
+        const parts = await window.webContents.executeJavaScript(
+          'window.__AgentBridge?.getSceneParts?.() ?? []'
+        );
+        return Array.isArray(parts) ? parts : [];
+      } catch {
+        return [];
+      }
+    },
     audit: (record) => writeAudit(formatAuditLine(record)),
     // 外部客户端（MCP / JSON-RPC）也走页面内卡片：原生模态在无人值守/远程调试下点不到
     confirmWrite: async (name, args) => await requestWriteConfirmation(mainWindow, {
