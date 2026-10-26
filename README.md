@@ -402,3 +402,35 @@ smoke 覆盖并断言：
 | [desktop/README.md](desktop/README.md) | 桌面版命令、MCP 接入、JSON-RPC 与各面板细节 |
 
 > `packs/builtin` 中的元器件参数与价格仅用于选型 / 成本演示，定型与报价前请以厂商最新样本、铭牌与正式报价为准。
+
+## 许可证 / License
+
+本项目源码以 [GNU General Public License v3.0](LICENSE) 发布。随安装包分发的第三方组件
+各有其许可证，见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)；其中 LibreDWG WASM
+为 GPL-3.0，这也是本项目选择 GPL-3.0 的原因之一。
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Only official Windows releases built from this public repository by the GitHub Actions
+`windows-build` workflow are submitted for signing. Each signing request is approved
+manually before the signed installer is published to GitHub Releases. Binaries built
+on personal machines are never signed.
+
+### Team roles
+
+- Committers and reviewers: [owlco001](https://github.com/owlco001) — trusted to modify
+  the source code; every change proposed by non-committers is reviewed by the maintainer.
+- Approvers: [owlco001](https://github.com/owlco001) — approves each code signing request.
+
+All team members use multi-factor authentication for both GitHub and SignPath.
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless
+specifically requested by the user or the person installing or operating it.
+User-triggered exceptions, all off or manual by default: checking for application
+updates, synchronizing design packages with a user-configured Smart Factory server,
+and the in-app agent calling a user-configured LLM endpoint. Third-party components
+bundled with the installer are listed in THIRD-PARTY-NOTICES.md.
