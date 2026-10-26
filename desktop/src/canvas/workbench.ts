@@ -34,6 +34,12 @@ import {
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
 import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
+  briefFromGraph,
+  buildCandidateSummaries,
+  candidateHeadline,
+  type CandidateSummary
+} from './candidates-source.ts';
+import {
   CANVAS_DRAFT_KEY,
   clearDraft,
   loadDraft,
@@ -544,9 +550,58 @@ function renderOrtho(): void {
 // 渲染：多画板
 // ---------------------------------------------------------------------------
 
+let candidateCache: { key: string; items: CandidateSummary[] } | null = null;
+
+/** 候选按「画布形态」缓存：节点数/目标/布局变了才重算（synthMachine 是同步计算）。 */
+function candidatesForGraph(): CandidateSummary[] {
+  const brief = briefFromGraph(state.graph);
+  const key = `${brief.stations}|${brief.cyclePerMin}|${brief.layout}|${state.graph.nodes.length}`;
+  if (candidateCache && candidateCache.key === key) return candidateCache.items;
+  const items = buildCandidateSummaries(brief);
+  candidateCache = { key, items };
+  return items;
+}
+
 function renderArtboards(): void {
   const host = document.getElementById('cwArtboards');
   if (!host) return;
+  const candidates = candidatesForGraph();
+  if (candidates.length > 0) {
+    host.innerHTML = `
+      <div class="cw-artboards">
+        ${candidates
+          .map(
+            (candidate) => `
+          <article class="cw-artboard" data-form="${escapeHtml(candidate.formId)}">
+            <h4>${escapeHtml(candidateHeadline(candidate))}</h4>
+            <p>${candidate.meetsTarget === null ? '未设目标节拍' : candidate.meetsTarget ? '估算达到目标（待实测）' : '估算低于目标（待实测）'}</p>
+            <dl>
+              <dt>CT</dt><dd>${fmt(candidate.cycleSeconds, 2)} s</dd>
+              <dt>UPH</dt><dd>${candidate.unitsPerHour}</dd>
+              <dt>成本</dt><dd class="${candidate.missingPriceCount > 0 ? 'warn' : ''}">¥${fmt(candidate.costTotalYuan, 0)}${candidate.missingPriceCount > 0 ? ` · ${candidate.missingPriceCount} 项缺价` : ''}</dd>
+              <dt>BOM</dt><dd>${candidate.bomRows} 行</dd>
+              <dt>工位</dt><dd>${candidate.stations}</dd>
+              <dt>警告</dt><dd class="${candidate.warnings.length > 0 ? 'warn' : ''}">${candidate.warnings.length} 条</dd>
+            </dl>
+            ${
+              candidate.warnings.length > 0
+                ? `<p class="cw-hint cw-warn">${escapeHtml(candidate.warnings[0] ?? '')}</p>`
+                : ''
+            }
+          </article>`
+          )
+          .join('')}
+      </div>
+      <p class="cw-hint" style="padding:0 12px 12px">
+        三套候选来自 <code>design/candidates.generateCandidates</code>（与 Agent/向导同一个 synthMachine），
+        节拍/成本/BOM 都是各自真实评估结果；brief 由当前画布反推（工位=运动节点数、节拍=目标值），是估计值。
+        候选不会自动导入画布——把 MachineDesign 反解成 MountPort 拓扑要型号级接口数据，现在没有。
+      </p>`;
+    host.dataset.boards = String(candidates.length);
+    host.dataset.source = 'candidates';
+    return;
+  }
+
   const boards = buildArtboards(state.graph, { priceLookup });
   host.innerHTML = `
     <div class="cw-artboards">
@@ -569,10 +624,10 @@ function renderArtboards(): void {
         .join('')}
     </div>
     <p class="cw-hint" style="padding:0 12px 12px">
-      三块画板是**同一张拓扑**在三种产能口径下的真实评估（single / linear / dial），
-      不是三套不同 BOM 的候选方案 —— 候选方案要等 P3 接 design/synthesis，这里不伪造。
+      候选合成不可用，回落到**同一张拓扑**的三种产能口径（single / linear / dial）；这不是三套方案。
     </p>`;
   host.dataset.boards = String(boards.length);
+  host.dataset.source = 'layouts';
 }
 
 // ---------------------------------------------------------------------------
