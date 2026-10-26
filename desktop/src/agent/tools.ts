@@ -878,6 +878,29 @@ export class AgentTools {
     });
 
     this.add({
+      name: 'save_scene_as_project',
+      description:
+        '把当前视口里的模型逐件存成工程（出现在文件菜单，可再次打开、查零件树与包围盒）：逐件写 STL、包络取零件 AABB 并集。' +
+        '质量恒为 null（导入网格没有材料/密度）。用于「导入 CAD 后落库」，不改动视口几何。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '工程名（默认取当前文件名 +「（导入）」）' }
+        },
+        additionalProperties: false
+      },
+      handler: async (args) => {
+        if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+        }
+        const result = await this.execute('save_scene_as_project', {
+          ...(typeof args.name === 'string' ? { name: args.name.trim() } : {})
+        });
+        return result ? commandSuccess(result) : this.unavailable();
+      }
+    });
+
+    this.add({
       name: 'get_render_stats',
       description:
         '读取当前 3D 视口的渲染指标：渲染器名称、是否软件渲染、像素比、质量档、零件/三角形数量，以及最近一次拖动的帧数、平均/最大帧时间。只读，用于定位「鼠标不跟手」是软件渲染、帧率还是装配体规模。',

@@ -600,3 +600,13 @@ parseFallbackCandidates(text): string[]
 - 「本会话允许」只存在渲染进程的 Set 里，不落盘，刷新即失效；同名工具后续调用直接放行不再弹卡
 - 卡片显示：工具名徽标、`detail`、参数 JSON（>600 字符截断）、bypass 警告
 - 未做单测（DOM 交互），靠真机跑智能体验证：允许一次 → 工程生成；本会话允许 → 第二次不再弹卡、工程照常生成
+
+## 工具：save_scene_as_project（2026-10-26）
+
+- 用途：把**当前视口里的模型**逐件存成工程（导入 CAD 后落库），写工具需确认
+- 链路：`tools.ts` → `registerSaveSceneAsProjectCommand` → 渲染桥 `saveSceneAsProject` →
+  `viewer.exportPartsForStl()`（three position/index → 二进制 STL）+ `unionEnvelope` → `projects.save`
+- 返回：`{ ok, projectId, name, parts, triangles, envelope, massKg: null, note }`
+- 失败码：`NO_SCENE`（没有视口）/ `EMPTY_SCENE`（无网格）/ `SAVE_FAILED` / `UNAVAILABLE`
+- 质量恒 null：导入网格没有材料与密度，按体积×密度算出来是假数
+- 与 `build_canvas_assembly` 的区别：那个从画布工位尺寸生成盒体，这个忠实搬运视口里已有网格

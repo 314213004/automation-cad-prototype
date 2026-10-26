@@ -277,6 +277,8 @@ export const WRITE_TOOLS = new Set([
   'build_machine_model',
   // 写工程文件（画布方案 → 示意装配工程），需要确认
   'build_canvas_assembly',
+  // 把当前视口模型逐件存成工程（导入模型落库），需要确认
+  'save_scene_as_project',
   'import_cad',
   'insert_component',
   'place_component',

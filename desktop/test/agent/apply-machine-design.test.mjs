@@ -86,7 +86,7 @@ test('apply_machine_design 已注册为写工具，schema 支持 brief/design �
   const { tools } = setup();
   const tool = tools.summaries().find((item) => item.name === 'apply_machine_design');
   assert.ok(tool);
-  assert.equal(tools.list().length, 24);
+  assert.equal(tools.list().length, 25);
   assert.equal(READ_ONLY_TOOLS.has('apply_machine_design'), false);
   assert.equal(WRITE_TOOLS.has('apply_machine_design'), true);
   assert.equal(tool.inputSchema.additionalProperties, false);

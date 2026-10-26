@@ -238,6 +238,7 @@ const BRIDGE_METHODS = new Set([
   // 以下三项命令层早已在调，白名单漏了：真实渲染桥会以 INVALID_METHOD 拒绝（fake bridge 测不出来）
   'buildMachineModel',
   'buildCanvasAssembly',
+  'saveSceneAsProject',
   'markPlcGenerated',
   'getElecDocument'
 ]);
@@ -1358,6 +1359,36 @@ function registerBuildCanvasAssemblyCommand(bus: CommandBus): void {
   });
 }
 
+/**
+ * 当前视口模型 → 工程（智能体工具 save_scene_as_project）。
+ * 用于导入 CAD 后落库：逐件 STL 写盘、零件树/包围盒可查；质量恒 null。
+ */
+function registerSaveSceneAsProjectCommand(bus: CommandBus): void {
+  bus.register({
+    name: 'save_scene_as_project',
+    async run(args, ctx) {
+      const allowed = ['name'];
+      for (const key of Object.keys(args)) {
+        if (!allowed.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
+      }
+      const payload = {
+        ...(typeof args.name === 'string' ? { name: args.name.trim() } : {})
+      };
+      const result = await ctx.bridge.call<{ ok: boolean; message?: string; code?: string }>('saveSceneAsProject', [payload]);
+      if (!result || result.ok !== true) {
+        throw new CommandFailure(
+          typeof result?.code === 'string' && result.code ? result.code : 'RENDERER_ERROR',
+          result?.message ?? '存为工程失败'
+        );
+      }
+      return { ok: true, data: result };
+    }
+  });
+}
+
 function registerBuildMachineModelCommand(bus: CommandBus): void {
   bus.register({
     name: 'build_machine_model',
@@ -2003,6 +2034,7 @@ export function createAgentCommandBus(
   registerPlcGenerateCommand(bus);
   registerBuildMachineModelCommand(bus);
   registerBuildCanvasAssemblyCommand(bus);
+  registerSaveSceneAsProjectCommand(bus);
   registerMachineApplyCommand(bus);
   registerExportFilesCommand(bus);
   return bus;

@@ -92,6 +92,7 @@ import type { Placement } from './enclosure/layout.ts';
 import { closeCanvasWorkbench, installCanvasWorkbench, openCanvasWorkbench } from './canvas/workbench.ts';
 import { buildAssemblyProject } from './canvas/assembly-export.ts';
 import { normalizeGraph } from './canvas/graph.ts';
+import { unionEnvelope } from './cad/stl-export.ts';
 import type { MachineGraph } from './canvas/types.ts';
 
 const ICONS = {
@@ -1705,6 +1706,16 @@ function mountHomeScreen(): void {
     button.addEventListener('click', () => homeHandle?.open());
     left.appendChild(button);
   }
+  if (left && !document.getElementById('saveAsProjectButton')) {
+    const saveButton = document.createElement('button');
+    saveButton.type = 'button';
+    saveButton.id = 'saveAsProjectButton';
+    saveButton.className = 'tbtn';
+    saveButton.textContent = '存为工程';
+    saveButton.title = '把当前视口里的模型逐件存成工程（出现在文件菜单里，可再次打开、查零件树与包围盒）';
+    saveButton.addEventListener('click', () => { void saveSceneAsProject(); });
+    left.appendChild(saveButton);
+  }
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && homeHandle?.isOpen()) {
       event.preventDefault();
@@ -1779,6 +1790,81 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     const reason = error instanceof Error ? error.message : String(error);
     showNotice(`工程「${result.record.name}」载入失败：${reason}。未确认场景恢复；请用主工具栏“打开 CAD”导入源文件，并在主视口与零件树非空后再校核。`, true);
     return null;
+  }
+}
+
+/**
+ * 当前视口模型 → 工程（导入模型也能落库）。
+ *
+ * 逐件导出 STL（读 three 的 position/index），包络取零件 AABB 并集；质量恒 null——
+ * 导入网格没有材料/密度，硬算出来的质量是假的。
+ */
+async function saveSceneAsProject(input?: unknown): Promise<Record<string, unknown>> {
+  const requested = (typeof input === 'object' && input !== null ? input : {}) as { name?: unknown };
+  if (requested.name !== undefined && (typeof requested.name !== 'string' || !requested.name.trim())) {
+    return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
+  }
+  if (!window.desktop?.projects?.save) {
+    return { ok: false, code: 'UNAVAILABLE', message: '工程库接口不可用，无法保存' };
+  }
+  let viewer;
+  try {
+    viewer = ensureViewer();
+  } catch (error) {
+    const message = `当前没有可保存的 3D 场景：${error instanceof Error ? error.message : String(error)}`;
+    showNotice(message, true);
+    return { ok: false, code: 'NO_SCENE', message };
+  }
+  const parts = viewer.exportPartsForStl();
+  if (parts.length === 0) {
+    const message = '当前视口没有可导出的网格：先打开 CAD 或生成整机模型，再存为工程';
+    showNotice(message, true);
+    return { ok: false, code: 'EMPTY_SCENE', message };
+  }
+  const sceneParts = viewer.getSceneParts();
+  const envelope = unionEnvelope(sceneParts.map((part) => ({ min: part.bbox.min, max: part.bbox.max })));
+  const triangles = sceneParts.reduce((sum, part) => sum + (Number.isFinite(part.triangles) ? part.triangles : 0), 0);
+  const base = (currentFileName || '导入模型')
+    .replace(/（\s*\d+\s*件\s*）\s*$/u, '')
+    .replace(/\.(stp|step|stl|igs|iges|obj|3mf|x_t)$/i, '')
+    .trim()
+    .slice(0, 40) || '导入模型';
+  const name = typeof requested.name === 'string' ? requested.name.trim() : `${base}（导入）`;
+  try {
+    const saved = await window.desktop.projects.save({
+      name,
+      process: 'cad-import',
+      params: { parts: parts.length, triangles, imported: 1 },
+      parts: parts.length,
+      massKg: null,
+      envelope,
+      material: [],
+      partData: parts
+    });
+    if (!saved.ok || !saved.record) {
+      showNotice(`存为工程失败：${saved.message ?? '未知原因'}`, true);
+      return { ok: false, code: 'SAVE_FAILED', message: saved.message ?? '工程保存失败' };
+    }
+    await refreshProjectMenu();
+    (window as unknown as { __applyProjectStage?: (record: unknown) => void }).__applyProjectStage?.(saved.record);
+    attachProjectPanel(toPanelInfo(saved.record));
+    setCurrentProject(projectMenuRecordOf(saved.record, parts.length));
+    const size = envelope ? `${envelope[0]}×${envelope[1]}×${envelope[2]} mm` : '包络未知';
+    showNotice(`已存为工程「${saved.record.name}」：${parts.length} 件 · ${triangles} 三角面 · ${size}（质量未称重，未计入）`);
+    return {
+      ok: true,
+      projectId: saved.record.id,
+      name: saved.record.name,
+      parts: parts.length,
+      triangles,
+      envelope,
+      massKg: null,
+      note: '逐件 STL 已写入工程目录；质量未称重（导入网格没有材料/密度）'
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showNotice(`存为工程失败：${message}`, true);
+    return { ok: false, code: 'SAVE_FAILED', message };
   }
 }
 
@@ -3222,6 +3308,7 @@ function initAgentBridge(): void {
     },
     buildMachineModel: async (payload: unknown) => await buildMachineModel(payload),
     buildCanvasAssembly: async (payload: unknown) => await buildCanvasAssembly(payload),
+    saveSceneAsProject: async (payload: unknown) => await saveSceneAsProject(payload),
     importPath: async (path: unknown) => {
       if (!agentBridgeReady()) return agentBridgeUnavailable();
       if (typeof path !== 'string' || !path.trim()) return { ok: false, message: 'CAD 文件路径不能为空' };

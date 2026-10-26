@@ -174,3 +174,12 @@ npm run build:ext && npm run smoke   # 冒烟：SMOKE_CANVAS_TOPOLOGY_OK / _ADAP
   **必须先关工作台**，否则工作台遮住经典界面，标题/结构树看着像没刷新（实测 `#spTitle` 空、左树还是演示装配）
 - 结构树分组：`app.js` 的 `projectGroupOf` 支持「类别·工位名」（`直线·入料段`）与「前缀-编号」（`托条-L17-2`）两种命名
 - 打开工程后要让原型 UI 刷新标题/树：`app.js` 暴露 `window.__applyProjectStage(record)`，extension 在 `openSavedProject` 成功后调用
+
+## 导入模型落库（`src/cad/stl-export.ts`，2026-10-26）
+
+- `geometryToBinaryStl(positions, indices)`：纯数值写二进制 STL（84+50n），退化三角形法线退回 +Z 不写 NaN
+- `unionEnvelope(boxes)`：零件 AABB 并集 → `[宽,深,高]`，保留 0.1mm
+- `uniquePartNames`：重名加 `-2/-3`，非法字符 `_`（partsList 与磁盘文件名共用，避免覆盖）
+- STL 头只写 `& 0x7f`（ASCII）；中文说明放工程记录，不塞进 80 字节头
+- viewer.exportPartsForStl() 只读 three 的 position/index；降级模式（无 WebGL）返回空 → 界面提示「没有可导出网格」
+- 真机：光伏缓存堆叠单元 94 件 → 「（导入）」工程 94 件 / 2592 三角面 / 1500×1400×1800mm，重开 94 行

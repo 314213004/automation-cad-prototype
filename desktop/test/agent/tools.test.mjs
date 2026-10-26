@@ -60,7 +60,7 @@ before(() => {
 
 after(() => rmSync(sandbox, { recursive: true, force: true }));
 
-test('工具表为 24 个且不存在 NOT_IMPLEMENTED', () => {
+test('工具表为 25 个且不存在 NOT_IMPLEMENTED', () => {
   assert.deepEqual(tools.list().map((tool) => tool.name).sort(), [
     'apply_machine_design',
     'build_canvas_assembly',
@@ -80,6 +80,7 @@ test('工具表为 24 个且不存在 NOT_IMPLEMENTED', () => {
     'run_electrical_check',
     'run_interference_check',
     'run_plc_generate',
+    'save_scene_as_project',
     'search_components',
     'search_docs',
     'suggest_kinematics',

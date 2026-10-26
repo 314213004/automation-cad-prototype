@@ -14,6 +14,7 @@ import {
 } from './render-batch.ts';
 import { assertBomRowCount } from '../shared/input-limits.ts';
 import { stageCadLoad, type LoadedPart } from './load-candidate.ts';
+import { geometryToBinaryStl, uniquePartNames } from './stl-export.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -1234,6 +1235,28 @@ export class CadViewer {
   }
 
   /** 按零件名选中（工程结构树 / 面板联动用）；找不到返回 false，不猜下标。 */
+  /**
+   * 把当前场景逐件导出成 STL（"存为工程"用）。
+   * 直接读 three 的 position/index 属性；没有几何（降级模式）时返回空数组，调用方要如实提示。
+   */
+  exportPartsForStl(): Array<{ name: string; data: Uint8Array }> {
+    const names = uniquePartNames(this.parts.map((part) => part.data.name));
+    const out: Array<{ name: string; data: Uint8Array }> = [];
+    this.parts.forEach((part, index) => {
+      const geometry = part.mesh.geometry;
+      const position = geometry.getAttribute('position');
+      if (!position) return;
+      const indexAttr = geometry.getIndex();
+      const data = geometryToBinaryStl(
+        position.array as unknown as ArrayLike<number>,
+        indexAttr ? (indexAttr.array as unknown as ArrayLike<number>) : null
+      );
+      if (!data) return;
+      out.push({ name: names[index] ?? `零件-${index + 1}`, data });
+    });
+    return out;
+  }
+
   selectPartByName(name: string, focus = false): boolean {
     const index = this.parts.findIndex((part) => part.data.name === name);
     if (index < 0) return false;
