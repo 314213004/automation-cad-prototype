@@ -4,7 +4,7 @@
 // 选型结果看着变了其实用的是混合值。要么全过，要么原样返回并给出中文原因。
 import type { CanvasNode } from './types.ts';
 
-export type EditableField = 'name' | 'strokeMm' | 'leadMm' | 'massKg' | 'stepSec';
+export type EditableField = 'name' | 'strokeMm' | 'leadMm' | 'massKg' | 'stepSec' | 'orthoX' | 'orthoY';
 
 export interface EditableFieldMeta {
   field: EditableField;
@@ -23,7 +23,9 @@ export const EDITABLE_FIELDS: readonly EditableFieldMeta[] = [
   { field: 'strokeMm', label: '行程', unit: 'mm', kind: 'number', min: 0, step: 1, hint: '直线轴按行程算速度与包络' },
   { field: 'leadMm', label: '导程', unit: 'mm', kind: 'number', min: 0, step: 1, hint: '0 = 无回转传动；>0 才做单轴选型' },
   { field: 'massKg', label: '质量', unit: 'kg', kind: 'number', min: 0, step: 0.1, hint: '影响惯量比、扭矩与挠度' },
-  { field: 'stepSec', label: '单步时间', unit: 's', kind: 'number', min: 0, step: 0.05, hint: '只影响甘特与单轴选型，不是整机产能' }
+  { field: 'stepSec', label: '单步时间', unit: 's', kind: 'number', min: 0, step: 0.05, hint: '只影响甘特与单轴选型，不是整机产能' },
+  { field: 'orthoX', label: '正交 X', unit: 'mm', kind: 'number', step: 10, hint: '2D 俯视图毫米坐标，允许负值' },
+  { field: 'orthoY', label: '正交 Y', unit: 'mm', kind: 'number', step: 10, hint: '2D 俯视图毫米坐标，允许负值' }
 ];
 
 export interface EditResult {
@@ -32,6 +34,8 @@ export interface EditResult {
 }
 
 function parseNumber(field: EditableFieldMeta, raw: string): { value: number } | { error: string } {
+  // 坐标允许负值：EDITABLE_FIELDS 里 orthoX/orthoY 不设 min/max
+
   const text = raw.trim();
   if (text === '') return { error: `${field.label}不能为空（${field.unit}）` };
   const value = Number(text);
@@ -96,6 +100,8 @@ export function applyNodePatch(node: CanvasNode, patch: Partial<Record<EditableF
     else if (meta.field === 'leadMm') next.leadMm = parsed.value;
     else if (meta.field === 'massKg') next.massKg = parsed.value;
     else if (meta.field === 'stepSec') next.stepSec = parsed.value;
+    else if (meta.field === 'orthoX') next.ortho.x = parsed.value;
+    else if (meta.field === 'orthoY') next.ortho.y = parsed.value;
   }
 
   if (errors.length > 0) return { node, errors };
@@ -112,6 +118,8 @@ export function patchChangesNode(node: CanvasNode, patch: Partial<Record<Editabl
     next.strokeMm !== node.strokeMm ||
     next.leadMm !== node.leadMm ||
     next.massKg !== node.massKg ||
-    next.stepSec !== node.stepSec
+    next.stepSec !== node.stepSec ||
+    next.ortho.x !== node.ortho.x ||
+    next.ortho.y !== node.ortho.y
   );
 }

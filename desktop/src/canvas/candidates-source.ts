@@ -108,6 +108,37 @@ export function buildCandidateSummaries(brief: MachineBrief): CandidateSummary[]
   }
 }
 
+export interface CandidateBestMarks {
+  fastestFormId: string | null;
+  cheapestFormId: string | null;
+  fewestStationsFormId: string | null;
+  /** 成本是否可横向比较（缺价行数一致才比）。 */
+  costComparable: boolean;
+}
+
+/**
+ * 指标选优：最快（UPH 最大）、最低成本、最少工位。
+ * 成本只有在三套候选的缺价行数一致时才比较——缺价不同时总额不可比，返回 costComparable=false。
+ */
+export function bestCandidateMarks(candidates: readonly CandidateSummary[]): CandidateBestMarks {
+  if (candidates.length === 0) {
+    return { fastestFormId: null, cheapestFormId: null, fewestStationsFormId: null, costComparable: false };
+  }
+  const fastest = [...candidates].sort((a, b) => b.unitsPerHour - a.unitsPerHour)[0] ?? null;
+  const missing = new Set(candidates.map((item) => item.missingPriceCount));
+  const costComparable = missing.size === 1;
+  const cheapest = costComparable
+    ? [...candidates].sort((a, b) => a.costTotalYuan - b.costTotalYuan)[0] ?? null
+    : null;
+  const fewest = [...candidates].sort((a, b) => a.stations - b.stations)[0] ?? null;
+  return {
+    fastestFormId: fastest?.formId ?? null,
+    cheapestFormId: cheapest?.formId ?? null,
+    fewestStationsFormId: fewest?.formId ?? null,
+    costComparable
+  };
+}
+
 /** 候选 → 画板标题：形态名 + 布局 + 工位数，便于一眼区分。 */
 export function candidateHeadline(candidate: CandidateSummary): string {
   return `${candidate.formName}（${candidate.layout} · ${candidate.stations} 工位）`;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  bestCandidateMarks,
   briefFromGraph,
   buildCandidateSummaries,
   candidateHeadline,
@@ -72,4 +73,54 @@ test('summarizeDesign：候选不会凭空造价——缺价只报数量，总�
     assert.ok(candidate.missingPriceCount >= 0);
     assert.ok(candidate.assumptions.length > 0, '必须带假设说明');
   }
+});
+
+
+function summary(overrides) {
+  return {
+    formId: 'form-a',
+    formName: 'A',
+    layout: 'linear',
+    stations: 4,
+    cycleSeconds: 2,
+    unitsPerHour: 1800,
+    targetPerMin: 20,
+    meetsTarget: true,
+    costTotalYuan: 10000,
+    missingPriceCount: 0,
+    bomRows: 8,
+    warnings: [],
+    assumptions: ['x'],
+    ...overrides
+  };
+}
+
+test('bestCandidateMarks：最快/最低成本/最少工位分别标出', () => {
+  const marks = bestCandidateMarks([
+    summary({ formId: 'fast', unitsPerHour: 3000, costTotalYuan: 12000, stations: 6 }),
+    summary({ formId: 'cheap', unitsPerHour: 2000, costTotalYuan: 9000, stations: 5 }),
+    summary({ formId: 'small', unitsPerHour: 2500, costTotalYuan: 11000, stations: 3 })
+  ]);
+  assert.equal(marks.fastestFormId, 'fast');
+  assert.equal(marks.cheapestFormId, 'cheap');
+  assert.equal(marks.fewestStationsFormId, 'small');
+  assert.equal(marks.costComparable, true);
+});
+
+test('bestCandidateMarks：缺价行数不同时不比成本，避免拿不可比总额排序', () => {
+  const marks = bestCandidateMarks([
+    summary({ formId: 'a', costTotalYuan: 9000, missingPriceCount: 0 }),
+    summary({ formId: 'b', costTotalYuan: 4000, missingPriceCount: 5 })
+  ]);
+  assert.equal(marks.costComparable, false);
+  assert.equal(marks.cheapestFormId, null);
+  assert.equal(marks.fastestFormId, 'a');
+});
+
+test('bestCandidateMarks：空候选返回全 null', () => {
+  const marks = bestCandidateMarks([]);
+  assert.equal(marks.fastestFormId, null);
+  assert.equal(marks.cheapestFormId, null);
+  assert.equal(marks.fewestStationsFormId, null);
+  assert.equal(marks.costComparable, false);
 });

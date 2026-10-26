@@ -122,6 +122,11 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 25. **undo 之后再改图会丢 redo**：这是标准行为，不是 bug；但提交前必须 `slice(0, index+1)` 截断，否则会把旧尾巴拼回来。
 26. **快照必须深拷贝**：`cloneGraph` 而不是共享引用，否则后续编辑会把历史里的状态一起改掉。
 
+## 坑点（P4 第五/六步追加）
+
+27. **成本不可比时别排序**：候选缺价行数不同，总额是「部分统计」，拿它比最低成本会误导；`bestCandidateMarks` 在这种情况下返回 `cheapestFormId=null`，界面写明「不可横向比较」。
+28. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
+
 ## 验证命令
 
 ```bash

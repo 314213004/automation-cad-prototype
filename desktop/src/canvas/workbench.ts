@@ -34,6 +34,7 @@ import {
 import { CANVAS_PALETTE, demoCanvasGraph, paletteNode, type PaletteItem } from './demo-graph.ts';
 import { buildPaletteSections, summarizePackCoverage, type PaletteSection } from './packs-source.ts';
 import {
+  bestCandidateMarks,
   briefFromGraph,
   buildCandidateSummaries,
   candidateHeadline,
@@ -676,6 +677,7 @@ function renderArtboards(): void {
   if (!host) return;
   const candidates = candidatesForGraph();
   if (candidates.length > 0) {
+    const marks = bestCandidateMarks(candidates);
     host.innerHTML = `
       <div class="cw-artboards">
         ${candidates
@@ -683,6 +685,11 @@ function renderArtboards(): void {
             (candidate) => `
           <article class="cw-artboard" data-form="${escapeHtml(candidate.formId)}">
             <h4>${escapeHtml(candidateHeadline(candidate))}</h4>
+            <p class="cw-artboard-badges">
+              ${candidate.formId === marks.fastestFormId ? '<span class="cw-badge-fast">最快</span>' : ''}
+              ${candidate.formId === marks.cheapestFormId ? '<span class="cw-badge-cost">最低成本</span>' : ''}
+              ${candidate.formId === marks.fewestStationsFormId ? '<span class="cw-badge-station">工位最少</span>' : ''}
+            </p>
             <p>${candidate.meetsTarget === null ? '未设目标节拍' : candidate.meetsTarget ? '估算达到目标（待实测）' : '估算低于目标（待实测）'}</p>
             <dl>
               <dt>CT</dt><dd>${fmt(candidate.cycleSeconds, 2)} s</dd>
@@ -697,6 +704,11 @@ function renderArtboards(): void {
                 ? `<p class="cw-hint cw-warn">${escapeHtml(candidate.warnings[0] ?? '')}</p>`
                 : ''
             }
+            <div class="cw-inspector-actions">
+              <button type="button" class="cw-btn" data-action="adopt-candidate" data-form="${escapeHtml(candidate.formId)}">
+                采纳这套产能口径
+              </button>
+            </div>
           </article>`
           )
           .join('')}
@@ -704,7 +716,9 @@ function renderArtboards(): void {
       <p class="cw-hint" style="padding:0 12px 12px">
         三套候选来自 <code>design/candidates.generateCandidates</code>（与 Agent/向导同一个 synthMachine），
         节拍/成本/BOM 都是各自真实评估结果；brief 由当前画布反推（工位=运动节点数、节拍=目标值），是估计值。
-        候选不会自动导入画布——把 MachineDesign 反解成 MountPort 拓扑要型号级接口数据，现在没有。
+        ${marks.costComparable ? '' : '<b class="cw-warn">三套候选缺价行数不同，成本总额不可横向比较。</b>'}<br />
+        「采纳这套产能口径」只把布局口径（single/linear/dial/cell）与目标节拍写回当前拓扑，
+        <b>不会</b>把候选的模块搬进画布——跨候选模块合并需要模块级对应关系，现在没有。
       </p>`;
     host.dataset.boards = String(candidates.length);
     host.dataset.source = 'candidates';
@@ -814,7 +828,14 @@ function renderInspector(): void {
 }
 
 function editRow(node: CanvasNode, meta: (typeof EDITABLE_FIELDS)[number]): string {
-  const raw = meta.field === 'name' ? node.name : String(node[meta.field]);
+  const raw =
+    meta.field === 'name'
+      ? node.name
+      : meta.field === 'orthoX'
+        ? String(node.ortho.x)
+        : meta.field === 'orthoY'
+          ? String(node.ortho.y)
+          : String(node[meta.field]);
   const numeric =
     meta.kind === 'number'
       ? ` type="number" min="${meta.min ?? 0}" step="${meta.step ?? 1}" inputmode="decimal"`
@@ -1473,6 +1494,29 @@ function bindEvents(): void {
     }
     if (action === 'redo') {
       redoCanvas();
+      return;
+    }
+    if (action === 'adopt-candidate') {
+      const formId = target.dataset.form;
+      const candidate = candidatesForGraph().find((item) => item.formId === formId);
+      if (!candidate) {
+        toast('候选已失效，请刷新后再试', true);
+        return;
+      }
+      const layout = candidate.layout as MachineGraph['layout'];
+      if (!layout) {
+        toast('候选没有可用的布局口径', true);
+        return;
+      }
+      state.graph = {
+        ...state.graph,
+        layout,
+        ...(candidate.targetPerMin !== null ? { targetPerMin: candidate.targetPerMin } : {})
+      };
+      recordHistory(`采纳候选产能口径 ${candidate.formId}`);
+      renderAll();
+      markDirty();
+      toast(`已采纳 ${candidate.formName} 的口径：布局 ${layout}，目标 ${candidate.targetPerMin ?? '—'} 件/分钟；模块未导入`);
       return;
     }
     if (action === 'build-adapter') {

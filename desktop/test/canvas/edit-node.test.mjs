@@ -9,11 +9,14 @@ function axis() {
 
 test('EDITABLE_FIELDS：带单位/范围/步长，名称是文本其余是数字', () => {
   const fields = EDITABLE_FIELDS.map((meta) => meta.field);
-  assert.deepEqual(fields, ['name', 'strokeMm', 'leadMm', 'massKg', 'stepSec']);
+  assert.deepEqual(fields, ['name', 'strokeMm', 'leadMm', 'massKg', 'stepSec', 'orthoX', 'orthoY']);
   for (const meta of EDITABLE_FIELDS) {
     assert.ok(meta.label.length > 0);
     assert.ok(meta.hint.length > 0);
-    if (meta.kind === 'number') assert.equal(typeof meta.min, 'number');
+    // 坐标允许负值，所以只有物理量（行程/导程/质量/时间）必须有 min
+    if (meta.kind === 'number' && meta.field !== 'orthoX' && meta.field !== 'orthoY') {
+      assert.equal(typeof meta.min, 'number');
+    }
   }
 });
 
@@ -52,6 +55,19 @@ test('applyNodePatch：任一字段非法 → 整批拒绝并给中文原因', (
   const mixed = applyNodePatch(node, { strokeMm: '500', leadMm: '-5' });
   assert.equal(mixed.node.strokeMm, node.strokeMm);
   assert.equal(mixed.errors.length, 1);
+});
+
+test('applyNodePatch：正交坐标可改且允许负值', () => {
+  const node = axis();
+  const result = applyNodePatch(node, { orthoX: '-120', orthoY: '340.5' });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.node.ortho.x, -120);
+  assert.equal(result.node.ortho.y, 340.5);
+  assert.deepEqual(node.ortho, { x: 60, y: 120 }, '入参 ortho 不能被改');
+  assert.equal(patchChangesNode(node, { orthoX: '-120' }), true);
+  assert.equal(patchChangesNode(node, { orthoX: '60' }), false);
+  const bad = applyNodePatch(node, { orthoX: 'abc' });
+  assert.match(bad.errors.join('；'), /正交 X必须是数字/);
 });
 
 test('applyNodePatch：0 是合法值（气缸导程 0 / 无节拍节点）', () => {
