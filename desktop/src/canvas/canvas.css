@@ -216,3 +216,10 @@
 }
 .cw-artboard-badges .cw-badge-cost { border-color: #6b5a2f; background: #3a3220; color: #ffca7a; }
 .cw-artboard-badges .cw-badge-station { border-color: #4a4f6d; background: #262a3a; color: #b9c2ff; }
+
+.cw-price-entry { display: flex; align-items: center; gap: 6px; }
+.cw-price-entry input {
+  width: 88px; padding: 3px 6px; border-radius: 6px; font-size: 12px;
+  background: #10151d; border: 1px solid #2b3444; color: #dfe7f3;
+}
+.cw-price-entry input:focus { outline: none; border-color: #3f7fbf; }

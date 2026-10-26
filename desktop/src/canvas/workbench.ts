@@ -66,6 +66,14 @@ import {
 } from './persistence.ts';
 import { validatePricebook } from '../cost/pricebook.ts';
 import { createPricebookLookup, describePriceSource, summarizePricebook, type PriceSourceSummary } from './price-source.ts';
+import {
+  createOverrideLookup,
+  emptyManualPrices,
+  parseManualPrices,
+  setManualPrice,
+  summarizeOverrides,
+  type ManualPriceBook
+} from './price-overrides.ts';
 import type { PriceLookup } from './metrics.ts';
 import type { CanvasNode, MachineGraph } from './types.ts';
 
@@ -97,9 +105,15 @@ let state: WorkbenchState = {
 
 // 价格源：P3 起从内置价格簿读取；读不到时保持「全部待询价」，不编价。
 let priceLookup: PriceLookup = () => null;
+/** 手工询价覆盖：优先于内置价格簿，存在工程目录。 */
+let manualPrices: ManualPriceBook = emptyManualPrices();
+let pricebookLookup: PriceLookup = () => null;
+let manualPriceError = '';
 let priceSource: PriceSourceSummary | null = null;
 let priceSourceError = '';
 let priceSourceLoaded = false;
+/** 草稿正在异步恢复：KPI 暂时显示占位，避免闪现示例数据的 CT/UPH。 */
+let restorePending = false;
 const adapterFactory = createDefaultAdapterFactory({ dowelDiaMm: 4 });
 
 // ---------------------------------------------------------------------------
@@ -266,7 +280,8 @@ async function loadPriceSource(): Promise<void> {
       return;
     }
     const book = validatePricebook(result.book as unknown);
-    priceLookup = createPricebookLookup(book);
+    pricebookLookup = createPricebookLookup(book);
+    priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
     priceSource = summarizePricebook(book);
     priceSourceError = '';
     renderPriceSource();
@@ -278,9 +293,44 @@ async function loadPriceSource(): Promise<void> {
   }
 }
 
+/** 读手工询价覆盖（工程目录）；坏条目逐条报出，但不阻断画布。 */
+async function loadManualPrices(): Promise<void> {
+  const api = window.desktop?.canvasPricing;
+  if (!api) return;
+  try {
+    const file = await api.load();
+    if (!file.book) {
+      if (file.recovered) manualPriceError = '报价文件损坏（现场已保留），本次按无报价处理';
+      return;
+    }
+    const parsed = parseManualPrices(file.book);
+    manualPrices = parsed.book;
+    priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+    if (parsed.rejected) manualPriceError = parsed.issues[0]?.message ?? '报价文件不可用';
+    else if (parsed.issues.length > 0) manualPriceError = `报价表有 ${parsed.issues.length} 条无效，已忽略`;
+    else manualPriceError = '';
+  } catch (error) {
+    manualPriceError = `报价读取失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
 async function restoreDraft(): Promise<void> {
-  if (draftLoaded) return;
+  if (draftLoaded) {
+    restorePending = false;
+    return;
+  }
   draftLoaded = true;
+  // 草稿在异步恢复：这期间不要显示用内置示例算出来的 CT/UPH，否则会闪一个错数字
+  restorePending = Boolean(window.desktop?.canvasDraft);
+  try {
+    await restoreDraftInner();
+  } finally {
+    restorePending = false;
+    if (state.open) renderAll();
+  }
+}
+
+async function restoreDraftInner(): Promise<void> {
   // 先读工程目录（跨会话/清缓存仍在），坏了再退回 localStorage
   const api = window.desktop?.canvasDraft;
   if (api) {
@@ -864,6 +914,15 @@ function renderGantt(): void {
 // ---------------------------------------------------------------------------
 
 function renderKpis(): void {
+  if (restorePending) {
+    const cost = document.getElementById('cwKpiCost');
+    const ct = document.getElementById('cwKpiCt');
+    const uph = document.getElementById('cwKpiUph');
+    if (cost) cost.textContent = '恢复草稿…';
+    if (ct) ct.textContent = '—';
+    if (uph) uph.textContent = '—';
+    return;
+  }
   const data = summary();
   const cost = document.getElementById('cwKpiCost');
   const ct = document.getElementById('cwKpiCt');
@@ -1114,6 +1173,12 @@ function downstreamMass(nodeId: string): number {
   return Math.round(mass * 1000) / 1000;
 }
 
+function costLinePriced(node: CanvasNode): boolean {
+  if (!node.partId) return false;
+  const price = priceLookup(node.partId);
+  return typeof price === 'number' && Number.isFinite(price) && price > 0;
+}
+
 function inspectorBom(node: CanvasNode): string {
   const data = summary();
   const lines = buildBomLines(state.graph, priceLookup);
@@ -1126,6 +1191,18 @@ function inspectorBom(node: CanvasNode): string {
       <p class="cw-hint ${priceSourceError ? 'cw-warn' : ''}">${escapeHtml(
         priceSourceError ? `不可用：${priceSourceError}` : describePriceSource(priceSource)
       )}</p>
+      <p class="cw-hint ${manualPriceError ? 'cw-warn' : ''}">${escapeHtml(
+        manualPriceError || `手工报价 ${summarizeOverrides(manualPrices).count} 项（优先于价格簿，存工程目录）`
+      )}</p>
+      ${
+        node.partId && !costLinePriced(node)
+          ? `<div class="cw-field cw-price-entry">
+              <span>填报价（${escapeHtml(node.partId)}）</span>
+              <input type="number" min="0.01" step="0.01" id="cwPriceInput" placeholder="元" />
+              <button type="button" class="cw-btn" data-action="save-price" data-part-id="${escapeHtml(node.partId)}">保存</button>
+            </div>`
+          : ''
+      }
     </section>
     <section class="cw-section">
       <h4>当前节点 IO</h4>
@@ -1147,7 +1224,7 @@ function inspectorBom(node: CanvasNode): string {
         )
         .join('')}
       <div class="cw-field"><span>合计</span><b class="${data.costComplete ? 'cw-ok' : 'cw-warn'}">¥${fmt(data.totalCostYuan, 2)}${data.costComplete ? '' : ` · ${data.pendingQuoteCount} 项待询价`}</b></div>
-      <p class="cw-hint">缺价行不计入总额，总额标「不完全统计」；P2 没有接价格簿，所有行都落在待询价。</p>
+      <p class="cw-hint">缺价行不计入总额，总额标「不完全统计」；价格来源依次为：手工报价 → 内置价格簿 → 待询价。</p>
     </section>
     <section class="cw-section">
       <h4>转接板</h4>
@@ -1213,6 +1290,48 @@ function renderExport(): void {
     saveButton.disabled = !target.supported;
     saveButton.title = target.supported ? `保存为 ${target.name}` : target.reason;
   }
+}
+
+/** 保存一条手工报价到工程目录；写盘失败要明说，不能只在内存里生效。 */
+async function saveManualPrice(partId: string): Promise<void> {
+  const input = document.getElementById('cwPriceInput') as HTMLInputElement | null;
+  const raw = input?.value.trim() ?? '';
+  const price = Number(raw);
+  if (!partId) {
+    toast('该节点没有 partId，无法挂报价', true);
+    return;
+  }
+  const result = setManualPrice(manualPrices, partId, price, new Date().toISOString());
+  if (result.error) {
+    toast(`报价未保存：${result.error}`, true);
+    return;
+  }
+  const previous = manualPrices;
+  manualPrices = result.book;
+  priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+  const api = window.desktop?.canvasPricing;
+  if (api) {
+    try {
+      const saved = await api.save(manualPrices);
+      if (!saved.ok) {
+        manualPrices = previous;
+        priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+        toast(`报价未保存：${saved.message ?? '写盘失败'}`, true);
+        renderAll();
+        return;
+      }
+    } catch (error) {
+      manualPrices = previous;
+      priceLookup = createOverrideLookup(manualPrices, pricebookLookup);
+      toast(`报价未保存：${error instanceof Error ? error.message : String(error)}`, true);
+      renderAll();
+      return;
+    }
+  }
+  manualPriceError = '';
+  const summaryNow = summary();
+  renderAll();
+  toast(`已记 ${partId} = ¥${price}；总额 ¥${summaryNow.totalCostYuan}，还有 ${summaryNow.pendingQuoteCount} 项待询价`);
 }
 
 /** 落盘：走主进程 export:saveFile（会弹保存对话框）；不支持的类型只提示，不改名糊弄。 */
@@ -1645,6 +1764,10 @@ function bindEvents(): void {
       void saveExport();
       return;
     }
+    if (action === 'save-price') {
+      void saveManualPrice(target.dataset.partId ?? '');
+      return;
+    }
     if (action === 'adapter-dxf') {
       state.exportTab = 'dxf';
       const modal = document.getElementById('cwExportModal');
@@ -1754,6 +1877,9 @@ export function openCanvasWorkbench(): void {
   section.hidden = false;
   state.open = true;
   void restoreDraft();
+  void loadManualPrices().then(() => {
+    if (state.open) renderAll();
+  });
   renderAll();
 }
 

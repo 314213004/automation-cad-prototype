@@ -54,6 +54,11 @@ export function serializeDraft(payload: DraftPayload, savedAt: string): string {
         schemeId: payload.graph.schemeId,
         ...(payload.graph.title === undefined ? {} : { title: payload.graph.title }),
         layout: payload.graph.layout ?? 'single',
+        // 口径参数必须一起存：漏了 transferSeconds，读回来 CT 会从 0.75s 变成 0.55s
+        ...(payload.graph.targetPerMin === undefined ? {} : { targetPerMin: payload.graph.targetPerMin }),
+        ...(payload.graph.transferSeconds === undefined ? {} : { transferSeconds: payload.graph.transferSeconds }),
+        ...(payload.graph.indexSeconds === undefined ? {} : { indexSeconds: payload.graph.indexSeconds }),
+        ...(payload.graph.lanes === undefined ? {} : { lanes: payload.graph.lanes }),
         nodes: payload.graph.nodes,
         edges: payload.graph.edges
       }

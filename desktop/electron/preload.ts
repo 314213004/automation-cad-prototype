@@ -56,6 +56,11 @@ const desktopApi = {
     save: (draft: unknown) => ipcRenderer.invoke('canvas:draft-save', draft),
     clear: () => ipcRenderer.invoke('canvas:draft-clear')
   },
+  canvasPricing: {
+    load: () => ipcRenderer.invoke('canvas:pricing-load'),
+    save: (book: unknown) => ipcRenderer.invoke('canvas:pricing-save', book),
+    clear: () => ipcRenderer.invoke('canvas:pricing-clear')
+  },
   projects: {
     list: () => ipcRenderer.invoke('projects:list'),
     save: (payload: unknown) => ipcRenderer.invoke('projects:save', payload),

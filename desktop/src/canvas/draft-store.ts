@@ -57,3 +57,51 @@ export function writeCanvasDraft(userDataDir: string, draft: unknown): { path: s
 export function clearCanvasDraft(userDataDir: string): void {
   rmSync(canvasDraftPath(userDataDir), { force: true });
 }
+
+// ---------------------------------------------------------------------------
+// 手工询价覆盖（canvas-price-overrides.json）
+// ---------------------------------------------------------------------------
+
+export const CANVAS_PRICING_FILE = 'canvas-price-overrides.json';
+/** 256KB：几千条报价绰绰有余，只挡异常放大。 */
+export const CANVAS_PRICING_MAX_BYTES = 256_000;
+
+export function canvasPricingPath(userDataDir: string): string {
+  return join(userDataDir, CANVAS_PRICING_FILE);
+}
+
+export function readCanvasPricing(userDataDir: string): { book: unknown | null; recovered: boolean; path: string } {
+  const path = canvasPricingPath(userDataDir);
+  if (!existsSync(path)) return { book: null, recovered: false, path };
+  try {
+    if (statSync(path).size > CANVAS_PRICING_MAX_BYTES) return { book: null, recovered: true, path };
+    return { book: JSON.parse(readFileSync(path, 'utf8')) as unknown, recovered: false, path };
+  } catch {
+    return { book: null, recovered: true, path };
+  }
+}
+
+export function clearCanvasPricing(userDataDir: string): void {
+  rmSync(canvasPricingPath(userDataDir), { force: true });
+}
+
+export function writeCanvasPricing(userDataDir: string, book: unknown): { path: string; bytes: number } {
+  const text = `${JSON.stringify(book, null, 2)}\n`;
+  const bytes = Buffer.byteLength(text, 'utf8');
+  if (bytes > CANVAS_PRICING_MAX_BYTES) {
+    throw new Error(`报价表 ${bytes} 字节，超过 ${CANVAS_PRICING_MAX_BYTES} 上限`);
+  }
+  mkdirSync(userDataDir, { recursive: true });
+  const path = canvasPricingPath(userDataDir);
+  const temporary = `${path}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporary, text, { encoding: 'utf8', mode: 0o600 });
+    chmodSync(temporary, 0o600);
+    if (process.platform === 'win32') rmSync(path, { force: true });
+    renameSync(temporary, path);
+    chmodSync(path, 0o600);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+  return { path, bytes };
+}

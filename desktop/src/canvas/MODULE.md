@@ -136,7 +136,9 @@ interface MachineGraph { schemeId; title?; nodes; edges; layout?; targetPerMin?;
 35. **沉头孔是两条圆柱相减**：沉窝必须比通孔大、深度必须小于板厚，否则台阶切不出来或直接把板面切穿——校验里这两条都是硬错误，不是警告。
 36. **沉头尺寸不能编**：`screwHeadForClearance` 只认 ISO 4762 标准头部（M4/M5/M6/M8/M10），孔径对不上就退回通孔并在说明里写明「按实物螺钉复核」。
 37. **`spike/build123d/app.py` 是真内核**：改了算子必须用 `spike/sketch/.venv/bin/python` 直接调 `build()` 验体积，Electron 侧用 `VIRTUAL_ENV=...` 指到该 venv 才会走真内核（否则报 `No module named 'build123d'`）。
-38. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
+38. **草稿要存全口径参数**：只存 nodes/edges/layout 会把 `transferSeconds`（0.2s）丢掉，读回 CT 直接少 0.2s；凡是影响 `evaluateFlow` 的字段都必须进草稿，并有一条「存-读-CT 相等」的测试兜住。
+39. **手工报价必须有来源**：`price-overrides` 只接受用户输入或文件，非法价格整条拒绝；查不到就是待询价，任何兜底价都是造假。
+40. **采纳只能写口径**：跨候选「合并最优模块」需要模块级对应关系（哪个模组对应哪个模组），现在没有；只把 layout/目标节拍写回拓扑，并明确提示「模块未导入」。
 
 ## 验证命令
 

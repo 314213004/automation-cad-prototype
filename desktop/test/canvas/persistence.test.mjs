@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { findMismatchedEdges, insertAdapterForEdge } from '../../src/canvas/graph.ts';
 import { createDefaultAdapterFactory } from '../../src/canvas/view-model.ts';
 import { demoCanvasGraph } from '../../src/canvas/demo-graph.ts';
+import { machineMetrics } from '../../src/canvas/metrics.ts';
 import {
   CANVAS_DRAFT_KEY,
   CANVAS_DRAFT_SCHEMA,
@@ -150,4 +151,25 @@ test('loadDraft：没有存储时明确说「没有本地存储」', () => {
   const result = loadDraft(null);
   assert.equal(result.draft, null);
   assert.match(result.reason, /没有本地存储/);
+});
+
+
+test('serializeDraft / parseDraft：布局口径参数（转移时间/分度时间/轨道/目标节拍）不丢', () => {
+  const graph = demoCanvasGraph();
+  const withOptions = { ...graph, targetPerMin: 24, transferSeconds: 0.35, indexSeconds: 1.2, lanes: 2 };
+  const json = serializeDraft({ graph: withOptions, selectedId: null, mode: 'topology' }, '2026-10-26T10:00:00+08:00');
+  const parsed = parseDraft(json);
+  assert.equal(parsed.draft.graph.transferSeconds, 0.35);
+  assert.equal(parsed.draft.graph.indexSeconds, 1.2);
+  assert.equal(parsed.draft.graph.lanes, 2);
+  assert.equal(parsed.draft.graph.targetPerMin, 24);
+});
+
+test('parseDraft：恢复后的 CT 与原始图一致（transferSeconds 丢了会算错）', () => {
+  const graph = demoCanvasGraph();
+  const before = machineMetrics(graph, { priceLookup: () => null });
+  const json = serializeDraft({ graph, selectedId: null, mode: 'topology' }, '2026-10-26T10:00:00+08:00');
+  const after = machineMetrics(parseDraft(json).draft.graph, { priceLookup: () => null });
+  assert.equal(after.cycleSeconds, before.cycleSeconds);
+  assert.equal(after.unitsPerHour, before.unitsPerHour);
 });
