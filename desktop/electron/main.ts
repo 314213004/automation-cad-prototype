@@ -1106,9 +1106,42 @@ async function runHeadlessDesignWebglSmoke(window: BrowserWindow): Promise<void>
         throw new Error('工程载入提示缺失或标为错误：' + JSON.stringify({ notice, noticeIsError }));
       }
       if (!menuMeta.includes('设计向导概念估算占位体')) throw new Error('工程菜单未标明概念估算占位体：' + menuMeta);
-      return { renderer, seedParts, sceneParts: scene.parts.length, partPaths, treeRows, partCount, notice, menuMeta, placements, layoutMetrics, layoutSemantics, layoutEditorSemantics, step: root.querySelector('.design-steps li.active')?.dataset.step ?? '' };
+
+      // 占位盒必须按数据包外形建（有 WebGL 的路径才测得了）：插 → 量 bbox → 删
+      const dimsCheck = await (async () => {
+        const inserted = await window.__AgentBridge.insertComponent({
+          id: 'iC65N-C16-1P',
+          model: 'SMOKE-DIMS',
+          category: '断路器',
+          dimsMm: { w: 18, h: 85, d: 78.5 }
+        });
+        if (!inserted?.ok) return { ok: false, message: inserted?.message || 'insertComponent 失败' };
+        const parts = window.__AgentBridge.getScene().parts || [];
+        const part = parts.find((item) => item && item.name === 'SMOKE-DIMS');
+        if (!part || !part.bbox) return { ok: false, message: '插入后 scene 里找不到 SMOKE-DIMS' };
+        // bbox 有两种形状：数组 [x,y,z]（getSceneParts）或 {x,y,z}（three Box3 直出）
+        const axis = (point, key, index) => Array.isArray(point) ? point[index] : point?.[key];
+        const min = part.bbox.min ?? part.bbox[0];
+        const max = part.bbox.max ?? part.bbox[1];
+        const size = {
+          w: Math.abs(axis(max, 'x', 0) - axis(min, 'x', 0)),
+          h: Math.abs(axis(max, 'y', 1) - axis(min, 'y', 1)),
+          d: Math.abs(axis(max, 'z', 2) - axis(min, 'z', 2)),
+          y: axis(min, 'y', 1)
+        };
+        if (typeof inserted.meshIndex === 'number') await window.__AgentBridge.removeComponent(inserted.meshIndex);
+        return { ok: true, size };
+      })();
+      if (!dimsCheck.ok) throw new Error('占位盒尺寸断言失败：' + dimsCheck.message);
+      const nearDims = (value, expect) => typeof value === 'number' && Math.abs(value - expect) <= 0.5;
+      if (!nearDims(dimsCheck.size.w, 18) || !nearDims(dimsCheck.size.h, 85) ||
+          !nearDims(dimsCheck.size.d, 78.5) || Math.abs(dimsCheck.size.y) > 0.5) {
+        throw new Error('占位盒尺寸不符：' + JSON.stringify(dimsCheck.size));
+      }
+      return { renderer, seedParts, sceneParts: scene.parts.length, partPaths, treeRows, partCount, notice, menuMeta, placements, layoutMetrics, layoutSemantics, layoutEditorSemantics, dims: dimsCheck.size, step: root.querySelector('.design-steps li.active')?.dataset.step ?? '' };
     })()`);
     console.log(`SMOKE_DESIGN_WEBGL_OK renderer=${result.renderer} seed=STEP_fixture:${result.seedParts} scene=${result.sceneParts} partPaths=${result.partPaths} tree=${result.treeRows} cadPartCount=${result.partCount} placements=${result.placements}`);
+    console.log(`SMOKE_PLACEHOLDER_DIMS_OK w=${result.dims.w} h=${result.dims.h} d=${result.dims.d} y=${result.dims.y}`);
     console.log('SMOKE_DESIGN_LAYOUT_SEMANTICS_OK wizard=symbolic-card saved-project=symbolic-card');
     console.log(`SMOKE_DESIGN_WEBGL_NOTICE ${result.notice}`);
   } catch (error) {

@@ -66,8 +66,11 @@ jobs:
       - name: 构建扩展（smoke 需要 dist/）
         run: npm run build:ext
       # smoke 覆盖画布/设计向导/机型/Agent 等的真实渲染路径，之前只在本机跑，CI 永远发现不了回归
-      - name: 冒烟（xvfb + 真实 Electron）
+      - name: 冒烟（xvfb + 真实 Electron，降级渲染）
         run: npm run smoke
+      # 降级 smoke 关掉了 WebGL；这条用 SwiftShader 真跑 3D，覆盖占位盒尺寸等几何断言
+      - name: WebGL 冒烟（SwiftShader）
+        run: npm run smoke:design:webgl
       - name: 失败时保留日志
         if: failure()
         uses: actions/upload-artifact@v4
