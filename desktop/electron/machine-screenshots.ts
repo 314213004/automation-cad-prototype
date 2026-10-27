@@ -115,49 +115,16 @@ function uniqueColorCount(bitmap: Buffer): number {
  * 不再产出「四张不同面板」的假截图。真正的修法是换通道（外部 CDP 连可见窗口，已在本机验证可拿到不同帧）。
  */
 /**
- * 抓图通道（2026-10-27 审计后改）：
- * xvfb + SwiftShader 下 `capturePage()` 与 CDP `Page.captureScreenshot` 都返回同一张首帧
- * （实测 15/16/17/18 字节完全相同），`desktopCapturer` 在无窗口管理器的 xvfb 里又没有窗口源。
- * 改成：主进程把窗口的屏幕矩形发给旁路 HTTP 服务（由 capture-machine-screenshots.mjs 提供），
- * 那边用 `ffmpeg -f x11grab` 直接抓 X 服务器像素——绕过渲染进程的帧冻结。
+ * 抓图通道（2026-10-27 结论修正）：
+ * 一开始以为是渲染进程帧冻结，加了 ffmpeg x11grab 旁路；后来查明真因是**流程从没离开首页**
+ * （所有操作都在首页遮罩下进行），修掉首页那步之后 `capturePage()` 本身就稳定给出四个不同画面
+ * （本机连续两次实跑、CI 一次实跑都 4 张互异）。所以这里回到最简单的 capturePage，
+ * 不再依赖 ffmpeg / Xauthority，去重守卫保留——四张雷同时直接报错。
  */
 async function grabPng(window: BrowserWindow): Promise<Buffer> {
-  const shotUrl = process.env.AUTOMATIONCAD_SHOT_URL;
-  if (shotUrl) {
-    try {
-      const bounds = window.getContentBounds();
-      const response = await fetch(shotUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        // 旁路没响应时必须自己放弃，否则 Electron 会一直等下去、CI 步骤挂死
-        signal: AbortSignal.timeout(20_000),
-        body: JSON.stringify({
-          name: pendingShotName,
-          display: process.env.DISPLAY,
-          // xvfb-run 给子进程发的是临时 Xauthority，外部抓屏进程必须用同一份，否则 Authorization required
-          xauthority: process.env.XAUTHORITY ?? '',
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height
-        })
-      });
-      if (response.ok) {
-        const result = (await response.json()) as { ok?: boolean; path?: string };
-        if (result.ok && result.path) return readFileSync(result.path);
-      } else {
-        console.warn('[machine-screenshots] X11 抓屏失败', response.status, await response.text());
-      }
-    } catch (error) {
-      console.warn('[machine-screenshots] X11 抓屏异常，回退 capturePage', error);
-    }
-  }
   const image = await window.webContents.capturePage();
   return image.toPNG();
 }
-
-/** X11 抓屏需要把文件名带过去，用模块级变量传递（capture 里已串行调用）。 */
-let pendingShotName = '';
 
 async function capture(
   window: BrowserWindow,
@@ -176,7 +143,6 @@ async function capture(
   if (!window.isVisible()) window.showInactive();
   window.webContents.invalidate();
   await settle(window, 320);
-  pendingShotName = name;
   const png = await grabPng(window);
   const image = nativeImage.createFromBuffer(png);
   const { width, height } = image.getSize();

@@ -77,9 +77,7 @@ jobs:
       # 机型四张图曾经四张同图还「全绿」；脚本内的 sha256 去重会在这里把它拦住
       - name: 机型全流程截图（含去重校验）
         timeout-minutes: 10
-        run: |
-          sudo apt-get install -y --no-install-recommends ffmpeg
-          npm run screenshots:machine
+        run: npm run screenshots:machine
       # 外部客户端契约（MCP/JSON-RPC）：401、tools/list、resources、-32602/-32601、只读调用
       - name: 外部客户端冒烟（MCP/JSON-RPC）
         timeout-minutes: 8

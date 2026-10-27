@@ -2,7 +2,7 @@
 // 不依赖外部模型；桩只返回一次 design_machine 工具调用和一次最终说明。
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -24,54 +24,7 @@ mkdirSync(outputDir, { recursive: true });
 mkdirSync(evalDir, { recursive: true });
 
 let requestCount = 0;
-let shotCount = 0;
 const stub = createServer((req, res) => {
-  // 截图旁路：主进程准备好画面后 POST 到这里，由本进程用 ffmpeg 抓 X 服务器像素。
-  // 渲染进程自己的帧在 xvfb 下会冻结（capturePage / CDP 都返回同一张首帧），抓屏才是真画面。
-  if (req.method === 'POST' && req.url === '/shot') {
-    let raw = '';
-    req.setEncoding('utf8');
-    req.on('data', (chunk) => { raw += chunk; });
-    req.on('end', () => {
-      let job = {};
-      try { job = JSON.parse(raw); } catch { job = {}; }
-      const { name, x = 0, y = 0, width = 1600, height = 1000 } = job;
-      const display = typeof job.display === 'string' && job.display ? job.display : process.env.DISPLAY;
-      const xauthority = typeof job.xauthority === 'string' && job.xauthority ? job.xauthority : process.env.XAUTHORITY;
-      const target = join(outputDir, String(name || `shot-${shotCount + 1}.png`));
-      if (!display) {
-        res.writeHead(500, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: '缺少 DISPLAY，无法抓屏' }));
-        return;
-      }
-      const args = [
-        '-loglevel', 'error', '-y',
-        '-f', 'x11grab',
-        '-draw_mouse', '0',
-        '-video_size', `${width}x${height}`,
-        '-i', `${display}+${x},${y}`,
-        // 硬上限：x11grab 偶尔会卡在等 X 响应，不设时限会把整条 CI 步骤拖死
-        '-t', '3',
-        '-frames:v', '1',
-        target
-      ];
-      const ffmpegEnv = { ...process.env };
-      if (xauthority) ffmpegEnv.XAUTHORITY = xauthority;
-      // spawnSync 会阻塞本进程的事件循环；给它 15s 硬超时，卡住就杀掉并返回错误
-      const result = spawnSync('ffmpeg', args, { encoding: 'utf8', env: ffmpegEnv, timeout: 15_000, killSignal: 'SIGKILL' });
-      if (result.status !== 0 || !existsSync(target)) {
-        console.error(`MACHINE_SHOT_X11_FAIL name=${name} ${String(result.stderr || '').slice(0, 300)}`);
-        res.writeHead(500, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ ok: false, error: String(result.stderr || 'ffmpeg 抓屏失败').slice(0, 300) }));
-        return;
-      }
-      shotCount += 1;
-      console.log(`MACHINE_SHOT_X11_OK name=${name} bytes=${statSync(target).size} display=${display} rect=${x},${y} ${width}x${height}`);
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, path: target, bytes: statSync(target).size }));
-    });
-    return;
-  }
   if (req.method !== 'POST' || !req.url?.endsWith('/chat/completions')) {
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ error: { message: 'not found' } }));
@@ -142,8 +95,7 @@ try {
     ELECTRON_DISABLE_SANDBOX: '1',
     AUTOMATIONCAD_SCREENSHOT_DIR: outputDir,
     AUTOMATIONCAD_EVAL_DIR: evalDir,
-    AUTOMATIONCAD_STUB_BASE_URL: baseUrl,
-    AUTOMATIONCAD_SHOT_URL: baseUrl.replace(/\/v1$/, '') + '/shot'
+    AUTOMATIONCAD_STUB_BASE_URL: baseUrl
   };
   const electronArgs = ['.', '--headless-machine-screenshots'];
   const xvfbArgs = ['-a', '-s', '-screen 0 1920x1200x24', electronBin, ...electronArgs];

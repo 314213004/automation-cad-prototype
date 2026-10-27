@@ -13,15 +13,15 @@
       "name": "15-machine-design-card.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 344722,
-      "uniqueColors": 6894
+      "bytes": 499928,
+      "uniqueColors": 6893
     },
     {
       "label": "6 工位 3D 联调",
       "name": "16-machine-3d.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 377971,
+      "bytes": 485272,
       "uniqueColors": 12036
     },
     {
@@ -29,7 +29,7 @@
       "name": "17-machine-bom.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 135247,
+      "bytes": 155911,
       "uniqueColors": 2871
     },
     {
@@ -37,7 +37,7 @@
       "name": "18-machine-iomap.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 125528,
+      "bytes": 143456,
       "uniqueColors": 3032
     }
   ]
