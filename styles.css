@@ -732,3 +732,6 @@ kbd{display:inline-flex; align-items:center; justify-content:center; min-width:1
 .cad-part-group-count{margin-left:auto;padding:0 5px;border-radius:8px;background:rgba(255,255,255,.06)}
 .cad-part-group[hidden]{display:none}
 .cad-part-row[hidden]{display:none}
+
+/* 覆盖层打开时经典结构树让位（同一屏只保留一套零件列表） */
+body.cad-overlay-open [data-panel="left"][data-for="assembly"]{visibility:hidden}

@@ -959,6 +959,9 @@ function openOverlay(): void {
   if (!root) return;
   overlayOpen = true;
   root.hidden = false;
+  // 同一屏不要两套零件列表：覆盖层打开时把经典结构树藏起来（覆盖层左栏自带分组与搜索），
+  // 关掉覆盖层再还原，避免用户在两处搜索里来回切。
+  document.body.classList.add('cad-overlay-open');
   initMechUi();
   // 顶栏工程列表：打开覆盖层时预热，点 ▾ 立刻有内容
   void refreshProjectMenu();
@@ -970,6 +973,7 @@ function openOverlay(): void {
 
 function closeOverlay(): void {
   overlayOpen = false;
+  document.body.classList.remove('cad-overlay-open');
   if (root) root.hidden = true;
   toggleExportMenu(false);
   viewer?.setActive(false);
