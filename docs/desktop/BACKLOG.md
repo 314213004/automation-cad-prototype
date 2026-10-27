@@ -35,14 +35,15 @@
 
 ## 已知问题（记录，不阻塞）
 
-0. **机型截图（15–18）是同一帧，图是假的**（2026-10-27 审计）：`npm run screenshots:machine` 的 DOM 断言全过
-   （`MACHINE_3D_OK stations=6 actuators=12 ticks=63`、BOM 12 行、IO 19 行），但四张 PNG 字节完全相同
-   （`md5 53b321ad2e…`，193,039 B / 3,236 色）。已加 sha256 去重守卫：现在会以
-   「16-machine-3d.png 与 15-machine-design-card.png 字节完全相同」失败，不再假装成功。
-   已试无效：`invalidate()` + 双 rAF、改窗口尺寸强制重绘、CDP `Page.captureScreenshot` + `bringToFront` + 焦点模拟、
-   `desktopCapturer`（无窗口管理器的 xvfb 里没有窗口源）。已定位为抓图通道问题（不是流程问题）：
-   外部 CDP 连一个正常运行窗口能拿到不同帧。修法：把机型流程改成「正常启动 + 外部 CDP 驱动抓图」。
-   **在此之前，README/报告中 15–18 四张图不应作为四个面板的证据。**
+0. ✅ **机型截图（15–18）曾长期是同一张首页，已修**（2026-10-27）：症状是四张 PNG 字节完全相同
+   （`md5 53b321ad2e…`，193,039 B / 3,236 色），而 DOM 断言全过（`MACHINE_3D_OK stations=6 actuators=12 ticks=63`、
+   BOM 12 行、IO 19 行）。真因不是抓图通道，而是**流程从首页开始、始终没离开首页**：
+   所有面板操作都发生在首页遮罩下面，抓到的自然是同一张首页。
+   修法两条一起上：① 流程开头先点 `.home-link` 离开首页（等 600ms）；
+   ② 抓图改用 `ffmpeg -f x11grab` 抓 X 服务器像素（由 `capture-machine-screenshots.mjs` 提供 `/shot` 旁路，
+   主进程把窗口内容矩形与 `XAUTHORITY` 传过去），彻底绕开渲染进程帧冻结的可能。
+   现在四张图各不相同：15 = 344,689 B / 6,893 色、16 = 377,971 B / 12,036 色、17 = 135,247 B / 2,871 色、
+   18 = 125,528 B / 3,032 色；`MACHINE_SHOTS_DONE captured=4 failed=0`，sha256 去重守卫保留。
 
 1. **运动学标注是启发式**：STEP 不含运动学，名称/型号/层级/几何只给建议，斜向运动、夹爪对侧手指与缩回位仍需人工确认。
 2. **尺寸覆盖不全**：已补 342/612 实型号（55.9%，含同系列推定），其余在底板画布按「未标注尺寸」处理；清单见 [DIMS-GAPS.md](DIMS-GAPS.md)。

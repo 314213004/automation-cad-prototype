@@ -2,7 +2,7 @@
 // 所有画面均由 Electron 渲染后 capturePage 捕获，不使用静态设计稿。
 import { nativeImage, type BrowserWindow } from 'electron';
 import { createHash } from 'node:crypto';
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const SHOT_WIDTH = 1600;
@@ -114,10 +114,48 @@ function uniqueColorCount(bitmap: Buffer): number {
  * 因此这里保留最简单的 capturePage，由调用方用 sha256 去重——重复即报错，
  * 不再产出「四张不同面板」的假截图。真正的修法是换通道（外部 CDP 连可见窗口，已在本机验证可拿到不同帧）。
  */
+/**
+ * 抓图通道（2026-10-27 审计后改）：
+ * xvfb + SwiftShader 下 `capturePage()` 与 CDP `Page.captureScreenshot` 都返回同一张首帧
+ * （实测 15/16/17/18 字节完全相同），`desktopCapturer` 在无窗口管理器的 xvfb 里又没有窗口源。
+ * 改成：主进程把窗口的屏幕矩形发给旁路 HTTP 服务（由 capture-machine-screenshots.mjs 提供），
+ * 那边用 `ffmpeg -f x11grab` 直接抓 X 服务器像素——绕过渲染进程的帧冻结。
+ */
 async function grabPng(window: BrowserWindow): Promise<Buffer> {
+  const shotUrl = process.env.AUTOMATIONCAD_SHOT_URL;
+  if (shotUrl) {
+    try {
+      const bounds = window.getContentBounds();
+      const response = await fetch(shotUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: pendingShotName,
+          display: process.env.DISPLAY,
+          // xvfb-run 给子进程发的是临时 Xauthority，外部抓屏进程必须用同一份，否则 Authorization required
+          xauthority: process.env.XAUTHORITY ?? '',
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height
+        })
+      });
+      if (response.ok) {
+        const result = (await response.json()) as { ok?: boolean; path?: string };
+        if (result.ok && result.path) return readFileSync(result.path);
+      } else {
+        console.warn('[machine-screenshots] X11 抓屏失败', response.status, await response.text());
+      }
+    } catch (error) {
+      console.warn('[machine-screenshots] X11 抓屏异常，回退 capturePage', error);
+    }
+  }
   const image = await window.webContents.capturePage();
   return image.toPNG();
 }
+
+/** X11 抓屏需要把文件名带过去，用模块级变量传递（capture 里已串行调用）。 */
+let pendingShotName = '';
 
 async function capture(
   window: BrowserWindow,
@@ -136,6 +174,7 @@ async function capture(
   if (!window.isVisible()) window.showInactive();
   window.webContents.invalidate();
   await settle(window, 320);
+  pendingShotName = name;
   const png = await grabPng(window);
   const image = nativeImage.createFromBuffer(png);
   const { width, height } = image.getSize();
@@ -195,6 +234,13 @@ export async function captureMachineScreenshots(
     await window.webContents.executeJavaScript(
       `(async () => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        // 启动后停在首页；不先离开首页，后面所有操作都在首页底下进行，
+        // 抓到的四张图就都是首页（这正是之前「四张图字节相同」的真正原因）。
+        const home = document.getElementById('homeScreen');
+        if (home && !home.hidden) {
+          document.querySelector('.home-link')?.click();
+          await wait(600);
+        }
         window.AutomationCadViewer?.close();
         window.AutomationCadParametric?.close();
         document.getElementById('commissionDrawer')?.setAttribute('hidden', '');
