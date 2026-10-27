@@ -64,3 +64,24 @@ test('Canvas3DSync：mark 后 flush 只回调脏节点，flush 后脏集清空',
   assert.equal(boxes.length, 3);
   assert.deepEqual(sync.dirtyIds(), []);
 });
+
+test('snapshotPipGraph：原地改 ortho 后，快照仍能算出脏节点', async () => {
+  const { snapshotPipGraph, pipDirtyIds } = await import('../../src/canvas/canvas3d-sync.ts');
+  const snap = snapshotPipGraph(graph);
+  graph.nodes[0].ortho = { x: 330, y: 120 };
+  assert.deepEqual(pipDirtyIds(snap, graph), ['n1']);
+  graph.nodes[0].ortho = { x: 320, y: 120 };
+});
+
+test('pipDirtyIds / pipNodeIdsChanged：只报几何变了的已有节点，新增/删除由集合变化报', async () => {
+  const { pipDirtyIds, pipNodeIdsChanged } = await import('../../src/canvas/canvas3d-sync.ts');
+  const prev = JSON.parse(JSON.stringify(graph));
+  const next = JSON.parse(JSON.stringify(graph));
+  next.nodes[1].ortho = { x: 610, y: 120 };
+  next.nodes[2].dimsMm = [71, 70, 95];
+  assert.deepEqual(pipDirtyIds(prev, next), ['n2', 'n3']);
+  assert.equal(pipNodeIdsChanged(prev, next), false);
+  const added = JSON.parse(JSON.stringify(next));
+  added.nodes.push(node({ id: 'n4' }));
+  assert.equal(pipNodeIdsChanged(next, added), true);
+});
