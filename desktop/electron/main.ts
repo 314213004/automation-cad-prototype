@@ -122,7 +122,10 @@ const DIAGNOSE = process.argv.includes('--diagnose');
 const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
 const HEADLESS_MACHINE_SCREENSHOTS = process.argv.includes('--headless-machine-screenshots');
 const HEADLESS_DESIGN_WEBGL_SMOKE = process.argv.includes('--headless-design-webgl-smoke');
-const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS || HEADLESS_DESIGN_WEBGL_SMOKE;
+/** 只起服务、跑外部客户端 smoke（MCP/JSON-RPC 契约）：不跑 UI 断言、不自动退出，等外部脚本杀。 */
+const HEADLESS_SERVICE = process.argv.includes('--headless-service');
+const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ||
+  HEADLESS_DESIGN_WEBGL_SMOKE || HEADLESS_SERVICE;
 if (HEADLESS_SMOKE && HEADLESS_DESIGN_WEBGL_SMOKE) {
   console.error('SMOKE_MODE_CONFLICT --headless-smoke disables WebGL; use --headless-design-webgl-smoke alone for SwiftShader');
   process.exit(1);
@@ -153,6 +156,7 @@ if (HEADLESS_DESIGN_WEBGL_SMOKE) {
 }
 if (HEADLESS) {
   // 避免与开发机上正在运行的实例争抢单实例锁。
+  const fixedUserData = HEADLESS_SERVICE ? process.env.AUTOMATIONCAD_SERVICE_USERDATA : '';
   const prefix = HEADLESS_DESIGN_WEBGL_SMOKE
     ? 'automationcad-design-webgl-smoke-'
     : HEADLESS_MACHINE_SCREENSHOTS
@@ -160,7 +164,7 @@ if (HEADLESS) {
     : HEADLESS_SCREENSHOTS
       ? 'automationcad-shots-'
       : 'automationcad-smoke-';
-  app.setPath('userData', mkdtempSync(join(tmpdir(), prefix)));
+  app.setPath('userData', fixedUserData && fixedUserData.trim() ? fixedUserData : mkdtempSync(join(tmpdir(), prefix)));
 }
 
 const CDP_INTERNAL_PORT = 9229;
@@ -1254,6 +1258,11 @@ function createWindow(): BrowserWindow {
     }
     if (HEADLESS_DESIGN_WEBGL_SMOKE) {
       await runHeadlessDesignWebglSmoke(window);
+      return;
+    }
+    if (HEADLESS_SERVICE) {
+      // 外部客户端 smoke（scripts/smoke-mcp.mjs）自己决定何时结束进程
+      console.log('SERVICE_READY');
       return;
     }
     if (HEADLESS_SMOKE) {

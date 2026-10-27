@@ -80,6 +80,10 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends ffmpeg
           npm run screenshots:machine
+      # 外部客户端契约（MCP/JSON-RPC）：401、tools/list、resources、-32602/-32601、只读调用
+      - name: 外部客户端冒烟（MCP/JSON-RPC）
+        timeout-minutes: 8
+        run: npm run smoke:mcp
       - name: 上传机型截图
         timeout-minutes: 5
         uses: actions/upload-artifact@v4

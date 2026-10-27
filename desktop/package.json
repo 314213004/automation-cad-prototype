@@ -34,7 +34,8 @@
     "build:mcp": "node scripts/build-mcp.mjs",
     "mcp": "node dist-electron/mcp.cjs",
     "agent:live": "node scripts/agent-live.mjs",
-    "agent:report": "node scripts/agent-report.mjs"
+    "agent:report": "node scripts/agent-report.mjs",
+    "smoke:mcp": "ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/smoke-mcp.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
