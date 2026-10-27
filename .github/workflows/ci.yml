@@ -76,6 +76,14 @@ jobs:
         run: |
           sudo apt-get install -y --no-install-recommends ffmpeg
           npm run screenshots:machine
+      - name: 上传机型截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: machine-screenshots
+          path: |
+            docs/desktop/screenshots/1[5-8]-machine-*.png
+            docs/desktop/eval/machine-screenshots.json
+          if-no-files-found: error
       - name: 失败时保留日志
         if: failure()
         uses: actions/upload-artifact@v4
