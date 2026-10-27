@@ -129,6 +129,8 @@ async function grabPng(window: BrowserWindow): Promise<Buffer> {
       const response = await fetch(shotUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        // 旁路没响应时必须自己放弃，否则 Electron 会一直等下去、CI 步骤挂死
+        signal: AbortSignal.timeout(20_000),
         body: JSON.stringify({
           name: pendingShotName,
           display: process.env.DISPLAY,

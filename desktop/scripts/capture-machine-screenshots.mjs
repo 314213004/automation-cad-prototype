@@ -50,12 +50,15 @@ const stub = createServer((req, res) => {
         '-draw_mouse', '0',
         '-video_size', `${width}x${height}`,
         '-i', `${display}+${x},${y}`,
+        // 硬上限：x11grab 偶尔会卡在等 X 响应，不设时限会把整条 CI 步骤拖死
+        '-t', '3',
         '-frames:v', '1',
         target
       ];
       const ffmpegEnv = { ...process.env };
       if (xauthority) ffmpegEnv.XAUTHORITY = xauthority;
-      const result = spawnSync('ffmpeg', args, { encoding: 'utf8', env: ffmpegEnv });
+      // spawnSync 会阻塞本进程的事件循环；给它 15s 硬超时，卡住就杀掉并返回错误
+      const result = spawnSync('ffmpeg', args, { encoding: 'utf8', env: ffmpegEnv, timeout: 15_000, killSignal: 'SIGKILL' });
       if (result.status !== 0 || !existsSync(target)) {
         console.error(`MACHINE_SHOT_X11_FAIL name=${name} ${String(result.stderr || '').slice(0, 300)}`);
         res.writeHead(500, { 'content-type': 'application/json' });
@@ -147,6 +150,12 @@ try {
   const command = existsSync('/usr/bin/xvfb-run') ? 'xvfb-run' : electronBin;
   const args = command === 'xvfb-run' ? xvfbArgs : electronArgs;
   child = spawn(command, args, { cwd: desktopRoot, env, stdio: 'inherit' });
+  // 总看门狗：整个流程 8 分钟没结束就强杀，避免 CI 步骤无限挂住
+  const watchdog = setTimeout(() => {
+    console.error('MACHINE_SCREENSHOTS_TIMEOUT 8 分钟内未完成，强制结束');
+    if (child && !child.killed) child.kill('SIGKILL');
+  }, 8 * 60_000);
+  child.once('exit', () => clearTimeout(watchdog));
   const code = await new Promise((resolveExit) => {
     child.on('error', (error) => {
       console.error(`截图进程启动失败：${error.message}`);
