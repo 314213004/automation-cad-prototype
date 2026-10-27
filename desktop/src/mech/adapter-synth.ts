@@ -1,1 +1,172 @@
-Ly8g6L2s5o6l5p2/6Ziy56C05a2U5qCh5qC45LiO562W55Wl6YCJ5oup77yIUDDvvIzop4HmnrbmnoTmlofmoaPnrKwgMTIuMSDoioLvvIkKLy8KLy8g57qv5Ye95pWw77yM5LiN5L6d6LWWIERPTSAvIEVsZWN0cm9u77yM5Y+v55u05o6l6LeRIE5vZGUg5Y2V5rWL44CCCi8vIOS4juaWh+aho+WOn+eov+eahOS4pOWkhOS/ruato++8iOS4jeimgeeFp+aKhOWOn+eov++8ie+8mgovLyAgIDEuIOWOn+eov+acieS4gOihjOaXoOaEj+S5ieeahCByZXF1aXJlZFJhZGl1c1N1bSDorqHnrpfvvIhib2x0U2l6ZS5zbGljZSgxKSDlvZPmlbDlrZfnlKjvvInvvIwKLy8gICAgICDlt7LliKDpmaTvvJvlrZTlo4Hlh4Dot53lj6rnlKggY2VudGVyRGlzdCAtIChjYm9yZURpYS8yICsgdGFwTWlub3JEaWEvMinjgIIKLy8gICAyLiDljp/nqL8gTTUg5rKJ5aS055u05b6E5YaZIDkuNW1t77yM5LiO5LuT5bqT5pei5pyJIElTTyA0NzYyIOihqO+8iGFkYXB0ZXItbW9kZWwudHPvvJpNNSDlpLTpg6ggOC41bW3vvIkKLy8gICAgICDkuI3kuIDoh7TvvJvov5nph4znu5/kuIDnlKjku5PlupPml6LmnInooajvvIzop4EgaG9sZVBhdHRlcm5Gcm9tTW91bnRQb3J044CCCi8vIOWBh+iuvu+8muS4pOerr+WtlOezu+Wdh+S4uiAyw5cyIOefqeW9oumYteWIl++8iHBpdGNoWE1tIC8gcGl0Y2hZTW0gPiAw77yJ77ybCi8vIOWNleS4reW/g+WtlO+8iOS4pOerryBwaXRjaCDlnYfkuLogMO+8ieaYr+WQjOW/g+mAmuWtlC/onrrnurnlrZTvvIzkuI3mjInlrZTlo4Hlh4Dot53liKTvvIznm7TmjqXotbDlubPmnb/pgJrlrZTjgIIKCmV4cG9ydCB0eXBlIEJvbHRTaXplID0gJ00zJyB8ICdNNCcgfCAnTTUnIHwgJ002JyB8ICdNOCc7CgpleHBvcnQgaW50ZXJmYWNlIEhvbGVQYXR0ZXJuU3BlYyB7CiAgcG9ydElkOiBzdHJpbmc7CiAgYm9sdFNpemU6IEJvbHRTaXplOwogIC8qKiDpgJrlrZTnm7TlvoQgbW3vvIjlpoIgTTUgLT4gNS4177yJ44CCICovCiAgdGhyb3VnaERpYU1tOiBudW1iZXI7CiAgLyoqIOayieWktOebtOW+hCBtbe+8iOWmgiBNNSAtPiA4LjXvvIzmjInku5PlupMgSVNPIDQ3NjIg6KGo77yJ44CCICovCiAgY2JvcmVEaWFNbTogbnVtYmVyOwogIC8qKiDmsonlpLTmt7HluqYgbW3vvIjlpoIgTTUgLT4gNe+8ieOAgiAqLwogIGNib3JlRGVwdGhNbTogbnVtYmVyOwogIC8qKiDonrrnurnlupXlrZTnm7TlvoQgbW3vvIjlpoIgTTUgLT4gNC4y77yJ44CCICovCiAgdGFwTWlub3JEaWFNbTogbnVtYmVyOwogIC8qKiBYIOWQkeWtlOi3nSBtbe+8m+WNleWtlOaXtuWPliAw44CCICovCiAgcGl0Y2hYTW06IG51bWJlcjsKICAvKiogWSDlkJHlrZTot50gbW3vvJvljZXlrZTml7blj5YgMOOAgiAqLwogIHBpdGNoWU1tOiBudW1iZXI7CiAgLyoqIOWuieijhemdouazleWQkemHj++8iOS4jeW/heWNleS9jeWMlu+8jOeCueenr+WPquWIpOato+S6pOS4juWQpu+8ieOAgiAqLwogIG5vcm1hbDogW251bWJlciwgbnVtYmVyLCBudW1iZXJdOwp9CgpleHBvcnQgdHlwZSBBZGFwdGVyU3RyYXRlZ3kgPQogIHwgeyBraW5kOiAnZmxhdF90aHJvdWdoJzsgdGhpY2tuZXNzTW06IG51bWJlcjsgb2Zmc2V0TW06IFtudW1iZXIsIG51bWJlcl0gfQogIHwgeyBraW5kOiAnZmxhdF9ibGluZF90aGljayc7IHRoaWNrbmVzc01tOiBudW1iZXI7IGJsaW5kRGVwdGhNbTogbnVtYmVyIH0KICB8IHsga2luZDogJ2ZsYXRfb2Zmc2V0JzsgdGhpY2tuZXNzTW06IG51bWJlcjsgb2Zmc2V0TW06IFtudW1iZXIsIG51bWJlcl0gfQogIHwgeyBraW5kOiAnbF9icmFja2V0X2d1c3NldCc7IHRoaWNrbmVzc01tOiBudW1iZXI7IGZsYW5nZUhlaWdodE1tOiBudW1iZXIgfTsKCmV4cG9ydCBjb25zdCBNSU5fV0FMTF9NTSA9IDIuNTsKCmNvbnN0IFNDUkVXX1RBQkxFOiBSZWNvcmQ8Qm9sdFNpemUsIHsgdGhyb3VnaERpYU1tOiBudW1iZXI7IGNib3JlRGlhTW06IG51bWJlcjsgY2JvcmVEZXB0aE1tOiBudW1iZXI7IHRhcE1pbm9yRGlhTW06IG51bWJlciB9PiA9IHsKICBNMzogeyB0aHJvdWdoRGlhTW06IDMuNSwgY2JvcmVEaWFNbTogNS41LCBjYm9yZURlcHRoTW06IDMsIHRhcE1pbm9yRGlhTW06IDIuNDYgfSwKICBNNDogeyB0aHJvdWdoRGlhTW06IDQuNSwgY2JvcmVEaWFNbTogNywgY2JvcmVEZXB0aE1tOiA0LCB0YXBNaW5vckRpYU1tOiAzLjMgfSwKICBNNTogeyB0aHJvdWdoRGlhTW06IDUuNSwgY2JvcmVEaWFNbTogOC41LCBjYm9yZURlcHRoTW06IDUsIHRhcE1pbm9yRGlhTW06IDQuMiB9LAogIE02OiB7IHRocm91Z2hEaWFNbTogNi42LCBjYm9yZURpYU1tOiAxMCwgY2JvcmVEZXB0aE1tOiA2LCB0YXBNaW5vckRpYU1tOiA1IH0sCiAgTTg6IHsgdGhyb3VnaERpYU1tOiA5LCBjYm9yZURpYU1tOiAxMywgY2JvcmVEZXB0aE1tOiA4LCB0YXBNaW5vckRpYU1tOiA2LjggfQp9OwoKLyoqIOaMiemAmuWtlOebtOW+hOaOqOieuuagk+inhOagvO+8iOS4jiBJU08gNDc2MiDooajkuIDoh7TvvIzor6/lt64gPjAuNm1tIOi/lOWbniBudWxs77yM5LiN54yc77yJ44CCICovCmV4cG9ydCBmdW5jdGlvbiBib2x0U2l6ZUZvckhvbGVEaWEoaG9sZURpYU1tOiBudW1iZXIpOiBCb2x0U2l6ZSB8IG51bGwgewogIGNvbnN0IHRhYmxlOiBSZWFkb25seUFycmF5PHsgdGhyb3VnaERpYU1tOiBudW1iZXI7IGJvbHQ6IEJvbHRTaXplIH0+ID0gWwogICAgeyB0aHJvdWdoRGlhTW06IDMuNSwgYm9sdDogJ00zJyB9LAogICAgeyB0aHJvdWdoRGlhTW06IDQuNSwgYm9sdDogJ000JyB9LAogICAgeyB0aHJvdWdoRGlhTW06IDUuNSwgYm9sdDogJ001JyB9LAogICAgeyB0aHJvdWdoRGlhTW06IDYuNiwgYm9sdDogJ002JyB9LAogICAgeyB0aHJvdWdoRGlhTW06IDksIGJvbHQ6ICdNOCcgfQogIF07CiAgbGV0IGJlc3Q6IHsgZGVsdGE6IG51bWJlcjsgYm9sdDogQm9sdFNpemUgfSB8IG51bGwgPSBudWxsOwogIGZvciAoY29uc3QgZW50cnkgb2YgdGFibGUpIHsKICAgIGNvbnN0IGRlbHRhID0gTWF0aC5hYnMoZW50cnkudGhyb3VnaERpYU1tIC0gaG9sZURpYU1tKTsKICAgIGlmIChkZWx0YSA8PSAwLjYgJiYgKCFiZXN0IHx8IGRlbHRhIDwgYmVzdC5kZWx0YSkpIGJlc3QgPSB7IGRlbHRhLCBib2x0OiBlbnRyeS5ib2x0IH07CiAgfQogIHJldHVybiBiZXN0Py5ib2x0ID8/IG51bGw7Cn0KCmZ1bmN0aW9uIGFzc2VydFBvc2l0aXZlKHZhbHVlOiBudW1iZXIsIG5hbWU6IHN0cmluZyk6IHZvaWQgewogIGlmICghKHZhbHVlID4gMCkpIHRocm93IG5ldyBFcnJvcihgJHtuYW1lfeW/hemhu+Wkp+S6jiAwYCk7Cn0KCi8qKiDnlLHku5PlupPml6LmnIkgTW91bnRQb3J0IOW9oueKtu+8iHBpdGNoIC8gaG9sZURpYe+8iSsg6J665qCT6KeE5qC877yM5o6o5a+8IEhvbGVQYXR0ZXJuU3BlY+OAgiAqLwpleHBvcnQgZnVuY3Rpb24gaG9sZVBhdHRlcm5Gcm9tTW91bnRQb3J0KAogIHBvcnQ6IHsgcGl0Y2hYTW06IG51bWJlcjsgcGl0Y2hZTW06IG51bWJlcjsgaG9sZURpYU1tOiBudW1iZXIgfSwKICBib2x0U2l6ZTogQm9sdFNpemUsCiAgbm9ybWFsOiBbbnVtYmVyLCBudW1iZXIsIG51bWJlcl0sCiAgcG9ydElkOiBzdHJpbmcKKTogSG9sZVBhdHRlcm5TcGVjIHsKICBjb25zdCBzcGVjID0gU0NSRVdfVEFCTEVbYm9sdFNpemVdOwogIGlmICghc3BlYykgdGhyb3cgbmV3IEVycm9yKGDkuI3mlK/mjIHnmoTonrrmoJPop4TmoLzvvJoke2JvbHRTaXplfWApOwogIGlmICghKHBvcnQucGl0Y2hYTW0gPj0gMCAmJiBwb3J0LnBpdGNoWU1tID49IDApKSB0aHJvdyBuZXcgRXJyb3IoJ+WtlOi3neS4jeiDveS4uui0nycpOwogIHJldHVybiB7CiAgICBwb3J0SWQsCiAgICBib2x0U2l6ZSwKICAgIHRocm91Z2hEaWFNbTogcG9ydC5ob2xlRGlhTW0gPiAwID8gcG9ydC5ob2xlRGlhTW0gOiBzcGVjLnRocm91Z2hEaWFNbSwKICAgIGNib3JlRGlhTW06IHNwZWMuY2JvcmVEaWFNbSwKICAgIGNib3JlRGVwdGhNbTogc3BlYy5jYm9yZURlcHRoTW0sCiAgICB0YXBNaW5vckRpYU1tOiBzcGVjLnRhcE1pbm9yRGlhTW0sCiAgICBwaXRjaFhNbTogcG9ydC5waXRjaFhNbSwKICAgIHBpdGNoWU1tOiBwb3J0LnBpdGNoWU1tLAogICAgbm9ybWFsCiAgfTsKfQoKZnVuY3Rpb24gaG9sZUNlbnRlcnMocGF0dGVybjogSG9sZVBhdHRlcm5TcGVjKTogQXJyYXk8W251bWJlciwgbnVtYmVyXT4gewogIGlmIChwYXR0ZXJuLnBpdGNoWE1tID09PSAwICYmIHBhdHRlcm4ucGl0Y2hZTW0gPT09IDApIHJldHVybiBbWzAsIDBdXTsKICByZXR1cm4gWwogICAgWy1wYXR0ZXJuLnBpdGNoWE1tIC8gMiwgLXBhdHRlcm4ucGl0Y2hZTW0gLyAyXSwKICAgIFtwYXR0ZXJuLnBpdGNoWE1tIC8gMiwgLXBhdHRlcm4ucGl0Y2hZTW0gLyAyXSwKICAgIFstcGF0dGVybi5waXRjaFhNbSAvIDIsIHBhdHRlcm4ucGl0Y2hZTW0gLyAyXSwKICAgIFtwYXR0ZXJuLnBpdGNoWE1tIC8gMiwgcGF0dGVybi5waXRjaFlNbSAvIDJdCiAgXTsKfQoKZXhwb3J0IGZ1bmN0aW9uIHBsYW5BZGFwdGVyR2VvbWV0cnkoCiAgcGFyZW50UG9ydDogSG9sZVBhdHRlcm5TcGVjLAogIGNoaWxkUG9ydDogSG9sZVBhdHRlcm5TcGVjCik6IHsgc3RyYXRlZ3k6IEFkYXB0ZXJTdHJhdGVneTsgbWluQ2xlYXJhbmNlTW06IG51bWJlciB9IHsKICBhc3NlcnRQb3NpdGl2ZShwYXJlbnRQb3J0LmNib3JlRGlhTW0sICfmr43ku7bmsonlpLTnm7TlvoQnKTsKICBhc3NlcnRQb3NpdGl2ZShwYXJlbnRQb3J0LnRocm91Z2hEaWFNbSwgJ+avjeS7tumAmuWtlOebtOW+hCcpOwogIGFzc2VydFBvc2l0aXZlKGNoaWxkUG9ydC50YXBNaW5vckRpYU1tLCAn5a2Q5Lu26J6657q55bqV5a2U55u05b6EJyk7CgogIC8vIDEuIOazleWQkemHj+i/keS8vOato+S6pCAtPiA5MMKwIEwg5Z6L5bim6IKL6KeS5bqn77yI5paH5qGjIDEyLjEg6KeE5YiZ77yMfGRvdHwgPCAwLjE177yJCiAgY29uc3QgZG90ID0KICAgIHBhcmVudFBvcnQubm9ybWFsWzBdICogY2hpbGRQb3J0Lm5vcm1hbFswXSArCiAgICBwYXJlbnRQb3J0Lm5vcm1hbFsxXSAqIGNoaWxkUG9ydC5ub3JtYWxbMV0gKwogICAgcGFyZW50UG9ydC5ub3JtYWxbMl0gKiBjaGlsZFBvcnQubm9ybWFsWzJdOwogIGlmIChNYXRoLmFicyhkb3QpIDwgMC4xNSkgewogICAgcmV0dXJuIHsKICAgICAgc3RyYXRlZ3k6IHsKICAgICAgICBraW5kOiAnbF9icmFja2V0X2d1c3NldCcsCiAgICAgICAgdGhpY2tuZXNzTW06IDEyLAogICAgICAgIGZsYW5nZUhlaWdodE1tOiBNYXRoLm1heChjaGlsZFBvcnQucGl0Y2hZTW0gKyAzMCwgNzUpCiAgICAgIH0sCiAgICAgIG1pbkNsZWFyYW5jZU1tOiA5OTkKICAgIH07CiAgfQoKICAvLyAyLiDkuKTnq6/lnYfkuLrljZXkuK3lv4PlrZTvvJrlkIzlv4PlrZTns7vvvIzkuI3mjInlrZTlo4Hlh4Dot53liKTjgIIKICBpZiAoCiAgICBwYXJlbnRQb3J0LnBpdGNoWE1tID09PSAwICYmIHBhcmVudFBvcnQucGl0Y2hZTW0gPT09IDAgJiYKICAgIGNoaWxkUG9ydC5waXRjaFhNbSA9PT0gMCAmJiBjaGlsZFBvcnQucGl0Y2hZTW0gPT09IDAKICApIHsKICAgIHJldHVybiB7CiAgICAgIHN0cmF0ZWd5OiB7IGtpbmQ6ICdmbGF0X3Rocm91Z2gnLCB0aGlja25lc3NNbTogMTIsIG9mZnNldE1tOiBbMCwgMF0gfSwKICAgICAgbWluQ2xlYXJhbmNlTW06IDk5OQogICAgfTsKICB9CgogIC8vIDMuIOW5s+ihjOWuieijhemdou+8muavjeS7tuayieWktOWtlOS4juWtkOS7tuieuue6ueWtlOS5i+mXtOeahOacgOWwj+WtlOWjgeWHgOi3nQogIGNvbnN0IHBIb2xlcyA9IGhvbGVDZW50ZXJzKHBhcmVudFBvcnQpOwogIGNvbnN0IGNIb2xlcyA9IGhvbGVDZW50ZXJzKGNoaWxkUG9ydCk7CiAgbGV0IG1pbldhbGwgPSBJbmZpbml0eTsKICBmb3IgKGNvbnN0IFtweCwgcHldIG9mIHBIb2xlcykgewogICAgZm9yIChjb25zdCBbY3gsIGN5XSBvZiBjSG9sZXMpIHsKICAgICAgY29uc3QgY2VudGVyRGlzdCA9IE1hdGguaHlwb3QocHggLSBjeCwgcHkgLSBjeSk7CiAgICAgIGNvbnN0IHdhbGwgPSBjZW50ZXJEaXN0IC0gKHBhcmVudFBvcnQuY2JvcmVEaWFNbSAvIDIgKyBjaGlsZFBvcnQudGFwTWlub3JEaWFNbSAvIDIpOwogICAgICBpZiAod2FsbCA8IG1pbldhbGwpIG1pbldhbGwgPSB3YWxsOwogICAgfQogIH0KCiAgLy8g5oOF5Ya1IEHvvJrlrZTlo4Hot53lhYXotrMgLT4g5qCH5YeGIDEybW0g5bmz5p2/CiAgaWYgKG1pbldhbGwgPj0gTUlOX1dBTExfTU0pIHsKICAgIHJldHVybiB7CiAgICAgIHN0cmF0ZWd5OiB7IGtpbmQ6ICdmbGF0X3Rocm91Z2gnLCB0aGlja25lc3NNbTogMTIsIG9mZnNldE1tOiBbMCwgMF0gfSwKICAgICAgbWluQ2xlYXJhbmNlTW06IE51bWJlcihtaW5XYWxsLnRvRml4ZWQoMikpCiAgICB9OwogIH0KCiAgLy8g5oOF5Ya1IELvvJrmsonlpLTlrZTkuI7onrrnurnlrZTlsYDpg6jlubLmtonvvIzkvYbpgJrlrZTmn7HpnaLmnKrnqb/pgI8gLT4g5Yqg5Y6a6IezIDE4bW3vvIzmraPlj43kuI3otK/pgJrnm7LlrZQKICBjb25zdCBzaGFua1dhbGwgPSBtaW5XYWxsICsgKHBhcmVudFBvcnQuY2JvcmVEaWFNbSAtIHBhcmVudFBvcnQudGhyb3VnaERpYU1tKSAvIDI7CiAgaWYgKHNoYW5rV2FsbCA+PSBNSU5fV0FMTF9NTSkgewogICAgcmV0dXJuIHsKICAgICAgc3RyYXRlZ3k6IHsga2luZDogJ2ZsYXRfYmxpbmRfdGhpY2snLCB0aGlja25lc3NNbTogMTgsIGJsaW5kRGVwdGhNbTogMTAgfSwKICAgICAgbWluQ2xlYXJhbmNlTW06IE51bWJlcihzaGFua1dhbGwudG9GaXhlZCgyKSkKICAgIH07CiAgfQoKICAvLyDmg4XlhrUgQ++8muWtlOi3nemrmOW6pumHjeWQiCAtPiDmsr8gWSDovbTlgY/nva7plJnkvY0gMTZtbe+8jOadv+WOmiAxNG1tCiAgcmV0dXJuIHsKICAgIHN0cmF0ZWd5OiB7IGtpbmQ6ICdmbGF0X29mZnNldCcsIHRoaWNrbmVzc01tOiAxNCwgb2Zmc2V0TW06IFswLCAxNl0gfSwKICAgIG1pbkNsZWFyYW5jZU1tOiBOdW1iZXIobWluV2FsbC50b0ZpeGVkKDIpKQogIH07Cn0K
+// 转接板防破孔校核与策略选择（P0，见架构文档第 12.1 节）
+//
+// 纯函数，不依赖 DOM / Electron，可直接跑 Node 单测。
+// 与文档原稿的两处修正（不要照抄原稿）：
+//   1. 原稿有一行无意义的 requiredRadiusSum 计算（boltSize.slice(1) 当数字用），
+//      已删除；孔壁净距只用 centerDist - (cboreDia/2 + tapMinorDia/2)。
+//   2. 原稿 M5 沉头直径写 9.5mm，与仓库既有 ISO 4762 表（adapter-model.ts：M5 头部 8.5mm）
+//      不一致；这里统一用仓库既有表，见 holePatternFromMountPort。
+// 假设：两端孔系均为 2×2 矩形阵列（pitchXMm / pitchYMm > 0）；
+// 单中心孔（两端 pitch 均为 0）是同心通孔/螺纹孔，不按孔壁净距判，直接走平板通孔。
+
+export type BoltSize = 'M3' | 'M4' | 'M5' | 'M6' | 'M8';
+
+export interface HolePatternSpec {
+  portId: string;
+  boltSize: BoltSize;
+  /** 通孔直径 mm（如 M5 -> 5.5）。 */
+  throughDiaMm: number;
+  /** 沉头直径 mm（如 M5 -> 8.5，按仓库 ISO 4762 表）。 */
+  cboreDiaMm: number;
+  /** 沉头深度 mm（如 M5 -> 5）。 */
+  cboreDepthMm: number;
+  /** 螺纹底孔直径 mm（如 M5 -> 4.2）。 */
+  tapMinorDiaMm: number;
+  /** X 向孔距 mm；单孔时取 0。 */
+  pitchXMm: number;
+  /** Y 向孔距 mm；单孔时取 0。 */
+  pitchYMm: number;
+  /** 安装面法向量（不必单位化，点积只判正交与否）。 */
+  normal: [number, number, number];
+}
+
+export type AdapterStrategy =
+  | { kind: 'flat_through'; thicknessMm: number; offsetMm: [number, number] }
+  | { kind: 'flat_blind_thick'; thicknessMm: number; blindDepthMm: number }
+  | { kind: 'flat_offset'; thicknessMm: number; offsetMm: [number, number] }
+  | { kind: 'l_bracket_gusset'; thicknessMm: number; flangeHeightMm: number };
+
+export const MIN_WALL_MM = 2.5;
+
+const SCREW_TABLE: Record<BoltSize, { throughDiaMm: number; cboreDiaMm: number; cboreDepthMm: number; tapMinorDiaMm: number }> = {
+  M3: { throughDiaMm: 3.5, cboreDiaMm: 5.5, cboreDepthMm: 3, tapMinorDiaMm: 2.46 },
+  M4: { throughDiaMm: 4.5, cboreDiaMm: 7, cboreDepthMm: 4, tapMinorDiaMm: 3.3 },
+  M5: { throughDiaMm: 5.5, cboreDiaMm: 8.5, cboreDepthMm: 5, tapMinorDiaMm: 4.2 },
+  M6: { throughDiaMm: 6.6, cboreDiaMm: 10, cboreDepthMm: 6, tapMinorDiaMm: 5 },
+  M8: { throughDiaMm: 9, cboreDiaMm: 13, cboreDepthMm: 8, tapMinorDiaMm: 6.8 }
+};
+
+/** 按通孔直径推螺栓规格（与 ISO 4762 表一致，误差 >0.6mm 返回 null，不猜）。 */
+export function boltSizeForHoleDia(holeDiaMm: number): BoltSize | null {
+  const table: ReadonlyArray<{ throughDiaMm: number; bolt: BoltSize }> = [
+    { throughDiaMm: 3.5, bolt: 'M3' },
+    { throughDiaMm: 4.5, bolt: 'M4' },
+    { throughDiaMm: 5.5, bolt: 'M5' },
+    { throughDiaMm: 6.6, bolt: 'M6' },
+    { throughDiaMm: 9, bolt: 'M8' }
+  ];
+  let best: { delta: number; bolt: BoltSize } | null = null;
+  for (const entry of table) {
+    const delta = Math.abs(entry.throughDiaMm - holeDiaMm);
+    if (delta <= 0.6 && (!best || delta < best.delta)) best = { delta, bolt: entry.bolt };
+  }
+  return best?.bolt ?? null;
+}
+
+function assertPositive(value: number, name: string): void {
+  if (!(value > 0)) throw new Error(`${name}必须大于 0`);
+}
+
+/** 由仓库既有 MountPort 形状（pitch / holeDia）+ 螺栓规格，推导 HolePatternSpec。 */
+export function holePatternFromMountPort(
+  port: { pitchXMm: number; pitchYMm: number; holeDiaMm: number },
+  boltSize: BoltSize,
+  normal: [number, number, number],
+  portId: string
+): HolePatternSpec {
+  const spec = SCREW_TABLE[boltSize];
+  if (!spec) throw new Error(`不支持的螺栓规格：${boltSize}`);
+  if (!(port.pitchXMm >= 0 && port.pitchYMm >= 0)) throw new Error('孔距不能为负');
+  return {
+    portId,
+    boltSize,
+    throughDiaMm: port.holeDiaMm > 0 ? port.holeDiaMm : spec.throughDiaMm,
+    cboreDiaMm: spec.cboreDiaMm,
+    cboreDepthMm: spec.cboreDepthMm,
+    tapMinorDiaMm: spec.tapMinorDiaMm,
+    pitchXMm: port.pitchXMm,
+    pitchYMm: port.pitchYMm,
+    normal
+  };
+}
+
+function holeCenters(pattern: HolePatternSpec): Array<[number, number]> {
+  if (pattern.pitchXMm === 0 && pattern.pitchYMm === 0) return [[0, 0]];
+  return [
+    [-pattern.pitchXMm / 2, -pattern.pitchYMm / 2],
+    [pattern.pitchXMm / 2, -pattern.pitchYMm / 2],
+    [-pattern.pitchXMm / 2, pattern.pitchYMm / 2],
+    [pattern.pitchXMm / 2, pattern.pitchYMm / 2]
+  ];
+}
+
+export function planAdapterGeometry(
+  parentPort: HolePatternSpec,
+  childPort: HolePatternSpec
+): { strategy: AdapterStrategy; minClearanceMm: number } {
+  assertPositive(parentPort.cboreDiaMm, '母件沉头直径');
+  assertPositive(parentPort.throughDiaMm, '母件通孔直径');
+  assertPositive(childPort.tapMinorDiaMm, '子件螺纹底孔直径');
+
+  // 1. 法向量近似正交 -> 90° L 型带肋角座（文档 12.1 规则，|dot| < 0.15）
+  const dot =
+    parentPort.normal[0] * childPort.normal[0] +
+    parentPort.normal[1] * childPort.normal[1] +
+    parentPort.normal[2] * childPort.normal[2];
+  if (Math.abs(dot) < 0.15) {
+    return {
+      strategy: {
+        kind: 'l_bracket_gusset',
+        thicknessMm: 12,
+        flangeHeightMm: Math.max(childPort.pitchYMm + 30, 75)
+      },
+      minClearanceMm: 999
+    };
+  }
+
+  // 2. 两端均为单中心孔：同心孔系，不按孔壁净距判。
+  if (
+    parentPort.pitchXMm === 0 && parentPort.pitchYMm === 0 &&
+    childPort.pitchXMm === 0 && childPort.pitchYMm === 0
+  ) {
+    return {
+      strategy: { kind: 'flat_through', thicknessMm: 12, offsetMm: [0, 0] },
+      minClearanceMm: 999
+    };
+  }
+
+  // 3. 平行安装面：母件沉头孔与子件螺纹孔之间的最小孔壁净距
+  const pHoles = holeCenters(parentPort);
+  const cHoles = holeCenters(childPort);
+  let minWall = Infinity;
+  for (const [px, py] of pHoles) {
+    for (const [cx, cy] of cHoles) {
+      const centerDist = Math.hypot(px - cx, py - cy);
+      const wall = centerDist - (parentPort.cboreDiaMm / 2 + childPort.tapMinorDiaMm / 2);
+      if (wall < minWall) minWall = wall;
+    }
+  }
+
+  // 情况 A：孔壁距充足 -> 标准 12mm 平板
+  if (minWall >= MIN_WALL_MM) {
+    return {
+      strategy: { kind: 'flat_through', thicknessMm: 12, offsetMm: [0, 0] },
+      minClearanceMm: Number(minWall.toFixed(2))
+    };
+  }
+
+  // 情况 B：沉头孔与螺纹孔局部干涉，但通孔柱面未穿透 -> 加厚至 18mm，正反不贯通盲孔
+  const shankWall = minWall + (parentPort.cboreDiaMm - parentPort.throughDiaMm) / 2;
+  if (shankWall >= MIN_WALL_MM) {
+    return {
+      strategy: { kind: 'flat_blind_thick', thicknessMm: 18, blindDepthMm: 10 },
+      minClearanceMm: Number(shankWall.toFixed(2))
+    };
+  }
+
+  // 情况 C：孔距高度重合 -> 沿 Y 轴偏置错位 16mm，板厚 14mm
+  return {
+    strategy: { kind: 'flat_offset', thicknessMm: 14, offsetMm: [0, 16] },
+    minClearanceMm: Number(minWall.toFixed(2))
+  };
+}
