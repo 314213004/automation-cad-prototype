@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-25T13:44:14.522Z",
+  "generatedAt": "2026-10-27T15:08:16.023Z",
   "generator": "desktop/scripts/agent-report.mjs",
   "sources": {
     "live": {
@@ -20,39 +20,39 @@
     "offline": {
       "file": "docs/desktop/eval/latest.json",
       "status": "ok",
-      "generatedAt": "2026-10-25T13:43:24.688Z",
-      "version": "0.4.9",
+      "generatedAt": "2026-10-27T12:46:54.979Z",
+      "version": "0.5.0",
       "mode": "offline-rules"
     },
     "audit": {
       "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
-      "status": "missing",
-      "generatedAt": null
+      "status": "ok",
+      "generatedAt": "2026-10-26T17:13:56.305Z"
     },
     "backlog": {
       "file": "docs/desktop/BACKLOG.md",
       "status": "ok",
-      "generatedAt": "2026-10-25T10:35:31.552Z"
+      "generatedAt": "2026-10-27T15:04:33.254Z"
     },
     "tools": {
       "file": "desktop/src/agent/tools.ts",
       "status": "ok",
-      "registryCount": 23,
-      "coverageCount": 23,
+      "registryCount": 25,
+      "coverageCount": 25,
       "consistent": true
     }
   },
   "overview": {
     "toolCount": {
-      "value": 23,
+      "value": 25,
       "source": "docs/desktop/eval/latest.json#dataset.toolCoverage",
-      "generatedAt": "2026-10-25T13:43:24.688Z",
+      "generatedAt": "2026-10-27T12:46:54.979Z",
       "missing": false
     },
     "testCount": {
-      "value": 1964,
+      "value": 2550,
       "source": "desktop/test/**/*.test.*（`node --test` 实测）",
-      "generatedAt": "2026-10-25T13:44:03.537Z",
+      "generatedAt": "2026-10-27T15:07:51.175Z",
       "missing": false
     },
     "testPassed": false,
@@ -170,55 +170,55 @@
     },
     "offline": {
       "total": {
-        "value": 109,
+        "value": 111,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-25T13:43:24.688Z",
+        "generatedAt": "2026-10-27T12:46:54.979Z",
         "missing": false
       },
       "passed": {
         "value": 1,
         "source": "docs/desktop/eval/latest.json",
-        "generatedAt": "2026-10-25T13:43:24.688Z",
+        "generatedAt": "2026-10-27T12:46:54.979Z",
         "missing": false
       },
       "metrics": {
         "intent": {
           "correct": {
-            "value": 109,
+            "value": 111,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "total": {
-            "value": 109,
+            "value": 111,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           }
         },
         "tools": {
           "correct": {
-            "value": 109,
+            "value": 111,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "total": {
-            "value": 109,
+            "value": 111,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           }
         },
@@ -226,19 +226,19 @@
           "correct": {
             "value": 57,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "total": {
             "value": 57,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           }
         },
@@ -246,19 +246,19 @@
           "correct": {
             "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "total": {
             "value": 7,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           }
         },
@@ -266,19 +266,19 @@
           "correct": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "total": {
             "value": 5,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           },
           "rate": {
             "value": 1,
             "source": "docs/desktop/eval/latest.json",
-            "generatedAt": "2026-10-25T13:43:24.688Z",
+            "generatedAt": "2026-10-27T12:46:54.979Z",
             "missing": false
           }
         }
@@ -828,40 +828,47 @@
     {
       "text": "**运动学标注是启发式**：STEP 不含运动学，名称/型号/层级/几何只给建议，斜向运动、夹爪对侧手指与缩回位仍需人工确认。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 35,
+      "line": 49,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T10:35:31.552Z"
+      "generatedAt": "2026-10-27T15:04:33.254Z"
     },
     {
       "text": "**离线意图路由是关键词规则**：审计已轮转（5 MB × 5 份 × 90 天），CSV 只导当前列表；回执无 token 用量。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 40,
+      "line": 54,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T10:35:31.552Z"
+      "generatedAt": "2026-10-27T15:04:33.254Z"
     },
     {
       "text": "**真实模型拒绝/澄清类**：仓库内 6/6 已过 MT04，但仍是单模型；换措辞需重跑 `npm run eval:agent:multiturn`。",
       "section": "已知问题（记录，不阻塞）",
-      "line": 41,
+      "line": 55,
       "source": "docs/desktop/BACKLOG.md",
-      "generatedAt": "2026-10-25T10:35:31.552Z"
+      "generatedAt": "2026-10-27T15:04:33.254Z"
     }
   ],
   "audit": {
-    "status": "missing",
+    "status": "ok",
     "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
-    "reason": "userData 路径可访问，但审计文件不存在：/root/.config/AutomationCAD/agent-audit.jsonl",
-    "total": null,
-    "failed": null,
-    "tools": {},
+    "reason": null,
+    "total": 89,
+    "failed": 4,
+    "tools": {
+      "design_machine": 8,
+      "search_docs": 11,
+      "search_components": 48,
+      "list_components": 6,
+      "run_electrical_check": 1,
+      "get_project_context": 1,
+      "get_bom": 3,
+      "run_cost_report": 2,
+      "build_machine_model": 4,
+      "apply_machine_design": 1,
+      "build_canvas_assembly": 4
+    },
     "malformed": [],
-    "lastAt": null,
-    "generatedAt": null
+    "lastAt": "2026-10-26T17:13:56.305Z",
+    "generatedAt": "2026-10-26T17:13:56.305Z"
   },
-  "missing": [
-    {
-      "file": "/root/.config/AutomationCAD/agent-audit.jsonl",
-      "reason": "userData 路径可访问，但审计文件不存在：/root/.config/AutomationCAD/agent-audit.jsonl"
-    }
-  ]
+  "missing": []
 }

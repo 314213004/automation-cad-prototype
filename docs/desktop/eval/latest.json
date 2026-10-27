@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-27T12:33:05.258Z",
-  "version": "0.4.9",
+  "generatedAt": "2026-10-27T12:46:54.979Z",
+  "version": "0.5.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
