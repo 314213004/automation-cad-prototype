@@ -43,4 +43,38 @@ jobs:
       - name: Agent 能力报告（防止脚本本身崩）
         run: npm run agent:report
 
-  # smoke 依赖 xvfb + 真实 Electron 渲染，本地跑；CI 只保证纯函数层与文档一致性。
+  smoke:
+    name: Electron smoke (xvfb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: 安装 Electron 运行库
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             xvfb libgbm1 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2             libdrm2 libgtk-3-0 libasound2t64 libxss1 libxrandr2 libxkbcommon0
+      - name: 安装依赖
+        run: npm ci
+      - name: 构建扩展（smoke 需要 dist/）
+        run: npm run build:ext
+      # smoke 覆盖画布/设计向导/机型/Agent 等的真实渲染路径，之前只在本机跑，CI 永远发现不了回归
+      - name: 冒烟（xvfb + 真实 Electron）
+        run: npm run smoke
+      - name: 失败时保留日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log
+          path: |
+            docs/desktop/eval/*.json
+            desktop/*.log
+          if-no-files-found: ignore
+
