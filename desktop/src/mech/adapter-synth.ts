@@ -46,6 +46,23 @@ const SCREW_TABLE: Record<BoltSize, { throughDiaMm: number; cboreDiaMm: number; 
   M8: { throughDiaMm: 9, cboreDiaMm: 13, cboreDepthMm: 8, tapMinorDiaMm: 6.8 }
 };
 
+/** 按通孔直径推螺栓规格（与 ISO 4762 表一致，误差 >0.6mm 返回 null，不猜）。 */
+export function boltSizeForHoleDia(holeDiaMm: number): BoltSize | null {
+  const table: ReadonlyArray<{ throughDiaMm: number; bolt: BoltSize }> = [
+    { throughDiaMm: 3.5, bolt: 'M3' },
+    { throughDiaMm: 4.5, bolt: 'M4' },
+    { throughDiaMm: 5.5, bolt: 'M5' },
+    { throughDiaMm: 6.6, bolt: 'M6' },
+    { throughDiaMm: 9, bolt: 'M8' }
+  ];
+  let best: { delta: number; bolt: BoltSize } | null = null;
+  for (const entry of table) {
+    const delta = Math.abs(entry.throughDiaMm - holeDiaMm);
+    if (delta <= 0.6 && (!best || delta < best.delta)) best = { delta, bolt: entry.bolt };
+  }
+  return best?.bolt ?? null;
+}
+
 function assertPositive(value: number, name: string): void {
   if (!(value > 0)) throw new Error(`${name}必须大于 0`);
 }

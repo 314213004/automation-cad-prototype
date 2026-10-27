@@ -10,6 +10,13 @@
 //   - 建模失败（内核未装 / 模块被门控 / 超时）一律按「仅参数」降级，不伪造成功。
 import type { FeatureDoc, FeatureNode } from '../parametric/features.ts';
 import type { CanvasNode, MountPort } from './types.ts';
+import {
+  boltSizeForHoleDia,
+  holePatternFromMountPort,
+  planAdapterGeometry,
+  type AdapterStrategy
+} from '../mech/adapter-synth.ts';
+import { buildFastenerBomItems, type FastenerBomItem } from '../cost/fastener-bom.ts';
 
 /** 板边相对孔阵列外扩的余量 mm（与 view-model 的默认工厂一致）。 */
 export const ADAPTER_EDGE_MARGIN_MM = 15;
@@ -78,6 +85,43 @@ function holeFeature(id: string, label: string, port: MountPort): FeatureNode | 
 }
 
 /**
+ * 转接板防破孔校核（P0 接入）：把两端 MountPort 转成孔系规格，走 mech/adapter-synth。
+ * 注意：MountPort 本身没有法向量，画布侧默认两端法向量均为 [0,0,1]（平行安装面），
+ * 因此画布侧的 plan 永远不会走到 L 型角座分支；L 型分支只在直接调用 planAdapterGeometry
+ * 并传入正交法向量时才出现，见 mech 单测。孔径不在标准螺栓表内时返回 null，不猜。
+ */
+export function adapterPlan(
+  node: CanvasNode
+): { strategy: AdapterStrategy; minClearanceMm: number } | null {
+  if (!node || node.kind !== 'adapter' || !node.adapterParams) return null;
+  const fromBolt = boltSizeForHoleDia(node.adapterParams.fromPort.holeDiaMm);
+  const toBolt = boltSizeForHoleDia(node.adapterParams.toPort.holeDiaMm);
+  if (!fromBolt || !toBolt) return null;
+  const parent = holePatternFromMountPort(node.adapterParams.fromPort, fromBolt, [0, 0, 1], 'from');
+  const child = holePatternFromMountPort(node.adapterParams.toPort, toBolt, [0, 0, 1], 'to');
+  return planAdapterGeometry(parent, child);
+}
+
+export function describeAdapterPlan(node: CanvasNode): string {
+  const plan = adapterPlan(node);
+  if (!plan) return '防破孔校核：端口孔径不在标准螺栓表内，未做校核。';
+  const s = plan.strategy;
+  if (s.kind === 'flat_through') return `防破孔校核：平板通孔 12mm · 最小孔壁 ${plan.minClearanceMm}mm ✓`;
+  if (s.kind === 'flat_blind_thick') return `防破孔校核：孔壁不足，已加厚至 18mm 盲孔（盲深 10mm）· 通孔柱面壁厚 ${plan.minClearanceMm}mm`;
+  if (s.kind === 'flat_offset') return `防破孔校核：孔距高度重合，已沿 Y 偏置 16mm，板厚 14mm · 最小孔壁 ${plan.minClearanceMm}mm`;
+  return '防破孔校核：法向量正交，需 L 型带肋角座，当前平板 FeatureDoc 不适用。';
+}
+
+/** 转接板配套紧固件 BOM（P0 接入）：孔径不在标准表内时返回 null，不猜螺栓规格。 */
+export function adapterFastenerBom(node: CanvasNode): FastenerBomItem[] | null {
+  if (!node || node.kind !== 'adapter' || !node.adapterParams) return null;
+  const fromBolt = boltSizeForHoleDia(node.adapterParams.fromPort.holeDiaMm);
+  const toBolt = boltSizeForHoleDia(node.adapterParams.toPort.holeDiaMm);
+  if (!fromBolt || !toBolt) return null;
+  return buildFastenerBomItems(node.id, fromBolt, toBolt);
+}
+
+/**
  * adapter 节点 → FeatureDoc。非 adapter 或缺 adapterParams 返回 null（不给假模型）。
  * 板外形用 box(centered=true)，板中心在原点；两端孔阵列都落在板内。
  */
@@ -86,19 +130,28 @@ export function adapterFeatureDoc(node: CanvasNode): FeatureDoc | null {
   const params = node.adapterParams;
   const [width, height, thickness] = node.dimsMm;
   if (!(width > 0 && height > 0 && thickness > 0)) return null;
+  // P0 接入：防破孔策略只在需要时改板厚 / 子件孔偏置；平板通孔时保持原尺寸，
+  // 因此既有 demo 节点的 FeatureDoc 不变，现有单测不受影响。
+  const plan = adapterPlan(node);
+  const effectiveThickness =
+    plan?.strategy.kind === 'flat_blind_thick' ? plan.strategy.thicknessMm
+    : plan?.strategy.kind === 'flat_offset' ? plan.strategy.thicknessMm
+    : thickness;
+  const offsetY = plan?.strategy.kind === 'flat_offset' ? plan.strategy.offsetMm[1] : 0;
+  const effectiveHeight = height + Math.abs(offsetY);
 
   const features: FeatureNode[] = [
     {
       id: 'f-body',
       type: 'box',
-      name: `${width}×${height}×${thickness} 板体`,
-      params: { length: width, width: height, height: thickness, centered: true }
+      name: `${width}×${effectiveHeight}×${effectiveThickness} 板体`,
+      params: { length: width, width: effectiveHeight, height: effectiveThickness, centered: true }
     }
   ];
   // 母件侧：要沉头且能查到标准螺钉头部尺寸 → 出 counterbore；否则退回通孔（不编尺寸）
   const fromPositions = holePositions(params.fromPort);
   const head = params.counterBore ? screwHeadForClearance(params.fromPort.holeDiaMm) : null;
-  const cbDepth = head ? Math.min(head.headHeightMm, Math.max(thickness - 1, 0.5)) : 0;
+  const cbDepth = head ? Math.min(head.headHeightMm, Math.max(effectiveThickness - 1, 0.5)) : 0;
   if (head && fromPositions.length > 0 && params.fromPort.holeDiaMm > 0 && cbDepth > 0) {
     features.push({
       id: 'f-cb-in',
@@ -117,13 +170,20 @@ export function adapterFeatureDoc(node: CanvasNode): FeatureDoc | null {
     if (fromHoles) features.push(fromHoles);
   }
   const toHoles = holeFeature('f-holes-out', `子件侧孔阵列（${params.toPort.family}）`, params.toPort);
-  if (toHoles) features.push(toHoles);
+  if (toHoles) {
+    if (offsetY !== 0 && Array.isArray(toHoles.params.positions)) {
+      toHoles.params.positions = (toHoles.params.positions as Array<[number, number]>).map(
+        ([x, y]) => [x, Number((y + offsetY).toFixed(3))] as [number, number]
+      );
+    }
+    features.push(toHoles);
+  }
   if (params.dowelDiaMm > 0) {
     // 定位销孔放在对角线靠边位置；放不下就不加（宁可少一个特征，也不要校验失败）
     const pad = params.dowelDiaMm;
     const candidates: Array<[number, number]> = [
-      [-width / 2 + pad * 2, -height / 2 + pad * 2],
-      [width / 2 - pad * 2, height / 2 - pad * 2]
+      [-width / 2 + pad * 2, -effectiveHeight / 2 + pad * 2],
+      [width / 2 - pad * 2, effectiveHeight / 2 - pad * 2]
     ];
     features.push({
       id: 'f-holes-dowel',
@@ -136,7 +196,7 @@ export function adapterFeatureDoc(node: CanvasNode): FeatureDoc | null {
     id: 'f-fillet',
     type: 'fillet',
     name: `四角 R${ADAPTER_FILLET_MM}`,
-    params: { radius: Math.min(ADAPTER_FILLET_MM, thickness), edges: '|Z' }
+    params: { radius: Math.min(ADAPTER_FILLET_MM, effectiveThickness), edges: '|Z' }
   });
 
   return {
