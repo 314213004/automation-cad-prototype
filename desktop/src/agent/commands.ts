@@ -527,7 +527,9 @@ function registerInsertCommand(bus: CommandBus): void {
         id: part.id,
         model: name,
         category: part.category,
-        ...(part.vendor ? { vendor: part.vendor } : {})
+        ...(part.vendor ? { vendor: part.vendor } : {}),
+        // 带上真实外形，渲染层按尺寸建占位盒（缺项时那边回落 20mm）
+        ...(part.dims ? { dimsMm: { w: part.dims.w, h: part.dims.h, d: part.dims.d } } : {})
       };
       const result = await ctx.bridge.call<InsertBridgeResult>('insertComponent', [payload]);
       if (!result || result.ok !== true) {

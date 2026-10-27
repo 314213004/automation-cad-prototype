@@ -2103,6 +2103,52 @@ function createWindow(): BrowserWindow {
           return;
         }
         console.log(`SMOKE_AGENT_PLACE_OK placed=${afterPlace.placed} undo=${removed ? 1 : 0}`);
+        // 占位盒尺寸：插带 dims 的器件后，3D 包围盒必须等于数据包外形（不是固定 20mm 方块）
+        {
+          const degraded = await window.webContents.executeJavaScript(
+            `(() => window.__AgentBridge?.getScene?.().degraded === true)()`
+          ) as boolean;
+          const inserted = await commandBus.execute('insert_component', { partId: 'iC65N-C16-1P' });
+          const measured = await window.webContents.executeJavaScript(
+            `(() => {
+              const parts = window.__AgentBridge?.getScene?.().parts ?? [];
+              const part = parts.find((item) => item && item.name === 'iC65N 1P C16');
+              if (!part || !part.bbox) return null;
+              const [min, max] = part.bbox;
+              return {
+                w: Math.abs(max[0] - min[0]),
+                h: Math.abs(max[1] - min[1]),
+                d: Math.abs(max[2] - min[2]),
+                y: min[1]
+              };
+            })()`
+          ) as { w: number; h: number; d: number; y: number } | null;
+          const insertError = !inserted.ok && inserted.error
+            ? String((inserted.error as { message?: unknown }).message ?? '')
+            : '';
+          if (!inserted.ok && (degraded || insertError.includes('WebGL'))) {
+            // 纯降级 smoke（无 WebGL）里没有 3D 视口，插入必然失败；这条断言只在有 WebGL 时生效
+            console.log('SMOKE_PLACEHOLDER_DIMS_SKIP reason=no-webgl');
+          } else {
+            const near = (value: number | undefined, expect: number): boolean =>
+              typeof value === 'number' && Math.abs(value - expect) <= 0.5;
+            if (!inserted.ok || !measured || !near(measured.w, 18) || !near(measured.h, 85) ||
+                !near(measured.d, 78.5) || Math.abs(measured.y) > 0.5) {
+              console.error('SMOKE_FAIL placeholder_dims', JSON.stringify({ inserted, measured }));
+              setTimeout(() => app.exit(1), 100);
+              return;
+            }
+            console.log(`SMOKE_PLACEHOLDER_DIMS_OK w=${measured.w} h=${measured.h} d=${measured.d} y=${measured.y}`);
+            if (inserted.ok && inserted.data && typeof inserted.data === 'object') {
+              const meshIndex = (inserted.data as Record<string, unknown>).meshIndex;
+              if (typeof meshIndex === 'number') {
+                await window.webContents.executeJavaScript(
+                  `(() => window.__AgentBridge?.removeComponent?.(${JSON.stringify(meshIndex)}))()`
+                );
+              }
+            }
+          }
+        }
       } catch (error) {
         console.error('SMOKE_FAIL agent_place_exception', error);
         setTimeout(() => app.exit(1), 100);

@@ -16,6 +16,7 @@ import { assertBomRowCount } from '../shared/input-limits.ts';
 import { stageCadLoad, type LoadedPart } from './load-candidate.ts';
 import { geometryToBinaryStl, uniquePartNames } from './stl-export.ts';
 import { buildPartListEntries, filterPartList } from './part-list-view.ts';
+import { resolvePlaceholderDims } from './placeholder-dims.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -1083,7 +1084,7 @@ export class CadViewer {
     this.refreshInstanceMatrices();
   }
 
-  addPlaceholderPart(name: string, partId?: string): number {
+  addPlaceholderPart(name: string, partId?: string, dimsMm?: { w?: number; h?: number; d?: number } | null): number {
     if (this.degraded || !this.renderer) {
       throw new Error('当前环境不支持 WebGL，无法插入占位件');
     }
@@ -1092,7 +1093,9 @@ export class CadViewer {
 
     const currentBounds = this.totalBounds();
     const centerX = currentBounds.isEmpty() ? 10 : currentBounds.max.x + 12;
-    const geometry = new THREE.BoxGeometry(20, 20, 20);
+    // 占位盒按数据包外形尺寸建（mm）；缺项才回落 20mm，避免把 20mm 气缸和 2m 输送段画成一样大
+    const { dims: size, sized } = resolvePlaceholderDims(dimsMm ?? undefined);
+    const geometry = new THREE.BoxGeometry(size.w, size.h, size.d);
     const material = new THREE.MeshStandardMaterial({
       color: new THREE.Color(DEFAULT_COLORS[this.parts.length % DEFAULT_COLORS.length] ?? 0x14b8a6),
       metalness: 0.22,
@@ -1102,8 +1105,10 @@ export class CadViewer {
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = displayName;
-    mesh.position.set(centerX, 0, 10);
+    mesh.position.set(centerX, size.h / 2, 10);
     mesh.userData.placeholder = true;
+    mesh.userData.placeholderDimsMm = { ...size };
+    mesh.userData.placeholderSized = sized;
     mesh.userData.kinematicsBasePosition = mesh.position.clone();
     mesh.userData.kinematicsBaseQuaternion = mesh.quaternion.clone();
 

@@ -3184,7 +3184,11 @@ function initAgentBridge(): void {
       if (!id || !model || !category) return { ok: false, message: '缺少必填参数：零件 id/model/category' };
       try {
         const name = model || id;
-        const meshIndex = ensureViewer().addPlaceholderPart(name, id);
+        const rawDims = source.dimsMm as Record<string, unknown> | undefined;
+        const dimsMm = rawDims && typeof rawDims === 'object'
+          ? { w: Number(rawDims.w), h: Number(rawDims.h), d: Number(rawDims.d) }
+          : null;
+        const meshIndex = ensureViewer().addPlaceholderPart(name, id, dimsMm);
         return { ok: true, meshIndex, name };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };

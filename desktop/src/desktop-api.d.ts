@@ -649,7 +649,14 @@ interface AgentBridgeApi {
   markPlcGenerated(): { ok: boolean };
   /** 当前电气图纸的校验数据（与电气域画布、__ElecDocProvider 同源）；Agent run_electrical_check 不传数据时用 */
   getElecDocument?(): { ok: true; document: import('./elec/check').ElecDocument; source: Record<string, unknown> } | AgentBridgeFailure;
-  insertComponent(part: { id: string; model: string; vendor?: string; category: string }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
+  insertComponent(part: {
+    id: string;
+    model: string;
+    vendor?: string;
+    category: string;
+    /** 真实外形（mm）：渲染层按此建占位盒，缺项回落 20mm 方块。 */
+    dimsMm?: { w: number; h: number; d: number };
+  }): { ok: boolean; meshIndex?: number; name?: string; message?: string };
   removeComponent(meshIndex: number): { ok: boolean; message?: string };
   placeEnclosurePart(payload: {
     partId: string;
