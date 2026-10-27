@@ -68,16 +68,20 @@ jobs:
         run: npm run build:ext
       # smoke 覆盖画布/设计向导/机型/Agent 等的真实渲染路径，之前只在本机跑，CI 永远发现不了回归
       - name: 冒烟（xvfb + 真实 Electron，降级渲染）
+        timeout-minutes: 12
         run: npm run smoke
       # 降级 smoke 关掉了 WebGL；这条用 SwiftShader 真跑 3D，覆盖占位盒尺寸等几何断言
       - name: WebGL 冒烟（SwiftShader）
+        timeout-minutes: 12
         run: npm run smoke:design:webgl
       # 机型四张图曾经四张同图还「全绿」；脚本内的 sha256 去重会在这里把它拦住
       - name: 机型全流程截图（含去重校验）
+        timeout-minutes: 10
         run: |
           sudo apt-get install -y --no-install-recommends ffmpeg
           npm run screenshots:machine
       - name: 上传机型截图
+        timeout-minutes: 5
         uses: actions/upload-artifact@v4
         with:
           name: machine-screenshots
