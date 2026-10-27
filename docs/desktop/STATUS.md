@@ -2,8 +2,8 @@
 
 ## 概览
 
-- 基线：`main` 已发布面到 **v0.4.2**（CDP 内网可达、token 生命周期、渲染性能可观测性 + Windows 本地 smoke 入口）；当前 `desktop/package.json` 为 **0.4.9**（电气出图引擎 + 整机设计五步向导），0.4.9 安装包未构建、未打 tag。
-- 版本：`desktop/package.json` → **0.4.9**；界面缩放 / 3D 渲染质量 / 局域网联调 / CDP 保持默认关闭。
+- 基线：`main` 已发布面到 **v0.4.2**（CDP 内网可达、token 生命周期、渲染性能可观测性 + Windows 本地 smoke 入口）；当前 `desktop/package.json` 为 **0.5.0**（电气出图引擎 + 整机设计五步向导 + CI/文档守卫），已打源码 tag `v0.5.0`，安装包仍未构建。
+- 版本：`desktop/package.json` → **0.5.0**；界面缩放 / 3D 渲染质量 / 局域网联调 / CDP 保持默认关闭。
 - 测试（2026-10-26 本机 Linux 实跑）：`npx tsc --noEmit` 0 错误；`npm test` **1967 总计 / 1967 通过 / 0 失败 / 0 跳过**。
 - 构建与冒烟：`npm run build:ext` 通过；`xvfb-run npm run smoke` 收尾 `SMOKE_OK`，`SMOKE_DESIGN_WIZARD_OK steps=5`、`_CANDIDATES_OK count=3`、`_LAYOUT_OK placements=13 overlaps=0`、`_SAVE_OK project=Smoke-整机设计`，不再出现 `SMOKE_DESIGN_SCENE_BRIDGE_WARN`。
 - 评估：`npm run eval:agent` **109/109 通过**，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；`docs/desktop/eval/cases.json` 已覆盖注册表全部工具（含 `build_machine_model` 的 bm01/bm02）。
