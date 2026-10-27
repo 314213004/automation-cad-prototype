@@ -6,6 +6,7 @@
 
 ## 上一轮（已归档）
 
+- 2026-10-26 整机设计向导改进、整机布局 3D 编辑（feat/layout-editor）、无限画布工作台方案：原文见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 - 2026-10-25 整机设计向导首轮及 0.4.2（`bfdaa37`）：详情见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 
 ## 待办（按优先级）
@@ -15,7 +16,7 @@
 - **P1：可移植工程档案恢复**：在只读严格预览后设计用户确认的显式应用、备份与事务回滚；补跨机器 CAD 几何复核，并继续定义尚未纳入的 PLC/工厂/Agent 数据迁移。
 - **P1/P2：扩展模块化边界**：继续迁移尚未门控的机械、CAD 只读/运动学、工厂、同步和通用导出能力；当前开关不卸载应用内代码。真正的按需下载须另行设计签名包、兼容性、离线安装和回滚。
 
-- **P1：FreeCAD 后台任务后续**（第 1 步零件工程图已交付，见下节）：② 钣金展开 DXF（SheetMetal 为第三方工作台，需先评估 1.x 自带能力或自写展开，仍走同一作业队列/清单/过期机制）；③ 总装图 + BOM 明细表（多零件 STEP + 摆位 → TechDraw 装配视图与序号/明细栏）；④ FEM（CalculiX 随 FreeCAD 安装，先做单件静力校核）；⑤ 孔中心线/孔径标注、DXF 隐藏线分层、设置页统一入口；⑥ Windows 真机验收 FreeCAD 1.0/1.1 安装路径与 PDF 中文字体。
+- **P1：FreeCAD 后台任务后续**（第 1 步零件工程图已交付，见下节）：② 钣金展开 DXF（SheetMetal 为第三方工作台，需先评估 1.x 自带能力或自写展开，仍走同一作业队列/清单/过期机制）；③ 总装图 + BOM 明细表（多零件 STEP + 摆位 → TechDraw 装配视图与序号/明细栏）；④ FEM（CalculiX 随 FreeCAD 安装，先做单件静力校核）；⑤ 孔位标注与 DXF 分层已交付（脚本 1.1.1 真机验证，见下节），余设置页统一入口；⑥ Windows 真机验收 FreeCAD 1.0/1.1 安装路径与 PDF 中文字体。
 
 ## 待决策（需要老王拍板，不阻塞其他开发）
 
@@ -49,27 +50,6 @@
 
 > 长期迭代与仓库推送约定见 [DEVELOPMENT-PLAN.md](DEVELOPMENT-PLAN.md#夜间迭代与仓库操作约定)。
 
-## 整机设计向导改进（2026-10-26）
-
-本节记录该向导实现的功能行为、版本化身份规则与当前工程边界。
-- 第 4 步真实 `MachineGeometry.parts` 俯视支持选站、X/Y mm 输入与网格拖动；示意 `placements` 仍独立。
-- `MachineDesign.stationIdentities` 保存不可变工位身份；`stationGeometryLayout` v2 按身份键关联偏移。改名/重排在同一身份仍可对应时保留偏移；删除或无法对应的身份只清除相应偏移，新工位按零偏移处理；候选/需求重算不按名称或序号猜测迁移。旧 v1 只记录序号/名称，无法证明实体连续性，读取时保留工程但安全清除全部旧偏移并告警。
-- 偏移纳入 review 签名；坐标或映射异常 fail-closed。不改尺寸/形状/行程。空场景与概念保存规则不变。
-**边界**：仍是概念占位体，AABB 非精检；型号 CAD、结构/干涉/节拍签核和 Windows 发布验收未完成。超出机架/占地需人工复核。测试与 KB 容量见 [STATUS.md](STATUS.md)，不等同生产验收。
-- **概念运动包络提示**：偏移后的当前几何输入；不支持轴显式未覆盖，候选只供人工复核，不改 review 或签核。限制见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)。
-
-## 整机布局 3D 编辑（2026-10-26，feat/layout-editor）
-
-- ✅ 向导第 4 步「3D 布局编辑」：点选/Ctrl/框选工位、属性面板、平移 X/Y/XY 与绕 Z 旋转 gizmo（拖动中键入数值、Esc 取消）、网格/角度/包络边吸附与参考线、对齐/分布/阵列排布、OBB 包络干涉标红 + 截面求交精检、运动包络去基线、临时测量；写回同一份 `stationGeometryLayout`（有旋转时 schemaVersion 3），撤销并入 `UnifiedHistory` 的 `'layout'` 令牌。详见 `desktop/src/layout-editor/MODULE.md`。
-- ⏳ 未做：复制/新增工位（需改机型配置）；已保存工程重开后的 3D 布局编辑（需 IPC 写 design.json 并重生成 STL）；build123d 布尔精检；通电联调 3D 未应用位姿；编辑器 DOM 自动化测试。
-
-## 无限画布工作台（2026-10-26）
-
-- 📄 归档：`docs/desktop/mockups/canvas-workbench.html`（老王给的交互原型，Tailwind CDN + three r128，106 KB）；配套架构评审原文 `docs/desktop/reviews/2026-10-25-architecture-review.md`。
-- 📐 方案：`docs/desktop/CANVAS-WORKBENCH.md` —— 模板 → 现有模块映射、数据契约（MountPort/CanvasNode/Edge）、5 处必须纠正的偏差（CDN 依赖、CT 串行口径、写死价格、端口只比字符串、假 B-Rep 干涉）、P1–P4 分期与验收。
-- ⏳ P1（核心纯函数 + 单测）：`src/canvas/graph.ts`（端口兼容 / 插转接板 / 删节点）、`metrics.ts`（CT 走 `evaluateFlow`、伺服选型）、`export.ts`（build123d 脚本 / ST / Graph JSON）。
-- ⏳ P2（三视图 UI + smoke）、P3（接真实候选/元件库/价格簿）、P4（3D PiP 联动）按方案推进，未开工。
-
 ## FreeCAD 零件工程图（2026-10-26，`feat/freecad-techdraw`）
 
 - ✅ `drawings.techdraw` 可选模块（依赖 `cad.parametric-import`）：参数化抽屉「工程图（FreeCAD）」分区——选中零件/全部/重出过期、进度与取消、PDF/DXF/目录、过期徽标、未安装提示与「指定 freecadcmd 路径」。
@@ -77,3 +57,10 @@
 - ✅ `techdraw_job.py`：第一角投影三视图 + 轴测、自动 A4/A3 与 GB 比例、外形尺寸、国标标题栏，PDF/DXF/SVG；沙箱 FreeCAD 1.0.0（conda-forge）+ build123d 0.13 真机跑通，两件批量约 1 s。
 - 测试：协议/过期/运行器（假 freecadcmd：成功、单件失败、崩溃、超时、取消、PDF 兜底、伪造路径、未安装）/服务/模块/脚本自检，+45 条。
 - 边界：DXF 隐藏线未分层；只标外形总尺寸，无孔位/公差/技术要求；PDF 中文依赖本机字体；Windows 实机未验收。
+
+## 孔位标注出图修正（2026-10-27，`fix/techdraw-holes`，脚本 1.1.1）
+
+- ✅ 沉孔/深度符号 ⌴ ↧ 改中文文字（「4×Ø6.6 沉孔Ø11深6.5」「2×M6-6H深10 孔深12」）：Noto Sans CJK SC 等中文字体无这两个字形，真机显示为方块。
+- ✅ 标注文字列避开剖切符号两端字母（禁区一维避让）；引线端点按「穿孔/槽数 → 是否沿中心线 → 长度」在同组各孔、孔周多方位里择优，不再穿 Ø8 孔 / M6 孔；有剖切线时左侧孔距尺寸外移。
+- ✅ freecadcmd 下 `--pass --self-test` 真正执行自检（此前静默跳过）。真机：转接板/法兰（螺纹）/滚筒三件出图 + e2e（改螺纹只判法兰过期，原因「孔规格」）。
+- 边界：剖切线过孔心时与该孔位尺寸界线重合（GB 允许，未特殊处理）；转接板 A3 1:1 轴测图仍因空间省略（原逻辑）。

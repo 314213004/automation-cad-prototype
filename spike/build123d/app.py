@@ -86,7 +86,7 @@ def build(ops: list[dict]):
                 if depth in (None, "through"):
                     shape = shape - (bd.Pos(float(x), float(y), -1.0) * bd.Cylinder(d / 2, 1e3))
                 else:
-                    # 盲孔/螺纹底孔：从顶面向下切，孔深 = depth（与工程图「↧depth」一致；顶面上方多切 1mm 保证切净）
+                    # 盲孔/螺纹底孔：从顶面向下切，孔深 = depth（与工程图「深<depth>」标注一致；顶面上方多切 1mm 保证切净）
                     dep = _num(depth, "depth")
                     shape = shape - (bd.Pos(float(x), float(y), top - dep / 2 + 0.5) * bd.Cylinder(d / 2, dep + 1))
         elif kind == "counterbore":

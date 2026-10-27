@@ -2,6 +2,27 @@
 
 从 [BACKLOG.md](BACKLOG.md) 移出的已完成迭代记录，原文保留、按时间倒序。本文件**不进入**智能体离线知识索引（`desktop/src/agent/kb/index.ts` 的 `KB_DOC_FILES`），需要时直接打开阅读。
 
+## 整机设计向导改进（2026-10-26）
+
+本节记录该向导实现的功能行为、版本化身份规则与当前工程边界。
+- 第 4 步真实 `MachineGeometry.parts` 俯视支持选站、X/Y mm 输入与网格拖动；示意 `placements` 仍独立。
+- `MachineDesign.stationIdentities` 保存不可变工位身份；`stationGeometryLayout` v2 按身份键关联偏移。改名/重排在同一身份仍可对应时保留偏移；删除或无法对应的身份只清除相应偏移，新工位按零偏移处理；候选/需求重算不按名称或序号猜测迁移。旧 v1 只记录序号/名称，无法证明实体连续性，读取时保留工程但安全清除全部旧偏移并告警。
+- 偏移纳入 review 签名；坐标或映射异常 fail-closed。不改尺寸/形状/行程。空场景与概念保存规则不变。
+**边界**：仍是概念占位体，AABB 非精检；型号 CAD、结构/干涉/节拍签核和 Windows 发布验收未完成。超出机架/占地需人工复核。测试与 KB 容量见 [STATUS.md](STATUS.md)，不等同生产验收。
+- **概念运动包络提示**：偏移后的当前几何输入；不支持轴显式未覆盖，候选只供人工复核，不改 review 或签核。限制见 [MACHINE-DESIGN.md](MACHINE-DESIGN.md)。
+
+## 整机布局 3D 编辑（2026-10-26，feat/layout-editor）
+
+- ✅ 向导第 4 步「3D 布局编辑」：点选/Ctrl/框选工位、属性面板、平移 X/Y/XY 与绕 Z 旋转 gizmo（拖动中键入数值、Esc 取消）、网格/角度/包络边吸附与参考线、对齐/分布/阵列排布、OBB 包络干涉标红 + 截面求交精检、运动包络去基线、临时测量；写回同一份 `stationGeometryLayout`（有旋转时 schemaVersion 3），撤销并入 `UnifiedHistory` 的 `'layout'` 令牌。详见 `desktop/src/layout-editor/MODULE.md`。
+- ⏳ 未做：复制/新增工位（需改机型配置）；已保存工程重开后的 3D 布局编辑（需 IPC 写 design.json 并重生成 STL）；build123d 布尔精检；通电联调 3D 未应用位姿；编辑器 DOM 自动化测试。
+
+## 无限画布工作台（2026-10-26）
+
+- 📄 归档：`docs/desktop/mockups/canvas-workbench.html`（老王给的交互原型，Tailwind CDN + three r128，106 KB）；配套架构评审原文 `docs/desktop/reviews/2026-10-25-architecture-review.md`。
+- 📐 方案：`docs/desktop/CANVAS-WORKBENCH.md` —— 模板 → 现有模块映射、数据契约（MountPort/CanvasNode/Edge）、5 处必须纠正的偏差（CDN 依赖、CT 串行口径、写死价格、端口只比字符串、假 B-Rep 干涉）、P1–P4 分期与验收。
+- ⏳ P1（核心纯函数 + 单测）：`src/canvas/graph.ts`（端口兼容 / 插转接板 / 删节点）、`metrics.ts`（CT 走 `evaluateFlow`、伺服选型）、`export.ts`（build123d 脚本 / ST / Graph JSON）。
+- ⏳ P2（三视图 UI + smoke）、P3（接真实候选/元件库/价格簿）、P4（3D PiP 联动）按方案推进，未开工。
+
 ## 整机设计向导（2026-10-25）
 
 - ✅ 五步向导落地（`desktop/src/design/`）：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核出图/保存工程；顶栏「整机设计」+ 文件菜单「新建设计」，草稿可续（`userData/design-draft.json`）。smoke：`SMOKE_DESIGN_ENTRY_OK` / `_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK`，本机 1964 单测全绿。

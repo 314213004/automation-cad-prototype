@@ -8,7 +8,7 @@ export type { DrawingHoleSpec } from './holes.ts';
 export const DRAWING_JOB_PROTOCOL = 'automationcad.drawing-job/1';
 export const DRAWING_RESULT_PROTOCOL = 'automationcad.drawing-result/1';
 /** 与 spike/freecad/techdraw_job.py 的 SCRIPT_VERSION 保持一致；变更会使已出图纸全部过期。 */
-export const TECHDRAW_SCRIPT_VERSION = '1.1.0';
+export const TECHDRAW_SCRIPT_VERSION = '1.1.1';
 export const DRAWING_PROGRESS_PREFIX = '@@ACAD ';
 
 export const DRAWING_FORMATS = ['pdf', 'dxf', 'svg', 'fcstd'] as const;

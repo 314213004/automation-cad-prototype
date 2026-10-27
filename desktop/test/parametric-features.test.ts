@@ -311,3 +311,22 @@ test('特征树：深度与 edges 参数做白名单校验', () => {
   assert.ok(errors.some((message) => message.includes('depth')));
   assert.ok(errors.some((message) => message.includes('edges')));
 });
+
+test('特征树：螺纹孔校验（规格、底孔径 < 公称、螺纹深 ≤ 孔深、无规格不得填螺纹深）', () => {
+  const plate = box({ length: 200, width: 120, height: 15 });
+  const ok = validateFeatures(doc([plate, holes({ diameter: 5, depth: 12, thread: 'M6', threadDepth: 10 })]));
+  assert.deepEqual(ok, []);
+  assert.deepEqual(validateFeatures(doc([plate, holes({ diameter: 6.8, thread: 'm8x1' })])), []);
+  assert.deepEqual(validateFeatures(doc([plate, holes({ diameter: 6, thread: '' })])), [], '空串视为光孔');
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{ diameter: 5, thread: 'G1/4' }, '参数「thread」必须是螺纹规格'],
+    [{ diameter: 6, thread: 'M6' }, '必须小于公称直径 6 mm'],
+    [{ diameter: 5, depth: 12, thread: 'M6', threadDepth: 14 }, '超过孔深 12.0 mm'],
+    [{ diameter: 5, depth: 12, thread: 'M6', threadDepth: 0 }, '参数「threadDepth」必须大于 0'],
+    [{ diameter: 5, depth: 12, threadDepth: 8 }, '填写了螺纹深但没有螺纹规格']
+  ];
+  for (const [params, fragment] of cases) {
+    const errors = validateFeatures(doc([plate, holes(params)]));
+    assert.ok(errors.some((message) => message.includes(fragment)), `${JSON.stringify(params)} → ${errors.join(' | ')}`);
+  }
+});
