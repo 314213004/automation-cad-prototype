@@ -181,7 +181,7 @@ export class Canvas3DSync {
     graph: MachineGraph,
     apply: (box: SyncBoxMm) => void
   ): SyncBoxMm[] {
-    const boxes = incrementalBoxesMm(graph, this.dirtyNodeIds);
+    const boxes = incrementalBoxesMm(graph, [...this.dirtyNodeIds]);
     for (const box of boxes) apply(box);
     this.dirtyNodeIds.clear();
     return boxes;
