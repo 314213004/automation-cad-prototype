@@ -71,6 +71,11 @@ jobs:
       # 降级 smoke 关掉了 WebGL；这条用 SwiftShader 真跑 3D，覆盖占位盒尺寸等几何断言
       - name: WebGL 冒烟（SwiftShader）
         run: npm run smoke:design:webgl
+      # 机型四张图曾经四张同图还「全绿」；脚本内的 sha256 去重会在这里把它拦住
+      - name: 机型全流程截图（含去重校验）
+        run: |
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          npm run screenshots:machine
       - name: 失败时保留日志
         if: failure()
         uses: actions/upload-artifact@v4
