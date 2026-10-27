@@ -40,8 +40,9 @@ export interface KeyframeOptions {
 
 function validateBBox(part: KeyframePart): void {
   for (let axis = 0; axis < 3; axis += 1) {
-    const min = part.bbox.min[axis];
-    const max = part.bbox.max[axis];
+    // noUncheckedIndexedAccess：索引结果可能是 undefined，先归一成 NaN 再校验
+    const min = part.bbox.min[axis] ?? Number.NaN;
+    const max = part.bbox.max[axis] ?? Number.NaN;
     if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) {
       throw new Error(`零件「${part.name}」的包围盒非法`);
     }
@@ -59,8 +60,11 @@ export function sweptBBox(part: KeyframePart): BBox {
   const min: Vec3 = [0, 0, 0];
   const max: Vec3 = [0, 0, 0];
   for (let axis = 0; axis < 3; axis += 1) {
-    min[axis] = Math.min(part.bbox.min[axis], part.bbox.min[axis] + stroke[axis]);
-    max[axis] = Math.max(part.bbox.max[axis], part.bbox.max[axis] + stroke[axis]);
+    const lo = part.bbox.min[axis] ?? 0;
+    const hi = part.bbox.max[axis] ?? 0;
+    const step = stroke[axis] ?? 0;
+    min[axis] = Math.min(lo, lo + step);
+    max[axis] = Math.max(hi, hi + step);
   }
   return { min, max };
 }
@@ -75,8 +79,8 @@ export function bboxAtRatio(part: KeyframePart, ratio: number): BBox {
   const min: Vec3 = [0, 0, 0];
   const max: Vec3 = [0, 0, 0];
   for (let axis = 0; axis < 3; axis += 1) {
-    min[axis] = part.bbox.min[axis] + stroke[axis] * ratio;
-    max[axis] = part.bbox.max[axis] + stroke[axis] * ratio;
+    min[axis] = (part.bbox.min[axis] ?? 0) + (stroke[axis] ?? 0) * ratio;
+    max[axis] = (part.bbox.max[axis] ?? 0) + (stroke[axis] ?? 0) * ratio;
   }
   return { min, max };
 }
@@ -84,8 +88,8 @@ export function bboxAtRatio(part: KeyframePart, ratio: number): BBox {
 function aabbOverlap(a: BBox, b: BBox, tolMm: number): { overlap: Vec3; volume: number } | null {
   const overlap: Vec3 = [0, 0, 0];
   for (let axis = 0; axis < 3; axis += 1) {
-    const lower = Math.max(a.min[axis], b.min[axis]);
-    const upper = Math.min(a.max[axis], b.max[axis]);
+    const lower = Math.max(a.min[axis] ?? 0, b.min[axis] ?? 0);
+    const upper = Math.min(a.max[axis] ?? 0, b.max[axis] ?? 0);
     // 粗筛用容差：upper + tol > lower 才算相交；精算时 tol=0，相切不算。
     if (upper + tolMm <= lower) return null;
     overlap[axis] = Math.max(0, upper - lower);
