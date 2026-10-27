@@ -1870,6 +1870,50 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
 }
 
 /**
+ * 纯导入（未落成工程）时刷新标题/元信息与右侧面板，避免继续显示上一个工程的名字。
+ * 面板用 stage='import'，文案写「当前模型（未保存工程）」，不冒充工程。
+ */
+function showImportedModelStage(name: string, result: CadImportResult): void {
+  lastOpenedProject = null;
+  const title = document.getElementById('spTitle');
+  if (title) title.textContent = name;
+  const envelope = unionEnvelope(
+    (result.meshes ?? []).map((mesh) => {
+      const positions = mesh.positions;
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i + 2 < positions.length; i += 3) {
+        const x = positions[i] ?? 0, y = positions[i + 1] ?? 0, z = positions[i + 2] ?? 0;
+        minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+      }
+      return Number.isFinite(minX)
+        ? { min: [minX, minY, minZ] as [number, number, number], max: [maxX, maxY, maxZ] as [number, number, number] }
+        : { min: [0, 0, 0] as [number, number, number], max: [0, 0, 0] as [number, number, number] };
+    })
+  );
+  const meta = document.getElementById('spMeta');
+  if (meta) {
+    meta.textContent = [
+      `零件 ${result.stats.meshCount} 件`,
+      `${result.stats.triangleCount} 个三角面`,
+      envelope ? `包络 ${envelope[0]}×${envelope[1]}×${envelope[2]} mm` : null,
+      '导入模型 · 未保存工程'
+    ].filter(Boolean).join(' · ');
+  }
+  attachProjectPanel({
+    name,
+    stage: 'import',
+    parts: result.stats.meshCount,
+    envelopeMm: envelope,
+    massKg: null,
+    hasStep: /\.(stp|step|igs|iges|brep)$/i.test(name),
+    hasStl: /\.stl$/i.test(name),
+    createdAt: new Date().toISOString(),
+    materials: []
+  });
+}
+
+/**
  * 当前视口零件清单 → CSV（userData/exports）。
  *
  * 只导真实量：名字、装配路径、包围盒、三角面数。质量/价格不写——没有材料与价格语义，
@@ -2142,6 +2186,8 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     parametric?.setSource(name, nextIdentity?.projectId, nextStorageKey);
     interference?.run([]);
     displayFileInfo(name);
+    // 导入后原型标题还挂着上一个工程名（实测：打开工程再导入 STEP，标题仍是旧工程）
+    showImportedModelStage(name, result);
     const partCount = document.getElementById('cadPartCount');
     if (partCount) partCount.textContent = String(result.stats.meshCount);
     setBusy(false);
@@ -3777,6 +3823,11 @@ function init(): void {
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();
   installAgentConfirmCard();
+  // 原型切回「装配」示例时交还右侧面板（工程面板只在工程/导入视图里用）
+  (window as unknown as { __detachProjectPanel?: () => void }).__detachProjectPanel = () => {
+    detachProjectPanel();
+    lastOpenedProject = null;
+  };
   buildOverlay();
   const designWizard = initDesignWizard({
     onSaved: async () => { await refreshProjectMenu(); },
