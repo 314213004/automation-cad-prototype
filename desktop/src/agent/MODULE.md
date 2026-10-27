@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 22 个 AgentTool；含只读 `suggest_kinematics`、`get_render_stats`；含只读 `design_machine` 与写工具 `apply_machine_design`）
+tools.ts（AgentTools + 25 个 AgentTool；含只读 `suggest_kinematics`、`get_render_stats`；含只读 `design_machine` 与写工具 `apply_machine_design`）
  ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
  ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
@@ -554,7 +554,7 @@ parseFallbackCandidates(text): string[]
 ## 进度
 
 - ✅ 注册表 + 22 工具（只读 12 / 写 10）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 22 个）
+- ✅ MCP stdio（真实握手 `tools/list` 返回 25 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）

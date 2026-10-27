@@ -1,0 +1,40 @@
+name: ci
+
+# 之前只有手动触发的 windows-build，main 上的提交与 PR 都不跑测试，
+# 合并前只能靠本地 `npm test` 自觉。这里补上 push / PR 的必跑项。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: tsc + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      - name: 类型检查
+        run: npx tsc --noEmit
+      - name: 单元测试（含 kb.json 新鲜度与工具数量文档一致性）
+        run: npm test
+      - name: 数据包校验
+        run: npm run packs:validate
+
+  # smoke 依赖 xvfb + 真实 Electron 渲染，本地跑；CI 只保证纯函数层与文档一致性。

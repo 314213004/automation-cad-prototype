@@ -255,7 +255,7 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 22 个工具里，只读 12 个、写操作 10 个。 */
+/** 目前注册的 25 个工具里，只读 12 个、写操作 13 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
