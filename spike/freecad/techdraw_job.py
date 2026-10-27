@@ -10,6 +10,7 @@ AutomationCAD · FreeCAD 无界面后台作业：零件工程图（TechDraw）�
 因此主进程默认只用环境变量）。纯逻辑自检（不需要 FreeCAD）：
 
     python3 techdraw_job.py --self-test
+    freecadcmd techdraw_job.py --pass --self-test     # 在 FreeCAD 自带 Python 里跑同一套自检（输出 SELF_TEST_OK）
 
 协议（与 build123d sidecar 一样是内核无关 JSON）：
   输入  automationcad.drawing-job/1   见 desktop/src/drawings/protocol.ts
@@ -32,7 +33,7 @@ import traceback
 
 PROTOCOL = "automationcad.drawing-job/1"
 RESULT_PROTOCOL = "automationcad.drawing-result/1"
-SCRIPT_VERSION = "1.1.0"
+SCRIPT_VERSION = "1.1.1"
 EVENT_PREFIX = "@@ACAD "
 
 # ---------------------------------------------------------------------------
@@ -627,9 +628,18 @@ MAX_TIERS = 4
 MAX_ORDINATES = 9
 MAX_CALLOUTS = 7
 TABLE_ROW = 6.0
+CUT_CLEAR = 4.0         # 有剖切符号时左侧孔位尺寸整体外移，避开剖切线左端字母
+KEEPOUT_PAD = 0.8       # 剖切符号禁区外扩
+LEADER_ANGLES = 16      # 引线端点在孔周的候选方位数
+LEADER_CLEAR = 1.0      # 引线与其它孔/槽至少留的间隙（页面 mm）
+ALONG_TOL = 2.0         # 引线离中心线这么近算「沿中心线走」
+CENTER_BAND = 4.5       # 标注折点离水平中心线至少这么远
+ALONG_MAX = 3.0         # 沿中心线走超过这么长判为难看（次于穿孔、先于长度）
 TABLE_COLS = (12.0, 18.0, 18.0, 42.0)
-SYM_CB = "\u2334"       # ⌴ 沉孔
-SYM_DEPTH = "\u21a7"    # ↧ 深度
+# 沉孔/深度用中文文字而不是 GB/ISO 符号（U+2334 / U+21A7）：图纸默认字体 Noto Sans CJK SC 等常见中文字体
+# 没有这两个字形，真机出图会显示成方块；Ø（U+00D8）与 ×（U+00D7）各字体都有，保留符号。
+TXT_CB = "沉孔"
+TXT_DEPTH = "深"
 SYM_DIA = "\u00d8"      # Ø
 
 
@@ -749,27 +759,27 @@ def group_holes(specs):
 
 
 def callout_text(g) -> str:
-    """GB 风格孔标注：4×Ø6.6 ⌴Ø11↧6.5、2×M6-6H↧10 孔↧12、6×Ø9 通孔 均布、腰形槽 60×12 通。"""
+    """GB 风格孔标注（文字版）：4×Ø6.6 沉孔Ø11深6.5、2×M6-6H深10 孔深12、6×Ø9 通孔 均布、腰形槽 60×12 通。"""
     n = len(g["positions"])
     pre = f"{n}×" if n > 1 else ""
     fm = format_mm
     if g["kind"] == "slot":
-        text = f"{pre}腰形槽 {fm(g['length'])}×{fm(g['width'])}" + (" 通" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}")
+        text = f"{pre}腰形槽 {fm(g['length'])}×{fm(g['width'])}" + (" 通" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}")
     elif g.get("thread"):
         thr = f"{g['thread']}-6H"
         if g.get("through"):
             text = f"{pre}{thr} 通孔"
         elif g.get("threadDepth") and abs(g["threadDepth"] - g["depth"]) > 1e-6:
-            text = f"{pre}{thr}{SYM_DEPTH}{fm(g['threadDepth'])} 孔{SYM_DEPTH}{fm(g['depth'])}"
+            text = f"{pre}{thr}{TXT_DEPTH}{fm(g['threadDepth'])} 孔{TXT_DEPTH}{fm(g['depth'])}"
         else:
-            text = f"{pre}{thr}{SYM_DEPTH}{fm(g['depth'])}"
+            text = f"{pre}{thr}{TXT_DEPTH}{fm(g['depth'])}"
     else:
         base = f"{pre}{SYM_DIA}{fm(g['diameter'])}"
         if g["kind"] == "counterbore":
-            depth = "" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}"
-            text = f"{base}{depth} {SYM_CB}{SYM_DIA}{fm(g['cbDiameter'])}{SYM_DEPTH}{fm(g['cbDepth'])}"
+            depth = "" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}"
+            text = f"{base}{depth} {TXT_CB}{SYM_DIA}{fm(g['cbDiameter'])}{TXT_DEPTH}{fm(g['cbDepth'])}"
         else:
-            text = base + (" 通孔" if g.get("through") else f"{SYM_DEPTH}{fm(g['depth'])}")
+            text = base + (" 通孔" if g.get("through") else f"{TXT_DEPTH}{fm(g['depth'])}")
     if g.get("pattern") and g["pattern"]["type"] == "circular":
         text += " 均布"
     return text
@@ -839,8 +849,208 @@ def spread(desired, gap: float, lo=None, hi=None):
     return out
 
 
-def annotation_needs(groups, positions_plan, mode: str = "dims") -> dict:
-    """页面上俯视图四周要预留的毫米数（与比例无关）；mode=table 时给出孔位表尺寸。"""
+def _merge_bands(bands):
+    out = []
+    for a, b in sorted((min(a, b), max(a, b)) for a, b in bands):
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def spread_avoid(desired, gap: float, bands=(), lo=None, hi=None):
+    """
+    带禁区的一维避让：结果值不落在任何开区间 band=(a,b) 内。禁区把数轴切成若干段，每个值归入期望位置
+    所在段（落在禁区里的按离哪侧近归段），各段内用 spread 排布并夹在段界内；某段放不下时把最靠边的值挪到相邻段。
+    """
+    bands = _merge_bands([b for b in bands if b[1] > b[0]])
+    if not desired:
+        return []
+    if not bands:
+        return spread(desired, gap, lo, hi)
+    lo_ = -math.inf if lo is None else lo
+    hi_ = math.inf if hi is None else hi
+    segs = []
+    cur = lo_
+    for a, b in bands:
+        if a > cur:
+            segs.append([cur, min(a, hi_)])
+        cur = max(cur, b)
+    if cur < hi_:
+        segs.append([cur, hi_])
+    segs = [sg for sg in segs if sg[1] >= sg[0]]
+    if not segs:
+        return spread(desired, gap, lo, hi)
+
+    def seg_of(v):
+        for k, (a, b) in enumerate(segs):
+            if a <= v <= b:
+                return k
+        # 在禁区（或越界）里：取距离最近的段
+        return min(range(len(segs)), key=lambda k: 0 if segs[k][0] <= v <= segs[k][1] else min(abs(v - segs[k][0]), abs(v - segs[k][1])))
+
+    assign = [seg_of(v) for v in desired]
+
+    def capacity(k):
+        a, b = segs[k]
+        return math.inf if math.isinf(b - a) else int(math.floor((b - a) / gap + 1e-9)) + 1
+
+    for _ in range(len(desired) * len(segs) + 1):
+        moved = False
+        for k in range(len(segs)):
+            idx = sorted((i for i in range(len(desired)) if assign[i] == k), key=lambda i: desired[i])
+            if len(idx) <= capacity(k):
+                continue
+            up_ok = k + 1 < len(segs) and sum(1 for i in assign if i == k + 1) < capacity(k + 1)
+            down_ok = k > 0 and sum(1 for i in assign if i == k - 1) < capacity(k - 1)
+            if up_ok and (not down_ok or desired[idx[-1]] - segs[k][1] >= segs[k][0] - desired[idx[0]]):
+                assign[idx[-1]] = k + 1
+            elif down_ok:
+                assign[idx[0]] = k - 1
+            else:
+                continue
+            moved = True
+        if not moved:
+            break
+    out = [0.0] * len(desired)
+    for k, (a, b) in enumerate(segs):
+        idx = [i for i in range(len(desired)) if assign[i] == k]
+        if not idx:
+            continue
+        got = spread([desired[i] for i in idx], gap, None if math.isinf(a) else a, None if math.isinf(b) else b)
+        for i, v in zip(idx, got):
+            out[i] = v
+    return out
+
+
+def _seg_seg_dist(a, b, c, d) -> float:
+    """平面两线段最短距离（相交为 0）。"""
+    def cross(o, p, q):
+        return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0])
+    d1, d2, d3, d4 = cross(c, d, a), cross(c, d, b), cross(a, b, c), cross(a, b, d)
+    if ((d1 > 0) != (d2 > 0)) and ((d3 > 0) != (d4 > 0)) and d1 * d2 < 0 and d3 * d4 < 0:
+        return 0.0
+    return min(_seg_dist(a, c, d), _seg_dist(b, c, d), _seg_dist(c, a, b), _seg_dist(d, a, b))
+
+
+def _seg_hits_rect(a, b, rect) -> bool:
+    x0, y0, x1, y1 = rect
+    if any(x0 <= p[0] <= x1 and y0 <= p[1] <= y1 for p in (a, b)):
+        return True
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    return any(_seg_seg_dist(a, b, corners[i], corners[(i + 1) % 4]) < 1e-9 for i in range(4))
+
+
+def seg_hits_obstacle(a, b, ob, clear: float = 0.0) -> bool:
+    """线段与孔（圆）/ 腰形槽（胶囊：轴线段 + 半径）/ 矩形禁区 是否相交；clear 为额外间隙（圆/槽外扩）。"""
+    if ob["type"] == "circle":
+        return _seg_dist(ob["c"], a, b) < ob["r"] + clear - 1e-6
+    if ob["type"] == "slot":
+        return _seg_seg_dist(a, b, ob["p0"], ob["p1"]) < ob["r"] + clear - 1e-6
+    return _seg_hits_rect(a, b, ob["rect"])
+
+
+def along_length(a, b, lines, tol: float = ALONG_TOL, step: float = 0.5) -> float:
+    """线段 a→b 上离任一中心线 tol 以内的长度（采样估算）。"""
+    L = math.hypot(b[0] - a[0], b[1] - a[1])
+    if not lines or L < 1e-9:
+        return 0.0
+    n = max(2, int(L / step))
+    near = 0
+    for i in range(n + 1):
+        t = i / n
+        q = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+        if any(_seg_dist(q, p0, p1) < tol for p0, p1 in lines):
+            near += 1
+    return L * near / (n + 1)
+
+
+def hole_obstacles(groups, P, scale: float):
+    """俯视图上所有孔/槽的页面占位（圆取沉孔/螺纹大径/孔径中最大者）；gi/pi 记录所属组与孔号。"""
+    out = []
+    for gi, g in enumerate(groups):
+        for pi, (x, y) in enumerate(g["positions"]):
+            px, py = P(x, y)
+            if g["kind"] == "slot":
+                ang = math.radians(g.get("angle") or 0.0)
+                half = (g["length"] - g["width"]) / 2 * scale
+                ux, uy = math.cos(ang), math.sin(ang)
+                out.append({"type": "slot", "p0": (px - ux * half, py - uy * half), "p1": (px + ux * half, py + uy * half),
+                            "r": g["width"] / 2 * scale, "gi": gi, "pi": pi})
+            else:
+                r = max(g.get("cbDiameter") or 0, _thread_major(g) or 0, g["diameter"]) / 2 * scale
+                out.append({"type": "circle", "c": (px, py), "r": r, "gi": gi, "pi": pi})
+    return out
+
+
+def leader_candidates(gi, obstacles, n: int = LEADER_ANGLES):
+    """同组每个孔、孔周 n 个方位的引线端点候选：[(tip, 所属孔占位)]。"""
+    out = []
+    for ob in obstacles:
+        if ob["gi"] != gi:
+            continue
+        for k in range(n):
+            a = 2 * math.pi * k / n
+            ux, uy = math.cos(a), math.sin(a)
+            if ob["type"] == "circle":
+                out.append(((ob["c"][0] + ux * ob["r"], ob["c"][1] + uy * ob["r"]), ob))
+            else:
+                for c in (ob["p0"], ob["p1"]):
+                    tip = (c[0] + ux * ob["r"], c[1] + uy * ob["r"])
+                    if _seg_dist(tip, ob["p0"], ob["p1"]) >= ob["r"] - 1e-6:
+                        out.append((tip, ob))
+    return out
+
+
+def circle_leader_candidates(center, radius: float, obstacles, n: int = 48):
+    """节圆引线端点：节圆上 n 个方位，去掉落在孔上或离孔太近（< LEADER_CLEAR + 0.5）的。"""
+    allc = [((center[0] + radius * math.cos(2 * math.pi * k / n), center[1] + radius * math.sin(2 * math.pi * k / n)), None)
+            for k in range(n)]
+    out = [c for c in allc if all(not seg_hits_obstacle(c[0], c[0], ob, LEADER_CLEAR + 0.5) for ob in obstacles)]
+    return out or allc
+
+
+def leader_score(tip, elbow, obstacles, own=None, lines=(), centerlines=()):
+    """
+    引线 tip→elbow 的代价，按字典序比较：
+      (穿越的其它孔/槽（含 LEADER_CLEAR 间隙）/禁区个数 + 回穿本孔 + 与已放引线相交数,
+       沿中心线走超过 ALONG_MAX, 长度)。起点沿引线内缩 0.4mm 判本孔。
+    """
+    dx, dy = elbow[0] - tip[0], elbow[1] - tip[1]
+    L = math.hypot(dx, dy) or 1e-9
+    start = (tip[0] + dx / L * 0.4, tip[1] + dy / L * 0.4)
+    hits = sum(1 for ob in obstacles if (seg_hits_obstacle(start, elbow, ob) if ob is own
+                                         else seg_hits_obstacle(tip, elbow, ob, LEADER_CLEAR)))
+    for (p, q) in lines:
+        if _seg_seg_dist(start, elbow, p, q) < 0.3:
+            hits += 1
+    along = 1 if along_length(start, elbow, centerlines) > ALONG_MAX else 0
+    return (hits, along, L)
+
+
+def choose_leader(cands, elbow, obstacles, lines=(), centerlines=()):
+    """候选端点里取穿越最少、其次不沿中心线、再次最短的一个；返回 (tip, score)。"""
+    best = None
+    for tip, own in cands:
+        sc = leader_score(tip, elbow, obstacles, own, lines, centerlines)
+        if best is None or sc < best[1]:
+            best = (tip, sc)
+    return best
+
+
+def cut_line_keepout(view_rect, y_page: float):
+    """剖切符号（两端短划、箭头、字母）的页面禁区矩形 [左, 右]，与 cut_line_prims 几何一致。"""
+    x0, _, x1, _ = view_rect
+    w = _text_width("A", TEXT_H)
+    pad = KEEPOUT_PAD
+    left = (x0 - 7 - w / 2 - pad, y_page - pad, x0 - 2 + pad, y_page + 5 + pad)
+    right = (x1 + 2 - pad, y_page - pad, x1 + 7 + w / 2 + pad, y_page + 5 + pad)
+    return [left, right]
+
+
+def annotation_needs(groups, positions_plan, mode: str = "dims", section: bool = False) -> dict:
+    """页面上俯视图四周要预留的毫米数（与比例无关）；mode=table 时给出孔位表尺寸；section=有剖切符号（左侧多留）。"""
     if not groups:
         return {}
     need = {"left": 0.0, "bottom": 0.0, "right": 0.0}
@@ -855,6 +1065,8 @@ def annotation_needs(groups, positions_plan, mode: str = "dims") -> dict:
             need[side] = DIM_OFFSET + TIER * (len(dims) - 1) + TEXT_H + 2
         elif plan.get("mode") == "ord" and dims:
             need[side] = 6.0 + max(_text_width(d["text"], TEXT_H) for d in dims) + 2
+    if section and need["left"] > 0:
+        need["left"] += CUT_CLEAR
     texts = [g["callout"] for g in groups] + [c["text"] for c in positions_plan.get("circles") or []]
     need["right"] = CALLOUT_GAP + max(_text_width(t, TEXT_H) for t in texts) + 3
     return need
@@ -1040,10 +1252,11 @@ def prims_bbox(prims):
     return boxes
 
 
-def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: float, mode: str = "dims"):
+def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: float, mode: str = "dims", keepout=()):
     """
     俯视图（孔可见）上的孔标注图元：孔标注引线、孔位尺寸（对称/坐标）、中心标记、节圆、孔位表标签。
-    view_rect 为俯视图页面占位（x0,y0,x1,y1）；返回 (prims, info)。
+    view_rect 为俯视图页面占位（x0,y0,x1,y1）；keepout 为页面禁区矩形（剖切符号两端字母/箭头），
+    标注文字列与左侧孔位尺寸都避开它，引线尽量不穿过它。返回 (prims, info)。
     """
     xmin, ymin, xmax, ymax = bbox2d
     vx0, vy0, vx1, vy1 = view_rect
@@ -1054,11 +1267,14 @@ def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: fl
     prims, info = [], {"callouts": [], "mode": mode}
     xc, yc = positions_plan["center"]
     cxp, cyp = P(xc, yc)
+    centerlines = []
     # 零件中心线（对称轴向）
     if (positions_plan.get("x") or {}).get("mode") == "sym" or positions_plan.get("circles"):
-        prims.append(prim_line([(cxp, vy0 - 3), (cxp, vy1 + 3)], "center"))
+        centerlines.append(((cxp, vy0 - 3), (cxp, vy1 + 3)))
     if (positions_plan.get("y") or {}).get("mode") == "sym" or positions_plan.get("circles"):
-        prims.append(prim_line([(vx0 - 3, cyp), (vx1 + 3, cyp)], "center"))
+        centerlines.append(((vx0 - 3, cyp), (vx1 + 3, cyp)))
+    for a, b in centerlines:
+        prims.append(prim_line([a, b], "center"))
     # 中心标记 / 槽中心线 / 螺纹大径 3/4 细实线圆 / 节圆
     for g in groups:
         for (x, y) in g["positions"]:
@@ -1094,39 +1310,54 @@ def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: fl
         info["callouts"] = [g["callout"] for g in groups]
         return prims, info
 
-    # ---- 孔标注：右侧文字列，引线指到该组最右侧的一个孔 ----
+    # ---- 孔标注：右侧文字列；引线端点在同组各孔、孔周多个方位里选穿越其它孔/槽最少、其次最短的 ----
     col = vx1 + CALLOUT_GAP
+    keepout = [tuple(r) for r in (keepout or ())]
+    obstacles = hole_obstacles(groups, P, scale)
+    blockers = obstacles + [{"type": "rect", "rect": r} for r in keepout]
     items = []
-    for g in groups:
-        tx, ty = max((P(x, y) for x, y in g["positions"]), key=lambda q: (q[0], q[1]))
-        if g["kind"] == "slot":
-            ang = math.radians(g.get("angle") or 0.0)
-            half = g["length"] / 2 * scale
-            edge = (tx + math.cos(ang) * half, ty + math.sin(ang) * half)
-            items.append({"text": g["callout"], "target": (tx, ty), "edge": edge, "r": 0.0})
-        else:
-            items.append({"text": g["callout"], "target": (tx, ty), "edge": None, "r": g["diameter"] / 2 * scale})
+    for gi, g in enumerate(groups):
+        items.append({"text": g["callout"], "cands": leader_candidates(gi, obstacles)})
     for c in positions_plan.get("circles") or []:
         px, py = P(*c["center"])
         rr = c["radius"] * scale
-        a = math.radians(-12.0)
-        items.append({"text": c["text"], "target": (px + rr * math.cos(a), py + rr * math.sin(a)),
-                      "edge": (px + rr * math.cos(a), py + rr * math.sin(a)), "r": 0.0})
-    want = [it["target"][1] + 2.5 for it in items]
-    got = spread(want, CALLOUT_PITCH, lo=vy0 - TEXT_H, hi=vy1 + 6)
-    for it, ty in zip(items, got):
+        items.append({"text": c["text"], "cands": circle_leader_candidates((px, py), rr, obstacles)})
+    # 第一轮：假设引线水平（折点与端点同高）选端点，得到每行期望高度
+    for it in items:
+        best = None
+        for tip, own in it["cands"]:
+            sc = leader_score(tip, (col - 1.5, tip[1]), blockers, own, (), centerlines)
+            if best is None or sc < best[1]:
+                best = (tip, sc)
+        it["want"] = best[0][1] - 0.8
+    # 文字行占位 [ty-0.6, ty+TEXT_H+1.1]；与禁区矩形在 x 上重叠的，换算成 ty 的禁区带
+    max_w = max(_text_width(it["text"], TEXT_H) for it in items)
+    bands = [(r[1] - TEXT_H - 1.1, r[3] + 0.6) for r in keepout if r[2] > col - 2.0 and r[0] < col + max_w]
+    # 折点不贴着水平中心线的延长方向（否则引线与中心线近乎重合，难以分辨）
+    bands += [(a[1] - CENTER_BAND, a[1] + CENTER_BAND) for a, b in centerlines if abs(a[1] - b[1]) < 1e-9]
+    got = spread_avoid([it["want"] for it in items], CALLOUT_PITCH, bands, lo=vy0 - TEXT_H, hi=vy1 + 6)
+    # 第二轮：折点定了，按实际折点重新选端点（已放的引线也算障碍，避免引线互相交叉）
+    placed = []
+    for it, ty in sorted(zip(items, got), key=lambda pair: pair[1]):
         w = _text_width(it["text"], TEXT_H)
         elbow = (col - 1.5, ty)
-        if it["edge"] is None:
-            dx, dy = elbow[0] - it["target"][0], elbow[1] - it["target"][1]
-            n = math.hypot(dx, dy) or 1.0
-            tip = (it["target"][0] + dx / n * it["r"], it["target"][1] + dy / n * it["r"])
-        else:
-            tip = it["edge"]
+        tip, sc = choose_leader(it["cands"], elbow, blockers, placed, centerlines)
+        placed.append((tip, elbow))
         prims.append(prim_line([tip, elbow, (col + w + 0.5, ty)]))
         prims.append(prim_arrow(tip, elbow))
         prims.append(prim_text(col, ty + 0.8, it["text"], "start"))
-        info["callouts"].append(it["text"])
+        info.setdefault("leaders", []).append({"text": it["text"], "tip": tip, "elbow": elbow, "hits": sc[0],
+                                                 "along": sc[1]})
+    info["callouts"] = [it["text"] for it in items]
+
+    # 左侧孔位尺寸避开剖切符号左端：首道尺寸线至少离禁区 3mm
+    left_shift = 0.0
+    ymode = (positions_plan.get("y") or {}).get("mode")
+    for r in keepout:
+        if r[2] <= vx0 + 0.5 and r[3] > vy0 - 2 and r[1] < vy1 + 2:
+            need = (vx0 - DIM_OFFSET) - (r[0] - 3.0) if ymode == "sym" else (vx0 - 6.0) - (r[0] - 1.5)
+            left_shift = max(left_shift, need)
+    info["leftShift"] = round(left_shift, 3)
 
     # ---- 孔位尺寸：X 在视图下方，Y 在视图左侧 ----
     for axis in ("x", "y"):
@@ -1141,7 +1372,8 @@ def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: fl
                     prims.extend(linear_dim((a, vy0), (b, vy0), "h", vy0 - DIM_OFFSET - TIER * tier, d["text"], vy0 - EXT_GAP))
                 else:
                     a, b = P(xc, d["a"])[1], P(xc, d["b"])[1]
-                    prims.extend(linear_dim((vx0, a), (vx0, b), "v", vx0 - DIM_OFFSET - TIER * tier, d["text"], vx0 - EXT_GAP))
+                    prims.extend(linear_dim((vx0, a), (vx0, b), "v", vx0 - DIM_OFFSET - left_shift - TIER * tier, d["text"],
+                                            vx0 - EXT_GAP))
         else:
             if axis == "x":
                 want = [P(d["value"], ymin)[0] for d in dims]
@@ -1153,8 +1385,8 @@ def layout_hole_annotations(groups, positions_plan, view_rect, bbox2d, scale: fl
                 want = [P(xmin, d["value"])[1] for d in dims]
                 got = spread(want, ORD_PITCH)
                 for d, w0, t in zip(dims, want, got):
-                    prims.append(prim_line([(vx0 - EXT_GAP, w0), (vx0 - 4.0, w0), (vx0 - 5.5, t)]))
-                    prims.append(prim_text(vx0 - 6.0, t - TEXT_H / 2 + 0.3, d["text"], "end"))
+                    prims.append(prim_line([(vx0 - EXT_GAP, w0), (vx0 - 4.0 - left_shift, w0), (vx0 - 5.5 - left_shift, t)]))
+                    prims.append(prim_text(vx0 - 6.0 - left_shift, t - TEXT_H / 2 + 0.3, d["text"], "end"))
     return prims, info
 
 
@@ -1985,7 +2217,7 @@ def run_part(rt: Runtime, job: dict, part: dict, index: int) -> dict:
         pos_plan = plan_hole_positions(groups, bbox2d) if groups else None
         section_y = choose_section_line(groups) if groups else None
         hole_mode = "dims" if groups else "none"
-        annot = annotation_needs(groups, pos_plan, "dims") if groups else {}
+        annot = annotation_needs(groups, pos_plan, "dims", section_y is not None) if groups else {}
         if section_y is not None:
             annot["section"] = True
         paper_opt = part.get("paper") or options.get("paper") or "auto"
@@ -1994,7 +2226,7 @@ def run_part(rt: Runtime, job: dict, part: dict, index: int) -> dict:
         crowded = crowding_reason(groups, pos_plan, plan["scale"]) if groups else None
         if crowded:
             hole_mode = "table"
-            annot = annotation_needs(groups, pos_plan, "table")
+            annot = annotation_needs(groups, pos_plan, "table", section_y is not None)
             if section_y is not None:
                 annot["section"] = True
             plan = choose_sheet(size, paper_opt, scale_opt, with_iso, annot)
@@ -2135,8 +2367,13 @@ def run_part(rt: Runtime, job: dict, part: dict, index: int) -> dict:
         prims = []
         hole_info = {"callouts": [], "mode": hole_mode}
         try:
+            cut_ty = None
+            if sec_view is not None and "section" in page_rects and cut_shape is not None and "top" in page_rects:
+                cut_ty = page_rects["top"][1] + (section_y - bb.YMin) * scale
+            keepout = cut_line_keepout(page_rects["top"], cut_ty) if cut_ty is not None else []
             if groups and "top" in page_rects:
-                hp, hole_info = layout_hole_annotations(groups, pos_plan, page_rects["top"], bbox2d, scale, hole_mode)
+                hp, hole_info = layout_hole_annotations(groups, pos_plan, page_rects["top"], bbox2d, scale, hole_mode,
+                                                        keepout)
                 prims.extend(hp)
                 if hole_mode == "table" and "table" in (plan.get("rects") or {}):
                     t = plan["rects"]["table"]
@@ -2153,8 +2390,7 @@ def run_part(rt: Runtime, job: dict, part: dict, index: int) -> dict:
                 cbb = cut_shape.BoundBox
                 prims.extend(section_prims(page_rects["section"], (cbb.XMin, cbb.YMin, cbb.ZMin, cbb.XMax, cbb.YMax, cbb.ZMax),
                                            scale, slices, groups, section_y, bb.ZMax))
-                ty = page_rects["top"][1] + (section_y - bb.YMin) * scale
-                prims.extend(cut_line_prims(page_rects["top"], ty, "A"))
+                prims.extend(cut_line_prims(page_rects["top"], cut_ty, "A"))
         except Exception as exc:  # noqa: BLE001
             result["warnings"].append(f"孔标注生成失败（已出外形尺寸图）：{type(exc).__name__}: {exc}")
         result["holes"] = {"source": ("mixed" if len(sources) > 1 else sources[0]) if sources else "none",
@@ -2324,6 +2560,186 @@ def main() -> int:
     return 0
 
 
+def _adapter_specs():
+    """自检样例：转接板 200×120（4×Ø6.6 沉孔、2×Ø8 通孔、腰形槽 60×12）。"""
+    raw = [
+        {"kind": "counterbore", "featureId": "f2", "positions": [[-85, -45], [85, -45], [-85, 45], [85, 45]],
+         "diameter": 6.6, "through": True, "cbDiameter": 11, "cbDepth": 6.5},
+        {"kind": "hole", "featureId": "f3", "positions": [[-40, 0], [40, 0]], "diameter": 8, "through": True},
+        {"kind": "slot", "featureId": "f4", "positions": [[0, 0]], "through": True, "length": 60, "width": 12},
+    ]
+    specs, warn = normalize_hole_specs(raw)
+    assert warn == [], warn
+    return specs
+
+
+def _flange_specs():
+    """自检样例：法兰 Ø130（Ø40 中心通孔、6×Ø9 节圆 Ø90 均布、2×M6 底孔 Ø5 深 12 螺纹深 10）。"""
+    pcd = [[round(45 * math.cos(math.radians(a)), 6), round(45 * math.sin(math.radians(a)), 6)] for a in range(0, 360, 60)]
+    raw = [
+        {"kind": "hole", "featureId": "c", "positions": [[0, 0]], "diameter": 40, "through": True},
+        {"kind": "hole", "featureId": "p", "positions": pcd, "diameter": 9, "through": True},
+        {"kind": "hole", "featureId": "t", "positions": [[0, 30], [0, -30]], "diameter": 5, "through": False,
+         "depth": 12, "thread": "M6", "threadDepth": 10},
+    ]
+    specs, warn = normalize_hole_specs(raw)
+    assert warn == [], warn
+    return specs
+
+
+def _self_test_holes() -> None:
+    # 清洗：非法条目丢弃并给出警告；None = 未提供
+    assert normalize_hole_specs(None) == (None, [])
+    bad, warn = normalize_hole_specs([{"kind": "x"}, {"kind": "hole", "positions": []},
+                                      {"kind": "hole", "positions": [[0, 0]], "through": False, "diameter": 5},
+                                      {"kind": "hole", "positions": [[0, 0]], "diameter": 5, "thread": "6"}])
+    assert len(bad) == 2 and len(warn) == 3, (bad, warn)
+    assert bad[0]["through"] is True and "thread" not in bad[1], bad
+
+    # 分组：跨特征同规格合并、去重孔位，字母顺序、阵列识别
+    a = _adapter_specs()
+    dup = a + [{**a[1], "featureId": "f9", "positions": [(40.0, 0.0), (0.0, 30.0)]}]
+    g = group_holes(dup)
+    assert [x["kind"] for x in g] == ["counterbore", "hole", "slot"], g
+    assert len(g[1]["positions"]) == 3 and g[1]["featureIds"] == ["f3", "f9"], g[1]
+    assert [x["letter"] for x in g] == ["A", "B", "C"]
+    assert g[0]["pattern"]["type"] == "grid"
+    f = group_holes(_flange_specs())
+    assert f[1]["pattern"]["type"] == "circular" and f[1]["pattern"]["count"] == 6 and abs(f[1]["pattern"]["radius"] - 45) < 1e-3
+
+    # 文字标注：沉孔/深度用中文文字（常见中文字体无 ⌴ ↧ 字形），Ø × 保留
+    ga = group_holes(a)
+    assert [x["callout"] for x in ga] == ["4×Ø6.6 沉孔Ø11深6.5", "2×Ø8 通孔", "腰形槽 60×12 通"], [x["callout"] for x in ga]
+    assert [x["callout"] for x in f] == ["Ø40 通孔", "6×Ø9 通孔 均布", "2×M6-6H深10 孔深12"], [x["callout"] for x in f]
+    for x in ga + f:
+        assert "\u2334" not in x["callout"] and "\u21a7" not in x["callout"], x["callout"]
+    blind = group_holes(normalize_hole_specs([
+        {"kind": "hole", "positions": [[0, 0]], "diameter": 5, "through": False, "depth": 8},
+        {"kind": "hole", "positions": [[10, 0]], "diameter": 5, "through": False, "depth": 8, "thread": "M6", "threadDepth": 8},
+        {"kind": "counterbore", "positions": [[20, 0]], "diameter": 6.6, "through": False, "depth": 12, "cbDiameter": 11, "cbDepth": 6.5},
+        {"kind": "hole", "positions": [[30, 0]], "diameter": 8.5, "through": True, "thread": "M10"},
+    ])[0])
+    assert [x["callout"] for x in blind] == ["Ø5深8", "M6-6H深8", "Ø6.6深12 沉孔Ø11深6.5", "M10-6H 通孔"], [x["callout"] for x in blind]
+    assert single_callout(ga[0]) == "Ø6.6 沉孔Ø11深6.5"
+
+    # 孔位尺寸方案：对称（孔距）/ 基准坐标（左下为 0）；圆周阵列只标节圆
+    bbox = (-100.0, -60.0, 100.0, 60.0)
+    pa = plan_hole_positions(ga, bbox)
+    assert pa["x"]["mode"] == "sym" and [d["text"] for d in pa["x"]["dims"]] == ["80", "170"], pa["x"]
+    assert pa["y"]["mode"] == "sym" and [d["text"] for d in pa["y"]["dims"]] == ["90"], pa["y"]
+    asym = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[-80, 10], [30, 10], [50, -40]], "diameter": 6}])[0])
+    po = plan_hole_positions(asym, bbox)
+    assert po["x"]["mode"] == "ord" and [d["text"] for d in po["x"]["dims"]] == ["0", "20", "130", "150"], po["x"]
+    assert po["y"]["mode"] == "ord" and [d["text"] for d in po["y"]["dims"]] == ["0", "20", "70"], po["y"]
+    pf = plan_hole_positions(f, (-65.0, -65.0, 65.0, 65.0))
+    assert pf["circles"] and pf["circles"][0]["text"] == "节圆Ø90", pf["circles"]
+    assert [d["text"] for d in pf["y"]["dims"]] == ["60"] and pf["x"]["dims"] == [], pf
+
+    # 一维避让：保序、间距、总位移最小
+    got = spread([0.0, 1.0, 2.0, 20.0], 5.0)
+    assert all(got[i + 1] - got[i] >= 5.0 - 1e-9 for i in range(3)) and abs(got[1] - 1.0) < 1e-9, got
+
+    # 过密退化孔位表
+    assert crowding_reason(ga, pa, 1.0) is None
+    many = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[i * 1.0 - 50, 0]], "diameter": 1 + i * 0.1}
+                                             for i in range(9)])[0])
+    assert "超过" in (crowding_reason(many, plan_hole_positions(many, bbox), 1.0) or ""), "9 种规格应退孔位表"
+    dense = group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[-99 + i * 1.3, -59 + i * 0.7] for i in range(8)], "diameter": 1}])[0])
+    assert crowding_reason(dense, plan_hole_positions(dense, bbox), 0.5), "孔心坐标过密应退孔位表"
+    tbl = hole_table_prims(ga, bbox, (0.0, 0.0))
+    texts = [p["text"] for p in tbl if p["t"] == "text"]
+    assert "A1" in texts and "C1" in texts and "Ø6.6 沉孔Ø11深6.5" in texts, texts
+
+    # 剖切线：过沉孔/盲孔孔心；全通孔不剖
+    assert choose_section_line(ga) in (-45.0, 45.0)
+    assert choose_section_line(f) in (30.0, -30.0)
+    assert choose_section_line(group_holes(normalize_hole_specs([{"kind": "hole", "positions": [[0, 0]], "diameter": 5}])[0])) is None
+
+    # 带禁区的一维避让：结果不落进禁区带，保序且间距不变
+    got = spread_avoid([10.0, 12.0, 30.0], 6.5, [(8.0, 20.0)])
+    assert all(not (8.0 < v < 20.0) for v in got) and got == sorted(got), got
+    assert all(got[i + 1] - got[i] >= 6.5 - 1e-9 for i in range(2)), got
+    got = spread_avoid([0.0, 1.0, 2.0], 5.0, [(4.0, 30.0)], lo=-6.0)
+    assert all(not (4.0 < v < 30.0) for v in got) and min(got) >= -6.0 - 1e-9, got
+    assert spread_avoid([1.0, 2.0], 5.0, []) == spread([1.0, 2.0], 5.0)
+
+    # 线段相交判定：圆 / 胶囊（腰形槽）/ 矩形
+    assert seg_hits_obstacle((0, 0), (10, 0), {"type": "circle", "c": (5, 1), "r": 2})
+    assert not seg_hits_obstacle((0, 0), (10, 0), {"type": "circle", "c": (5, 3), "r": 2})
+    assert seg_hits_obstacle((0, 5), (2, -5), {"type": "slot", "p0": (-3, 0), "p1": (3, 0), "r": 1})
+    assert not seg_hits_obstacle((0, 5), (10, 5), {"type": "slot", "p0": (-3, 0), "p1": (3, 0), "r": 1})
+    assert seg_hits_obstacle((0, 0), (10, 10), {"type": "rect", "rect": (4, 4, 6, 6)})
+    assert not seg_hits_obstacle((0, 0), (10, 0), {"type": "rect", "rect": (4, 1, 6, 6)})
+
+    def check_layout(groups, plan, rect, bbox, cut_y):
+        keep = cut_line_keepout(rect, cut_y)
+        prims, info = layout_hole_annotations(groups, plan, rect, bbox, 1.0, "dims", keep)
+        P = lambda x, y: (rect[0] + x - bbox[0], rect[1] + y - bbox[1])  # noqa: E731
+        obs = hole_obstacles(groups, P, 1.0)
+        # 引线：不穿越任何孔/槽（本孔除外的起点内缩已在评分里处理），不进剖切符号禁区
+        for ld in info["leaders"]:
+            assert ld["hits"] == 0, ld
+            for ob in obs:
+                tip, el = ld["tip"], ld["elbow"]
+                L = math.hypot(el[0] - tip[0], el[1] - tip[1])
+                st = (tip[0] + (el[0] - tip[0]) / L * 0.4, tip[1] + (el[1] - tip[1]) / L * 0.4)
+                assert not seg_hits_obstacle(st, el, ob), (ld["text"], ob)
+        # 文字：互不重叠、不进禁区、不压视图
+        boxes = [b for _, b, _ in prims_bbox(prims + cut_line_prims(rect, cut_y))]
+        texts = [(b, t) for _, b, t in prims_bbox(prims)]
+        for i, (b1, t1) in enumerate(texts):
+            for b2, t2 in texts[i + 1:]:
+                assert not _overlap(b1, b2), (t1, t2)
+            for r in keep:
+                assert not _overlap(b1, r), (t1, r)
+        assert len(boxes) >= len(texts)
+        return prims, info
+
+    # 转接板：腰形槽引线不穿 Ø8 孔；剖切线（过沉孔 y=-45）右端字母不压标注文字；左侧 90 尺寸外移
+    rect = (100.0, 40.0, 300.0, 160.0)
+    cut_y = 40.0 + (-45.0 + 60.0)
+    prims, info = check_layout(ga, pa, rect, bbox, cut_y)
+    assert info["leftShift"] >= CUT_CLEAR - 1e-6 - 0.5, info["leftShift"]
+    left = cut_line_keepout(rect, cut_y)[0]
+    vlines = [p for p in prims if p["t"] == "line" and len(p["pts"]) == 2 and abs(p["pts"][0][0] - p["pts"][1][0]) < 1e-9
+              and p["pts"][0][0] < rect[0] - 3]
+    assert vlines and max(p["pts"][0][0] for p in vlines) <= left[0] - 3.0 + 1e-6, "左侧尺寸线离剖切字母至少 3mm"
+    slot_leader = next(ld for ld in info["leaders"] if ld["text"].startswith("腰形槽"))
+    assert slot_leader["hits"] == 0
+    # 法兰：Ø40 引线不越过 M6 孔与 Ø9 孔；剖切线过 M6 孔心（y=30 或 -30）
+    fb = (-65.0, -65.0, 65.0, 65.0)
+    frect = (100.0, 40.0, 230.0, 170.0)
+    fcut = 40.0 + (choose_section_line(f) + 65.0)
+    _, finfo = check_layout(f, pf, frect, fb, fcut)
+    assert next(ld for ld in finfo["leaders"] if ld["text"] == "Ø40 通孔")["hits"] == 0
+    # 无禁区时 leftShift 为 0，旧调用（不传 keepout）兼容
+    assert layout_hole_annotations(ga, pa, rect, bbox, 1.0)[1]["leftShift"] == 0.0
+    need0 = annotation_needs(ga, pa, "dims")
+    need1 = annotation_needs(ga, pa, "dims", section=True)
+    assert abs(need1["left"] - need0["left"] - CUT_CLEAR) < 1e-9
+
+    # DXF 分层：孔标注图元按 cls 进 DIM/CENTER/THREAD/NOTES 图层，图层表补齐
+    rect = (50.0, 50.0, 250.0, 170.0)
+    prims, info = layout_hole_annotations(f, pf, (100.0, 100.0, 230.0, 230.0), (-65.0, -65.0, 65.0, 65.0), 1.0)
+    dxf = "\n".join([
+        "  0", "SECTION", "  2", "HEADER", "  9", "$HANDSEED", "  5", "100", "  0", "ENDSEC",
+        "  0", "SECTION", "  2", "TABLES", "  0", "TABLE", "  2", "LAYER", "  5", "2", "  0", "ENDTAB",
+        "  0", "TABLE", "  2", "LTYPE", "  5", "5", "  0", "ENDTAB",
+        "  0", "TABLE", "  2", "BLOCK_RECORD", "  0", "BLOCK_RECORD", "  5", "1F", "  2", "*Model_Space", "  0", "ENDTAB", "  0", "ENDSEC",
+        "  0", "SECTION", "  2", "ENTITIES", "  0", "LINE", "  5", "A6", "  8", "Visible", "  10", "0", "  20", "0", "  11", "5", "  21", "0",
+        "  0", "ENDSEC", "  0", "EOF", ""])
+    out = dxf_postprocess(dxf, prims + cut_line_prims(rect, 60.0))
+    pairs = _dxf_pairs(out)
+    layers = {v.strip() for c, v in pairs if c == "8"}
+    assert {"DIM", "CENTER", "THREAD", "OUTLINE"} <= layers, layers
+    table_names = {next(v2.strip() for c2, v2 in pairs[i + 1:i + 10] if c2 == "2")
+                   for i, (c, v) in enumerate(pairs) if c == "0" and v.strip() == "LAYER"}
+    assert {n for n, _, _ in DXF_LAYERS} <= table_names, table_names
+    assert any(c == "1" and "M6-6H" in v for c, v in pairs), "螺纹标注应写进 DXF TEXT"
+    assert any(c == "6" and v.strip() == "CENTER" for c, v in pairs), "CENTER 图层应用点画线线型"
+    assert info["callouts"] == ["Ø40 通孔", "6×Ø9 通孔 均布", "2×M6-6H深10 孔深12", "节圆Ø90"], info
+
+
 def self_test() -> int:
     """纯逻辑自检：比例/图幅/布局/DXF 句柄追加。供 node --test 在有 python3 时调用。"""
     assert parse_scale("1:2") == 0.5 and parse_scale("2:1") == 2.0 and parse_scale("auto") is None
@@ -2364,12 +2780,14 @@ def self_test() -> int:
     assert validate_job({"protocol": "x", "kind": "techdraw", "outputDir": "/x", "parts": []})
     svg = compose_svg("A3", {**plate, "scaleLabel": "1:1"}, {}, [], {"name": "转接板"}, "Noto Sans CJK SC")
     assert svg.startswith("<svg") and "转接板" in svg and "420mm" in svg
+    _self_test_holes()
     sys.stdout.write("SELF_TEST_OK\n")
     return 0
 
 
-if __name__ == "__main__" or os.environ.get("AUTOMATIONCAD_FREECAD_JOB"):
-    # freecadcmd 执行脚本时 __name__ 不一定是 "__main__"，以环境变量为准
+if __name__ == "__main__" or os.environ.get("AUTOMATIONCAD_FREECAD_JOB") or "--self-test" in sys.argv:
+    # freecadcmd 执行脚本时 __name__ 不一定是 "__main__"，以环境变量 / --self-test 参数为准
+    # （freecadcmd 下自检要写成 `freecadcmd techdraw_job.py --pass --self-test`，否则 --self-test 被当成 freecadcmd 自己的参数）
     if "--self-test" in sys.argv:
         _code = self_test()
     else:
