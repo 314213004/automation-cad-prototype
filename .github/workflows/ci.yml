@@ -21,6 +21,7 @@ jobs:
     defaults:
       run:
         working-directory: desktop
+    # 故意不设 TZ：runner 是 UTC，刚好能抓住「按本机时区渲染却按 +08 断言」的测试
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
