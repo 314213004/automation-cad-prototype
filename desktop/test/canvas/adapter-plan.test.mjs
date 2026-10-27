@@ -1,1 +1,76 @@
-aW1wb3J0IGFzc2VydCBmcm9tICdub2RlOmFzc2VydC9zdHJpY3QnOwppbXBvcnQgeyB0ZXN0IH0gZnJvbSAnbm9kZTp0ZXN0JzsKaW1wb3J0IHsgdmFsaWRhdGVGZWF0dXJlcyB9IGZyb20gJy4uLy4uL3NyYy9wYXJhbWV0cmljL2ZlYXR1cmVzLnRzJzsKaW1wb3J0IHsKICBhZGFwdGVyRmFzdGVuZXJCb20sCiAgYWRhcHRlckZlYXR1cmVEb2MsCiAgYWRhcHRlclBsYW4sCiAgZGVzY3JpYmVBZGFwdGVyUGxhbgp9IGZyb20gJy4uLy4uL3NyYy9jYW52YXMvYWRhcHRlci1tb2RlbC50cyc7Cgpjb25zdCBwb3J0ID0gKG92ZXIgPSB7fSkgPT4gKHsgZmFtaWx5OiAnc2xpZGVyJywgaG9sZURpYU1tOiA1LjUsIHBpdGNoWE1tOiA2MCwgcGl0Y2hZTW06IDYwLCBjb3VudDogNCwgLi4ub3ZlciB9KTsKY29uc3Qgbm9kZSA9IChmcm9tLCB0bykgPT4gKHsKICBpZDogJ2FkYXB0ZXItMScsCiAga2luZDogJ2FkYXB0ZXInLAogIGRpbXNNbTogWzkwLCA5MCwgMTJdLAogIGFkYXB0ZXJQYXJhbXM6IHsKICAgIGZyb21Qb3J0OiBmcm9tLAogICAgdG9Qb3J0OiB0bywKICAgIHBsYXRlRGltc01tOiBbOTAsIDkwLCAxMl0sCiAgICB0aGlja25lc3NNbTogMTIsCiAgICBtYXRlcmlhbDogJzYwNjEtVDYnLAogICAgY291bnRlckJvcmU6IHRydWUsCiAgICBkb3dlbERpYU1tOiAwLAogICAgbWFzc0tnOiAxLAogICAgY29zdFl1YW46IG51bGwKICB9Cn0pOwoKdGVzdCgnYWRhcHRlclBsYW7vvJrlrZTot53lhYXotrPml7blubPmnb/pgJrlrZTvvIxGZWF0dXJlRG9jIOS4jeWPmCcsICgpID0+IHsKICBjb25zdCBuID0gbm9kZShwb3J0KCksIHBvcnQoeyBwaXRjaFhNbTogNDAsIHBpdGNoWU1tOiA0MCB9KSk7CiAgY29uc3QgcGxhbiA9IGFkYXB0ZXJQbGFuKG4pOwogIGFzc2VydC5lcXVhbChwbGFuLnN0cmF0ZWd5LmtpbmQsICdmbGF0X3Rocm91Z2gnKTsKICBhc3NlcnQubWF0Y2goZGVzY3JpYmVBZGFwdGVyUGxhbihuKSwgL+W5s+adv+mAmuWtlC8pOwogIGNvbnN0IGRvYyA9IGFkYXB0ZXJGZWF0dXJlRG9jKG4pOwogIGFzc2VydC5kZWVwRXF1YWwoZG9jLmZlYXR1cmVzWzBdLnBhcmFtcywgeyBsZW5ndGg6IDkwLCB3aWR0aDogOTAsIGhlaWdodDogMTIsIGNlbnRlcmVkOiB0cnVlIH0pOwogIGFzc2VydC5kZWVwRXF1YWwodmFsaWRhdGVGZWF0dXJlcyhkb2MpLCBbXSk7Cn0pOwoKdGVzdCgnYWRhcHRlclBsYW7vvJrlrZTlo4HnlaXkuI3otrPml7YgRmVhdHVyZURvYyDliqDljproh7MgMThtbSDnm7LlrZQnLCAoKSA9PiB7CiAgY29uc3QgbiA9IG5vZGUocG9ydCgpLCBwb3J0KHsgcGl0Y2hYTW06IDQ4LCBwaXRjaFlNbTogNDggfSkpOwogIGNvbnN0IHBsYW4gPSBhZGFwdGVyUGxhbihuKTsKICBhc3NlcnQuZXF1YWwocGxhbi5zdHJhdGVneS5raW5kLCAnZmxhdF9ibGluZF90aGljaycpOwogIGFzc2VydC5tYXRjaChkZXNjcmliZUFkYXB0ZXJQbGFuKG4pLCAv5Yqg5Y6a6IezIDE4bW0vKTsKICBjb25zdCBkb2MgPSBhZGFwdGVyRmVhdHVyZURvYyhuKTsKICBhc3NlcnQuZXF1YWwoZG9jLmZlYXR1cmVzWzBdLnBhcmFtcy5oZWlnaHQsIDE4KTsKICBhc3NlcnQuZGVlcEVxdWFsKHZhbGlkYXRlRmVhdHVyZXMoZG9jKSwgW10pOwp9KTsKCnRlc3QoJ2FkYXB0ZXJQbGFu77ya5a2U6Led6auY5bqm6YeN5ZCI5pe25a2Q5Lu25a2U5rK/IFkg5YGP572uIDE2bW3vvIzmnb/lrr3pmo/kuYvmiakgMTZtbScsICgpID0+IHsKICBjb25zdCBuID0gbm9kZShwb3J0KHsgcGl0Y2hYTW06IDQwLCBwaXRjaFlNbTogNDAgfSksIHBvcnQoeyBwaXRjaFhNbTogMzYsIHBpdGNoWU1tOiAzNiB9KSk7CiAgY29uc3QgcGxhbiA9IGFkYXB0ZXJQbGFuKG4pOwogIGFzc2VydC5lcXVhbChwbGFuLnN0cmF0ZWd5LmtpbmQsICdmbGF0X29mZnNldCcpOwogIGNvbnN0IGRvYyA9IGFkYXB0ZXJGZWF0dXJlRG9jKG4pOwogIGFzc2VydC5lcXVhbChkb2MuZmVhdHVyZXNbMF0ucGFyYW1zLndpZHRoLCAxMDYpOwogIGFzc2VydC5lcXVhbChkb2MuZmVhdHVyZXNbMF0ucGFyYW1zLmhlaWdodCwgMTQpOwogIGNvbnN0IG91dCA9IGRvYy5mZWF0dXJlcy5maW5kKChmKSA9PiBmLmlkID09PSAnZi1ob2xlcy1vdXQnKTsKICAvLyDljp/lrZDku7blrZQgWSDkuLogLTE4LysxOO+8jOWBj+e9ruWQjuS4uiAtMi8rMzQKICBhc3NlcnQuZGVlcEVxdWFsKG91dC5wYXJhbXMucG9zaXRpb25zLCBbWy0xOCwgLTJdLCBbMTgsIC0yXSwgWy0xOCwgMzRdLCBbMTgsIDM0XV0pOwogIGFzc2VydC5kZWVwRXF1YWwodmFsaWRhdGVGZWF0dXJlcyhkb2MpLCBbXSk7Cn0pOwoKdGVzdCgnYWRhcHRlclBsYW7vvJrpnZ7ovazmjqXmnb8gLyDlrZTlvoTkuI3lnKjmoIflh4booajlhoXov5Tlm54gbnVsbO+8jOS4jeeMnCcsICgpID0+IHsKICBhc3NlcnQuZXF1YWwoYWRhcHRlclBsYW4oeyBpZDogJ3gnLCBraW5kOiAnZnJhbWUnIH0pLCBudWxsKTsKICBjb25zdCB3ZWlyZCA9IG5vZGUocG9ydCgpLCBwb3J0KHsgaG9sZURpYU1tOiAyIH0pKTsKICBhc3NlcnQuZXF1YWwoYWRhcHRlclBsYW4od2VpcmQpLCBudWxsKTsKICBhc3NlcnQuZXF1YWwoYWRhcHRlckZhc3RlbmVyQm9tKHdlaXJkKSwgbnVsbCk7Cn0pOwoKdGVzdCgnYWRhcHRlckZhc3RlbmVyQm9t77ya5oyJ5Lik56uv5a2U5b6E5o6o6J665qCT6KeE5qC877yMMyDpobnlm73moIfku7YnLCAoKSA9PiB7CiAgY29uc3QgaXRlbXMgPSBhZGFwdGVyRmFzdGVuZXJCb20obm9kZShwb3J0KCksIHBvcnQoKSkpOwogIGFzc2VydC5lcXVhbChpdGVtcy5sZW5ndGgsIDMpOwogIGFzc2VydC5lcXVhbChpdGVtc1swXS5wYXJ0SWQsICdHQjcwLjEtTTV4MTYnKTsKICBhc3NlcnQuZXF1YWwoaXRlbXNbMV0ucGFydElkLCAnR0I3MC4xLU01eDEyJyk7CiAgYXNzZXJ0LmVxdWFsKGl0ZW1zWzJdLnBhcnRJZCwgJ0dCMTIwLjItRDR4MTQnKTsKICBhc3NlcnQub2soaXRlbXMuZXZlcnkoKGl0KSA9PiBpdC5wYXJlbnROb2RlSWQgPT09ICdhZGFwdGVyLTEnKSk7Cn0pOwo=
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { validateFeatures } from '../../src/parametric/features.ts';
+import {
+  adapterFastenerBom,
+  adapterFeatureDoc,
+  adapterPlan,
+  describeAdapterPlan
+} from '../../src/canvas/adapter-model.ts';
+
+const port = (over = {}) => ({ family: 'slider', holeDiaMm: 5.5, pitchXMm: 60, pitchYMm: 60, count: 4, ...over });
+const node = (from, to) => ({
+  id: 'adapter-1',
+  kind: 'adapter',
+  dimsMm: [90, 90, 12],
+  adapterParams: {
+    fromPort: from,
+    toPort: to,
+    plateDimsMm: [90, 90, 12],
+    thicknessMm: 12,
+    material: '6061-T6',
+    counterBore: true,
+    dowelDiaMm: 0,
+    massKg: 1,
+    costYuan: null
+  }
+});
+
+test('adapterPlan：孔距充足时平板通孔，FeatureDoc 不变', () => {
+  const n = node(port(), port({ pitchXMm: 40, pitchYMm: 40 }));
+  const plan = adapterPlan(n);
+  assert.equal(plan.strategy.kind, 'flat_through');
+  assert.match(describeAdapterPlan(n), /平板通孔/);
+  const doc = adapterFeatureDoc(n);
+  assert.deepEqual(doc.features[0].params, { length: 90, width: 90, height: 12, centered: true });
+  assert.deepEqual(validateFeatures(doc), []);
+});
+
+test('adapterPlan：孔壁略不足时 FeatureDoc 加厚至 18mm 盲孔', () => {
+  const n = node(port(), port({ pitchXMm: 48, pitchYMm: 48 }));
+  const plan = adapterPlan(n);
+  assert.equal(plan.strategy.kind, 'flat_blind_thick');
+  assert.match(describeAdapterPlan(n), /加厚至 18mm/);
+  const doc = adapterFeatureDoc(n);
+  assert.equal(doc.features[0].params.height, 18);
+  assert.deepEqual(validateFeatures(doc), []);
+});
+
+test('adapterPlan：孔距高度重合时子件孔沿 Y 偏置 16mm，板宽随之扩 16mm', () => {
+  const n = node(port({ pitchXMm: 40, pitchYMm: 40 }), port({ pitchXMm: 36, pitchYMm: 36 }));
+  const plan = adapterPlan(n);
+  assert.equal(plan.strategy.kind, 'flat_offset');
+  const doc = adapterFeatureDoc(n);
+  assert.equal(doc.features[0].params.width, 106);
+  assert.equal(doc.features[0].params.height, 14);
+  const out = doc.features.find((f) => f.id === 'f-holes-out');
+  // 原子件孔 Y 为 -18/+18，偏置后为 -2/+34
+  assert.deepEqual(out.params.positions, [[-18, -2], [18, -2], [-18, 34], [18, 34]]);
+  assert.deepEqual(validateFeatures(doc), []);
+});
+
+test('adapterPlan：非转接板 / 孔径不在标准表内返回 null，不猜', () => {
+  assert.equal(adapterPlan({ id: 'x', kind: 'frame' }), null);
+  const weird = node(port(), port({ holeDiaMm: 2 }));
+  assert.equal(adapterPlan(weird), null);
+  assert.equal(adapterFastenerBom(weird), null);
+});
+
+test('adapterFastenerBom：按两端孔径推螺栓规格，3 项国标件', () => {
+  const items = adapterFastenerBom(node(port(), port()));
+  assert.equal(items.length, 3);
+  assert.equal(items[0].partId, 'GB70.1-M5x16');
+  assert.equal(items[1].partId, 'GB70.1-M5x12');
+  assert.equal(items[2].partId, 'GB120.2-D4x14');
+  assert.ok(items.every((it) => it.parentNodeId === 'adapter-1'));
+});
