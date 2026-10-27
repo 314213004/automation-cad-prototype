@@ -9,9 +9,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# 曾经用过 concurrency(cancel-in-progress)；2026-10-27 遇到一次 GitHub 侧状态不一致：
+# run 的 jobs 全绿、artifact 已上传，但 run 级 status 永久停在 in_progress，
+# 于是占住了同一 ref 的并发组，后续 workflow_dispatch 一直排队，且 cancel / force-cancel 都返回
+# "not in progress"。去掉并发组，宁可偶尔并行跑两次，也不要整条 CI 被一个幽灵 run 卡死。
 
 jobs:
   unit:
