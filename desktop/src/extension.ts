@@ -1822,6 +1822,17 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
       buffers.push({ buffer: toArrayBuffer(bytes), name: item.name });
     }
     const merged = await parseStandardCadBuffers(buffers, 'STL');
+    // 把工程记录里的装配层级补回网格：STL 本身不带路径，不补的话 3D 左栏只能显示「未分层」
+    const pathByName = new Map<string, string[]>();
+    for (const item of (result.record.partsList ?? []) as Array<{ name: string; path?: string[] }>) {
+      if (item?.name && Array.isArray(item.path) && item.path.length > 0) pathByName.set(item.name, item.path);
+    }
+    if (pathByName.size > 0) {
+      merged.meshes.forEach((mesh) => {
+        const path = pathByName.get(mesh.name);
+        if (path) mesh.path = path;
+      });
+    }
     const label = `${result.record.name}（${merged.meshes.length} 件）`;
     openOverlay();
     const currentViewer = ensureViewer();
