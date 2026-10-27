@@ -37,5 +37,10 @@ jobs:
         run: npm test
       - name: 数据包校验
         run: npm run packs:validate
+      # 离线规则评估与能力报告此前没人跑，工具加了却不进评估集也发现不了（本轮就是 eval:agent 红的）
+      - name: 离线规则评估（含工具覆盖校验）
+        run: npm run eval:agent
+      - name: Agent 能力报告（防止脚本本身崩）
+        run: npm run agent:report
 
   # smoke 依赖 xvfb + 真实 Electron 渲染，本地跑；CI 只保证纯函数层与文档一致性。

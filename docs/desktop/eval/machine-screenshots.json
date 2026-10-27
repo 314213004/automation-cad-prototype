@@ -5,8 +5,6 @@
     "width": 1600,
     "height": 1000
   },
-  "minBytes": 20480,
-  "minUniqueColors": 500,
   "shots": [
     {
       "label": "机型方案卡",
@@ -15,30 +13,7 @@
       "height": 1000,
       "bytes": 193039,
       "uniqueColors": 3236
-    },
-    {
-      "label": "6 工位 3D 联调",
-      "name": "16-machine-3d.png",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
-    },
-    {
-      "label": "BOM 真实型号",
-      "name": "17-machine-bom.png",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
-    },
-    {
-      "label": "PLC IO 点位",
-      "name": "18-machine-iomap.png",
-      "width": 1600,
-      "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
     }
-  ]
+  ],
+  "error": "16-machine-3d.png 与 15-machine-design-card.png 字节完全相同，抓到的是同一帧（画面没刷新）"
 }
