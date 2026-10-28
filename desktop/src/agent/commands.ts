@@ -455,6 +455,15 @@ export class CommandBus {
   }
 }
 
+/**
+ * 内核建模（逐件实体）是分钟级操作：build123d 出 28~30 个零件实测 40~120 s。
+ * 桥接默认 10 s 是给普通读写命令的，套到 buildMachineModel 上必然 RENDERER_TIMEOUT，
+ * 表现为"智能体说几何没生成、回退 TS 网格"。
+ */
+const SLOW_BRIDGE_METHODS: Readonly<Record<string, number>> = {
+  buildMachineModel: 240_000
+};
+
 export class RendererBridge implements Bridge {
   private readonly getWindow: () => BridgeWindow | null;
   private readonly timeoutMs: number;
@@ -487,14 +496,15 @@ export class RendererBridge implements Bridge {
     })()`;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const budget = SLOW_BRIDGE_METHODS[method] ?? this.timeoutMs;
     try {
       const timeout = new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => {
           reject(new CommandFailure(
             'RENDERER_TIMEOUT',
-            `渲染层调用超时（${Math.round(this.timeoutMs / 1000)} 秒）：${method}`
+            `渲染层调用超时（${Math.round(budget / 1000)} 秒）：${method}`
           ));
-        }, this.timeoutMs);
+        }, budget);
       });
       return await Promise.race([
         window.webContents.executeJavaScript(script) as Promise<T>,

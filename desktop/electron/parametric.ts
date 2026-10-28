@@ -78,7 +78,9 @@ interface ExitState {
 }
 
 const DEFAULT_IDLE_MS = 10 * 60 * 1000;
-const DEFAULT_BUILD_TIMEOUT_MS = 30_000;
+// 30 s 只够单件小特征；整机（28~94 件逐件导出 STEP/STL）实测 40~120 s，
+// 超时会被判 BUILD_FAILED 并回退 TS 网格，用户看到的就是"几何没生成"
+const DEFAULT_BUILD_TIMEOUT_MS = 180_000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 3_000;
 const DEFAULT_HEALTH_INTERVAL_MS = 300;
 const DEFAULT_PORT_START = 7430;

@@ -89,7 +89,7 @@ const PROCESS_RULES: Array<{ process: Exclude<MachineProcess, 'unknown'>; patter
   { process: 'inspection', pattern: /检测|检查|检验|视觉|测量|AOI/i },
   { process: 'packaging', pattern: /包装|装箱|装盒|封箱|贴标|码垛/ },
   // 输送放最后：只有没提到其他工艺时才判为输送线，避免「装配线配输送」被抢走工艺类型。
-  { process: 'conveyor', pattern: /输送机|输送线|皮带线|传送带|皮带输送|链条输送|流水线输送|输送段/ }
+  { process: 'conveyor', pattern: /输送机|输送线|皮带线|传送带|皮带输送|链条输送|链式输送|流水线输送|输送段|缓存机|缓存线|缓存台|缓存线体|积放|倍速链/ }
 ];
 
 /**
@@ -254,7 +254,9 @@ export function detectConveyorSpec(text: string): ConveyorSpec | null {
   const width = /(?:带宽|皮带宽|有效宽|宽度|宽)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(mm|毫米)/i.exec(text);
   const speed = /(?:线速|速度|线速度)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(m\/s|米\/秒|mm\/s)/i.exec(text);
   const load = /(?:工件|负载|载重|单件)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*(kg|公斤|千克)/i.exec(text);
-  if (!length && !width && !speed && !load) return null;
+  // 「占地 3000×1800」这类写法：缓存/线体类需求通常只给包络，不给"线体长/带宽"
+  const envelope = /(?:占地|外形|包络|尺寸)[^\d]{0,6}(\d{3,5})\s*[×xX*]\s*(\d{3,5})/.exec(text);
+  if (!length && !width && !speed && !load && !envelope) return null;
   const toMm = (value: string, unit: string): number => {
     const number = Number(value);
     return /^(米|m)$/i.test(unit) ? number * 1000 : number;
@@ -264,8 +266,8 @@ export function detectConveyorSpec(text: string): ConveyorSpec | null {
     return /mm/i.test(unit) ? number / 1000 : number;
   };
   return {
-    lengthMm: length ? toMm(length[1] ?? '0', length[2] ?? 'mm') : null,
-    widthMm: width ? Number(width[1]) : null,
+    lengthMm: length ? toMm(length[1] ?? '0', length[2] ?? 'mm') : envelope ? Number(envelope[1]) : null,
+    widthMm: width ? Number(width[1]) : envelope ? Number(envelope[2]) : null,
     speedMps: speed ? toMps(speed[1] ?? '0', speed[2] ?? 'm/s') : null,
     loadKg: load ? Number(load[1]) : null
   };
@@ -295,7 +297,8 @@ export function detectWorkpiece(text: string): WorkpieceSpec | null {
   return { lengthMm, widthMm, heightMm, massKg };
 }
 
-function detectProcess(text: string): MachineProcess {
+/** 导出给测试用：工艺判定是"缓存机台被当成转盘机"那类问题的唯一入口。 */
+export function detectProcess(text: string): MachineProcess {
   for (const rule of PROCESS_RULES) {
     if (rule.pattern.test(text)) return rule.process;
   }
