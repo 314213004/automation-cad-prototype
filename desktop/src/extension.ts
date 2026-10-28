@@ -1559,7 +1559,9 @@ function refreshElecView(options: { notify?: boolean } = {}): void {
     return;
   }
   if (!drawing) {
-    if (shownElecDrawing) showElecPlaceholder();
+    // 原型自带的 EL-001 示例图会留在画布上冒充"本工程的图纸"，
+    // 所以无数据源时无条件换占位页（含首次进入电气域）
+    showElecPlaceholder();
     return;
   }
   if (drawing !== shownElecDrawing) showElecDrawing(drawing, 0);
@@ -1711,8 +1713,17 @@ function projectMenuRecordOf(record: DesktopProjectRecordLike, parts: number): P
 /** 工程成为当前工程，也成为最新的电气数据源 */
 function setCurrentProject(project: ProjectMenuRecord): void {
   lastOpenedProject = project;
+  syncShellProjectTitle(project.name);
   elecSources.useProject(project);
   elecSourceChanged();
+}
+
+/** 外壳标题/文件名跟随当前工程；原来永远是原型里的「滑台气缸装配体」 */
+function syncShellProjectTitle(name: string | undefined): void {
+  const label = (name ?? '').trim();
+  document.title = label ? `${label} · 自动化设计工作台` : '自动化设计工作台';
+  const nameEl = document.getElementById('fileCurrentName');
+  if (nameEl) nameEl.textContent = label || '未命名工程';
 }
 
 let homeHandle: HomeScreenHandle | null = null;

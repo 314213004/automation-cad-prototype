@@ -25,6 +25,24 @@
 }
 .domsw-btn kbd{display:none}
 
+/* 电气页面选择器：下拉框代替三个竖排文字标签 */
+.emode-pick{
+  position:relative; display:flex; align-items:center; gap:7px;
+  height:100%; padding:0 10px; color:var(--text-2); font-size:13px;
+}
+.emode-pick-cap{font-size:11px; letter-spacing:.02em; color:var(--text-3, var(--text-2)); opacity:.75}
+.emode-select{
+  height:26px; min-width:118px; padding:0 26px 0 9px; font-size:13px;
+  color:var(--text-1); background:var(--panel, #14181d); cursor:pointer;
+  border:1px solid var(--line, #2b3238); border-radius:6px;
+  appearance:none; -webkit-appearance:none;
+  background-image:linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:calc(100% - 14px) 11px, calc(100% - 9px) 11px;
+  background-size:5px 5px, 5px 5px; background-repeat:no-repeat;
+}
+.emode-select:hover{border-color:var(--accent)}
+.emode-select:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+
 /* 电气模式按钮（与 .mode 同构，独立类名以免与 app.js 的 .mode 委托冲突） */
 .emode{
   position:relative; height:100%; padding:0 16px; font-size:13px; color:var(--text-2);
@@ -160,6 +178,8 @@
 .if{fill:var(--ink)}
 .it{fill:var(--ink); font-family:var(--font-mono); font-size:5.2px; font-variant-numeric:tabular-nums}
 .it-s{fill:var(--ink2); font-family:var(--font-mono); font-size:3.4px}
+/* 线号：比说明文字更深、稍大，A3 缩到屏幕上也能读（原来和注释同色同号，看着像没标） */
+.it-s.wn{fill:var(--ink); font-size:3.2px; font-weight:600; letter-spacing:.01em}
 .it-t{fill:var(--ink); font-family:var(--font-ui); font-size:4.2px}
 .it-b{fill:var(--ink); font-family:var(--font-ui); font-size:4.8px; font-weight:600}
 .it-m{fill:var(--ink); font-family:var(--font-mono); font-size:7px}
