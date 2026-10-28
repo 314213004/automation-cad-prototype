@@ -34,6 +34,7 @@ export function reorderFeature(doc: FeatureDocLike, id: string, targetIndex: num
   if (from === -1) return { ok: false, error: `找不到特征：${id}` };
   const features = [...doc.features];
   const [moved] = features.splice(from, 1);
+  if (!moved) return { ok: false, error: `找不到特征：${id}` };
   const clamped = Math.max(0, Math.min(targetIndex, features.length));
   features.splice(clamped, 0, moved);
   return { ok: true, value: { ...doc, features } };
@@ -58,8 +59,11 @@ export function applyDocFeatureEdit(
 ): EditResult<FeatureDocLike> {
   const index = findIndex(doc, id);
   if (index === -1) return { ok: false, error: `找不到特征：${id}` };
-  const result = applyPanelEdit(doc.features[index], key, value);
+  const feature = doc.features[index];
+  if (!feature) return { ok: false, error: `找不到特征：${id}` };
+  const result = applyPanelEdit(feature, key, value);
   if (!result.ok || result.value === undefined) return { ok: false, error: result.error ?? '校验失败' };
-  const features = doc.features.map((feature, i) => (i === index ? result.value! : feature));
+  const updated = result.value;
+  const features = doc.features.map((feature, i) => (i === index ? updated : feature));
   return { ok: true, value: { ...doc, features } };
 }

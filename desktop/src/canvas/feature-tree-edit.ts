@@ -48,23 +48,19 @@ function positiveInteger(value: unknown, label: string): EditResult<number> {
   return { ok: true, value };
 }
 
+function setNumberParam(params: Params, key: string, checked: EditResult<number>): EditResult<Params> {
+  if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+  return { ok: true, value: { ...params, [key]: checked.value } };
+}
+
 /** 特征面板字段 -> 校验器（key 是 panelFieldsForFeature 的 key）。 */
 const FEATURE_EDITORS: Record<string, (params: Params, value: unknown) => EditResult<Params>> = {
-  length: (params, value) => {
-    const checked = positiveNumber(value, '长度');
-    return checked.ok ? { ok: true, value: { ...params, length: checked.value } } : checked;
-  },
-  width: (params, value) => {
-    const checked = positiveNumber(value, '宽度');
-    return checked.ok ? { ok: true, value: { ...params, width: checked.value } } : checked;
-  },
-  height: (params, value) => {
-    const checked = positiveNumber(value, '高度');
-    return checked.ok ? { ok: true, value: { ...params, height: checked.value } } : checked;
-  },
+  length: (params, value) => setNumberParam(params, 'length', positiveNumber(value, '长度')),
+  width: (params, value) => setNumberParam(params, 'width', positiveNumber(value, '宽度')),
+  height: (params, value) => setNumberParam(params, 'height', positiveNumber(value, '高度')),
   diameter: (params, value) => {
     const checked = positiveNumber(value, '孔径');
-    if (!checked.ok) return checked;
+    if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
     const cbDiameter = params.cbDiameter;
     if (typeof cbDiameter === 'number' && checked.value >= cbDiameter) {
       return fail('孔径必须小于沉窝直径');
@@ -73,21 +69,15 @@ const FEATURE_EDITORS: Record<string, (params: Params, value: unknown) => EditRe
   },
   cbDiameter: (params, value) => {
     const checked = positiveNumber(value, '沉窝直径');
-    if (!checked.ok) return checked;
+    if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
     const diameter = params.diameter;
     if (typeof diameter === 'number' && checked.value <= diameter) {
       return fail('沉窝直径必须大于孔径');
     }
     return { ok: true, value: { ...params, cbDiameter: checked.value } };
   },
-  cbDepth: (params, value) => {
-    const checked = positiveNumber(value, '沉窝深度');
-    return checked.ok ? { ok: true, value: { ...params, cbDepth: checked.value } } : checked;
-  },
-  radius: (params, value) => {
-    const checked = positiveNumber(value, '圆角半径');
-    return checked.ok ? { ok: true, value: { ...params, radius: checked.value } } : checked;
-  }
+  cbDepth: (params, value) => setNumberParam(params, 'cbDepth', positiveNumber(value, '沉窝深度')),
+  radius: (params, value) => setNumberParam(params, 'radius', positiveNumber(value, '圆角半径'))
 };
 
 export function applyPanelEdit(
@@ -122,30 +112,46 @@ export function applyAdapterEdit(
   key: string,
   value: unknown
 ): EditResult<AdapterParamsLike> {
-  const [head, field] = key.split('.');
+  const parts = key.split('.');
+  const head = parts[0];
+  const field = parts[1];
   if ((head === 'fromPort' || head === 'toPort') && field) {
     const port = adapterParams[head];
     if (field === 'holeDiaMm') {
       const checked = positiveNumber(value, '孔径');
-      return checked.ok ? { ok: true, value: { ...adapterParams, [head]: { ...port, holeDiaMm: checked.value } } } : checked;
+      if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+      const updated = { ...port, holeDiaMm: checked.value };
+      return head === 'fromPort'
+        ? { ok: true, value: { ...adapterParams, fromPort: updated } }
+        : { ok: true, value: { ...adapterParams, toPort: updated } };
     }
     if (field === 'pitchXMm' || field === 'pitchYMm') {
       const checked = nonNegativeNumber(value, '孔距');
-      return checked.ok ? { ok: true, value: { ...adapterParams, [head]: { ...port, [field]: checked.value } } } : checked;
+      if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+      const updated = field === 'pitchXMm' ? { ...port, pitchXMm: checked.value } : { ...port, pitchYMm: checked.value };
+      return head === 'fromPort'
+        ? { ok: true, value: { ...adapterParams, fromPort: updated } }
+        : { ok: true, value: { ...adapterParams, toPort: updated } };
     }
     if (field === 'count') {
       const checked = positiveInteger(value, '孔数');
-      return checked.ok ? { ok: true, value: { ...adapterParams, [head]: { ...port, count: checked.value } } } : checked;
+      if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+      const updated = { ...port, count: checked.value };
+      return head === 'fromPort'
+        ? { ok: true, value: { ...adapterParams, fromPort: updated } }
+        : { ok: true, value: { ...adapterParams, toPort: updated } };
     }
     return fail(`未知字段：${key}`);
   }
   if (key === 'thicknessMm') {
     const checked = positiveNumber(value, '板厚');
-    return checked.ok ? { ok: true, value: { ...adapterParams, thicknessMm: checked.value } } : checked;
+    if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+    return { ok: true, value: { ...adapterParams, thicknessMm: checked.value } };
   }
   if (key === 'dowelDiaMm') {
     const checked = nonNegativeNumber(value, '定位销孔直径');
-    return checked.ok ? { ok: true, value: { ...adapterParams, dowelDiaMm: checked.value } } : checked;
+    if (!checked.ok || checked.value === undefined) return fail(checked.error ?? '校验失败');
+    return { ok: true, value: { ...adapterParams, dowelDiaMm: checked.value } };
   }
   if (key === 'material') {
     if (typeof value !== 'string' || value.trim() === '') return fail('材料必须是非空字符串');
