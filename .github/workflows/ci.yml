@@ -38,11 +38,32 @@ jobs:
         run: npm test
       - name: 数据包校验
         run: npm run packs:validate
+      # FeatureTree 契约服务（自起服务、FT_PORT=0，跑完自动关）
+      - name: 契约服务验收（featuretree-service）
+        timeout-minutes: 5
+        run: node ../featuretree-service/tests.mjs   # unit job 的 cwd 是 desktop
       # 离线规则评估与能力报告此前没人跑，工具加了却不进评估集也发现不了（本轮就是 eval:agent 红的）
       - name: 离线规则评估（含工具覆盖校验）
         run: npm run eval:agent
       - name: Agent 能力报告（防止脚本本身崩）
         run: npm run agent:report
+
+  qt-client:
+    name: Qt client build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 Qt6 开发包
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qt6-base-dev cmake g++
+      - name: 配置与编译
+        run: |
+          cmake -S qt-client -B build-qt -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-qt -j4
+      - name: 可执行文件存在
+        run: test -x build-qt/automationcad-qt
 
   smoke:
     name: Electron smoke (xvfb)
