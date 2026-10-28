@@ -49,7 +49,7 @@ import { createPipScene, type PipScene } from './pip3d.ts';
 import { checkNodeSizes, describeModelCheck } from './model-check.ts';
 import type { InterferencePart } from '../mech/interference.ts';
 import { adapterFeatureDoc, describeAdapterModel } from './adapter-model.ts';
-import { mounteatureorkbench } from './feature-tree-mount.ts';
+import { mountFeatureWorkbench } from './feature-tree-mount.ts';
 import { adapterPlateDxf, describeAdapterDxf } from './adapter-dxf.ts';
 import { buildLayoutDxf, describeLayoutDxf } from './layout-dxf.ts';
 import { buildSchemeReport } from './summary-report.ts';
@@ -481,8 +481,8 @@ function buildShell(): void {
           <button type="button" class="cw-tab" data-action="inspector" data-tab="bom" role="tab">BOM / IO</button>
         </div>
         <div class="cw-inspector-body" id="cwInspector"></div>
-        <div id="featureree"></div>
-        <div id="propertyanel"></div>
+        <div id="featureTree"></div>
+        <div id="propertyPanel"></div>
       </aside>
     </div>
     <div class="cw-modal" id="cwSchemeModal" hidden>
@@ -1073,21 +1073,27 @@ function renderInspector(): void {
   if (state.inspector === 'prop') host.innerHTML = inspectorProp(node);
   else if (state.inspector === 'mech') host.innerHTML = inspectorMech(node);
   else host.innerHTML = inspectorBom(node);
-  const tree = document.getlementyd('featureree');
-  const panel = document.getlementyd('propertyanel');
-  if (!tree || !panel) return;
-  const selected = selectedode();
-  if (selected && isdapterode(selected)) {
-    const doc = adaptereatureoc(selected);
-    if (doc) {
-      mounteatureorkbench(doc, { tree, panel });
+  const selected = selectedNode();
+  const treeEl = document.getElementById('featureTree');
+  const panelEl = document.getElementById('propertyPanel');
+  if (selected && isAdapterNode(selected)) {
+    const doc = adapterFeatureDoc(selected);
+    if (doc && treeEl && panelEl) {
+      mountFeatureWorkbench(doc, {
+        tree: treeEl,
+        panel: panelEl
+      });
     } else {
-      tree.innerL = '';
-      panel.innerL = '';
+      const tree = document.getElementById('featureTree');
+      const panel = document.getElementById('propertyPanel');
+      if (tree) tree.innerHTML = '';
+      if (panel) panel.innerHTML = '';
     }
   } else {
-    tree.innerL = '';
-    panel.innerL = '';
+    const tree = document.getElementById('featureTree');
+    const panel = document.getElementById('propertyPanel');
+    if (tree) tree.innerHTML = '';
+    if (panel) panel.innerHTML = '';
   }
 }
 
