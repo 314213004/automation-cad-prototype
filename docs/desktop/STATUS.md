@@ -2,14 +2,30 @@
 
 ## 概览
 
-- 仓库：`main` @ `3d5ee07`（GitHub `owlco001/automation-cad-prototype` 与 Gitee 双推，两侧 SHA 一致）。
+- 仓库：`main` @ `2f73636`（GitHub `owlco001/automation-cad-prototype` 与 Gitee 双推，两侧 SHA 一致）。
 - 版本：`desktop/package.json` → **0.5.0**，已打源码 tag `v0.5.0`；**安装包仍停在 v0.4.2**（Windows 本地构建、未签名），0.4.3 之后未出包。
 - 质量门槛（2026-10-28 本机 Linux 实跑）：`npx tsc --noEmit` 0 错误；`npm test` **2589 总计 / 2587 通过 / 0 失败 / 2 跳过**（跳过项为需真实 FreeCAD 的 E2E，未设 `AUTOMATIONCAD_FREECAD_REAL`）；`npm run build:ext` 通过；`npm run smoke` 收尾 `SMOKE_OK`。
-- CI：`.github/workflows/ci.yml` 在 push `main` 与 `pull_request` 上跑两个并行 job——`unit`（tsc / 单测 / 包校验 / `eval:agent` / `agent:report`）与 `smoke`（xvfb + 真实 Electron：降级 smoke、SwiftShader WebGL 冒烟、机型全流程截图 + artifact、外部客户端 MCP 冒烟）。最新全绿 run `40636234337`（1m54s）。Windows 打包仍是手动 `workflow_dispatch`。
+- CI：`.github/workflows/ci.yml` 在 push `main` 与 `pull_request` 上跑 **四个** 并行 job——`unit`（tsc / 单测 / 包校验 / `eval:agent` / 契约服务 35 条 / MCP 11 条 / 落盘 10 条）、`smoke`（xvfb + 真实 Electron：降级 smoke、SwiftShader WebGL、机型截图 + artifact、MCP 冒烟）、`Qt client build`（Qt6 编译 + `--selftest` / `--history-selftest` / `--feature-ops-selftest` / `--sse-selftest` / 自动刷新）、`FeatureTree real geometry`（pip 装 build123d，跑体积/质量/STL/材料）。Windows 打包仍是手动 `workflow_dispatch`。
 - 评估：`npm run eval:agent` **111/111**，`EVAL_AGENT_OK accuracy=1.00 tools=1.00 refused=1.00`；工具注册表 **25 个（只读 12 / 写 13）**。
 - 数据包：`npm run packs:validate` → **10 包 / 617 条 / 612 唯一型号 / 0 错误 0 警告**。
-- 离线知识索引：`npm run kb:build` → `docs=13 chunks=347`，约 385 KB（≈94%，余量约 24 KB，未截断）——字节数会随文档重建变动，这里只给近似值，精确值由 `npm run kb:build` 输出。
+- 离线知识索引：`npm run kb:build` → `docs=13 chunks=361`，约 378 KB（≈94.5%，余量约 22 KB，未截断；实测 385,723 B）——字节数会随文档重建变动，这里只给近似值，精确值由 `npm run kb:build` 输出。
 - 最近发布：`v0.4.0` NSIS `AutomationCAD-Setup-0.4.0.exe`（约 130 MB，未签名），更新通道未做真实签名与跨版本升级验收。
+
+
+## 夜间迭代（2026-10-28 夜，5 个 PR 全绿合并）
+
+| PR | 内容 | 关键数字 |
+|----|------|----------|
+| #26 | Qt 特征右键菜单（压缩/解除压缩、删除特征）+ `--feature-ops-selftest` | 压缩沉头孔 94,166.8 → **95,966.9 mm³**（差值 1,800.1 正是该特征体积）；删除被引用基体走 409 `REFERENCE_IN_USE` |
+| #27 | Qt 改 SSE 推送为主、10s 轮询兜底、断线 3s 重连 | 自检把轮询调到 30s，改树 → 刷新 **138ms** |
+| #28 | 契约服务可选落盘 `FT_DATA_DIR`（单文件 JSON + 原子写 + 快照） | 重启后 r1/高度 19 还在；重启后 undo 仍能回到 12；默认不写盘 |
+| #29 | MCP 补 `ft_set_suppressed` / `ft_delete_feature`（4 → 6 工具） | 压缩后体积变大、删除引用基体回 `REFERENCE_IN_USE` + 提示「先处理引用方」 |
+| #30 | 材料与质量：`doc.material` + `setMaterial` + Qt「工具→材质」菜单 | 铝 **0.2543 kg** vs 钢 0.7392 kg，体积都是 94,166.8 mm³ |
+
+夜间实测汇总（本机 Linux）：featuretree **35/35**、MCP **16 条 PASS**、落盘 **10/10**、
+真几何 **18 条 PASS**、Qt 三个 selftest 全过（`FT_QT_SELFTEST_OK revision=2 height=13`、
+`FT_QT_HISTORY_OK undo=r2 redo=r3`、`FT_QT_FEATUREOPS_OK suppressed=95307.2 restored=94166.8`、`QT_SSE_OK 138ms`）、
+desktop `npm test` **2589（2587 通过 / 2 跳过）**。
 
 ## 验证记录（逐条为本机真实输出）
 
@@ -24,24 +40,16 @@
 | `npm run smoke:mcp` | `MCP_SMOKE_DONE`：401 未授权 → 渲染层就绪 → `tools/list` 25 → 3 个 resources → `file:///etc/passwd` 返回 `-32602` → 未知方法 `-32601` → `tools/call get_bom` 成功 |
 | `npm run eval:agent` | 111/111；`accuracy=1.00 tools=1.00 refused=1.00` |
 | `npm run packs:validate` | `PACKS_VALIDATE_OK packs=10 errors=0 warnings=0 parts=617 models=612` |
-| `npm run sync:e2e` | `SYNC_E2E_OK package=dsp_4718a1a3b50b484da618dcf611277916 dup=true diff=1 bytes=856`（起真实 material-flow 后端，端口 8899） |
-| `npm run perf:baseline`（2026-10-27） | 3000 件：`sceneBuildMs=71.0`、`tickP95Ms=2.34`、`heapPeakMb=39.0` |
-| `npm run bench:render`（2026-10-27） | 500 件 / 100,000 三角面 → `drawCalls=20`，实例合并省 **96%**，`budget=OK` |
-| `npm run check:orbit-webgl`（2026-10-27） | `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1` |
+| `node featuretree-service/tests.mjs` | 全部通过：**35 条**（契约校验/乐观锁/undo-redo/材料/413/引用检查） |
+| `node featuretree-service/mcp-tests.mjs` | `MCP_FEATURETREE_OK`，**16 条 PASS**（双向读写、6 工具、引用拒绝、资源） |
+| `node featuretree-service/persistence-tests.mjs` | `FT_PERSISTENCE_OK`，**10 条 PASS**（默认不写盘 / 落盘 / 重启恢复 / 快照可 undo） |
+| `node featuretree-service/build-tests.mjs` | `FT_BUILD_OK`，**18 条 PASS**（体积 94,166.8 与手算一致、STL 6,604 面、铝 0.2543 kg、fail-closed） |
+| `qt-client --selftest` / `--history-selftest` / `--feature-ops-selftest` / `--sse-selftest` | 全过；SSE 实测 **138ms**，压缩孔阵列 +1,140.4 mm³ 与手算一致 |
 | `git diff --check` | 通过（提交前复核） |
 
-## Smoke 断言（当前在跑的关键几条）
+## Smoke 断言
 
-| 断言 | 实测 |
-|------|------|
-| `SMOKE_OK` | 全部 smoke 分支完成后输出 |
-| `SMOKE_PLACEHOLDER_DIMS_OK` | `w=18 h=85 d=78.5 y=0`（插 `iC65N-C16-1P` 后包围盒等于数据包外形、贴地）；降级 smoke 无 WebGL 时打印 `SMOKE_PLACEHOLDER_DIMS_SKIP reason=no-webgl`，属正常 |
-| `SMOKE_DESIGN_WEBGL_OK` | `renderer=ANGLE (… SwiftShader …) seed=STEP_fixture:1 scene=61 partPaths=61 tree=61 placements=13` |
-| `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
-| `SMOKE_DESIGN_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK` | `steps=5` / `count=3` / `placements=13 overlaps=0` / `project=Smoke-整机设计` |
-| `MACHINE_SHOTS_DONE` | `captured=4 failed=0` |
-
-完整历史断言矩阵见 [STATUS-HISTORY.md](STATUS-HISTORY.md#smoke-断言清单)。
+关键几条：`SMOKE_OK`、`SMOKE_DESIGN_WEBGL_OK`（SwiftShader）、`MACHINE_SHOTS_DONE captured=4 failed=0`、`MCP_SMOKE_DONE`。完整断言矩阵见 [STATUS-HISTORY.md](STATUS-HISTORY.md#smoke-断言清单)。
 
 ## 模块状态（P1–P9 + 后续落地）
 
@@ -62,6 +70,15 @@
 | 机型设计 | ✅ | brief → 方案卡 → 落盘 → 3D/BOM/IO 联动；立体缓存变体（`layers≥2`）、brief 直接建机、场景质量随工程保存 | 几何仍为示意件，非型号 CAD |
 
 补充：18 张 Electron 实跑截图位于 `docs/desktop/screenshots/`（`11–14` 由 `npm run screenshots`、`15–18` 由 `npm run screenshots:machine` 生成，后者在 CI 里也跑并做 sha256 去重）。
+
+## Qt 客户端现状（真机验证）
+
+- 特征树：文档根（含版本）→ 零件 → 特征，特征名带关键尺寸，压缩项标灰「（已压缩）」；右键压缩/解除压缩/删除。
+- 属性面板：白名单字段可改（length/width/height/diameter/cbDiameter/cbDepth/radius），其余只读带 tooltip。
+- 3D 视口：`QOpenGLWidget` 渲染服务端 `/v1/geometry.stl`（build123d 导出），左键旋转、滚轮缩放、随版本重载。
+- 链路：SSE 订阅 `/v1/events`，断线 3s 重连 + 10s 轮询兜底，状态栏显示「SSE 已连接 / 轮询兜底」。
+- 材质：工具→材质四选一，换材质几何不变、质量重算。
+- **仍未做**：OCCT AIS 视口（本机 Debian 12/13 混源，`libocct-{data-exchange,visualization}-dev` 被 `libfreetype-dev` 版本冲突卡住）、Windows 上编译 Qt、选择面/测量/剖切、新建特征对话框。
 
 ## 已知限制
 

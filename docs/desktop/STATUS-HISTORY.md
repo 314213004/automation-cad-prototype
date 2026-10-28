@@ -71,3 +71,29 @@
 | `SMOKE_LAN_SWITCH_OK` | `enabled=false host=127.0.0.1 allowlist=1`，LAN 默认关闭且仅监听回环 |
 | `SMOKE_LAN_ALLOWLIST_OK` | `allowed=1 denied=0`，同一次 smoke 验证白名单允许与非白名单拒绝 |
 | `SMOKE_OK` | 全部 smoke 分支完成后输出 |
+
+---
+
+（以下内容由 STATUS.md 归档，不进离线索引）
+
+## Smoke 断言（当前在跑的关键几条）
+
+| 断言 | 实测 |
+|------|------|
+| `SMOKE_OK` | 全部 smoke 分支完成后输出 |
+| `SMOKE_PLACEHOLDER_DIMS_OK` | `w=18 h=85 d=78.5 y=0`（插 `iC65N-C16-1P` 后包围盒等于数据包外形、贴地）；降级 smoke 无 WebGL 时打印 `SMOKE_PLACEHOLDER_DIMS_SKIP reason=no-webgl`，属正常 |
+| `SMOKE_DESIGN_WEBGL_OK` | `renderer=ANGLE (… SwiftShader …) seed=STEP_fixture:1 scene=61 partPaths=61 tree=61 placements=13` |
+| `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
+| `SMOKE_DESIGN_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK` | `steps=5` / `count=3` / `placements=13 overlaps=0` / `project=Smoke-整机设计` |
+| `MACHINE_SHOTS_DONE` | `captured=4 failed=0` |
+
+完整历史断言矩阵见 [STATUS-HISTORY.md](STATUS-HISTORY.md#smoke-断言清单)。
+
+## 早期验证记录（2026-10-27）
+
+| 命令 | 结果 |
+|------|------|
+| `npm run perf:baseline` | 3000 件：`sceneBuildMs=71.0`、`tickP95Ms=2.34`、`heapPeakMb=39.0` |
+| `npm run bench:render` | 500 件 / 100,000 三角面 → `drawCalls=20`，实例合并省 96%，`budget=OK` |
+| `npm run check:orbit-webgl` | `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1` |
+| `npm run sync:e2e` | `SYNC_E2E_OK package=dsp_4718a1a3b50b484da618dcf611277916 dup=true diff=1 bytes=856`（真实 material-flow 后端 8899） |
