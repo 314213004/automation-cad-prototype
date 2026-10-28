@@ -378,7 +378,7 @@ function buildOverlay(): void {
       if (domainBtn.dataset.cadDomain === 'elec') {
         // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前数据源上下文
         refreshElecView({ notify: true });
-        closeOverlay();
+        closeOverlay({ restoreCanvas: false });
         try {
           (window as unknown as { ElecDomain?: { setDomain?: (domain: string) => void } }).ElecDomain?.setDomain?.('elec');
         } catch (error) {
@@ -953,9 +953,17 @@ function requiredElement(id: string): HTMLElement {
   return element;
 }
 
+/** 进 CAD 前画布是否开着：关 CAD 时据此把画布原样还给用户（保留画布会话） */
+let canvasOpenBeforeCad = false;
+
 function openOverlay(): void {
   // 无限画布/首页是全屏层，z-index 比覆盖层高；打开 CAD 查看前先收起来，
   // 否则模型正常渲染但整层被盖住（表现为"点了没反应/看不到电气图"）
+  // 只在"关→开"这一刻记录，重复调用 openOverlay 不能把 true 覆盖成 false
+  if (!overlayOpen) {
+    const canvas = document.getElementById('canvasWorkbench');
+    canvasOpenBeforeCad = Boolean(canvas && !canvas.hidden);
+  }
   closeCanvasWorkbench();
   homeHandle?.close();
   closeEnclosure();
@@ -975,7 +983,7 @@ function openOverlay(): void {
   document.getElementById(CAD_ENTRY)?.classList.add('is-active');
 }
 
-function closeOverlay(): void {
+function closeOverlay(options: { restoreCanvas?: boolean } = {}): void {
   overlayOpen = false;
   document.body.classList.remove('cad-overlay-open');
   if (root) root.hidden = true;
@@ -984,6 +992,12 @@ function closeOverlay(): void {
   document.getElementById(CAD_ENTRY)?.classList.remove('is-active');
   document.getElementById('cadStressRootTab')?.classList.remove('is-active');
   (document.getElementById(CAD_ENTRY) as HTMLButtonElement | null)?.focus();
+  // 关 CAD 回到进来时的那个界面：从画布进来的就回画布（保留画布会话），
+  // 但切去电气/机械域时不能回画布，否则又把原理图盖住
+  if (options.restoreCanvas !== false && canvasOpenBeforeCad) {
+    canvasOpenBeforeCad = false;
+    openCanvasWorkbench();
+  }
 }
 
 function updateLoading(on: boolean, text?: string, error = false): void {
