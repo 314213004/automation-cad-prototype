@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-27T13:22:20.249Z",
+  "generatedAt": "2026-10-28T22:30:42.487Z",
   "ok": true,
   "baseUrl": "http://127.0.0.1:8899",
   "deviceId": "DEV-TEST-01",
@@ -43,12 +43,12 @@
     }
   ],
   "summary": {
-    "packageId": "dsp_4718a1a3b50b484da618dcf611277916",
+    "packageId": "dsp_f88786e250414e16af8ae4e301c100d9",
     "version": 1,
     "duplicated": true,
     "diffChanges": 1,
     "bytes": 856,
-    "sha256": "6d4fff1f65f2c0edc395bb025618365ef8378e27193fa985622110b04832059f"
+    "sha256": "9882b37f9176d2e5f6c2dab0d61fa3595015a62a452b7c7d9b1b13d471292095"
   },
   "error": null
 }

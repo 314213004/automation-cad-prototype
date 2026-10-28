@@ -40,30 +40,15 @@
 
 ## 截图目录（docs/desktop/screenshots/）
 
-Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为 1600×1000），不是设计稿。复现：`cd desktop && npm run screenshots`（xvfb + 真实 Electron + `capturePage`，参数化面板由 `scripts/fake-parametric-sidecar.mjs` 驱动）；机型全流程截图用 `cd desktop && npm run screenshots:machine`（本地脚本化离线桩 + 真实 Electron + SwiftShader WebGL，注入 brief → `design_machine` → 应用 → 3D/BOM/IO）。普通 headless 下 Chromium 把 WebGL 列入 blocklist 时，CAD 3D 区域显示解析统计降级面板；机型 3D 图走 SwiftShader 真实渲染。文件名与内容：
+全部为 Electron/Windows 实跑抓图，不是设计稿。分四组：
+- `01`–`10`：主界面与各面板（1440×873），`cd desktop && npm run screenshots`
+- `11`–`18`：机型方案卡 / 3D / BOM / IO（1600×1000），`npm run screenshots:machine`
+- `qt-client-01`–`qt-client-17`：Qt 客户端（树/属性/3D/撤销重做/材质/新建特征/视角），逐张说明见 `qt-client/README.md`
+- `20-wizard-00`–`20-wizard-07`：从零建机分步（首页→工艺→候选→预览→工位→布局→校核→BOM→3D），`npm run screenshots:wizard`
 
-| 文件 | 内容 |
-|------|------|
-| `01-home.png` | 主界面：原型 8 视图 + 桌面入口（CAD 查看 / 工厂 / 联调 / 数据包 / 电气元件 / 智慧工厂 / 智能体） |
-| `02-cad-assembly.png` | CAD 查看：STEP 装配体 18 零件 / 5,040 三角面、零件列表 |
-| `03-interference.png` | 干涉检测：28 处候选、按严重度分组、点击定位 |
-| `04-stress.png` | 受力分析：气缸推力公式、余量与安全系数 |
-| `05-factory.png` | 智慧工厂：demo 适配器连接后 2 工位 × 4 点位实时值 |
-| `06-commission.png` | 通电联调：sim 已连接、6 步上电全部通过 |
-| `07-packs.png` | 数据包：内置包列表、导入/启停、检索 |
-| `08-elec-library.png` | 电气元件库：44 型号 / 12 分类、符号标记与「放入图纸」 |
-| `09-agent.png` | 智能体面板：对话、工具、模型设置、本机服务信息 |
-| `10-sync-settings.png` | 智慧工厂同步设置：baseUrl / 机台编号 / 项目 / API Key 掩码 |
-| `11-plcgen.png` | PLC 程序生成：预检 0 错误、11 文件树、README 预览、生成历史（1600×1000） |
-| `12-parametric.png` | 参数化抽屉：4 特征树、孔位参数表单、`就绪 · 面 19 · 体积 71.5 cm³`（1600×1000，假 sidecar） |
-| `13-cost.png` | 成本估算：9 张统计卡、6 行明细、缺价 1 项、合计 ¥1,398.64（1600×1000） |
-| `14-enclosure.png` | 底板布置：3 个真实尺寸元件、1 处重叠红框/角标、利用率与冲突计数（1600×1000） |
-| `15-machine-design-card.png` | 机型方案卡：6 工位、12 执行机构、7 传感器、当前案例 31.75 件/分钟、4628 VA、警告与「应用到工程」（1600×1000；截图为旧版数值） |
-| `16-machine-3d.png` | 6 工位 3D 联调：12 个执行机构、7 个传感器，运行若干 tick（1600×1000，SwiftShader WebGL） |
-| `17-machine-bom.png` | BOM 面板：12 行，含 SV660P 750 W / MHZ2-20D / D-M9B / SY5120-5LZD 与安全光栅行（1600×1000；截图为补录前版本，仍显示待选型，待有 GUI 时重拍） |
-| `18-machine-iomap.png` | PLC IO 面板：19 行（7 输入 + 12 输出），点位与夹爪/旋转轴/传感器对应（1600×1000） |
-
-引用约定：README 与文档一律用**相对仓库根**的路径（如 `docs/desktop/screenshots/01-home.png`），保证 GitHub 上可直接渲染；补拍或替换截图时保持同名覆盖，避免文档批量改链接。
+抓图脚本自带 sha256 去重与尺寸/色数校验：同一帧重复即报错，不产出「看起来成功」的假图。
+普通 headless 下 Chromium 若把 WebGL 列入 blocklist，CAD 3D 区会显示解析统计降级面板；
+需要真 3D 截图时用 SwiftShader（`--use-gl=angle --use-angle=swiftshader`）。
 
 ## 跨模块数据流
 
