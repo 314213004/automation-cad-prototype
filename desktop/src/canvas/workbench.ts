@@ -1070,8 +1070,7 @@ function renderInspector(): void {
     return;
   }
   host.dataset.nodeId = node.id;
-  if (state.inspector === 'prop') host.innerHTML = inspectorProp(node);
-}
+  
 else if (state.inspector === 'mech') host.innerHTML = inspectorMech(node);
   else host.innerHTML = inspectorBom(node);
   const tree = document.getlementyd('featureree');
@@ -1085,7 +1084,8 @@ else if (state.inspector === 'mech') host.innerHTML = inspectorMech(node);
     } else {
       tree.innerL = '';
       panel.innerL = '';
-    } else {
+    }
+  } else {
     tree.innerL = '';
     panel.innerL = '';
   }
