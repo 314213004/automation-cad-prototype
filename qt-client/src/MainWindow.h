@@ -53,6 +53,7 @@ private:
     QTableWidget *m_panel;
     QLabel *m_viewportPlaceholder;
     QLabel *m_statusRevision;
+    QLabel *m_statusGeometry;
     QSplitter *m_splitter;
     class QTimer *m_pollTimer = nullptr;
     QJsonObject m_envelope;

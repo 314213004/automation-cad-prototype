@@ -72,5 +72,8 @@ int main(int argc, char *argv[]) {
     MainWindow window;
     window.setServiceBase(base);
     window.show();
+    // 普通启动也要真的去读一次树，并开启自动刷新；否则界面永远显示「服务未连接」
+    window.refreshNow();
+    window.startAutoRefresh(1500);
     return app.exec();
 }

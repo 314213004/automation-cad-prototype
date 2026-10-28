@@ -89,6 +89,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_statusRevision = new QLabel(tr("未连接"), this);
     statusBar()->addPermanentWidget(m_statusRevision);
+    m_statusGeometry = new QLabel(tr("几何：未接入"), this);
+    statusBar()->addPermanentWidget(m_statusGeometry);
     statusBar()->showMessage(tr("单位：mm 优先"));
 
     connect(m_tree, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemSelected);
@@ -142,6 +144,21 @@ void MainWindow::refreshTree(const QJsonObject &envelope) {
     m_tree->expandAll();
     const int revision = envelope.value(QStringLiteral("revision")).toInt();
     m_statusRevision->setText(tr("版本 r%1").arg(revision));
+    // 真实几何（build123d sidecar 算出）：体积/质量/包围盒，没有就如实说没有
+    const QJsonObject geometry = envelope.value(QStringLiteral("geometry")).toObject();
+    if (geometry.isEmpty()) {
+        m_statusGeometry->setText(tr("几何：未接 sidecar"));
+    } else {
+        const QJsonObject bbox = geometry.value(QStringLiteral("bboxMm")).toObject();
+        m_statusGeometry->setText(
+            QStringLiteral("体积 %1 mm³ · 质量 %2 kg · %3×%4×%5 mm · %6")
+                .arg(geometry.value(QStringLiteral("volumeMm3")).toDouble(), 0, 'f', 1)
+                .arg(geometry.value(QStringLiteral("massKg")).toDouble(), 0, 'f', 4)
+                .arg(bbox.value(QStringLiteral("x")).toDouble())
+                .arg(bbox.value(QStringLiteral("y")).toDouble())
+                .arg(bbox.value(QStringLiteral("z")).toDouble())
+                .arg(geometry.value(QStringLiteral("kernel")).toString()));
+    }
     emit envelopeRefreshed(revision);
 }
 

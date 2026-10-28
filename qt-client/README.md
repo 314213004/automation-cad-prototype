@@ -37,6 +37,14 @@
 3. 在客户端里点特征、改属性面板数值，即走一次 `POST /v1/operations`；
    服务端版本 +1 后界面以返回的包络全文刷新。
 
+## 真机界面（1280×800，xvfb + ffmpeg x11grab 抓的实图）
+
+| 图 | 内容 |
+| --- | --- |
+| `docs/desktop/screenshots/qt-client-01-tree.png` | 启动即读契约服务：特征树 4 条 + 状态栏「版本 r0 / 体积 94,166.8 mm³ · 质量 0.7392 kg · 90×90×12 mm」 |
+| `docs/desktop/screenshots/qt-client-02-selected.png` | 选中「90×90×12 板体」，右侧 PropertyManager 列出 length/width/height（可改，白名单外只读） |
+| `docs/desktop/screenshots/qt-client-03-refreshed.png` | 外部客户端把 height 改成 18 后，1.5s 内自动刷新成「版本 r1 / 体积 141,580.0 mm³ · 质量 1.1114 kg · 90×90×18 mm · build123d」 |
+
 ## 自检入口（CI 用）
 
 ```sh
