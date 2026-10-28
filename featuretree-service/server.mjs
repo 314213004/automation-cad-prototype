@@ -20,6 +20,7 @@ export const seedDoc = {
 };
 
 const store = new Store(seedDoc);
+await store.init();
 const sseClients = new Set();
 store.onChange((change) => {
   const line = `data: ${JSON.stringify(change)}\n\n`;
@@ -78,13 +79,13 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/v1/operations') {
       const body = await readBody(req);
-      const out = store.applyOperation(body);
+      const out = await store.applyOperation(body);
       if (out.error) return send(res, errorStatus(out.error), out);
       return send(res, 200, out);
     }
     if (req.method === 'POST' && url.pathname === '/v1/undo') {
       const body = await readBody(req);
-      const out = store.undo(body.expectedRevision, body.actor === 'agent' ? `agent:${body.agentId || 'unknown'}` : 'manual', body.steps ?? 1);
+      const out = await store.undo(body.expectedRevision, body.actor === 'agent' ? `agent:${body.agentId || 'unknown'}` : 'manual', body.steps ?? 1);
       if (out.error) return send(res, errorStatus(out.error), out);
       return send(res, 200, out);
     }

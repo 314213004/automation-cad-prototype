@@ -86,6 +86,28 @@ jobs:
         timeout-minutes: 5
         run: node qt-client/tests/watch.mjs --binary build-qt/automationcad-qt
 
+  featuretree-geometry:
+    name: FeatureTree real geometry (build123d)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 安装 build123d
+        run: |
+          python -m venv .venv-ft
+          . .venv-ft/bin/activate
+          pip install --quiet --upgrade pip
+          pip install --quiet build123d==0.13.0
+      # 真实 OCCT 重建：种子树体积必须等于手算（94166.8 mm³），改板厚后按手算变化
+      - name: 体积/包围盒/质量 + 失败路径
+        timeout-minutes: 10
+        run: |
+          . .venv-ft/bin/activate
+          FT_PYTHON="$PWD/.venv-ft/bin/python" node featuretree-service/build-tests.mjs
+
   smoke:
     name: Electron smoke (xvfb)
     runs-on: ubuntu-latest

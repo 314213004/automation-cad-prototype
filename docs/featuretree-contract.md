@@ -136,6 +136,11 @@
 
 ## 8. 重建与几何（校验通过 ≠ 几何成功）
 
+> v0.1 实现：`featuretree-service/rebuild-sidecar.py`（build123d/OCCT）负责真建实体，
+> 服务通过 `FT_BUILD_URL` 接上它，把算子的 `{volumeMm3, bboxMm, massKg, densityGPerCm3, kernel}`
+> 写进包络与每条历史（可追溯）。密度是**输入**（默认钢 7.85 g/cm³，`FT_DENSITY` 可改），不是猜出来的。
+> 没接 sidecar 时服务只做「编译 + 指纹」并返回 `geometry:null`；接了但连不上时 `REBUILD_FAILED`（fail-closed）。
+
 - 写操作流程固定为：校验（第 4 节）→ 编译算子（`suppressed` 跳过，现有 `compileOps` / `compileAssembly` 的白名单算子）→ build123d / OCP 重建 BRep → 缓存 BRep 并生成 STEP（如需）→ 发布新版本并通知（第 7 节）。
 - 重建失败时整单回滚：文档停在原 `revision`，错误按 `REBUILD_FAILED` 返回并附带重建方原始错误信息；**不许出现“树已更新、模型还是旧的”这种中间态**。
 - 几何缓存以 `revision` 为键；`revision` 不变则缓存不变，不重复重建。
@@ -213,7 +218,7 @@
 
 | # | 标准 | v0.1 状态（2026-10-28） |
 |---|---|---|
-| 1 | 转接板示例树（90×90×12、Ø5.5 通孔、Ø8.5×5 沉窝、R3 四角）能完整写入、读出、重建，且体积、质量与手算一致 | ⚠️ 部分：写入/读出/编译算子 + 指纹已通过；**体积与质量未算**（重建仍是占位钩子，未接 OCCT/build123d） |
+| 1 | 转接板示例树（90×90×12、Ø5.5 通孔、Ø8.5×5 沉窝、R3 四角）能完整写入、读出、重建，且体积、质量与手算一致 | ✅ 已达成（2026-10-28）：`rebuild-sidecar.py`（build123d 0.13.0）真建实体，种子树体积 **94,166.8 mm³** 与手算一致（板 97,200 − 4 通孔 1,140.4 − 4 沉头 1,800.1 − 4 圆角 92.7），包围盒 90×90×12，质量按密度 7.85 g/cm³ = **0.7392 kg**；改板厚 13 后体积按手算变化（`build-tests.mjs` 8 条断言）。**未接 sidecar 时只做编译+指纹，`geometry:null`，不会假装算过**；sidecar 连不上时 fail-closed 返回 `REBUILD_FAILED` |
 | 2 | 手动改 → 版本 +1 → MCP 读到；MCP 改 → 版本 +1 → Qt 树自动刷新，双向 | ✅ 双向已通（2026-10-28）：`featuretree-service/mcp.mjs` 暴露 `ft_get_tree/ft_update_params/ft_undo/ft_list_revisions`，`mcp-tests.mjs` 11 条断言验「MCP 写→HTTP 读得到」「HTTP 写→MCP 读得到」「旧 revision 经 MCP 也被 409」；Qt 侧 `--selftest` 读→写→回读（`FT_QT_SELFTEST_OK revision=1 height=13`）。Qt 侧自动刷新已接：`--watch-selftest` 用 1.5s 轮询 `/v1/tree`，外部改树后实测在轮询周期内刷到新 revision（`qt-client/tests/watch.mjs` 4 条断言）。SSE 端点可用但客户端未订阅 |
 | 3 | 旧版本提交被 `CONFLICT_STALE_REVISION` 拒绝，文档不变 | ✅ `tests.mjs` 第 4/5 条 |
 | 4 | 批量事务任一子操作失败整单回滚，版本不变 | ✅ `tests.mjs` 第 10/11 条 |
@@ -221,7 +226,8 @@
 | 6 | 压缩不参与编译、解除即恢复；删除被引用特征被拒绝并指明引用方 | ✅ 压缩/解除在第 12/13 条；删除引用在第 16 条（返回 `REFERENCE_IN_USE` 并点名引用方） |
 | 7 | 未知字段、重复 id、沉窝直径 ≤ 孔径、圆角超厚一半等按第 13 节错误码返回 | ✅ 第 8/9 条（`UNKNOWN_FIELD` / `VALIDATION_FAILED`），其余规则见 `validate.mjs` |
 
-**结论（2026-10-28 更新）：§14 七条里 6 条达成（2/3/4/5/6/7），1 条部分（第 1 条：体积与质量仍未算，重建钩子只是编译算子 + 指纹）。剩下的硬缺口是「真实几何重建（OCCT/build123d）」与「SSE 接到 Qt 自动刷新」，不在这两条解决前不要对外说「FeatureTree 契约已完全落地」。**
+**结论（2026-10-28 更新）：§14 七条全部达成**（1 真实几何+体积/质量、2 MCP↔Qt 双向、3 乐观锁、4 事务回滚、5 重建失败路径、6 压缩/删除引用、7 错误码）。
+仍属「v0 边界」而非未达成：无持久化（重启回种子树）、单文档、无鉴权（仅回环）、SSE 未接客户端（Qt 用 1.5s 轮询）、QPaint/Qt 只在 Linux 编译验证。
 
 ## 15. 未定项（本文故意不定，需要 Sean 拍板，不许实现时擅自默认）
 

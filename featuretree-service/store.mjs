@@ -23,15 +23,49 @@ export function nowIso(date = new Date()) {
 // 重建钩子（v1 占位实现，非 OCCT 真重建）：编译算子 + 指纹。
 // 真实 OCCT/build123d 重建由后续 cadgen 侧车桥接替换本函数；
 // 在此之前，服务诚实地只保证“编译通过 + 指纹变化”，不宣称已生成 BRep。
-export function rebuild(doc) {
+/**
+ * 重建（契约 §8 / §14.1）：
+ * - 配了 FT_BUILD_URL（build123d sidecar）时，把算子送去真建实体，拿体积/包围盒/质量；
+ *   质量按调用方给的密度算（默认钢 7.85 g/cm³），密度是输入不是猜的。
+ * - 没配 sidecar 时只做「编译 + 指纹」，并明确 geometry=null，绝不假装算过体积。
+ * - 算子为空（全部压缩）一律失败——契约 §14.5 要求版本停在原处。
+ */
+export async function rebuild(doc) {
   const ops = compileOps(doc);
-  // 契约 §14.5：校验通过 ≠ 几何成功。全部特征被压缩（或只剩非实体特征）时算子为空，
-  // 这时必须如实报重建失败，而不是发布一个「空版本」让界面以为保存成功。
   if (ops.length === 0) {
     return { ok: false, message: '重建失败：没有任何可构建的特征（全部被压缩或缺少实体特征）' };
   }
-  const fingerprint = createHash('sha256').update(JSON.stringify(ops)).digest('hex').slice(0, 16);
-  return { ok: true, ops, fingerprint };
+  const sidecar = process.env.FT_BUILD_URL;
+  if (!sidecar) {
+    const fingerprint = createHash('sha256').update(JSON.stringify(ops)).digest('hex').slice(0, 16);
+    return { ok: true, ops, fingerprint, geometry: null };
+  }
+  try {
+    const response = await fetch(`${sidecar.replace(/\/+$/, '')}/rebuild`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ops, ...(process.env.FT_DENSITY ? { densityGPerCm3: Number(process.env.FT_DENSITY) } : {}) }),
+      signal: AbortSignal.timeout(20_000)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || !payload?.ok) {
+      return { ok: false, message: payload?.message || `重建 sidecar 返回 HTTP ${response.status}` };
+    }
+    return {
+      ok: true,
+      ops,
+      fingerprint: payload.fingerprint,
+      geometry: {
+        volumeMm3: payload.volumeMm3,
+        bboxMm: payload.bboxMm,
+        massKg: payload.massKg,
+        densityGPerCm3: payload.densityGPerCm3,
+        kernel: 'build123d'
+      }
+    };
+  } catch (error) {
+    return { ok: false, message: `重建 sidecar 不可用：${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 export class Store {
@@ -41,17 +75,39 @@ export class Store {
     this.history = [];
     this.snapshots = [clone(this.doc)]; // snapshots[revision] = 该版本文档全文
     this.listeners = new Set();
+    this.geometry = null;
     const errs = validateDoc(this.doc);
     if (errs.length) throw new Error('初始文档校验失败：' + errs.join('；'));
   }
+  /**
+   * 启动时把种子树也重建一次，这样首个 GET /v1/tree 就带 geometry。
+   * sidecar 配了但连不上时不让服务起不来：只记下错误，等写操作时按 REBUILD_FAILED 报。
+   */
+  async init() {
+    const rb = await rebuild(this.doc);
+    if (rb.ok) {
+      this.geometry = rb.geometry;
+      this.fingerprint = rb.fingerprint;
+    } else {
+      this.geometryError = rb.message || '重建失败';
+    }
+  }
+
   envelope() {
-    return { documentId: 'demo-adapter', kind: 'part', revision: this.revision, doc: clone(this.doc), history: clone(this.history) };
+    return {
+      documentId: 'demo-adapter',
+      kind: 'part',
+      revision: this.revision,
+      doc: clone(this.doc),
+      history: clone(this.history),
+      ...(this.geometry ? { geometry: clone(this.geometry) } : {})
+    };
   }
   onChange(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
   emit(change) { for (const fn of this.listeners) fn(change); }
 
   // 核心写入口：fn(docDraft) 做修改；随后整树校验 + 重建，失败则丢弃草稿。
-  commit(expectedRevision, actor, operation, featureIds, fn) {
+  async commit(expectedRevision, actor, operation, featureIds, fn) {
     if (expectedRevision !== this.revision) {
       return { error: 'CONFLICT_STALE_REVISION', message: `版本过期：期望 ${expectedRevision}，当前 ${this.revision}`, current: this.envelope() };
     }
@@ -60,21 +116,22 @@ export class Store {
     if (opErr) return { error: 'VALIDATION_FAILED', message: opErr };
     const errs = validateDoc(draft);
     if (errs.length) return { error: 'VALIDATION_FAILED', message: errs.join('；') };
-    const rb = rebuild(draft);
+    const rb = await rebuild(draft);
     if (!rb.ok) return { error: 'REBUILD_FAILED', message: rb.message || '重建失败' };
     const before = this.revision;
     this.doc = draft;
     this.doc.updatedAt = nowIso();
     this.revision += 1;
     this.snapshots[this.revision] = clone(this.doc);
-    const entry = { revision: this.revision, beforeRevision: before, timestamp: this.doc.updatedAt, actor, operation, featureIds, fingerprint: rb.fingerprint };
+    this.geometry = rb.geometry;
+    const entry = { revision: this.revision, beforeRevision: before, timestamp: this.doc.updatedAt, actor, operation, featureIds, fingerprint: rb.fingerprint, ...(rb.geometry ? { geometry: rb.geometry } : {}) };
     this.history.push(entry);
     const env = this.envelope();
     this.emit({ documentId: env.documentId, revision: env.revision, changedFeatureIds: featureIds, actor });
     return env;
   }
 
-  applyOperation(body) {
+  async applyOperation(body) {
     const { expectedRevision, actor = 'manual', operation } = body;
     const actorLabel = actor === 'agent' ? `agent:${body.agentId || 'unknown'}` : 'manual';
     switch (operation) {
@@ -82,7 +139,7 @@ export class Store {
         const f = body.feature;
         if (!f || typeof f.id !== 'string' || !f.id.trim()) return { error: 'VALIDATION_FAILED', message: '缺少必填参数：特征.id' };
         if (this.doc.features.some(x => x.id === f.id)) return { error: 'DUPLICATE_ID', message: `id「${f.id}」已存在` };
-        return this.commit(expectedRevision, actorLabel, operation, [f.id], (d) => { d.features.push(clone(f)); return null; });
+        return await this.commit(expectedRevision, actorLabel, operation, [f.id], (d) => { d.features.push(clone(f)); return null; });
       }
       case 'updateFeatureParams': {
         const f = this.doc.features.find(x => x.id === body.featureId);
@@ -91,7 +148,7 @@ export class Store {
           const e = checkPanelEdit(f, k, v);
           if (e) return { error: e.startsWith('未知字段') ? 'UNKNOWN_FIELD' : 'VALIDATION_FAILED', message: e };
         }
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
+        return await this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
           const t = d.features.find(x => x.id === body.featureId);
           Object.assign(t.params, clone(body.patch)); return null;
         });
@@ -99,12 +156,12 @@ export class Store {
       case 'renameFeature': {
         if (typeof body.name !== 'string' || !body.name.trim()) return { error: 'VALIDATION_FAILED', message: 'name 必须是非空字符串' };
         if (!this.doc.features.some(x => x.id === body.featureId)) return { error: 'NOT_FOUND', message: `找不到特征：${body.featureId}` };
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features.find(x => x.id === body.featureId).name = body.name; return null; });
+        return await this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features.find(x => x.id === body.featureId).name = body.name; return null; });
       }
       case 'reorderFeature': {
         const from = this.doc.features.findIndex(x => x.id === body.featureId);
         if (from === -1) return { error: 'NOT_FOUND', message: `找不到特征：${body.featureId}` };
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
+        return await this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
           const [m] = d.features.splice(from, 1);
           const idx = Math.max(0, Math.min(body.targetIndex ?? 0, d.features.length));
           d.features.splice(idx, 0, m); return null;
@@ -113,7 +170,7 @@ export class Store {
       case 'setSuppressed': {
         if (typeof body.suppressed !== 'boolean') return { error: 'VALIDATION_FAILED', message: 'suppressed 必须是布尔值' };
         if (!this.doc.features.some(x => x.id === body.featureId)) return { error: 'NOT_FOUND', message: `找不到特征：${body.featureId}` };
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features.find(x => x.id === body.featureId).suppressed = body.suppressed; return null; });
+        return await this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features.find(x => x.id === body.featureId).suppressed = body.suppressed; return null; });
       }
       case 'deleteFeature': {
         const target = this.doc.features.find(x => x.id === body.featureId);
@@ -130,7 +187,7 @@ export class Store {
             message: `特征「${target.id}」被引用，不能删除：引用方 ${orphans.map(f => `${f.type}「${f.id}」`).join('、')}`
           };
         }
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
+        return await this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
           d.features = d.features.filter(x => x.id !== body.featureId);
           return null;
         });
@@ -138,7 +195,7 @@ export class Store {
       case 'applyTransaction': {
         const ops = body.operations || [];
         // 事务在单次 commit 内顺序执行子操作，任一失败整单回滚（草稿丢弃）。
-        return this.commit(expectedRevision, actorLabel, operation, ops.map(o => o.featureId).filter(Boolean), (d) => {
+        return await this.commit(expectedRevision, actorLabel, operation, ops.map(o => o.featureId).filter(Boolean), (d) => {
           for (const op of ops) {
             if (op.operation === 'updateFeatureParams') {
               const t = d.features.find(x => x.id === op.featureId);
@@ -162,7 +219,7 @@ export class Store {
     }
   }
 
-  undo(expectedRevision, actor = 'manual', steps = 1) {
+  async undo(expectedRevision, actor = 'manual', steps = 1) {
     // undo 本身也是一次写操作：带 expectedRevision，经过校验与重建，产生新 revision；
     // 历史不删除，undo 记录进 history，目标是 snapshots[revision - steps] 的全文。
     if (expectedRevision !== this.revision) {
@@ -173,14 +230,16 @@ export class Store {
     const restored = clone(this.snapshots[target]);
     const errs = validateDoc(restored);
     if (errs.length) return { error: 'VALIDATION_FAILED', message: errs.join('；') };
-    const rb = rebuild(restored);
+    const rb = await rebuild(restored);
     if (!rb.ok) return { error: 'REBUILD_FAILED', message: rb.message || '重建失败' };
     const before = this.revision;
     this.doc = restored;
     this.doc.updatedAt = nowIso();
     this.revision += 1;
     this.snapshots[this.revision] = clone(this.doc);
+    this.geometry = rb.geometry;
     this.history.push({ revision: this.revision, beforeRevision: before, timestamp: this.doc.updatedAt, actor, operation: 'undo', featureIds: [], fingerprint: rb.fingerprint, undoTarget: target });
+    if (rb.geometry) this.history[this.history.length - 1].geometry = rb.geometry;
     const env = this.envelope();
     this.emit({ documentId: env.documentId, revision: env.revision, changedFeatureIds: [], actor });
     return env;
