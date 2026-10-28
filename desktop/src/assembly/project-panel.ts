@@ -10,6 +10,8 @@ import type { InterferencePart } from '../mech/interference.ts';
 
 export interface ProjectPanelInfo {
   name: string;
+  /** project = 已保存工程；import = 刚导入的模型（还没落成工程，别写「当前工程」） */
+  stage?: 'project' | 'import';
   /** 零件名 → 装配层级路径（STEP 有层级时才有） */
   partPaths?: Record<string, string[]>;
   parts: number;
@@ -67,7 +69,7 @@ function summaryHtml(info: ProjectPanelInfo): string {
     <b>工程零件</b>
     <span class="pp-badge">实时</span>
   </div>
-  <div class="pp-note">当前工程：${escapeHtml(info.name)}</div>
+  <div class="pp-note">${info.stage === 'import' ? '当前模型（未保存工程）：' : '当前工程：'}${escapeHtml(info.name)}</div>
   <section>
     <h4>工程概况</h4>
     <div class="pp-row"><span>零件数</span><b>${info.parts} 件</b></div>
@@ -95,7 +97,7 @@ function partHtml(name: string, bbox: number[] | null): string {
     <b>${escapeHtml(name)}</b>
     <span class="pp-badge">实时</span>
   </div>
-  ${current ? `<div class="pp-note">所属工程：${escapeHtml(current.name)}</div>` : ''}
+  ${current ? `<div class="pp-note">${current.stage === 'import' ? '所属模型（未保存工程）：' : '所属工程：'}${escapeHtml(current.name)}</div>` : ''}
   <section>
     <h4>几何</h4>
     ${size

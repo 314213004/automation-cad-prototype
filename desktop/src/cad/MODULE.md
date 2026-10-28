@@ -183,3 +183,16 @@ suggestionToMovingPart(suggestion, meshes) → MovingPart   // 复用 draftFromM
 - 验证：层级验证工程 9 件 → 1 个总装 + 4 个子装配（机架2/升降2/堆叠3/输送2）；
   面板「所属装配 光伏缓存堆叠单元（层级验证） > 机架」；状态栏「工程 > … > 机架 > 立柱-左前」
 - 真实 STEP 是否带层级取决于导出方有没有写产品结构；没写就只能靠「序号+尺寸」兜底命名
+
+## 占位盒按外形尺寸生成（`placeholder-dims.ts`，2026-10-27）
+
+`insert_component` 以前固定建 20×20×20 方块，插 20mm 气缸和 2m 输送段在 3D 里一样大，判断不了比例。
+现在 `commands.ts` 把数据包里的 `dims` 作为 `dimsMm` 传给渲染层，`addPlaceholderPart` 用它建盒子：
+
+- 轴映射 w→X、h→Y（高度，盒子落在 `y = h/2` 贴地）、d→Z，单位 mm
+- 缺项 / 非正数 / 超 20m 逐轴回落 20mm（不整体放弃，避免一个坏字段导致没有盒子）
+- `mesh.userData.placeholderSized` 标记是否三轴都来自真实外形，便于界面区分「按外形」与「方形占位」
+
+真机（SwiftShader WebGL，直接调 `__AgentBridge.insertComponent`）：
+- 带 dims：`iC65N 1P C16` → bbox 18×85×78.5，与数据包 `{w:18,h:85,d:78.5}` 一致
+- 不带 dims：20×20×20 回落

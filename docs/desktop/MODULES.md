@@ -14,6 +14,8 @@
 | 客户可选模块注册与启停 | [desktop/src/modules/MODULE.md](../../desktop/src/modules/MODULE.md) | 内置模块 ID/API/依赖/能力目录、默认状态、持久化开关与跨 renderer/主进程门控边界 |
 | Windows 应用内更新 | [desktop/docs/update-channel.md](../../desktop/docs/update-channel.md) | 可选 `system.update`（v1.0.0 / API 1）；稳定/测试渠道、显式下载与确认安装、NSIS blockmap 与签名/完整性发布门禁 |
 | 可移植工程档案 | [desktop/src/project-archive/MODULE.md](../../desktop/src/project-archive/MODULE.md) | 可选 `project.portable` v2.0.0；stable project ID/source hash 绑定 schema-v2 状态+CAD 候选档案，strict read-only preview；事务恢复仍未实现 |
+| Qt 客户端（新） | [qt-client/README.md](../../qt-client/README.md) | Qt6 壳子 v0.1：FeatureManager 设计树 / PropertyManager 属性面板 / 占位 3D 视口；写操作全部走契约服务，带 `expectedRevision`，409 冲突拒绝覆盖；Linux + Qt 6.4.2 已编译通过，Windows 未编译 |
+| FeatureTree 契约服务 | [docs/featuretree-contract.md](../featuretree-contract.md) | 只监听 127.0.0.1 的本地服务：字段层 + 整树层校验、乐观锁、原子事务、历史留痕、undo、SSE 变更事件；`node featuretree-service/tests.mjs` 18 条验收；§14 验收 4 条全达成 / 1 部分 / 2 未达成 |
 | 主视口 3D | [desktop/src/orbit/MODULE.md](../../desktop/src/orbit/MODULE.md) | 原型装配/干涉视口换成可旋转 three.js：标准视图、透视/正交、适合、树↔3D 选择、属性编辑改几何、剖切与包围盒干涉叠加；WebGL 不可用退回原型等轴测 |
 | 整机布局 3D 编辑 | [desktop/src/layout-editor/MODULE.md](../../desktop/src/layout-editor/MODULE.md) | 可选 `design.layout-editor`；向导第 4 步 3D 视口直接选/移/绕 Z 旋转工位、吸附、对齐分布、包络干涉与测量，写回 `MachineDesign.stationGeometryLayout`（v2 平移 / v3 含旋转），撤销并入主视口时间线 |
 | 元器件数据包 | [desktop/src/packs/MODULE.md](../../desktop/src/packs/MODULE.md) | manifest-only 索引、`loadPack/unloadPack` 懒加载、跨包去重、partId 全局索引、检索与面板；`validatePack` 全包校验、`partsSha256` 完整性、schema 迁移、依赖与统计报表 |
@@ -77,11 +79,11 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 
 **边界原则**：渲染层无 fs/net 权限；主进程不做几何计算；Agent 与 UI 共用同一份工具/命令注册表。
 
-## 当前总体进度（2026-10-26）
+## 当前总体进度（2026-10-28）
 
 > 逐轮验证数字见 [STATUS.md](./STATUS.md)；历史迭代明细已移入 [BACKLOG-HISTORY.md](./BACKLOG-HISTORY.md)，本处只留能力目录。
 
-- ✅ 基线：`main` 上 `npx tsc --noEmit` 0 错误、`npm test` 1967/1967、`npm run build:ext` + xvfb smoke 收尾 `SMOKE_OK`、`npm run eval:agent` 109/109（工具选择率 1.00）。
+- ✅ 基线（`3d5ee07`）：`npx tsc --noEmit` 0 错误、`npm test` 2589（2587 通过 / 2 跳过）、`npm run build:ext` + xvfb smoke 收尾 `SMOKE_OK`、`npm run eval:agent` 111/111（accuracy/tools/refused 全 1.00）；CI 在 push/PR 上自动跑 unit + Electron smoke 两个 job。
 - ✅ 设计域：五步向导（`src/design/`：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核/保存工程）；机型方案合成与落盘、11 种整机形态库、参数化整机几何、通用实体建模 `build_machine_model`、标准件拖拽吸附。详见 [DESIGN-WIZARD.md](./DESIGN-WIZARD.md) / [MACHINE-DESIGN.md](./MACHINE-DESIGN.md)。
 - ✅ 几何与视口：STEP/IGES/STL/GLTF 解析（STEP 实测 18 零件 / 5,040 面 / 559 ms）、可旋转/正交/剖切视口、运动学标注、参数化特征树（build123d sidecar）、WebGL 降级。
 - ✅ 电气与电柜：按工程 BOM 出原理图（电路模型 + ERC + 拓扑布局 + A3 渲染，不可交付时图上直接列问题）、线号/功率/截面/断路器校验、底板毫米画布与导轨碰撞、利用率。
@@ -89,7 +91,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 数据与成本：10 个内置包（启动只读 manifest、按需 `loadPack`、跨包去重）+ 用户 ZIP 导入；价格簿数据包 + 纯函数成本引擎（缺价如实报、示例价自动排除）；五种导出（PDF / DXF / GLB / OBJ / BOM）。
 - ✅ Agent：离线规则路由 7 类意图 + 多步规划 + 写操作确认/撤销 + NDJSON 审计 + 上下文指代 + 离线知识检索（`kb.json`）；工具清单与数量以 `desktop/src/agent/tools.ts` 注册表为准，MCP / RPC / UI 共用。
 - ✅ 可选模块门控（`elec.validation` / `cost.estimation` / `commission.io-test` / `factory.plc-sync` / `cad.parametric-import` / `project.portable` / `system.update` 等）默认启用，关闭时 UI、IPC、Agent、副作用入口一并 fail-closed。
-- ⏳ 未完成/未实测：真实 PLC 联调、Windows Authenticode 签名、设计同步服务端部署（生产 221 未确认）、向导保存后 `__AgentBridge.getScene().parts` 仍为 0（见 BACKLOG 待修项）。
+- ⏳ 未完成/未实测：真实 PLC 联调、Windows Authenticode 签名、设计同步服务端部署（生产 221 未确认）、FreeCAD 真实出图（本机无 `freecadcmd`）。
 
 ## 参数化建模（P9）
 

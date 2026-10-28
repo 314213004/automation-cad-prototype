@@ -21,6 +21,44 @@
 .acp-entry-btn:hover{border-color:#5d6770;background:#2d3237;color:#fff}
 .acp-entry-btn.is-active{border-color:#1f9c8d;color:#b9f2e9;background:#243a37}
 .acp-entry-btn svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---- 工具下拉：入口多到只剩图标时，改用带文字的菜单 ---- */
+.tb-tools-btn{
+  display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;margin-left:6px;
+  border:1px solid #414850;border-radius:var(--r,3px);color:#cbd2d8;
+  background:linear-gradient(180deg,#292d31,#23272b);font:inherit;font-size:12px;white-space:nowrap;flex:0 0 auto;
+}
+.tb-tools-btn:hover{border-color:#5d6770;background:#2d3237;color:#fff}
+.tb-tools-btn[aria-expanded="true"]{border-color:#1f9c8d;color:#b9f2e9;background:#243a37}
+.tb-tools-caret{font-size:10px;line-height:1;opacity:.85}
+.tb-tools-menu{
+  /* 绝对定位挂在 .topbar 里：整页 html{zoom:1.15}，fixed 坐标会被缩放放大而溢出右边缘 */
+  position:absolute;right:10px;top:calc(100% + 6px);z-index:2147482000;
+  min-width:236px;max-width:320px;max-height:calc(100vh - 96px);overflow:auto;
+  padding:6px;border:1px solid #3d444b;border-radius:6px;
+  background:#1f2428;box-shadow:0 18px 42px rgba(0,0,0,.45);
+}
+.tb-tools-menu[hidden]{display:none !important}
+.tb-menu-group{padding:2px 0}
+.tb-menu-group + .tb-menu-group{border-top:1px solid #2e343a}
+.tb-menu-head{padding:6px 10px 3px;font-size:10px;letter-spacing:.08em;color:#7f8a92}
+.tb-tools-menu .acp-entry-btn,
+.tb-tools-menu .tbtn{
+  display:flex;align-items:center;justify-content:flex-start;gap:9px;
+  width:100%;height:30px;margin:0;padding:0 10px;
+  border:0;border-radius:4px;background:none;color:#d6dde2;
+  font:inherit;font-size:12.5px;text-align:left;white-space:nowrap;
+}
+.tb-tools-menu .acp-entry-btn:hover,
+.tb-tools-menu .tbtn:hover{background:#2b3238;color:#fff;border:0}
+.tb-tools-menu .acp-entry-btn span,
+.tb-tools-menu .tbtn span,
+.tb-tools-menu .tb-menu-item span{
+  display:inline-flex !important; width:auto; min-width:0; overflow:visible;
+}
+.tb-tools-menu .acp-entry-btn.is-active{color:#b9f2e9}
+.tb-tools-menu .tbtn svg,
+.tb-tools-menu .acp-entry-btn svg{width:14px;height:14px;flex:0 0 auto}
 .acp-drawer{
   position:fixed;top:44px;right:0;bottom:26px;width:430px;z-index:2147482500;display:flex;flex-direction:column;
   background:#1e2124;border-left:1px solid #3a4047;box-shadow:-18px 0 46px rgba(0,0,0,.38);color:#d6dde2;

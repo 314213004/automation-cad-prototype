@@ -1,0 +1,124 @@
+name: ci
+
+# 之前只有手动触发的 windows-build，main 上的提交与 PR 都不跑测试，
+# 合并前只能靠本地 `npm test` 自觉。这里补上 push / PR 的必跑项。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# 曾经用过 concurrency(cancel-in-progress)；2026-10-27 遇到一次 GitHub 侧状态不一致：
+# run 的 jobs 全绿、artifact 已上传，但 run 级 status 永久停在 in_progress，
+# 于是占住了同一 ref 的并发组，后续 workflow_dispatch 一直排队，且 cancel / force-cancel 都返回
+# "not in progress"。去掉并发组，宁可偶尔并行跑两次，也不要整条 CI 被一个幽灵 run 卡死。
+
+jobs:
+  unit:
+    name: tsc + unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: desktop
+    # 故意不设 TZ：runner 是 UTC，刚好能抓住「按本机时区渲染却按 +08 断言」的测试
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: 安装依赖
+        run: npm ci
+      - name: 类型检查
+        run: npx tsc --noEmit
+      - name: 单元测试（含 kb.json 新鲜度与工具数量文档一致性）
+        run: npm test
+      - name: 数据包校验
+        run: npm run packs:validate
+      # FeatureTree 契约服务（自起服务、FT_PORT=0，跑完自动关）
+      - name: 契约服务验收（featuretree-service）
+        timeout-minutes: 5
+        run: node ../featuretree-service/tests.mjs   # unit job 的 cwd 是 desktop
+      # 离线规则评估与能力报告此前没人跑，工具加了却不进评估集也发现不了（本轮就是 eval:agent 红的）
+      - name: 离线规则评估（含工具覆盖校验）
+        run: npm run eval:agent
+      - name: Agent 能力报告（防止脚本本身崩）
+        run: npm run agent:report
+
+  qt-client:
+    name: Qt client build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 Qt6 开发包
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qt6-base-dev cmake g++
+      - name: 配置与编译
+        run: |
+          cmake -S qt-client -B build-qt -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-qt -j4
+      - name: 可执行文件存在
+        run: test -x build-qt/automationcad-qt
+
+  smoke:
+    name: Electron smoke (xvfb)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: 安装 Electron 运行库
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             xvfb libgbm1 libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2             libdrm2 libgtk-3-0 libasound2t64 libxss1 libxrandr2 libxkbcommon0
+      - name: 安装依赖
+        run: npm ci
+      - name: 构建扩展（smoke 需要 dist/）
+        run: npm run build:ext
+      # smoke 覆盖画布/设计向导/机型/Agent 等的真实渲染路径，之前只在本机跑，CI 永远发现不了回归
+      - name: 冒烟（xvfb + 真实 Electron，降级渲染）
+        timeout-minutes: 12
+        run: npm run smoke
+      # 降级 smoke 关掉了 WebGL；这条用 SwiftShader 真跑 3D，覆盖占位盒尺寸等几何断言
+      - name: WebGL 冒烟（SwiftShader）
+        timeout-minutes: 12
+        run: npm run smoke:design:webgl
+      # 机型四张图曾经四张同图还「全绿」；脚本内的 sha256 去重会在这里把它拦住
+      - name: 机型全流程截图（含去重校验）
+        timeout-minutes: 10
+        run: npm run screenshots:machine
+      # 外部客户端契约（MCP/JSON-RPC）：401、tools/list、resources、-32602/-32601、只读调用
+      - name: 外部客户端冒烟（MCP/JSON-RPC）
+        timeout-minutes: 8
+        run: npm run smoke:mcp
+      - name: 上传机型截图
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: machine-screenshots
+          path: |
+            docs/desktop/screenshots/1[5-8]-machine-*.png
+            docs/desktop/eval/machine-screenshots.json
+          if-no-files-found: error
+      - name: 失败时保留日志
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-log
+          path: |
+            docs/desktop/eval/*.json
+            desktop/*.log
+          if-no-files-found: ignore
+

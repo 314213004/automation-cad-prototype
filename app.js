@@ -1182,7 +1182,11 @@ function setView(v) {
 
 function setMode(m) {
   const map = { model: 'sizing', assembly: 'assembly', check: 'check', drafting: 'drafting' };
-  setView(map[m] || 'assembly');
+  const target = map[m] || 'assembly';
+  // 「装配」页展示的是原型示例装配：此时必须把工程面板交还给原型，
+  // 否则右侧仍是工程零件面板，示例装配的参数输入框（如缸径）根本不存在。
+  if (target === 'assembly') window.__detachProjectPanel?.();
+  setView(target);
 }
 
 /* ---------------------------------------------------------------- 选中态 */

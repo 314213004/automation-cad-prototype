@@ -1,16 +1,17 @@
 {
-  "generatedAt": "2026-10-25T14:59:01.535Z",
-  "version": "0.4.9",
+  "generatedAt": "2026-10-27T12:46:54.979Z",
+  "version": "0.5.0",
   "mode": "offline-rules",
   "dataset": {
     "path": "docs/desktop/eval/cases.json",
-    "count": 109,
+    "count": 111,
     "references": 17,
     "ambiguous": 7,
     "multiStep": 5,
     "outOfScope": 7,
     "toolCoverage": [
       "apply_machine_design",
+      "build_canvas_assembly",
       "build_machine_model",
       "design_machine",
       "export_cost_report",
@@ -27,6 +28,7 @@
       "run_electrical_check",
       "run_interference_check",
       "run_plc_generate",
+      "save_scene_as_project",
       "search_components",
       "search_docs",
       "suggest_kinematics",
@@ -53,13 +55,13 @@
   "passed": true,
   "metrics": {
     "intent": {
-      "correct": 109,
-      "total": 109,
+      "correct": 111,
+      "total": 111,
       "rate": 1
     },
     "tools": {
-      "correct": 109,
-      "total": 109,
+      "correct": 111,
+      "total": 111,
       "rate": 1
     },
     "params": {
@@ -3267,6 +3269,66 @@
       "actualPlans": [
         {
           "tool": "build_machine_model",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "ca01",
+      "input": "把这个画布方案生成整机 3D 装配工程",
+      "tags": [
+        "model-build"
+      ],
+      "note": "画布工位 → 占位盒装配工程：不含真实几何，质量为 null，需确认。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "build_canvas_assembly"
+      ],
+      "actualTools": [
+        "build_canvas_assembly"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "build_canvas_assembly",
+          "args": {},
+          "readOnly": false,
+          "missing": []
+        }
+      ],
+      "passed": true
+    },
+    {
+      "id": "sp01",
+      "input": "把当前模型存为工程",
+      "tags": [
+        "project-save"
+      ],
+      "note": "当前视口逐件导出 STL 并落库成工程，需确认。",
+      "expectedIntent": "generate",
+      "actualIntent": "generate",
+      "intentOk": true,
+      "expectedTools": [
+        "save_scene_as_project"
+      ],
+      "actualTools": [
+        "save_scene_as_project"
+      ],
+      "toolOk": true,
+      "paramsApplicable": false,
+      "paramsOk": null,
+      "refusedOk": true,
+      "actualPlans": [
+        {
+          "tool": "save_scene_as_project",
           "args": {},
           "readOnly": false,
           "missing": []

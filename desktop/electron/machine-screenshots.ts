@@ -1,7 +1,8 @@
 // 六工位锁螺丝机全流程截图。使用本地 OpenAI 兼容桩驱动真实智能体会话，
 // 所有画面均由 Electron 渲染后 capturePage 捕获，不使用静态设计稿。
-import { type BrowserWindow } from 'electron';
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { nativeImage, type BrowserWindow } from 'electron';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const SHOT_WIDTH = 1600;
@@ -102,28 +103,65 @@ function uniqueColorCount(bitmap: Buffer): number {
   return seen.size;
 }
 
+/**
+ * xvfb + SwiftShader 下 `webContents.capturePage()` 会一直返回第一帧（实测 15/16/17/18
+ * 字节完全相同），但 CDP 的 Page.captureScreenshot 是重新合成后再取，能拿到当前画面。
+ */
+/**
+ * 抓图说明（2026-10-27 审计）：
+ * xvfb + SwiftShader 下 capturePage / CDP Page.captureScreenshot 都返回同一张首帧
+ * （实测 15/16/17/18 字节完全相同），desktopCapturer 在无窗口管理器的 xvfb 里又没有窗口源。
+ * 因此这里保留最简单的 capturePage，由调用方用 sha256 去重——重复即报错，
+ * 不再产出「四张不同面板」的假截图。真正的修法是换通道（外部 CDP 连可见窗口，已在本机验证可拿到不同帧）。
+ */
+/**
+ * 抓图通道（2026-10-27 结论修正）：
+ * 一开始以为是渲染进程帧冻结，加了 ffmpeg x11grab 旁路；后来查明真因是**流程从没离开首页**
+ * （所有操作都在首页遮罩下进行），修掉首页那步之后 `capturePage()` 本身就稳定给出四个不同画面
+ * （本机连续两次实跑、CI 一次实跑都 4 张互异）。所以这里回到最简单的 capturePage，
+ * 不再依赖 ffmpeg / Xauthority，去重守卫保留——四张雷同时直接报错。
+ */
+async function grabPng(window: BrowserWindow): Promise<Buffer> {
+  const image = await window.webContents.capturePage();
+  return image.toPNG();
+}
+
 async function capture(
   window: BrowserWindow,
   outputDir: string,
   name: string,
-  label: string
+  label: string,
+  seenHashes: Map<string, string>
 ): Promise<MachineShotValidation> {
   await window.webContents.executeJavaScript(
     `document.getElementById('cadNotice')?.classList.remove('is-on');
      document.getElementById('acpToast')?.classList.remove('is-on'); true`
   );
   await settle(window);
-  const image = await window.webContents.capturePage();
+  // xvfb + SwiftShader 下窗口可能被判为被遮挡，合成器不产新帧，capturePage 会重复返回同一张。
+  // 先确保窗口可见并主动作废一帧，再等两个 rAF，最后才抓图。
+  if (!window.isVisible()) window.showInactive();
+  window.webContents.invalidate();
+  await settle(window, 320);
+  const png = await grabPng(window);
+  const image = nativeImage.createFromBuffer(png);
   const { width, height } = image.getSize();
   if (width !== SHOT_WIDTH || height !== SHOT_HEIGHT) {
     throw new Error(`${name} 尺寸 ${width}×${height}，期望 ${SHOT_WIDTH}×${SHOT_HEIGHT}`);
   }
-  const png = image.toPNG();
+  // 四张图必须真的是四个画面：字节级重复说明抓到的是同一帧（合成器没刷新），
+  // 这种「看起来成功」的截图比失败更糟，直接报错。
+  const hash = createHash('sha256').update(png).digest('hex');
+  const duplicateOf = seenHashes.get(hash);
+  if (duplicateOf) {
+    throw new Error(`${name} 与 ${duplicateOf} 字节完全相同，抓到的是同一帧（画面没刷新）`);
+  }
+  seenHashes.set(hash, name);
   const target = join(outputDir, name);
   writeFileSync(target, png);
   const bytes = statSync(target).size;
   if (bytes <= 20 * 1024) throw new Error(`${name} 仅 ${bytes} 字节，疑似空白`);
-  const uniqueColors = uniqueColorCount(image.toBitmap());
+  const uniqueColors = uniqueColorCount(nativeImage.createFromBuffer(png).toBitmap());
   if (uniqueColors <= 500) throw new Error(`${name} 唯一色数 ${uniqueColors}，疑似单色/空白`);
   console.log(`MACHINE_SHOT_OK name=${name} label=${label} size=${width}x${height} bytes=${bytes} colors=${uniqueColors}`);
   return { label, name, width, height, bytes, uniqueColors };
@@ -142,6 +180,7 @@ export async function captureMachineScreenshots(
   if (!baseUrl) throw new Error('缺少 AUTOMATIONCAD_STUB_BASE_URL，无法启动离线模型桩');
 
   window.setContentSize(SHOT_WIDTH, SHOT_HEIGHT);
+  window.webContents.setBackgroundThrottling(false);
   await delay(350);
   await waitForExtension(window);
 
@@ -158,10 +197,18 @@ export async function captureMachineScreenshots(
   );
 
   const shots: MachineShotValidation[] = [];
+  const seenHashes = new Map<string, string>();
   try {
     await window.webContents.executeJavaScript(
       `(async () => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        // 启动后停在首页；不先离开首页，后面所有操作都在首页底下进行，
+        // 抓到的四张图就都是首页（这正是之前「四张图字节相同」的真正原因）。
+        const home = document.getElementById('homeScreen');
+        if (home && !home.hidden) {
+          document.querySelector('.home-link')?.click();
+          await wait(600);
+        }
         window.AutomationCadViewer?.close();
         window.AutomationCadParametric?.close();
         document.getElementById('commissionDrawer')?.setAttribute('hidden', '');
@@ -246,7 +293,7 @@ export async function captureMachineScreenshots(
     if (!(cardState.warnings ?? []).some((text) => text.includes('缺价'))) {
       throw new Error(`方案卡缺少成本缺价警告：${JSON.stringify(cardState.warnings)}`);
     }
-    shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡'));
+    shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡', seenHashes));
 
     // 写操作确认现在是页面卡片：截图脚本无人值守，必须在点「应用」前装自动确认
     // （只点「允许一次」，不写死 remember；计数回读写进日志，免得看不出到底弹没弹）
@@ -357,7 +404,7 @@ export async function captureMachineScreenshots(
       throw new Error(`3D 场景状态异常：${JSON.stringify(sceneStats)}`);
     }
     console.log(`MACHINE_3D_OK stations=${sceneStats.stations} actuators=${sceneStats.actuators} sensors=${sceneStats.sensors} ticks=${sceneStats.ticks}`);
-    shots.push(await capture(window, options.outputDir, '16-machine-3d.png', '6 工位 3D 联调'));
+    shots.push(await capture(window, options.outputDir, '16-machine-3d.png', '6 工位 3D 联调', seenHashes));
 
     await window.webContents.executeJavaScript(
       `(async () => {
@@ -396,7 +443,7 @@ export async function captureMachineScreenshots(
         !bomState.hasValve || !bomState.hasCurtain || bomState.hasPending || !bomState.paneOpen) {
       throw new Error(`BOM 面板内容不完整：${JSON.stringify(bomState)}`);
     }
-    shots.push(await capture(window, options.outputDir, '17-machine-bom.png', 'BOM 真实型号'));
+    shots.push(await capture(window, options.outputDir, '17-machine-bom.png', 'BOM 真实型号', seenHashes));
 
     await window.webContents.executeJavaScript(
       `(async () => {
@@ -430,7 +477,7 @@ export async function captureMachineScreenshots(
       throw new Error(`IO 点位面板不完整：${JSON.stringify(ioState)}`);
     }
     console.log(`MACHINE_IOMAP_OK rows=${ioState.rows} meta=${String(ioState.meta)}`);
-    shots.push(await capture(window, options.outputDir, '18-machine-iomap.png', 'PLC IO 点位'));
+    shots.push(await capture(window, options.outputDir, '18-machine-iomap.png', 'PLC IO 点位', seenHashes));
 
     const validationFile = join(evalDir, 'machine-screenshots.json');
     writeFileSync(validationFile, `${JSON.stringify({

@@ -719,3 +719,19 @@ kbd{display:inline-flex; align-items:center; justify-content:center; min-width:1
 .cad-interference-row{display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px}
 .cad-interference-row span{color:var(--text-3,#8b98a9);font-size:11px}
 .cad-interference-empty{padding:10px 8px;color:var(--text-3,#8b98a9);font-size:11.5px;line-height:1.6}
+
+/* 结构树搜索：.tree-row 自带 display:flex，会盖掉 [hidden]，必须显式让位 */
+.pt-row[hidden]{display:none !important}
+
+/* CAD 工作区左栏：零件搜索 + 装配分组 */
+.cad-part-toolbar{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--panel,#111820);border-bottom:1px solid rgba(255,255,255,.06)}
+.cad-part-search{flex:1;min-width:0;padding:4px 8px;border-radius:5px;border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.24);color:var(--text-1,#dfe7f3);font-size:12px}
+.cad-part-count{color:var(--text-3,#8b98a9);font-size:11px;white-space:nowrap}
+.cad-part-group{display:flex;align-items:center;gap:6px;padding:4px 8px;margin-top:2px;font-size:10.5px;color:var(--text-3,#8b98a9);background:rgba(255,255,255,.02);border-top:1px solid rgba(255,255,255,.04)}
+.cad-part-group-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cad-part-group-count{margin-left:auto;padding:0 5px;border-radius:8px;background:rgba(255,255,255,.06)}
+.cad-part-group[hidden]{display:none}
+.cad-part-row[hidden]{display:none}
+
+/* 覆盖层打开时经典结构树让位（同一屏只保留一套零件列表） */
+body.cad-overlay-open [data-panel="left"][data-for="assembly"]{visibility:hidden}

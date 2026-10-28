@@ -2,22 +2,25 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildHomeModel, formatRelativeDay, formatShortTime, projectMeta } from '../../src/home/model.ts';
 
-const NOW = new Date('2026-10-26T14:30:00+08:00');
+// 时间文案按**本机时区**渲染（车间用户看本地时间），所以测试不能用固定 +08:00 断言，
+// 否则在 UTC runner 上「昨天 09:10」会变成「昨天 01:10」。这里统一用本地时间构造。
+const NOW = new Date(2026, 9, 26, 14, 30);
+const at = (month, day, hour, minute) => new Date(2026, month - 1, day, hour, minute).toISOString();
 
 test('formatShortTime：ISO → MM-DD HH:mm，坏时间返回空串', () => {
-  assert.equal(formatShortTime('2026-10-26T14:05:00+08:00'), '10-26 14:05');
+  assert.equal(formatShortTime(at(10, 26, 14, 5)), '10-26 14:05');
   assert.equal(formatShortTime('not-a-date'), '');
 });
 
 test('formatRelativeDay：今天/昨天/N 天前，超过 30 天回落到日期', () => {
-  assert.equal(formatRelativeDay('2026-10-26T09:00:00+08:00', NOW), '今天');
-  assert.equal(formatRelativeDay('2026-10-25T09:00:00+08:00', NOW), '昨天');
-  assert.equal(formatRelativeDay('2026-10-20T09:00:00+08:00', NOW), '6 天前');
-  assert.equal(formatRelativeDay('2026-08-01T09:00:00+08:00', NOW), '08-01');
+  assert.equal(formatRelativeDay(at(10, 26, 9, 0), NOW), '今天');
+  assert.equal(formatRelativeDay(at(10, 25, 9, 0), NOW), '昨天');
+  assert.equal(formatRelativeDay(at(10, 20, 9, 0), NOW), '6 天前');
+  assert.equal(formatRelativeDay(at(8, 1, 9, 0), NOW), '08-01');
 });
 
 test('projectMeta：工艺 · 件数 · 相对时间+时刻，缺工艺不硬塞占位', () => {
-  const meta = projectMeta({ id: 'a', name: 'A', process: '贴合', parts: 12, createdAt: '2026-10-25T09:10:00+08:00' }, NOW);
+  const meta = projectMeta({ id: 'a', name: 'A', process: '贴合', parts: 12, createdAt: at(10, 25, 9, 10) }, NOW);
   assert.equal(meta, '贴合 · 12 件 · 昨天 09:10');
   const empty = projectMeta({ id: 'b', name: 'B', process: '  ', parts: 0, createdAt: '' }, NOW);
   assert.equal(empty, '0 件');

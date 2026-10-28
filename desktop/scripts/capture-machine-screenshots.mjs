@@ -102,6 +102,12 @@ try {
   const command = existsSync('/usr/bin/xvfb-run') ? 'xvfb-run' : electronBin;
   const args = command === 'xvfb-run' ? xvfbArgs : electronArgs;
   child = spawn(command, args, { cwd: desktopRoot, env, stdio: 'inherit' });
+  // 总看门狗：整个流程 8 分钟没结束就强杀，避免 CI 步骤无限挂住
+  const watchdog = setTimeout(() => {
+    console.error('MACHINE_SCREENSHOTS_TIMEOUT 8 分钟内未完成，强制结束');
+    if (child && !child.killed) child.kill('SIGKILL');
+  }, 8 * 60_000);
+  child.once('exit', () => clearTimeout(watchdog));
   const code = await new Promise((resolveExit) => {
     child.on('error', (error) => {
       console.error(`截图进程启动失败：${error.message}`);
