@@ -297,6 +297,23 @@ export function detectWorkpiece(text: string): WorkpieceSpec | null {
   return { lengthMm, widthMm, heightMm, massKg };
 }
 
+/**
+ * 缓存层数：只认显式写法（「3 层」「三层缓存」「层数 4」）。
+ * 没有层数线索就返回 null，由调用方保持单层，不臆造立体结构。
+ */
+export function detectBufferLayers(text: string): number | null {
+  const explicit = /(?:层数|缓存层)\s*[:：=]?\s*([1-8一二三四五六七八])/.exec(text);
+  // 前面不能是数字：「12 层」不能被读成 2 层
+  const stacked = /(?<![\d一二三四五六七八九十])([1-8一二三四五六七八])\s*层/.exec(text);
+  for (const match of [explicit, stacked]) {
+    const raw = match?.[1];
+    if (!raw) continue;
+    const value = parseChineseNumber(raw);
+    if (value !== null && value >= 1 && value <= 8) return value;
+  }
+  return null;
+}
+
 /** 导出给测试用：工艺判定是"缓存机台被当成转盘机"那类问题的唯一入口。 */
 export function detectProcess(text: string): MachineProcess {
   for (const rule of PROCESS_RULES) {

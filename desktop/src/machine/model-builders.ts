@@ -42,14 +42,16 @@ const CONVEYOR_PARAMS: ModelParamSpec[] = [
   { name: 'beltHeightMm', label: '皮带面高度', defaultValue: DEFAULT_CONVEYOR.beltHeightMm, min: 300, max: 1400, unit: 'mm' },
   { name: 'pulleyDiameterMm', label: '滚筒直径', defaultValue: DEFAULT_CONVEYOR.pulleyDiameterMm, min: 20, max: 200, unit: 'mm' },
   { name: 'beltThicknessMm', label: '皮带厚度', defaultValue: DEFAULT_CONVEYOR.beltThicknessMm, min: 1, max: 20, unit: 'mm' },
-  { name: 'frameSectionMm', label: '型材截面', defaultValue: DEFAULT_CONVEYOR.frameSectionMm, min: 20, max: 100, unit: 'mm' }
+  { name: 'frameSectionMm', label: '型材截面', defaultValue: DEFAULT_CONVEYOR.frameSectionMm, min: 20, max: 100, unit: 'mm' },
+  { name: 'layers', label: '缓存层数（1=普通线体，≥2=立体缓存）', defaultValue: DEFAULT_CONVEYOR.layers, min: 1, max: 8, unit: '层' },
+  { name: 'layerPitchMm', label: '层间距', defaultValue: DEFAULT_CONVEYOR.layerPitchMm, min: 250, max: 900, unit: 'mm' }
 ];
 
 export const MODEL_BUILDERS: Partial<Record<MachineProcess, ModelBuilder>> = {
   conveyor: {
     process: 'conveyor',
     engine: 'parametric',
-    label: '皮带输送线（参数化内核：28 件真实零件 → 逐件 STEP/STL）',
+    label: '输送线 / 立体缓存（参数化内核：逐件真实零件 → STEP/STL；layers≥2 出多层缓存）',
     params: CONVEYOR_PARAMS
   }
 };
@@ -119,6 +121,8 @@ export function toConveyorParams(params: Record<string, number>): ConveyorParams
     beltHeightMm: params.beltHeightMm ?? DEFAULT_CONVEYOR.beltHeightMm,
     pulleyDiameterMm: params.pulleyDiameterMm ?? DEFAULT_CONVEYOR.pulleyDiameterMm,
     beltThicknessMm: params.beltThicknessMm ?? DEFAULT_CONVEYOR.beltThicknessMm,
-    frameSectionMm: params.frameSectionMm ?? DEFAULT_CONVEYOR.frameSectionMm
+    frameSectionMm: params.frameSectionMm ?? DEFAULT_CONVEYOR.frameSectionMm,
+    layers: params.layers ?? DEFAULT_CONVEYOR.layers,
+    layerPitchMm: params.layerPitchMm ?? DEFAULT_CONVEYOR.layerPitchMm
   };
 }

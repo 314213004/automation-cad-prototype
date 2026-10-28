@@ -78,6 +78,7 @@ import {
   toConveyorParams,
   RULES_ONLY_PROCESSES
 } from './machine/model-builders';
+import { detectBufferLayers, detectConveyorSpec } from './machine/spec.ts';
 import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
 import { syncToolMenu } from './ui/tool-menu.ts';
 import { assertCadFileSize } from './shared/input-limits';
@@ -126,6 +127,12 @@ let workerSequence = 0;
 let currentFileName = '';
 let currentSceneSource: SceneGeometrySource = 'empty';
 let currentSceneGeneration = 0;
+/**
+ * 当前视口模型的可信质量（kg）。只有参数化构建或工程记录给过才非 null；
+ * "存为工程"沿用这个值，否则同一台机器用 build_machine_model 存出 159.59 kg、
+ * 用 save_scene_as_project 存出来却是 null，工程卡片上重量凭空消失。
+ */
+let currentSceneMassKg: number | null = null;
 let currentProjectIdentity: CadProjectIdentity | null = null;
 let currentProjectStorageKey = `session:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 let currentModelObjectIdentities: CadModelObjectIdentity[] = [];
@@ -1873,6 +1880,7 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     currentViewer.load(merged, label);
     const scenePartCount = currentViewer.getSceneParts().length;
     currentSceneSource = result.record.design !== undefined ? 'concept-placeholder' : 'saved-model';
+    currentSceneMassKg = result.record.massKg ?? null;
     currentSceneGeneration += 1;
     const webglFallback = document.getElementById('cadWebglFallback');
     const geometryKind = result.record.design !== undefined
@@ -2043,10 +2051,11 @@ async function saveSceneAsProject(input?: unknown): Promise<Record<string, unkno
   try {
     const saved = await window.desktop.projects.save({
       name,
-      process: 'cad-import',
+      process: currentSceneSource === 'saved-model' ? 'cad-scene' : 'cad-import',
       params: { parts: parts.length, triangles, imported: 1 },
       parts: parts.length,
-      massKg: null,
+      // 场景来自参数化构建/工程记录时带真实质量；纯导入仍是 null（不编数）
+      massKg: currentSceneMassKg,
       envelope,
       material: [],
       partData: parts
@@ -2221,6 +2230,7 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     }
     currentFileName = name;
     currentSceneSource = 'imported-model';
+    currentSceneMassKg = null;
     currentSceneGeneration += 1;
     currentProjectIdentity = nextIdentity;
     currentProjectStorageKey = nextStorageKey;
@@ -2357,6 +2367,7 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
     params?: unknown;
     name?: unknown;
     load?: unknown;
+    brief?: unknown;
   };
   const process = typeof request.process === 'string' && request.process.trim() ? request.process.trim() : 'conveyor';
   const builder = pickModelBuilder(process);
@@ -2373,7 +2384,21 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
   if (builder.engine !== 'parametric') {
     return { ok: false, code: 'ENGINE_UNSUPPORTED', message: `机型「${process}」的构建器不是参数化引擎` };
   }
-  const normalized = normalizeModelParams(builder, request.params);
+  // 允许只给 brief：从需求原文取尺寸与层数（参数显式给了就以参数为准）
+  const briefText = typeof request.brief === 'string' ? request.brief : '';
+  const briefParams: Record<string, number> = {};
+  if (briefText && builder.process === 'conveyor') {
+    const spec = detectConveyorSpec(briefText);
+    if (spec?.lengthMm) briefParams.lengthMm = Math.round(spec.lengthMm);
+    if (spec?.widthMm) briefParams.widthMm = Math.round(spec.widthMm);
+    const layers = detectBufferLayers(briefText);
+    if (layers && layers > 1) briefParams.layers = layers;
+  }
+  const mergedParams = {
+    ...briefParams,
+    ...((typeof request.params === 'object' && request.params !== null ? request.params : {}) as Record<string, number>)
+  };
+  const normalized = normalizeModelParams(builder, mergedParams);
   if (!normalized.ok) return { ok: false, code: 'INVALID_ARGUMENT', message: normalized.message };
 
   const params = toConveyorParams(normalized.params);
@@ -2418,6 +2443,7 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
       ensureViewer().load(merged, label);
       currentFileName = label;
       currentSceneSource = 'saved-model';
+      currentSceneMassKg = massKg;
       currentSceneGeneration += 1;
       displayFileInfo(label);
       const partCount = document.getElementById('cadPartCount');

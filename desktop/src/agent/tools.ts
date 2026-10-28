@@ -240,8 +240,12 @@ const BUILD_MACHINE_MODEL_SCHEMA = {
     },
     params: {
       type: 'object',
-      description: '机型参数（mm）：输送机可用 lengthMm / widthMm / beltHeightMm / pulleyDiameterMm / beltThicknessMm / frameSectionMm；缺省用默认值，越界会夹紧并在 warnings 里说明',
+      description: '机型参数（mm）：输送机可用 lengthMm / widthMm / beltHeightMm / pulleyDiameterMm / beltThicknessMm / frameSectionMm；立体缓存另加 layers（1~8，≥2 出多层）、layerPitchMm。缺省用默认值，越界会夹紧并在 warnings 里说明',
       additionalProperties: true
+    },
+    brief: {
+      type: 'string',
+      description: '可选，需求原文。给了就自动取线体长/宽与「N 层」缓存层数，params 里显式给的键优先'
     },
     name: { type: 'string', description: '可选，模型显示名（写入零件树标题）' },
     load: { type: 'boolean', description: '默认 true；false 时只构建并返回统计，不把模型装进视口' }
@@ -816,7 +820,9 @@ export class AgentTools {
     this.add({
       name: 'build_machine_model',
       description:
-        '按机型参数生成整机 3D 模型并装配进当前视口：机型经注册表分发，输送机走参数化内核（逐件实体 → 每件独立 STL），返回零件数、实体数、包络、总质量、BOM、STEP/STL 字节数。只改视口、不写工程文件；需要落盘请用 apply_machine_design。',
+        '按机型参数生成整机 3D 模型并装配进当前视口：机型经注册表分发，输送机走参数化内核（逐件实体 → 每件独立 STL），返回零件数、实体数、包络、总质量、BOM、STEP/STL 字节数。' +
+        '可以直接给 brief（需求原文），工具会从里面取线体长/宽、「N 层」缓存层数，不必逐项填 params；params 显式给了就以 params 为准。' +
+        'layers≥2 出立体缓存（底层输送 + 多层托架 + 升降机构），layers=1 是普通输送线。会落盘成工程。',
       inputSchema: BUILD_MACHINE_MODEL_SCHEMA,
       handler: async (args) => {
         if (args.process !== undefined && (typeof args.process !== 'string' || !args.process.trim())) {
@@ -828,11 +834,15 @@ export class AgentTools {
         if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
           return { ok: false, code: 'INVALID_ARGUMENT', message: 'name 必须是非空字符串' };
         }
+        if (args.brief !== undefined && (typeof args.brief !== 'string' || !args.brief.trim())) {
+          return { ok: false, code: 'INVALID_ARGUMENT', message: 'brief 必须是非空字符串' };
+        }
         if (args.load !== undefined && typeof args.load !== 'boolean') {
           return { ok: false, code: 'INVALID_ARGUMENT', message: 'load 必须是布尔值' };
         }
         const result = await this.execute('build_machine_model', {
           process: typeof args.process === 'string' ? args.process.trim() : 'conveyor',
+          ...(typeof args.brief === 'string' && args.brief.trim() ? { brief: args.brief.trim() } : {}),
           ...(isRecord(args.params) ? { params: args.params } : {}),
           ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
           ...(args.load === false ? { load: false } : {})

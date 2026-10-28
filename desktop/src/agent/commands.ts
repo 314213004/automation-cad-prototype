@@ -1410,9 +1410,12 @@ function registerBuildMachineModelCommand(bus: CommandBus): void {
       if (rawParams !== undefined && rawParams !== null && (typeof rawParams !== 'object' || Array.isArray(rawParams))) {
         throw new CommandFailure('INVALID_ARGUMENT', 'params 必须是对象');
       }
-      const names = ['process', 'params', 'name', 'load'];
+      const names = ['process', 'params', 'name', 'load', 'brief'];
       for (const key of Object.keys(args)) {
         if (!names.includes(key)) throw new CommandFailure('INVALID_ARGUMENT', `未知参数：${key}`);
+      }
+      if (args.brief !== undefined && (typeof args.brief !== 'string' || !args.brief.trim())) {
+        throw new CommandFailure('INVALID_ARGUMENT', 'brief 必须是非空字符串');
       }
       if (args.name !== undefined && (typeof args.name !== 'string' || !args.name.trim())) {
         throw new CommandFailure('INVALID_ARGUMENT', 'name 必须是非空字符串');
@@ -1422,6 +1425,8 @@ function registerBuildMachineModelCommand(bus: CommandBus): void {
       }
       const payload = {
         process,
+        // brief：让工具自己从需求里取线体长/宽/层数，智能体不必猜参数名
+        ...(typeof args.brief === 'string' ? { brief: args.brief.trim() } : {}),
         ...(rawParams ? { params: rawParams } : {}),
         ...(typeof args.name === 'string' ? { name: args.name.trim() } : {}),
         ...(args.load === false ? { load: false } : {})
