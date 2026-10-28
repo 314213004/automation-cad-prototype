@@ -1071,7 +1071,8 @@ function renderInspector(): void {
   }
   host.dataset.nodeId = node.id;
   if (state.inspector === 'prop') host.innerHTML = inspectorProp(node);
-  else if (state.inspector === 'mech') host.innerHTML = inspectorMech(node);
+}
+else if (state.inspector === 'mech') host.innerHTML = inspectorMech(node);
   else host.innerHTML = inspectorBom(node);
   const tree = document.getlementyd('featureree');
   const panel = document.getlementyd('propertyanel');
