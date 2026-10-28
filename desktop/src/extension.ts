@@ -954,6 +954,10 @@ function requiredElement(id: string): HTMLElement {
 }
 
 function openOverlay(): void {
+  // 无限画布/首页是全屏层，z-index 比覆盖层高；打开 CAD 查看前先收起来，
+  // 否则模型正常渲染但整层被盖住（表现为"点了没反应/看不到电气图"）
+  closeCanvasWorkbench();
+  homeHandle?.close();
   closeEnclosure();
   buildOverlay();
   if (!root) return;
@@ -3943,7 +3947,7 @@ function init(): void {
         openOverlay();
         if (root) {
           root.hidden = false;
-          root.style.zIndex = '2147483000';
+          root.style.zIndex = '2147483400';
         }
         return true;
       },
