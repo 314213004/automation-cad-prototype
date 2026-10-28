@@ -106,7 +106,7 @@ import {
   type UpdateChannel
 } from './update-service.ts';
 import { captureProductScreenshots } from './screenshots';
-import { captureMachineScreenshots } from './machine-screenshots';
+import { captureMachineScreenshots, captureDesignWizardScreenshots } from './machine-screenshots';
 import { writeLastCrash } from './crash-report.ts';
 import { collectDiagnosis } from './diagnostics.ts';
 import {
@@ -121,11 +121,13 @@ const HEADLESS_SMOKE = process.argv.includes('--headless-smoke');
 const DIAGNOSE = process.argv.includes('--diagnose');
 const HEADLESS_SCREENSHOTS = process.argv.includes('--headless-screenshots');
 const HEADLESS_MACHINE_SCREENSHOTS = process.argv.includes('--headless-machine-screenshots');
+/** 整机设计向导分步截图（不依赖模型桩） */
+const HEADLESS_WIZARD_SHOTS = process.argv.includes('--headless-wizard-shots');
 const HEADLESS_DESIGN_WEBGL_SMOKE = process.argv.includes('--headless-design-webgl-smoke');
 /** 只起服务、跑外部客户端 smoke（MCP/JSON-RPC 契约）：不跑 UI 断言、不自动退出，等外部脚本杀。 */
 const HEADLESS_SERVICE = process.argv.includes('--headless-service');
 const HEADLESS = HEADLESS_SMOKE || HEADLESS_SCREENSHOTS || HEADLESS_MACHINE_SCREENSHOTS ||
-  HEADLESS_DESIGN_WEBGL_SMOKE || HEADLESS_SERVICE;
+  HEADLESS_WIZARD_SHOTS || HEADLESS_DESIGN_WEBGL_SMOKE || HEADLESS_SERVICE;
 if (HEADLESS_SMOKE && HEADLESS_DESIGN_WEBGL_SMOKE) {
   console.error('SMOKE_MODE_CONFLICT --headless-smoke disables WebGL; use --headless-design-webgl-smoke alone for SwiftShader');
   process.exit(1);
@@ -1223,6 +1225,21 @@ function createWindow(): BrowserWindow {
       recordDiagnosticError('EXTENSION_INJECT_FAILED', error);
       console.error('[desktop] 扩展脚本注入失败', error);
     }
+      if (HEADLESS_WIZARD_SHOTS) {
+        const outputDir = process.env.AUTOMATIONCAD_SCREENSHOT_DIR
+          ? resolve(process.env.AUTOMATIONCAD_SCREENSHOT_DIR)
+          : resolve(desktopRoot(), '..', 'docs', 'desktop', 'screenshots');
+        try {
+          const result = await captureDesignWizardScreenshots(window, { outputDir });
+          if (parametric) await parametric.stop();
+          setTimeout(() => app.exit(result.failed > 0 ? 1 : 0), 100);
+        } catch (error) {
+          console.error('SMOKE_WIZARD_SHOTS_FAIL', error);
+          if (parametric) await parametric.stop();
+          setTimeout(() => app.exit(1), 100);
+        }
+        return;
+      }
       if (HEADLESS_MACHINE_SCREENSHOTS) {
         const outputDir = process.env.AUTOMATIONCAD_SCREENSHOT_DIR
           ? resolve(process.env.AUTOMATIONCAD_SCREENSHOT_DIR)

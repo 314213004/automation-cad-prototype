@@ -508,3 +508,186 @@ export async function captureMachineScreenshots(
     return { captured: shots.length, failed: 1 };
   }
 }
+
+/**
+ * 「从零建一台机器」的分步截图：整机设计向导 5 步 + 保存后的 3D + BOM + IO。
+ * 与 captureMachineScreenshots 的区别是**不走智能体**，纯手工走向导，
+ * 这样每一步的界面状态都能单独截下来当证据（哪一步填了什么、候选长什么样）。
+ */
+export async function captureDesignWizardScreenshots(
+  window: BrowserWindow,
+  options: MachineScreenshotOptions
+): Promise<{ captured: number; failed: number }> {
+  mkdirSync(options.outputDir, { recursive: true });
+  const shots: MachineShotValidation[] = [];
+  const seenHashes = new Map<string, string>();
+  const step = (name: string, label: string) => capture(window, options.outputDir, name, label, seenHashes);
+
+  window.setContentSize(SHOT_WIDTH, SHOT_HEIGHT);
+  window.webContents.setBackgroundThrottling(false);
+  await delay(350);
+  await waitForExtension(window);
+
+  try {
+    // 0. 首页（还没开始建机）
+    shots.push(await step('20-wizard-00-home.png', '首页：整机设计入口'));
+
+    // 1. 第一步：基本信息
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const home = document.getElementById('homeScreen');
+        if (home && !home.hidden) { document.querySelector('.home-link')?.click(); await wait(600); }
+        window.AutomationCadViewer?.close();
+        window.AutomationCadParametric?.close();
+        await window.desktop.design.clearDraft();
+        document.getElementById('designWizardEntry').click();
+        await wait(700);
+        const root = document.getElementById('designWizard');
+        const set = (name, value) => {
+          const field = root.querySelector('[name="' + name + '"]');
+          if (!field) throw new Error('字段缺失：' + name);
+          field.value = value;
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        set('name', '从零建机演示');
+        set('stations', '3');
+        set('cyclePerMin', '10');
+        set('lengthMm', '2400');
+        set('widthMm', '1600');
+        await wait(200);
+        return true;
+      })()`
+    );
+    await settle(window, 300);
+    shots.push(await step('20-wizard-01-brief.png', '第 1 步：工艺与节拍'));
+
+    // 2. 第二步：形态候选（3 个方案 + 预测节拍）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]').click();
+        await wait(1600);
+        if (root.querySelectorAll('[data-candidate]').length < 3) throw new Error('候选未生成');
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-02-candidates.png', '第 2 步：形态候选'));
+
+    // 2b. 候选预览（3D 缩略）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-preview="0"]')?.click();
+        await wait(700);
+        return true;
+      })()`
+    );
+    await settle(window, 300);
+    shots.push(await step('20-wizard-03-candidate-preview.png', '候选预览'));
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const root = document.getElementById('designWizard');
+        root.querySelector('#designPreviewClose')?.click();
+        root.querySelector('[data-action="next"]').click();
+        await new Promise((r) => setTimeout(r, 400));
+        return true;
+      })()`
+    );
+
+    // 3. 第三步：工位与执行机构（在第 3 工位加一个执行机构，让点位自动分配可见）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelectorAll('[data-station]')[2]?.click();
+        await wait(120);
+        root.querySelector('[data-action="add-actuator"]')?.click();
+        await wait(250);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-04-stations.png', '第 3 步：工位与执行机构'));
+
+    // 4. 第四步：布局
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]').click();
+        await new Promise((r) => setTimeout(r, 500));
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-05-layout.png', '第 4 步：布局'));
+
+    // 5. 第五步：评审
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]')?.click();
+        await wait(300);
+        root.querySelector('[data-action="run-review"]')?.click();
+        await wait(600);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-06-review.png', '第 5 步：评审与保存'));
+
+    // 5b. 在第 5 步真的生成一次 BOM（不是空面板）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-output="bom"]')?.click();
+        await wait(900);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-06b-bom-generated.png', '第 5 步：生成 BOM'));
+
+    // 6. 保存为工程 → 3D
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        const save = root.querySelector('[data-action="save-project"]');
+        if (!save) throw new Error('保存按钮缺失');
+        if (save.disabled) {
+          const notice = root.querySelector('.design-content')?.textContent || '';
+          throw new Error('保存按钮不可用（评审未通过）：' + notice.slice(0, 300));
+        }
+        save.click();
+        // 概念保存后向导不会自己关（要等用户点「保存并关闭」），所以这里显式走同一路径
+        await wait(2200);
+        const state = document.getElementById('designSaveState')?.textContent || '';
+        root.querySelector('[data-action="close"]')?.click();
+        for (let i = 0; i < 120 && !root.hidden; i += 1) await wait(250);
+        if (!root.hidden) throw new Error('保存后向导仍未关闭：' + state.slice(0, 200));
+        window.AutomationCadKinematics?.close();
+        document.querySelector('#cadEntryButton')?.click();
+        await wait(900);
+        return true;
+      })()`
+    );
+    await waitFor(window, `(document.getElementById('cadPartCount')?.textContent || '').trim().length > 0`, '3D 零件数就绪', 30_000);
+    await settle(window, 500);
+    shots.push(await step('20-wizard-07-3d.png', '保存后：3D 联调'));
+
+    // 注意：向导路径保存的是「概念工程」，CAD 面板里的 BOM/IO 要「应用机型方案」才有内容，
+    // 所以这里不抓那两张空面板——BOM 已在第 5 步用「生成 BOM」落成 CSV（06b）。
+
+    console.log(`DESIGN_WIZARD_SHOTS_DONE captured=${shots.length} failed=0`);
+    return { captured: shots.length, failed: 0 };
+  } catch (error) {
+    console.error('DESIGN_WIZARD_SHOTS_FAIL', error);
+    return { captured: shots.length, failed: 1 };
+  }
+}
