@@ -93,6 +93,16 @@ export function validateDoc(doc) {
       if (r !== null && plate && r > plate.thickness / 2) errs.push(`${label}：圆角半径 ${r} mm 超过最小板厚 ${plate.thickness} mm 的一半`);
     }
   });
+  // 基体约束（契约第 2 节：孔/沉头/圆角都作用在板体上）：
+  // 没有 box 的树几何上无从谈起，必须在校验层拦住，不能靠下游 compileOps 才发现。
+  const bodyTypes = ['holes', 'counterbore', 'fillet'];
+  const bodies = feats.filter((f) => isRec(f) && f.type === 'box' && f.suppressed !== true);
+  if (bodies.length === 0) {
+    const orphans = feats.filter((f) => isRec(f) && bodyTypes.includes(f.type) && f.suppressed !== true);
+    if (orphans.length > 0) {
+      errs.push(`缺少基体：${orphans.map((f) => `${f.type}「${typeof f.id === 'string' ? f.id : '?'}」`).join('、')} 需要至少一个 box 板体`);
+    }
+  }
   if (typeof doc.updatedAt !== 'string' || !TZ.test(doc.updatedAt) || Number.isNaN(Date.parse(doc.updatedAt))) {
     errs.push('updatedAt 必须带时区（如 2026-10-23T12:00:00+08:00）');
   }

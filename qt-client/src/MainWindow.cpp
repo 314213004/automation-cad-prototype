@@ -2,6 +2,7 @@
 // 不含 OCCT 头文件；视口是占位 QWidget，OCCT AIS 接入是后续里程碑。
 #include "MainWindow.h"
 
+#include <QColor>
 #include <QFormLayout>
 #include <QHeaderView>
 #include <QJsonArray>
@@ -11,6 +12,7 @@
 #include <QMessageBox>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QSet>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTableWidget>
@@ -19,6 +21,17 @@
 #include <QVBoxLayout>
 
 namespace {
+// 服务端白名单（契约第 4 节）：只有这些字段能通过 updateFeatureParams 直接改。
+// 面板若把 centered / edges / depth 这类布尔、枚举也做成可编辑，一改就 422 UNKNOWN_FIELD。
+bool isEditableParam(const QString &key) {
+    static const QSet<QString> editable = {
+        QStringLiteral("length"), QStringLiteral("width"), QStringLiteral("height"),
+        QStringLiteral("diameter"), QStringLiteral("cbDiameter"), QStringLiteral("cbDepth"),
+        QStringLiteral("radius")
+    };
+    return editable.contains(key);
+}
+
 QJsonObject readReply(QNetworkReply *reply) {
     const QByteArray data = reply->readAll();
     QJsonDocument doc = QJsonDocument::fromJson(data);
@@ -83,6 +96,8 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::loadTree() {
     QNetworkRequest req(QUrl(m_serviceBase + QStringLiteral("/v1/tree")));
+    // 服务没起来时不要让界面无限等；8 秒后按连接失败处理
+    req.setTransferTimeout(8000);
     QNetworkReply *reply = m_net->get(req);
     connect(reply, &QNetworkReply::finished, this, &MainWindow::onTreeReply);
 }
@@ -140,6 +155,12 @@ void MainWindow::refreshPanel(const QJsonObject &feature) {
                     : QString::number(it.value().toDouble());
         auto *valueItem = new QTableWidgetItem(v);
         valueItem->setData(Qt::UserRole, it.key());
+        if (!isEditableParam(it.key())) {
+            // 白名单外（centered / edges / depth 等）只读展示，避免"改了就报错"
+            valueItem->setFlags(valueItem->flags() & ~Qt::ItemIsEditable);
+            valueItem->setToolTip(tr("该字段不通过属性面板直接改（服务端只接受长度/直径/深度/半径等数值）"));
+            valueItem->setForeground(QColor(0x9a, 0xa3, 0xb2));
+        }
         m_panel->setItem(row, 1, valueItem);
         ++row;
     }
@@ -151,6 +172,12 @@ void MainWindow::onPropertyCellChanged(int row, int) {
     QTableWidgetItem *keyItem = m_panel->item(row, 0);
     QTableWidgetItem *valueItem = m_panel->item(row, 1);
     if (!keyItem || !valueItem) return;
+    if (!isEditableParam(keyItem->text())) {
+        // 兜底：即使有别的路径触发 cellChanged，也不要发一个注定 422 的补丁
+        refreshPanelFromEnvelope();
+        statusBar()->showMessage(tr("「%1」不支持在属性面板直接修改").arg(keyItem->text()), 4000);
+        return;
+    }
     bool ok = false;
     const double num = valueItem->text().toDouble(&ok);
     QJsonObject patch;
@@ -168,6 +195,7 @@ void MainWindow::onPropertyCellChanged(int row, int) {
 void MainWindow::postOperation(const QJsonObject &body) {
     QNetworkRequest req(QUrl(m_serviceBase + QStringLiteral("/v1/operations")));
     req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setTransferTimeout(8000);
     QNetworkReply *reply = m_net->post(req, QJsonDocument(body).toJson());
     connect(reply, &QNetworkReply::finished, this, &MainWindow::onOperationReply);
 }
@@ -185,6 +213,16 @@ void MainWindow::onOperationReply() {
     QMessageBox::warning(this, tr("保存失败"),
         obj.value(QStringLiteral("message")).toString());
     loadTree(); // 失败后以服务端版本刷新，禁止在旧版本上继续编辑
+}
+
+void MainWindow::refreshPanelFromEnvelope() {
+    if (m_selectedFeatureId.isEmpty()) return;
+    const QJsonArray features = m_envelope.value(QStringLiteral("doc")).toObject()
+                                    .value(QStringLiteral("features")).toArray();
+    for (const auto &fv : features) {
+        const QJsonObject f = fv.toObject();
+        if (f.value(QStringLiteral("id")).toString() == m_selectedFeatureId) { refreshPanel(f); return; }
+    }
 }
 
 void MainWindow::showConflict(const QJsonObject &current) {

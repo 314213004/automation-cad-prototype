@@ -29,6 +29,7 @@ private:
     void refreshPanel(const QJsonObject &feature);
     void postOperation(const QJsonObject &body);
     void showConflict(const QJsonObject &current);
+    void refreshPanelFromEnvelope();
 
     QNetworkAccessManager *m_net;
     QTreeWidget *m_tree;

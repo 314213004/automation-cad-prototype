@@ -5,6 +5,21 @@ import { validateDoc, checkPanelEdit, compileOps } from './validate.mjs';
 
 export function clone(v) { return JSON.parse(JSON.stringify(v)); }
 
+/**
+ * 带真实时区偏移的 ISO 时间串。
+ * 以前写的是 `toISOString().replace('Z','+08:00')`——那只是把 UTC 时刻改标成 +08:00，
+ * 实际差 8 小时（实测留痕时间比真实时刻早 480 分钟）。这里按本机偏移重排各字段。
+ */
+export function nowIso(date = new Date()) {
+  const pad = (value, width = 2) => String(Math.abs(value)).padStart(width, '0');
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}` +
+    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
 // 重建钩子（v1 占位实现，非 OCCT 真重建）：编译算子 + 指纹。
 // 真实 OCCT/build123d 重建由后续 cadgen 侧车桥接替换本函数；
 // 在此之前，服务诚实地只保证“编译通过 + 指纹变化”，不宣称已生成 BRep。
@@ -44,7 +59,7 @@ export class Store {
     if (!rb.ok) return { error: 'REBUILD_FAILED', message: rb.message || '重建失败' };
     const before = this.revision;
     this.doc = draft;
-    this.doc.updatedAt = new Date().toISOString().replace('Z', '+08:00');
+    this.doc.updatedAt = nowIso();
     this.revision += 1;
     this.snapshots[this.revision] = clone(this.doc);
     const entry = { revision: this.revision, beforeRevision: before, timestamp: this.doc.updatedAt, actor, operation, featureIds, fingerprint: rb.fingerprint };
@@ -96,8 +111,24 @@ export class Store {
         return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features.find(x => x.id === body.featureId).suppressed = body.suppressed; return null; });
       }
       case 'deleteFeature': {
-        if (!this.doc.features.some(x => x.id === body.featureId)) return { error: 'NOT_FOUND', message: `找不到特征：${body.featureId}` };
-        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => { d.features = d.features.filter(x => x.id !== body.featureId); return null; });
+        const target = this.doc.features.find(x => x.id === body.featureId);
+        if (!target) return { error: 'NOT_FOUND', message: `找不到特征：${body.featureId}` };
+        // 契约 §14.6：删除被引用特征必须被拒绝并指明引用方——删掉唯一基体后，
+        // 剩下的孔/沉头/圆角就失去了作用对象（旧实现会 200 通过并留下无基体的树）。
+        const remaining = this.doc.features.filter(f => f.id !== target.id);
+        const cutTypes = ['holes', 'counterbore', 'fillet'];
+        const hasBody = remaining.some(f => f.type === 'box' && f.suppressed !== true);
+        const orphans = remaining.filter(f => cutTypes.includes(f.type) && f.suppressed !== true);
+        if (!hasBody && orphans.length > 0) {
+          return {
+            error: 'REFERENCE_IN_USE',
+            message: `特征「${target.id}」被引用，不能删除：引用方 ${orphans.map(f => `${f.type}「${f.id}」`).join('、')}`
+          };
+        }
+        return this.commit(expectedRevision, actorLabel, operation, [body.featureId], (d) => {
+          d.features = d.features.filter(x => x.id !== body.featureId);
+          return null;
+        });
       }
       case 'applyTransaction': {
         const ops = body.operations || [];
@@ -141,7 +172,7 @@ export class Store {
     if (!rb.ok) return { error: 'REBUILD_FAILED', message: rb.message || '重建失败' };
     const before = this.revision;
     this.doc = restored;
-    this.doc.updatedAt = new Date().toISOString().replace('Z', '+08:00');
+    this.doc.updatedAt = nowIso();
     this.revision += 1;
     this.snapshots[this.revision] = clone(this.doc);
     this.history.push({ revision: this.revision, beforeRevision: before, timestamp: this.doc.updatedAt, actor, operation: 'undo', featureIds: [], fingerprint: rb.fingerprint, undoTarget: target });

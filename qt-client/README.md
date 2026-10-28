@@ -6,8 +6,9 @@
   左侧 FeatureManager 设计树、顶部菜单 + 特征工具栏、中间 3D 视口占位、
   右侧 PropertyManager 属性面板、底部状态栏。
 - 视口目前是占位 QWidget，OCCT AIS Viewer **尚未接入**；不要宣称已实现 3D 拾取/渲染。
-- 本机 Linux 虚拟机暂无 Qt6 工具链，本工程**未在此编译**；需在装有 Qt6（Widgets + Network）
-  的 Windows / Linux 机器上用 CMake 构建验证（见 `CMakeLists.txt`）。
+- 编译状态（2026-10-28 更新）：Linux + Qt **6.4.2**（`qt6-base-dev`）上已
+  `cmake -S . -B build && cmake --build build` **编译通过**，并在 `QT_QPA_PLATFORM=offscreen`
+  下启动不崩；CI 里有 `qt-client build` job 持续守着。**Windows 真机仍未编译**。
 - 数据契约：见仓库 `docs/featuretree-contract.md`（草案 v0.1）。客户端不持有可独立写回的
   树副本；一切写操作走 `featuretree-service`（默认 `http://127.0.0.1:18080`），
   带 `expectedRevision`，409 冲突时提示重新读取，禁止自动覆盖。
@@ -18,9 +19,12 @@
 
    ```sh
    cd ../featuretree-service
+   node tests.mjs           # 自己拉起服务（FT_PORT=0）跑 18 条验收后关闭
+   # 或手工起服务看日志：
    node server.mjs          # 默认 127.0.0.1:18080，仅本地回环
-   node tests.mjs           # 契约验收用例，应全部通过
    ```
+
+   注意：服务是**内存态**，重启即回到种子树（revision 0），编辑不留存。
 
 2. 构建客户端（需 Qt6）：
 
