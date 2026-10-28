@@ -41,7 +41,7 @@ jobs:
       # FeatureTree 契约服务（自起服务、FT_PORT=0，跑完自动关）
       - name: 契约服务验收（featuretree-service）
         timeout-minutes: 5
-        run: node featuretree-service/tests.mjs
+        run: node ../featuretree-service/tests.mjs   # unit job 的 cwd 是 desktop
       # 离线规则评估与能力报告此前没人跑，工具加了却不进评估集也发现不了（本轮就是 eval:agent 红的）
       - name: 离线规则评估（含工具覆盖校验）
         run: npm run eval:agent
