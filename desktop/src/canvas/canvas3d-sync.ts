@@ -106,6 +106,60 @@ export function syncFrom3DToCanvas(
   };
 }
 
+
+
+/**
+ * pip 快照：只克隆 pip 比较用到的字段（ortho、dimsMm、pos），避免 workbench
+ * 原地改节点（如画布拖拽时直接改 node.ortho）导致上次快照也被改掉、
+ * 增量判断失效。快照节点与原图节点不是同一对象。
+ */
+export function snapshotPipGraph(graph: MachineGraph): MachineGraph {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => ({
+      ...node,
+      ortho: { ...node.ortho },
+      dimsMm: [...node.dimsMm] as [number, number, number],
+      pos: { ...node.pos }
+    })),
+    edges: [...graph.edges]
+  };
+}
+
+/**
+ * 增量接线用：对比前后两张图，返回几何/运动属性变了的已有节点 id。
+ * 比较项 = pip3d.buildPipBoxes 用到的全部字段：ortho、dimsMm、strokeMm、kind、adapter。
+ * 新增节点不在此列（workbench 检测到节点集合变化时走全量重建，不走增量）。
+ */
+export function pipDirtyIds(prev: MachineGraph, next: MachineGraph): string[] {
+  const prevById = new Map(prev.nodes.map((node) => [node.id, node]));
+  const dirty: string[] = [];
+  for (const node of next.nodes) {
+    const old = prevById.get(node.id);
+    if (!old) continue;
+    if (
+      old.ortho.x !== node.ortho.x ||
+      old.ortho.y !== node.ortho.y ||
+      old.strokeMm !== node.strokeMm ||
+      old.kind !== node.kind ||
+      (old.adapter ?? false) !== (node.adapter ?? false) ||
+      old.dimsMm[0] !== node.dimsMm[0] ||
+      old.dimsMm[1] !== node.dimsMm[1] ||
+      old.dimsMm[2] !== node.dimsMm[2]
+    ) {
+      dirty.push(node.id);
+    }
+  }
+  return dirty;
+}
+
+/** 节点集合是否变化（新增 / 删除任一即 true，workbench 据此走全量重建）。 */
+export function pipNodeIdsChanged(prev: MachineGraph, next: MachineGraph): boolean {
+  if (prev.nodes.length !== next.nodes.length) return true;
+  const ids = new Set(prev.nodes.map((node) => node.id));
+  return next.nodes.some((node) => !ids.has(node.id));
+}
+
 /**
  * 有状态版（对应文档原稿 Canvas3DBidirectionalSync 的最小可用形态）：
  * mark 后 flush 只对脏节点回调，不清空未变更节点；flush 后清空脏集。
@@ -127,7 +181,7 @@ export class Canvas3DSync {
     graph: MachineGraph,
     apply: (box: SyncBoxMm) => void
   ): SyncBoxMm[] {
-    const boxes = incrementalBoxesMm(graph, this.dirtyNodeIds);
+    const boxes = incrementalBoxesMm(graph, [...this.dirtyNodeIds]);
     for (const box of boxes) apply(box);
     this.dirtyNodeIds.clear();
     return boxes;
