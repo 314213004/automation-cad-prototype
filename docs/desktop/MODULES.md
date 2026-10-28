@@ -77,11 +77,11 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 
 **边界原则**：渲染层无 fs/net 权限；主进程不做几何计算；Agent 与 UI 共用同一份工具/命令注册表。
 
-## 当前总体进度（2026-10-26）
+## 当前总体进度（2026-10-28）
 
 > 逐轮验证数字见 [STATUS.md](./STATUS.md)；历史迭代明细已移入 [BACKLOG-HISTORY.md](./BACKLOG-HISTORY.md)，本处只留能力目录。
 
-- ✅ 基线：`main` 上 `npx tsc --noEmit` 0 错误、`npm test` 1967/1967、`npm run build:ext` + xvfb smoke 收尾 `SMOKE_OK`、`npm run eval:agent` 109/109（工具选择率 1.00）。
+- ✅ 基线（`3d5ee07`）：`npx tsc --noEmit` 0 错误、`npm test` 2589（2587 通过 / 2 跳过）、`npm run build:ext` + xvfb smoke 收尾 `SMOKE_OK`、`npm run eval:agent` 111/111（accuracy/tools/refused 全 1.00）；CI 在 push/PR 上自动跑 unit + Electron smoke 两个 job。
 - ✅ 设计域：五步向导（`src/design/`：需求 → 3 候选对比 → 工位与元件 → 毫米布局 → 校核/保存工程）；机型方案合成与落盘、11 种整机形态库、参数化整机几何、通用实体建模 `build_machine_model`、标准件拖拽吸附。详见 [DESIGN-WIZARD.md](./DESIGN-WIZARD.md) / [MACHINE-DESIGN.md](./MACHINE-DESIGN.md)。
 - ✅ 几何与视口：STEP/IGES/STL/GLTF 解析（STEP 实测 18 零件 / 5,040 面 / 559 ms）、可旋转/正交/剖切视口、运动学标注、参数化特征树（build123d sidecar）、WebGL 降级。
 - ✅ 电气与电柜：按工程 BOM 出原理图（电路模型 + ERC + 拓扑布局 + A3 渲染，不可交付时图上直接列问题）、线号/功率/截面/断路器校验、底板毫米画布与导轨碰撞、利用率。
@@ -89,7 +89,7 @@ Electron 实跑抓取（共 18 张：`01`–`10` 为 1440×873；`11`–`18` 为
 - ✅ 数据与成本：10 个内置包（启动只读 manifest、按需 `loadPack`、跨包去重）+ 用户 ZIP 导入；价格簿数据包 + 纯函数成本引擎（缺价如实报、示例价自动排除）；五种导出（PDF / DXF / GLB / OBJ / BOM）。
 - ✅ Agent：离线规则路由 7 类意图 + 多步规划 + 写操作确认/撤销 + NDJSON 审计 + 上下文指代 + 离线知识检索（`kb.json`）；工具清单与数量以 `desktop/src/agent/tools.ts` 注册表为准，MCP / RPC / UI 共用。
 - ✅ 可选模块门控（`elec.validation` / `cost.estimation` / `commission.io-test` / `factory.plc-sync` / `cad.parametric-import` / `project.portable` / `system.update` 等）默认启用，关闭时 UI、IPC、Agent、副作用入口一并 fail-closed。
-- ⏳ 未完成/未实测：真实 PLC 联调、Windows Authenticode 签名、设计同步服务端部署（生产 221 未确认）、向导保存后 `__AgentBridge.getScene().parts` 仍为 0（见 BACKLOG 待修项）。
+- ⏳ 未完成/未实测：真实 PLC 联调、Windows Authenticode 签名、设计同步服务端部署（生产 221 未确认）、FreeCAD 真实出图（本机无 `freecadcmd`）。
 
 ## 参数化建模（P9）
 

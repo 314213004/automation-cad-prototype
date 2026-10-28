@@ -6,6 +6,7 @@
 
 ## 上一轮（已归档）
 
+- 2026-10-28 画布特征树/属性面板（PR #20）、机型立体缓存变体（`layers≥2`）、brief 直接建机、场景质量随工程保存、CI 四步渲染冒烟（降级 smoke / WebGL / 机型截图 / MCP 契约）：本轮明细见 [STATUS.md](STATUS.md)，历史细节见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 - 2026-10-26 整机设计向导改进、整机布局 3D 编辑（feat/layout-editor）、无限画布工作台方案：原文见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 - 2026-10-25 整机设计向导首轮及 0.4.2（`bfdaa37`）：详情见 [BACKLOG-HISTORY.md](BACKLOG-HISTORY.md)。
 
