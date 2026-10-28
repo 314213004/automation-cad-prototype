@@ -4,6 +4,8 @@
 #include "FeatureDialog.h"
 
 #include <QAction>
+#include <QComboBox>
+#include <QInputDialog>
 #include <QColor>
 #include <QEventLoop>
 #include <QFormLayout>
@@ -52,12 +54,12 @@ MainWindow::MainWindow(QWidget *parent)
     auto *fileMenu = menuBar()->addMenu(tr("文件"));
     fileMenu->addAction(tr("刷新特征树"), this, &MainWindow::loadTree);
     auto *viewMenu = menuBar()->addMenu(tr("视图"));
-    viewMenu->addAction(tr("等轴测"), this, [this]() { m_viewport->setStandardView(0); });
-    viewMenu->addAction(tr("正视"), this, [this]() { m_viewport->setStandardView(1); });
-    viewMenu->addAction(tr("俯视"), this, [this]() { m_viewport->setStandardView(2); });
-    viewMenu->addAction(tr("右视"), this, [this]() { m_viewport->setStandardView(3); });
+    viewMenu->addAction(tr("等轴测"), this, [this]() { setViewportStandardView(0); });
+    viewMenu->addAction(tr("正视"), this, [this]() { setViewportStandardView(1); });
+    viewMenu->addAction(tr("俯视"), this, [this]() { setViewportStandardView(2); });
+    viewMenu->addAction(tr("右视"), this, [this]() { setViewportStandardView(3); });
     viewMenu->addSeparator();
-    viewMenu->addAction(tr("适合视图"), this, [this]() { m_viewport->fitView(); });
+    viewMenu->addAction(tr("适合视图"), this, [this]() { fitViewport(); });
     auto *insertMenu = menuBar()->addMenu(tr("插入"));
     QAction *newFeature = insertMenu->addAction(tr("新建特征…"), this, &MainWindow::createFeatureDialog);
     newFeature->setShortcut(QKeySequence::New);
@@ -77,7 +79,7 @@ MainWindow::MainWindow(QWidget *parent)
         m_materialActions.insert(entry.first, action);
         connect(action, &QAction::triggered, this, [this, key = entry.first]() {
             QJsonObject body;
-            body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+            body.insert(QStringLiteral("documentId"), m_documentId);
             body.insert(QStringLiteral("expectedRevision"), m_envelope.value(QStringLiteral("revision")).toInt());
             body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
             body.insert(QStringLiteral("operation"), QStringLiteral("setMaterial"));
@@ -96,6 +98,14 @@ MainWindow::MainWindow(QWidget *parent)
     m_redoAction->setEnabled(false);
 
     auto *toolbar = addToolBar(tr("特征工具栏"));
+    // 文档切换：服务端支持多文档，这里列出并允许新建（默认 demo-adapter）
+    m_documentCombo = new QComboBox(this);
+    m_documentCombo->setMinimumWidth(180);
+    m_documentCombo->setToolTip(tr("当前文档（服务端多文档）"));
+    toolbar->addWidget(new QLabel(tr("文档 "), this));
+    toolbar->addWidget(m_documentCombo);
+    toolbar->addAction(tr("新建文档…"), this, &MainWindow::onCreateDocument);
+    toolbar->addSeparator();
     toolbar->addAction(m_undoAction);
     toolbar->addAction(m_redoAction);
     toolbar->addSeparator();
@@ -114,13 +124,31 @@ MainWindow::MainWindow(QWidget *parent)
 
     // 视口：几何来自服务端 /v1/geometry.stl（build123d 真建实体导出的二进制 STL），
     // 客户端只负责画，不参与建模。
-    m_viewport = new StlViewport(this);
-    connect(m_viewport, &StlViewport::loaded, this, [this](int triangles) {
-        statusBar()->showMessage(tr("几何已加载：%1 个三角面（服务端 STL）").arg(triangles), 5000);
-    });
-    connect(m_viewport, &StlViewport::failed, this, [this](const QString &message) {
-        statusBar()->showMessage(message, 6000);
-    });
+    // 默认用自绘 OpenGL STL 视口（四个标准视角已像素级验过）；OCCT AIS 视口目前是**实验性**的，
+    // 渲染与旋转可用，但标准视角/选取还没调好，需要时用 AUTOMATIONCAD_QT_OCCT=1 打开。
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    const bool preferOcct = qEnvironmentVariable("AUTOMATIONCAD_QT_OCCT", "0") == QStringLiteral("1");
+    if (preferOcct) {
+        m_occtViewport = new OcctViewport(this);
+        m_viewport = m_occtViewport;
+        connect(m_occtViewport, &OcctViewport::loaded, this, [this](int triangles) {
+            statusBar()->showMessage(tr("几何已加载：%1 个三角面（OCCT AIS · 服务端 STL）").arg(triangles), 5000);
+        });
+        connect(m_occtViewport, &OcctViewport::failed, this, [this](const QString &message) {
+            statusBar()->showMessage(message, 6000);
+        });
+    }
+#endif
+    if (!m_viewport) {
+        m_glViewport = new StlViewport(this);
+        m_viewport = m_glViewport;
+        connect(m_glViewport, &StlViewport::loaded, this, [this](int triangles) {
+            statusBar()->showMessage(tr("几何已加载：%1 个三角面（服务端 STL）").arg(triangles), 5000);
+        });
+        connect(m_glViewport, &StlViewport::failed, this, [this](const QString &message) {
+            statusBar()->showMessage(message, 6000);
+        });
+    }
 
     m_panel = new QTableWidget(0, 2, this);
     m_panel->setHorizontalHeaderLabels({tr("参数"), tr("值")});
@@ -147,14 +175,132 @@ MainWindow::MainWindow(QWidget *parent)
     statusBar()->addPermanentWidget(m_statusLink);
     statusBar()->showMessage(tr("单位：mm 优先"));
 
+    connect(m_documentCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        if (index < 0) return;
+        setDocument(m_documentCombo->itemData(index).toString());
+    });
     connect(m_tree, &QTreeWidget::itemClicked, this, &MainWindow::onTreeItemSelected);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &MainWindow::showTreeMenu);
     connect(m_panel, &QTableWidget::cellChanged, this, &MainWindow::onPropertyCellChanged);
     loadTree();
+    reloadDocuments();
 }
 
 void MainWindow::setServiceBase(const QString &base) { m_serviceBase = base; }
+
+QString MainWindow::docQuery() const {
+    return QStringLiteral("?documentId=") + QString::fromUtf8(QUrl::toPercentEncoding(m_documentId));
+}
+
+void MainWindow::setDocument(const QString &documentId) {
+    if (documentId.isEmpty() || documentId == m_documentId) return;
+    m_documentId = documentId;
+    m_envelope = QJsonObject();
+    // 换文档必须让视口忘掉上一份的缓存（版本号可能相同，不然不会重载几何）
+    setViewportGeometry(-1, QString());
+    refreshNow();
+}
+
+void MainWindow::reloadDocuments() {
+    QNetworkRequest req{QUrl(m_serviceBase + QStringLiteral("/v1/documents"))};
+    req.setTransferTimeout(8000);
+    QNetworkReply *reply = m_net->get(req);
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        reply->deleteLater();
+        const QJsonObject payload = readReply(reply);
+        const QJsonArray documents = payload.value(QStringLiteral("documents")).toArray();
+        if (reply->error() != QNetworkReply::NoError || documents.isEmpty()) return;
+        m_documentCombo->blockSignals(true);
+        m_documentCombo->clear();
+        for (const auto &entry : documents) {
+            const QJsonObject doc = entry.toObject();
+            const QString id = doc.value(QStringLiteral("documentId")).toString();
+            m_documentCombo->addItem(QStringLiteral("%1 · r%2").arg(id).arg(doc.value(QStringLiteral("revision")).toInt()), id);
+            if (id == m_documentId) m_documentCombo->setCurrentIndex(m_documentCombo->count() - 1);
+        }
+        m_documentCombo->blockSignals(false);
+    });
+}
+
+void MainWindow::onCreateDocument() {
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("新建文档"), tr("文档 id（字母数字与 . _ -）："),
+                                               QLineEdit::Normal, QString(), &ok);
+    if (!ok || name.trimmed().isEmpty()) return;
+    QJsonObject body;
+    body.insert(QStringLiteral("documentId"), name.trimmed());
+    QNetworkRequest req{QUrl(m_serviceBase + QStringLiteral("/v1/documents"))};
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    req.setTransferTimeout(8000);
+    QNetworkReply *reply = m_net->post(req, QJsonDocument(body).toJson());
+    connect(reply, &QNetworkReply::finished, this, [this, reply, name]() {
+        reply->deleteLater();
+        const QJsonObject payload = readReply(reply);
+        if (reply->error() != QNetworkReply::NoError || payload.contains(QStringLiteral("error"))) {
+            QMessageBox::warning(this, tr("新建文档失败"), payload.value(QStringLiteral("message")).toString(reply->errorString()));
+            return;
+        }
+        statusBar()->showMessage(tr("已新建文档 %1").arg(name), 4000);
+        const QString id = payload.value(QStringLiteral("documentId")).toString();
+        m_documentId = id;
+        reloadDocuments();
+        refreshNow();
+    });
+}
+
+bool MainWindow::runDocumentSelfTest(const QString &base, int *newRevision, double *defaultHeight, QString *error) {
+    m_serviceBase = base;
+    int status = 0;
+    QString localError;
+    const auto heightOf = [](const QJsonObject &envelope) {
+        for (const auto &fv : envelope.value(QStringLiteral("doc")).toObject().value(QStringLiteral("features")).toArray()) {
+            const QJsonObject f = fv.toObject();
+            if (f.value(QStringLiteral("id")).toString() == QStringLiteral("f-body")) {
+                return f.value(QStringLiteral("params")).toObject().value(QStringLiteral("height")).toDouble();
+            }
+        }
+        return -1.0;
+    };
+
+    const QJsonObject created = requestSync("POST", QStringLiteral("/v1/documents"),
+                                            QJsonObject{{QStringLiteral("documentId"), QStringLiteral("doc-qt-test")}},
+                                            &status, &localError);
+    if (status != 201 && status != 409) {
+        if (error) *error = tr("新建文档失败（HTTP %1）：%2").arg(status).arg(localError);
+        return false;
+    }
+
+    QJsonObject body;
+    body.insert(QStringLiteral("documentId"), QStringLiteral("doc-qt-test"));
+    body.insert(QStringLiteral("expectedRevision"), created.value(QStringLiteral("revision")).toInt(0));
+    body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
+    body.insert(QStringLiteral("operation"), QStringLiteral("updateFeatureParams"));
+    body.insert(QStringLiteral("featureId"), QStringLiteral("f-body"));
+    body.insert(QStringLiteral("patch"), QJsonObject{{QStringLiteral("height"), 44.0}});
+    const QJsonObject wrote = requestSync("POST", QStringLiteral("/v1/operations"), body, &status, &localError);
+    if (status != 200) {
+        if (error) *error = tr("新文档写入失败（HTTP %1）：%2").arg(status).arg(wrote.value(QStringLiteral("message")).toString(localError));
+        return false;
+    }
+    if (wrote.value(QStringLiteral("documentId")).toString() != QStringLiteral("doc-qt-test")) {
+        if (error) *error = QStringLiteral("包络里的 documentId 不是 doc-qt-test");
+        return false;
+    }
+
+    const QJsonObject def = requestSync("GET", QStringLiteral("/v1/tree"), {}, &status, &localError);
+    if (status != 200) {
+        if (error) *error = tr("读默认文档失败（HTTP %1）").arg(status);
+        return false;
+    }
+    if (qAbs(heightOf(def) - 44.0) < 0.01) {
+        if (error) *error = QStringLiteral("默认文档被新文档的写入影响了（高度被改成 44）");
+        return false;
+    }
+    if (newRevision) *newRevision = wrote.value(QStringLiteral("revision")).toInt();
+    if (defaultHeight) *defaultHeight = heightOf(def);
+    return true;
+}
 
 bool MainWindow::runCreateFeatureSelfTest(const QString &base, double *withHole, double *restored, QString *error) {
     m_serviceBase = base;
@@ -499,7 +645,7 @@ bool MainWindow::runSseSelfTest(const QString &base, int *revision, QString *err
 }
 
 void MainWindow::loadTree() {
-    QNetworkRequest req(QUrl(m_serviceBase + QStringLiteral("/v1/tree")));
+    QNetworkRequest req(QUrl(m_serviceBase + QStringLiteral("/v1/tree") + docQuery()));
     // 服务没起来时不要让界面无限等；8 秒后按连接失败处理
     req.setTransferTimeout(8000);
     QNetworkReply *reply = m_net->get(req);
@@ -517,6 +663,29 @@ void MainWindow::onTreeReply() {
     refreshTree(readReply(reply));
 }
 
+void MainWindow::setViewportGeometry(int revision, const QString &url) {
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    if (m_occtViewport) { m_occtViewport->ensureRevision(revision, url); return; }
+#endif
+    if (m_glViewport) m_glViewport->ensureRevision(revision, url);
+}
+
+void MainWindow::fitViewport() {
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    if (m_occtViewport) { m_occtViewport->fitView(); return; }
+#endif
+    if (m_glViewport) m_glViewport->fitView();
+}
+
+void MainWindow::applyStandardView(int which) { setViewportStandardView(which); }
+
+void MainWindow::setViewportStandardView(int which) {
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    if (m_occtViewport) { m_occtViewport->setStandardView(which); return; }
+#endif
+    if (m_glViewport) m_glViewport->setStandardView(which);
+}
+
 void MainWindow::undoOnce() {
     postHistory("undo");
 }
@@ -528,7 +697,7 @@ void MainWindow::redoOnce() {
 void MainWindow::postHistory(const QString &kind) {
     const int revision = m_envelope.value(QStringLiteral("revision")).toInt();
     QJsonObject body;
-    body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+    body.insert(QStringLiteral("documentId"), m_documentId);
     body.insert(QStringLiteral("expectedRevision"), revision);
     body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
     body.insert(QStringLiteral("steps"), 1);
@@ -611,9 +780,9 @@ void MainWindow::refreshTree(const QJsonObject &envelope) {
     }
     // 几何只在版本变化时重新拉，避免每次 1.5s 轮询都下一遍 STL
     if (geometryInfo.isEmpty()) {
-        m_viewport->ensureRevision(-1, QString());
+        setViewportGeometry(-1, QString());
     } else {
-        m_viewport->ensureRevision(revisionFromEnvelope, m_serviceBase + QStringLiteral("/v1/geometry.stl"));
+        setViewportGeometry(revisionFromEnvelope, m_serviceBase + QStringLiteral("/v1/geometry.stl"));
     }
     emit envelopeRefreshed(revision);
 }
@@ -672,7 +841,7 @@ void MainWindow::onPropertyCellChanged(int row, int) {
     QJsonObject patch;
     patch.insert(keyItem->text(), ok ? QJsonValue(num) : QJsonValue(valueItem->text()));
     QJsonObject body;
-    body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+    body.insert(QStringLiteral("documentId"), m_documentId);
     body.insert(QStringLiteral("expectedRevision"), m_envelope.value(QStringLiteral("revision")).toInt());
     body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
     body.insert(QStringLiteral("operation"), QStringLiteral("updateFeatureParams"));
@@ -685,7 +854,7 @@ void MainWindow::createFeatureDialog() {
     FeatureDialog dialog(this);
     if (dialog.exec() != QDialog::Accepted) return;
     QJsonObject body;
-    body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+    body.insert(QStringLiteral("documentId"), m_documentId);
     body.insert(QStringLiteral("expectedRevision"), m_envelope.value(QStringLiteral("revision")).toInt());
     body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
     body.insert(QStringLiteral("operation"), QStringLiteral("createFeature"));
@@ -718,7 +887,7 @@ void MainWindow::showTreeMenu(const QPoint &pos) {
     if (!chosen) return;
 
     QJsonObject body;
-    body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+    body.insert(QStringLiteral("documentId"), m_documentId);
     body.insert(QStringLiteral("expectedRevision"), m_envelope.value(QStringLiteral("revision")).toInt());
     body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
     body.insert(QStringLiteral("featureId"), id);
@@ -807,7 +976,7 @@ bool MainWindow::runSelfTest(const QString &base, int *revision, double *height,
     }
     QJsonObject patch; patch.insert(QStringLiteral("height"), current + 1);
     QJsonObject body;
-    body.insert(QStringLiteral("documentId"), QStringLiteral("demo-adapter"));
+    body.insert(QStringLiteral("documentId"), m_documentId);
     body.insert(QStringLiteral("expectedRevision"), rev);
     body.insert(QStringLiteral("actor"), QStringLiteral("manual"));
     body.insert(QStringLiteral("operation"), QStringLiteral("updateFeatureParams"));
