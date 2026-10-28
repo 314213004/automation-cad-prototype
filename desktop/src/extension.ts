@@ -79,6 +79,7 @@ import {
   RULES_ONLY_PROCESSES
 } from './machine/model-builders';
 import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
+import { syncToolMenu } from './ui/tool-menu.ts';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
@@ -3658,6 +3659,8 @@ function init(): void {
       console.error('[appearance] 读取界面缩放/渲染质量失败，使用默认值', error);
     }) ?? Promise.resolve();
   buildEntryButton();
+  // 顶栏入口收进「工具」下拉（机械/电气与 CAD 查看留在栏上）
+  syncToolMenu();
   initFactoryPanel();
   commission = initCommissionPanel({
     onExportReport: async () => {
