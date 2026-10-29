@@ -14,6 +14,7 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
 #include <Aspect_NeutralWindow.hxx>
+#include <Aspect_Window.hxx>
 #include <OpenGl_GraphicDriver.hxx>
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
@@ -46,6 +47,7 @@ public:
 
     void ensureRevision(int revision, const QString &url);
     void loadFromUrl(const QString &url);
+    void startRequest(const QString &url);
     void fitView();
     void setStandardView(int which);
     int triangleCount() const { return m_triangles; }
@@ -63,6 +65,8 @@ signals:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    // 交给 OCCT 直接画到 HWND：Qt 不能再有绘制引擎，否则会用自己的背景盖掉 GL 画面
+    QPaintEngine *paintEngine() const override { return nullptr; }
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -79,7 +83,7 @@ private:
     Handle(V3d_Viewer) m_viewer;
     Handle(V3d_View) m_view;
     Handle(AIS_InteractiveContext) m_context;
-    Handle(Aspect_NeutralWindow) m_window;
+    Handle(Aspect_Window) m_window;
     Handle(AIS_Shape) m_shape;
     QVector<Handle(AIS_Shape)> m_shapes;
     QStringList m_shapePartIds;      // 与 m_shapes 一一对应的 partId
@@ -93,4 +97,6 @@ private:
     QPoint m_lastPos;
     QNetworkAccessManager *m_net = nullptr;
     QNetworkReply *m_pending = nullptr;
+    QString m_pendingUrl;   // 正在拉取的 URL，用来合并重复请求
+    QString m_queuedUrl;    // 拉取中又来了别的 URL：排队，等这次结束再发
 };

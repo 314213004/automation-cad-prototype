@@ -11,6 +11,11 @@
 #include <QWheelEvent>
 
 #include <Aspect_DisplayConnection.hxx>
+#ifdef _WIN32
+#include <WNT_Window.hxx>
+#else
+#include <Aspect_NeutralWindow.hxx>
+#endif
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
@@ -52,6 +57,12 @@ constexpr int kStlTriangleBytes = 50;
 } // namespace
 
 OcctViewport::OcctViewport(QWidget *parent) : QWidget(parent), m_net(new QNetworkAccessManager(this)) {
+    // OCCT 用 WNT_Window 自己持有 GL 上下文，Qt 这边必须让开绘制权：
+    // 不加 WA_PaintOnScreen，Qt 的 backing store 会把 GL 画面盖成纯黑（实测）。
+    setAttribute(Qt::WA_PaintOnScreen, true);
+    setAttribute(Qt::WA_NoSystemBackground, true);
+    setAttribute(Qt::WA_OpaquePaintEvent, true);
+    setAutoFillBackground(false);
     setFocusPolicy(Qt::StrongFocus);
     setMinimumSize(320, 240);
     setMouseTracking(false);
@@ -90,10 +101,17 @@ void OcctViewport::initializeView() {
         m_context = new AIS_InteractiveContext(m_viewer);
         m_view = m_viewer->CreateView();
 
-        m_window = new Aspect_NeutralWindow();
-        m_window->SetNativeHandle((Aspect_Drawable)winId());
+#ifdef _WIN32
+        // Windows 上必须给 WNT_Window：Aspect_NeutralWindow 的 OpenGl_Window 建不出 GL 上下文，
+        // SetWindow 会“成功”但画面永远是黑的（实测）；Linux 仍走 NeutralWindow。
+        m_window = new WNT_Window(reinterpret_cast<Aspect_Handle>(winId()));
+#else
+        Handle(Aspect_NeutralWindow) neutral = new Aspect_NeutralWindow();
+        neutral->SetNativeHandle((Aspect_Drawable)winId());
         const qreal ratio = devicePixelRatioF();
-        m_window->SetSize(static_cast<Standard_Integer>(width() * ratio), static_cast<Standard_Integer>(height() * ratio));
+        neutral->SetSize(static_cast<Standard_Integer>(width() * ratio), static_cast<Standard_Integer>(height() * ratio));
+        m_window = neutral;
+#endif
         m_view->SetWindow(m_window);
         if (m_window.IsNull() || m_window->NativeHandle() == 0) {
             emit failed(tr("OCCT 视口初始化失败（窗口句柄无效），请检查图形驱动"));
@@ -109,31 +127,32 @@ void OcctViewport::initializeView() {
         m_view->SetImmediateUpdate(false);
         m_viewReady = true;
     } catch (const Standard_Failure &error) {
-        emit failed(tr("OCCT 初始化异常：%1").arg(QString::fromUtf8(error.GetMessageString())));
+            emit failed(tr("OCCT 初始化异常：%1").arg(QString::fromUtf8(error.GetMessageString())));
     }
 }
 
 void OcctViewport::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
     initializeView();
+    // 初始化时控件还没拿到最终尺寸，窗口句柄尺寸要在 show 之后再同步一次
+    if (m_viewReady && !m_view.IsNull()) m_view->MustBeResized();
 }
 
 void OcctViewport::resizeEvent(QResizeEvent *event) {
     QWidget::resizeEvent(event);
     if (!m_viewReady || m_window.IsNull() || m_view.IsNull()) return;
+#ifndef _WIN32
+    // WNT_Window 自己从 HWND 读客户区大小，不需要（也没有）SetSize
     const qreal ratio = devicePixelRatioF();
-    m_window->SetSize(static_cast<Standard_Integer>(width() * ratio), static_cast<Standard_Integer>(height() * ratio));
+    Handle(Aspect_NeutralWindow)::DownCast(m_window)->SetSize(
+        static_cast<Standard_Integer>(width() * ratio), static_cast<Standard_Integer>(height() * ratio));
+#endif
     m_view->MustBeResized();
 }
 
 void OcctViewport::paintEvent(QPaintEvent *) {
-    if (!m_viewReady) {
-        QPainter painter(this);
-        painter.fillRect(rect(), QColor(0x17, 0x1a, 0x1f));
-        painter.setPen(QColor(0x9a, 0xa3, 0xb2));
-        painter.drawText(rect(), Qt::AlignCenter, tr("OCCT 视口未就绪"));
-        return;
-    }
+    // paintEngine() 返回 nullptr，这里不能再用 QPainter
+    if (!m_viewReady || m_view.IsNull()) return;
     m_view->Redraw();
 }
 
@@ -331,53 +350,70 @@ void OcctViewport::ensureRevision(int revision, const QString &url) {
 }
 
 void OcctViewport::loadFromUrl(const QString &url) {
-    qInfo().noquote() << "OCCT_LOAD_URL" << url;
-    if (m_pending) { m_pending->abort(); m_pending->deleteLater(); m_pending = nullptr; }
+    if (url.isEmpty() || !m_net) return;
+    if (m_pending) {
+        // 同一个 URL 重复请求（刷新树和几何事件都会调到这里）直接合并。
+        // 以前这里 abort() 旧请求再重发：实测 abort 会同步发 finished，把调用栈卡住不返回。
+        if (m_pendingUrl == url) return;
+        m_queuedUrl = url;   // 换成别的几何了：排队，等这次结束再发
+        return;
+    }
+    startRequest(url);
+}
+
+void OcctViewport::startRequest(const QString &url) {
+    qInfo().noquote() << "OCCT_LOAD" << url;
     QNetworkRequest request{QUrl(url)};
-    request.setTransferTimeout(15'000);
+    request.setTransferTimeout(20'000);
     request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
-    m_pending = m_net->get(request);
-    connect(m_pending, &QNetworkReply::finished, this, [this]() {
-        QNetworkReply *reply = m_pending;
-        m_pending = nullptr;
-        if (!reply) return;
+    QNetworkReply *reply = m_net->get(request);
+    m_pending = reply;
+    m_pendingUrl = url;
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        // 捕获 reply 而不是读 m_pending：两次请求交错时 m_pending 已经换成新的了
+        const bool replyOk = reply->error() == QNetworkReply::NoError;
+        const QString replyError = reply->errorString();
+        const QByteArray data = replyOk ? reply->readAll() : QByteArray();
+        if (m_pending == reply) { m_pending = nullptr; m_pendingUrl.clear(); }
         reply->deleteLater();
-        if (reply->error() != QNetworkReply::NoError) {
-            emit failed(tr("拉取几何失败：%1").arg(reply->errorString()));
-            return;
-        }
-        const QByteArray data = reply->readAll();
-        if (data.size() < kStlHeaderBytes) {
+
+        const QString queued = m_queuedUrl;
+        m_queuedUrl.clear();
+
+        if (!replyOk) {
+            if (reply->error() != QNetworkReply::OperationCanceledError)
+                emit failed(tr("拉取几何失败：%1").arg(replyError));
+        } else if (data.size() < kStlHeaderBytes) {
             emit failed(tr("STL 太短（%1 字节）").arg(data.size()));
-            return;
+        } else {
+            quint32 count = 0;
+            std::memcpy(&count, data.constData() + 80, sizeof(count));
+            if (data.size() != kStlHeaderBytes + static_cast<qint64>(count) * kStlTriangleBytes) {
+                emit failed(tr("STL 长度与三角面数不自洽（%1 字节 / %2 面）").arg(data.size()).arg(count));
+            } else {
+                // StlAPI_Reader 只吃文件：写临时文件再读，避免自己造 TopoDS 的误差
+                QTemporaryFile temp(QDir::tempPath() + QStringLiteral("/automationcad-XXXXXX.stl"));
+                temp.setAutoRemove(true);
+                if (!temp.open()) {
+                    emit failed(tr("无法创建临时 STL 文件"));
+                } else {
+                    temp.write(data);
+                    temp.flush();
+                    TopoDS_Shape shape;
+                    StlAPI_Reader reader;
+                    const bool read = reader.Read(shape, temp.fileName().toUtf8().constData());
+                    if (!read || shape.IsNull()) {
+                        emit failed(tr("OCCT 读取 STL 失败"));
+                    } else {
+                        m_triangles = static_cast<int>(count);
+                        qInfo().noquote() << "OCCT_LOAD_DONE tris=" << m_triangles << "bytes=" << data.size();
+                        displayShape(shape);
+                        emit loaded(m_triangles);
+                    }
+                }
+            }
         }
-        quint32 count = 0;
-        std::memcpy(&count, data.constData() + 80, sizeof(count));
-        if (data.size() != kStlHeaderBytes + static_cast<qint64>(count) * kStlTriangleBytes) {
-            emit failed(tr("STL 长度与三角面数不自洽（%1 字节 / %2 面）").arg(data.size()).arg(count));
-            return;
-        }
-        // StlAPI_Reader 只吃文件：写临时文件再读，避免自己造 TopoDS 的误差
-        // 临时文件必须落到系统临时目录：模板不带路径时会写到进程 cwd（实测把 .stl 漏进仓库根目录）
-        QTemporaryFile temp(QDir::tempPath() + QStringLiteral("/automationcad-XXXXXX.stl"));
-        temp.setAutoRemove(true);
-        if (!temp.open()) {
-            emit failed(tr("无法创建临时 STL 文件"));
-            return;
-        }
-        temp.write(data);
-        temp.flush();
-        TopoDS_Shape shape;
-        StlAPI_Reader reader;
-        const bool read = reader.Read(shape, temp.fileName().toUtf8().constData());
-        if (!read || shape.IsNull()) {
-            emit failed(tr("OCCT 读取 STL 失败"));
-            return;
-        }
-        m_triangles = static_cast<int>(count);
-        qInfo().noquote() << "OCCT_LOAD_DONE tris=" << m_triangles << "bytes=" << data.size();
-        displayShape(shape);
-        emit loaded(m_triangles);
+        if (!queued.isEmpty()) loadFromUrl(queued);
     });
 }
 
@@ -394,6 +430,7 @@ void OcctViewport::displayShape(const TopoDS_Shape &shape) {
     m_context->Activate(m_shape, AIS_Shape::SelectionMode(TopAbs_FACE));
     m_context->SetAutomaticHilight(true);
     m_hasGeometry = true;
+    m_view->MustBeResized();   // 先按当前控件尺寸校正投影，再缩放
     m_view->FitAll(0.02, false);
     m_view->Redraw();
 }

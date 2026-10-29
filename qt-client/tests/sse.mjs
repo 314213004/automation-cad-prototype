@@ -38,7 +38,8 @@ if (!base) {
 }
 
 const qt = spawn(binary, ['--sse-selftest', '--base', base], {
-  env: { ...process.env, QT_QPA_PLATFORM: 'offscreen' },
+  // 同 watch.mjs：Windows 上 offscreen 配真实 GL 会挂住，只有 CI（xvfb）才走 offscreen
+  env: { ...process.env, ...(process.platform === 'win32' ? {} : { QT_QPA_PLATFORM: 'offscreen' }) },
   stdio: ['ignore', 'pipe', 'pipe']
 });
 let qtLog = '';

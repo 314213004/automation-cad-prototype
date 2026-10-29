@@ -1,6 +1,8 @@
 // Qt 客户端壳子 v0.1 实现。注意：本文件只用 Qt Widgets + Network，
 // 不含 OCCT 头文件；视口是占位 QWidget，OCCT AIS 接入是后续里程碑。
 #include "MainWindow.h"
+
+#include <QGuiApplication>
 #include "FeatureDialog.h"
 #include "MachineCaseDialog.h"
 
@@ -209,7 +211,12 @@ MainWindow::MainWindow(QWidget *parent)
     // （俯视 639×639 正方形 / 正视与右视 639×103 / 等轴测 639×455）。
     // 选面与测量还没做（点击选中返回空选择），需要自绘视口时用 AUTOMATIONCAD_QT_OCCT=0。
 #ifdef AUTOMATIONCAD_HAVE_OCCT
-    const bool preferOcct = qEnvironmentVariable("AUTOMATIONCAD_QT_OCCT", "1") != QStringLiteral("0");
+    // offscreen（CI/自检）下没有真实窗口句柄，OCCT 的 WNT_Window 会挂住初始化，
+    // 这种场景一律走 STL 视口；另外留 AUTOMATIONCAD_QT_STL=1 手动切回。
+    const bool headless = QGuiApplication::platformName().contains(QStringLiteral("offscreen"))
+                          || qEnvironmentVariableIsSet("AUTOMATIONCAD_QT_STL");
+    const bool preferOcct = !headless
+                            && qEnvironmentVariable("AUTOMATIONCAD_QT_OCCT", "1") != QStringLiteral("0");
     if (preferOcct) {
         m_occtViewport = new OcctViewport(this);
         m_viewport = m_occtViewport;

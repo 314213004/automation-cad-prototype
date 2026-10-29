@@ -40,7 +40,9 @@ if (!base) {
 }
 
 const qt = spawn(binary, ['--watch-selftest', '--base', base], {
-  env: { ...process.env, QT_QPA_PLATFORM: 'offscreen' },
+  // Windows 上 offscreen 平台配真实 GL 上下文会挂住（QOpenGLWidget / OCCT 都没有 HWND），
+  // 只在非 Windows（CI 的 xvfb）里用 offscreen
+  env: { ...process.env, ...(process.platform === 'win32' ? {} : { QT_QPA_PLATFORM: 'offscreen' }) },
   stdio: ['ignore', 'pipe', 'pipe']
 });
 let qtLog = '';
