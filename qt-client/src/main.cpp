@@ -6,6 +6,8 @@
 #include <QApplication>
 #include <QSurfaceFormat>
 #include <QDebug>
+#include <QDir>
+#include <QStandardPaths>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QStringList>
@@ -25,6 +27,13 @@ int main(int argc, char *argv[]) {
     QSurfaceFormat::setDefaultFormat(format);
 
     QApplication app(argc, argv);
+    // Windows 上 Qt 默认消息处理器走 OutputDebugString：从脚本/CI 起进程时
+    // stdout 是空的，所有 FT_QT_* 自检行都收不到（Linux 走 stderr 没这问题）。
+    // 这里强制写 stderr，自检脚本按行解析才有东西可读。
+    qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &message) {
+        std::fprintf(stderr, "%s\n", message.toUtf8().constData());
+        std::fflush(stderr);
+    });
     const QStringList args = QCoreApplication::arguments();
 
     // 无人值守自检：--selftest [--base http://127.0.0.1:PORT]
@@ -539,7 +548,8 @@ int main(int argc, char *argv[]) {
         if (baseIndex >= 0 && baseIndex + 1 < args.size()) base = args.at(baseIndex + 1);
         const int outIndex = args.indexOf(QStringLiteral("--out"));
         const QString out = outIndex >= 0 && outIndex + 1 < args.size()
-            ? args.at(outIndex + 1) : QStringLiteral("/tmp/export-selftest.stl");
+            // 跨平台临时目录：/tmp 在 Windows 不存在，自检会写不出去
+            ? args.at(outIndex + 1) : QDir(QDir::tempPath()).filePath(QStringLiteral("export-selftest.stl"));
         MainWindow window;
         window.setServiceBase(base);
         const QString assemblyId = qEnvironmentVariable("AUTOMATIONCAD_QT_ASSEMBLY");

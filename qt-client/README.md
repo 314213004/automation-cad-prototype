@@ -285,3 +285,46 @@ QT_QPA_PLATFORM=offscreen ./build/automationcad-qt --feature-ops-selftest --base
 - 草图对象与 SolveSpace 求解器（契约只占了字段位，v1 提交 `sketch` 会被拒绝）；
 - 拓扑命名稳定层（圆角/配合引用不断链）；
 - 工程包磁盘文件布局、变更事件传输方式（SSE / 长轮询）的最终拍板。
+
+## Windows 真机构建（2026-10-29 实测通过）
+
+本机把工具链装在 D 盘，全部走 MinGW，不需要 Visual Studio：
+
+| 组件 | 路径 | 版本 |
+|---|---|---|
+| Qt | `D:\Qt\6.8.3\mingw_64` | 6.8.3（qtbase：Widgets / Network / OpenGLWidgets） |
+| MinGW | `D:\Qt\Tools\mingw1310_64` | g++ 13.1.0 |
+| CMake | `D:\Qt\Tools\CMake_64\bin` | 3.30.5 |
+| Ninja | `D:\Qt\Tools\Ninja` | 1.12.1 |
+
+装法（`aqtinstall`，装到 `D:\Tools\aqt-venv`）：
+
+```bash
+uv venv D:/Tools/aqt-venv --python 3.12
+uv pip install --python D:/Tools/aqt-venv/Scripts/python.exe aqtinstall
+D:/Tools/aqt-venv/Scripts/python.exe -m aqt install-qt windows desktop 6.8.3 win64_mingw -O D:/Qt --archives qtbase
+D:/Tools/aqt-venv/Scripts/python.exe -m aqt install-tool windows desktop tools_mingw1310 -O D:/Qt
+D:/Tools/aqt-venv/Scripts/python.exe -m aqt install-tool windows desktop tools_ninja -O D:/Qt
+D:/Tools/aqt-venv/Scripts/python.exe -m aqt install-tool windows desktop tools_cmake -O D:/Qt
+```
+
+构建（OCCT 头文件在 Windows 上没有，走 OpenGL STL 视口回退）：
+
+```bash
+export PATH="/d/Qt/Tools/mingw1310_64/bin:/d/Qt/Tools/Ninja:/d/Qt/Tools/CMake_64/bin:$PATH"
+cmake -S qt-client -B D:/build/qt-client -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=D:/Qt/6.8.3/mingw_64 \
+  -DCMAKE_CXX_COMPILER=D:/Qt/Tools/mingw1310_64/bin/g++.exe -DAUTOMATIONCAD_OCCT=OFF
+cmake --build D:/build/qt-client --parallel
+```
+
+跑起来要把 Qt 与 MinGW 的 bin 都放进 PATH（缺 MinGW 运行库会 0xC0000135 直接退出），
+无人值守自检加 `QT_QPA_PLATFORM=offscreen`：
+
+```bash
+export PATH="D:/Qt/6.8.3/mingw_64/bin:D:/Qt/Tools/mingw1310_64/bin:$PATH"
+QT_QPA_PLATFORM=offscreen node qt-client/tests/watch.mjs --binary D:/build/qt-client/automationcad-qt.exe
+QT_QPA_PLATFORM=offscreen node qt-client/tests/sse.mjs   --binary D:/build/qt-client/automationcad-qt.exe
+```
+
+两个 e2e 在 Windows 上已通过：`QT_WATCH_OK`、`QT_SSE_OK`（SSE 延迟 357 ms）。
