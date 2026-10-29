@@ -445,7 +445,8 @@ bool MainWindow::designMachineFromBrief(const QString &brief, QJsonObject *docum
 
     QProcess process;
     process.setProcessChannelMode(QProcess::SeparateChannels);
-    process.start(QStringLiteral("node"), {script, QStringLiteral("--brief"), brief});
+    process.start(QStringLiteral("node"),
+                  {script, QStringLiteral("--brief"), brief, QStringLiteral("--with-geometry")});
     if (!process.waitForStarted(10'000)) {
         *error = tr("启动 node 失败：%1").arg(process.errorString());
         return false;
@@ -479,6 +480,35 @@ bool MainWindow::designMachineFromBrief(const QString &brief, QJsonObject *docum
     return true;
 }
 
+bool MainWindow::renderMachineGeometry(const QJsonObject &document, int *shapeCount, QString *error) {
+    const QJsonObject geometry = document.value(QStringLiteral("geometry")).toObject();
+    if (geometry.isEmpty()) {
+        *error = tr("方案里没有 geometry（管线需 --with-geometry）");
+        return false;
+    }
+#ifndef AUTOMATIONCAD_HAVE_OCCT
+    *error = tr("这个构建没有 OCCT AIS 视口（CMake 未找到 OCCT 头文件），整机示意 3D 不可用");
+    return false;
+#endif
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    if (m_occtViewport->isHidden()) m_occtViewport->show();
+    if (!m_occtViewport->showMachineGeometry(geometry, shapeCount, error)) return false;
+#else
+    // CI 只装 Qt、没有 OCCT 头文件；这条路径要在「没有视口」时也能编过并给出可操作原因
+    *error = tr("这个构建没有 OCCT AIS 视口（CMake 未找到 OCCT 头文件），整机示意 3D 不可用");
+    return false;
+#endif
+    const QJsonArray envelope = geometry.value(QStringLiteral("envelope")).toArray();
+    if (envelope.size() == 3) {
+        statusBar()->showMessage(tr("整机示意装配：%1 个占位体 · 包络 %2×%3×%4 mm · 精度=概念估算")
+                                     .arg(*shapeCount)
+                                     .arg(envelope.at(0).toDouble(), 0, 'f', 0)
+                                     .arg(envelope.at(1).toDouble(), 0, 'f', 0)
+                                     .arg(envelope.at(2).toDouble(), 0, 'f', 0), 20000);
+    }
+    return true;
+}
+
 void MainWindow::designMachineDialog() {
     bool accepted = false;
     const QString brief = QInputDialog::getMultiLineText(
@@ -499,6 +529,11 @@ void MainWindow::designMachineDialog() {
         return;
     }
     statusBar()->showMessage(tr("整机方案：%1").arg(MachineCaseDialog::summarize(document)), 15000);
+    int shapes = 0;
+    QString geometryError;
+    if (!renderMachineGeometry(document, &shapes, &geometryError)) {
+        statusBar()->showMessage(tr("整机方案已生成，但 3D 示意没画出来：%1").arg(geometryError), 20000);
+    }
     MachineCaseDialog dialog(document, this);
     dialog.exec();
 }
