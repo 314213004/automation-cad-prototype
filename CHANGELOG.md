@@ -4,6 +4,26 @@
 
 ## [0.5.0] - 2026-10-27
 
+### Added · 缓存机台与 Qt 原生客户端（2026-10-29）
+
+- `build_machine_model` 增加 `brief` 参数：一句中文需求（"立体缓存机台：3 层缓存、每层 4 个储位，线体长 3000mm、带宽 1200mm、层间距 400mm"）直接出整机。`detectBufferLayers()` 用负向后顾读层数，避免"12 层"被读成 2 层。
+- 立体缓存机型：`layers ≥ 2` 时按层生成托条/托板/传动辊/挡停/到位光电，外加一套升降机构，不再把缓存机台画成单层输送线。
+- 工程自动入库：`build_machine_model` 成功后写 `userData/projects/<id>/`（`project.json` + `model.step` + `model.stl` + 逐件 `parts/NN-*.stl`），CAD 顶栏下拉可直接重开。
+- Qt 原生客户端接上 OCCT AIS 视口（MSVC 2022 + Qt 6.8.3 + OCCT 7.9.3），README 补了 Windows 安装/构建/运行全过程，含 `occt --no-deps` 与运行时 DLL 两个坑。
+
+### Fixed · 缓存机台整机
+
+- 装配实体上限 50 → 200，单次布尔仍按 50 分块（`MAX_ASSEMBLY_CHUNK`），3 层 56 件不再被拦。
+- 内核建模超时 30s → 180s，渲染桥对 `buildMachineModel` 单独给 240s 预算（原来 10s 直接判 `RENDERER_TIMEOUT`）。
+- 参数脏值（`11-128` 这类）只保留有限数字；存工程时带上场景可信质量；内核冷启动健康检查 3s → 90s；STL 导出用 mkstemp 避免 Windows 返回 0 字节。
+
+### Fixed · Qt 客户端
+
+- 加载几何崩溃 `0xC0000005`：`loadFromUrl` 的 lambda 读成员 `m_pending` 而不是连接时的 reply，两次请求交错时拿到未结束的新 reply，旧 reply 成了野指针。改为捕获 reply + 同 URL 去重、换 URL 排队（顺带解决 `abort()` 同步发信号导致的挂死）。
+- 视口纯黑：Windows 上 `Aspect_NeutralWindow` 建不出 GL 上下文，改用 `WNT_Window`；Qt 侧让出绘制权（`WA_PaintOnScreen` + `paintEngine()` 返回 `nullptr`），否则 backing store 会盖掉 GL 画面。
+- 自检/CI 挂死：offscreen 平台没有 HWND，改走 STL 视口；`watch.mjs` / `sse.mjs` 在 Windows 上不再强制 offscreen。
+
+
 ### Added · CI 与文档守卫
 
 - 新增 `.github/workflows/ci.yml`（push main + pull_request）：`npm ci` → `tsc --noEmit` → `npm test` → `packs:validate` → `eval:agent` → `agent:report`。此前只有一个手动触发的 windows-build，PR 合并前没有自动验证。
