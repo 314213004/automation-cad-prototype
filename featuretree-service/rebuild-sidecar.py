@@ -120,6 +120,29 @@ def build(ops, density, document_id='demo-adapter'):
     }
 
 
+def export_stl_bytes(solid):
+    """把实体导成二进制 STL 字节。
+
+    不用 NamedTemporaryFile(delete=True)：Windows 下它会把文件句柄一直开着，
+    export_stl 再按路径打开同文件会失败，拿到的就是 0 字节 STL
+    （现象是 /stl 返回 200 但客户端画不出东西）。
+    """
+    import tempfile
+    from build123d import export_stl
+
+    fd, path = tempfile.mkstemp(suffix=".stl")
+    os.close(fd)
+    try:
+        export_stl(solid, path)
+        with open(path, "rb") as handle:
+            return handle.read()
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 静音默认访问日志
         sys.stderr.write("[rebuild] " + (fmt % args) + "\n")
@@ -142,12 +165,7 @@ class Handler(BaseHTTPRequestHandler):
                 if target_asm is None:
                     self._send(404, {"ok": False, "message": f"装配不存在：{asm_id}"})
                     return
-                import tempfile
-                from build123d import export_stl
-                with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as handle:
-                    export_stl(target_asm, handle.name)
-                    handle.seek(0)
-                    data = handle.read()
+                data = export_stl_bytes(target_asm)
                 self.send_response(200)
                 self.send_header("Content-Type", "model/stl")
                 self.send_header("Content-Length", str(len(data)))
@@ -163,12 +181,7 @@ class Handler(BaseHTTPRequestHandler):
             if target is None:
                 self._send(409, {"ok": False, "message": "还没有成功重建过，无几何可导出"})
                 return
-            import tempfile
-            from build123d import export_stl
-            with tempfile.NamedTemporaryFile(suffix=".stl", delete=True) as handle:
-                export_stl(target, handle.name)
-                handle.seek(0)
-                data = handle.read()
+            data = export_stl_bytes(target)
             self.send_response(200)
             self.send_header("Content-Type", "model/stl")
             self.send_header("Content-Length", str(len(data)))

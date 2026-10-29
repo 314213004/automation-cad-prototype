@@ -81,7 +81,9 @@ const DEFAULT_IDLE_MS = 10 * 60 * 1000;
 // 30 s 只够单件小特征；整机（28~94 件逐件导出 STEP/STL）实测 40~120 s，
 // 超时会被判 BUILD_FAILED 并回退 TS 网格，用户看到的就是"几何没生成"
 const DEFAULT_BUILD_TIMEOUT_MS = 180_000;
-const DEFAULT_HEALTH_TIMEOUT_MS = 3_000;
+// 冷启动 import build123d/OCP：Linux 约 3 s，Windows 实测 35 s。
+// 3 s 会让首次建模直接判"内核没起来"，用户看到的就是"几何没生成"。
+const DEFAULT_HEALTH_TIMEOUT_MS = 90_000;
 const DEFAULT_HEALTH_INTERVAL_MS = 300;
 const DEFAULT_PORT_START = 7430;
 const DEFAULT_PORT_END = 7449;

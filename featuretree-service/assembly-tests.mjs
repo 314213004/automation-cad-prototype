@@ -30,10 +30,11 @@ let sidecarOut = '';
 sidecar.stdout.setEncoding('utf8');
 sidecar.stdout.on('data', (chunk) => { sidecarOut += chunk; });
 let sidecarPort = '';
-for (let attempt = 0; attempt < 120 && !sidecarPort; attempt += 1) {
+// 同 build-tests：Windows 冷启动 import build123d 要 30 s 以上
+for (let attempt = 0; attempt < 200 && !sidecarPort; attempt += 1) {
   const match = sidecarOut.match(/http:\/\/127\.0\.0\.1:(\d+)/);
   if (match) sidecarPort = match[1];
-  else await sleep(200);
+  else await sleep(500);
 }
 if (!sidecarPort) {
   console.error('ASSEMBLY_TEST_FAIL sidecar 未起来', sidecarOut.slice(0, 200));

@@ -45,10 +45,12 @@ let sidecarOut = '';
 sidecar.stdout.setEncoding('utf8');
 sidecar.stdout.on('data', (chunk) => { sidecarOut += chunk; });
 let buildBase = '';
-for (let attempt = 0; attempt < 100 && !buildBase; attempt += 1) {
+// Windows 上冷启动 import build123d/OCP 实测 35 s（Linux 约 3 s），原来 100×150ms=15 s
+// 会误判"sidecar 未起来"。给到 100 s 再判失败。
+for (let attempt = 0; attempt < 200 && !buildBase; attempt += 1) {
   const match = sidecarOut.match(/http:\/\/127\.0\.0\.1:(\d+)/);
   if (match) buildBase = match[1];
-  else await sleep(150);
+  else await sleep(500);
 }
 if (!buildBase) {
   console.error('FT_BUILD_TEST_FAIL sidecar 未起来', sidecarOut.slice(0, 300));
