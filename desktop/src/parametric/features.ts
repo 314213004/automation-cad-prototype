@@ -55,7 +55,10 @@ export interface CompiledAssembly {
 }
 
 export const ASSEMBLY_SCHEMA_VERSION = 2 as const;
-export const MAX_ASSEMBLY_INSTANCES = 50;
+// 与 sidecar 的 MAX_INSTANCES 对齐：整机装配不止 50 件（立体缓存 56 件、光伏缓存堆叠 94 件）
+export const MAX_ASSEMBLY_INSTANCES = 200;
+/** 单次 POST /build 的实体数：内核一次布尔求和太多件会明显变慢，逐块提交更稳 */
+export const MAX_ASSEMBLY_CHUNK = 50;
 
 type UnknownRecord = Record<string, unknown>;
 

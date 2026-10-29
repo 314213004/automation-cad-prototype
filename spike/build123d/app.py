@@ -32,7 +32,9 @@ def load_kernel(wait: bool = True) -> bool:
         VERSION = getattr(_bd, "__version__", "unknown")
         _KERNEL_ERROR = ""
         return True
-MAX_INSTANCES = 50
+# 整机级装配不止 50 件：立体缓存（3 层 × 4 位）56 件、光伏缓存堆叠单元 94 件。
+# 上限按"分钟级建模"给：200 件实测仍在 180 s 预算内，再多应拆子装配。
+MAX_INSTANCES = 200
 
 
 def _num(value, name: str, minimum: float = 0.0) -> float:

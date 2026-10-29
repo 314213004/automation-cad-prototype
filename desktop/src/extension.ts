@@ -2041,7 +2041,7 @@ async function saveSceneAsProject(input?: unknown): Promise<Record<string, unkno
   }
   const sceneParts = viewer.getSceneParts();
   const envelope = unionEnvelope(sceneParts.map((part) => ({ min: part.bbox.min, max: part.bbox.max })));
-  const triangles = sceneParts.reduce((sum, part) => sum + (Number.isFinite(part.triangles) ? part.triangles : 0), 0);
+  const triangles = Math.round(sceneParts.reduce((sum, part) => sum + (Number.isFinite(part.triangles) ? Number(part.triangles) : 0), 0));
   const base = (currentFileName || '导入模型')
     .replace(/（\s*\d+\s*件\s*）\s*$/u, '')
     .replace(/\.(stp|step|stl|igs|iges|obj|3mf|x_t)$/i, '')

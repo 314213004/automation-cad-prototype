@@ -236,7 +236,11 @@ export function saveProject(userDataDir: string, input: ProjectSaveInput): { ok:
       id,
       name,
       process: String(input.process ?? 'unknown'),
-      params: input.params ?? {},
+      // params 只收有限数字：历史上有过 "11-128" 这种既不是数字也不是字符串的值写进工程，
+      // 读回来 JSON.parse 直接炸，工程被当成损坏文件跳过
+      params: Object.fromEntries(
+        Object.entries(input.params ?? {}).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+      ),
       parts: Number(input.parts ?? partsList.length),
       massKg: typeof input.massKg === 'number' ? input.massKg : null,
       envelope: input.envelope ?? null,

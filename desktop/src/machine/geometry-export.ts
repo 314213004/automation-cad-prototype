@@ -8,7 +8,7 @@
 
 import {
   ASSEMBLY_SCHEMA_VERSION,
-  MAX_ASSEMBLY_INSTANCES,
+  MAX_ASSEMBLY_CHUNK,
   type AssemblyDoc,
   type FeatureNode,
   type PartInstance
@@ -316,7 +316,7 @@ export function partSidecarFeatures(part: GeomPart): { features: FeatureNode[]; 
 }
 
 export interface SidecarAssemblyBundle {
-  /** 每块 ≤ MAX_ASSEMBLY_INSTANCES 个实体，可逐块 POST /build。 */
+  /** 每块 ≤ MAX_ASSEMBLY_CHUNK 个实体，可逐块 POST /build。 */
   chunks: AssemblyDoc[];
   instances: number;
   approximated: string[];
@@ -326,7 +326,7 @@ export function geometryToSidecarAssemblies(
   geometry: MachineGeometry,
   options: { updatedAt?: string; maxInstances?: number } = {}
 ): SidecarAssemblyBundle {
-  const max = Math.max(1, Math.min(MAX_ASSEMBLY_INSTANCES, options.maxInstances ?? MAX_ASSEMBLY_INSTANCES));
+  const max = Math.max(1, Math.min(MAX_ASSEMBLY_CHUNK, options.maxInstances ?? MAX_ASSEMBLY_CHUNK));
   const updatedAt = options.updatedAt ?? new Date().toISOString();
   const instances: PartInstance[] = [];
   const approximated: string[] = [];
