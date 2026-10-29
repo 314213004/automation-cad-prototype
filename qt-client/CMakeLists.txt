@@ -30,18 +30,36 @@ target_link_libraries(automationcad-qt PRIVATE Qt6::Widgets Qt6::Network Qt6::Op
 # 用来在本机复现 CI（CI 只装 Qt，没有 OCCT 头文件）。
 option(AUTOMATIONCAD_OCCT "启用 OCCT AIS 视口（找不到头文件时自动回退）" ON)
 
+# Windows 预编译 OCCT（conda-forge occt --no-deps，头文件在 include/opencascade、
+# 导入库 .lib 在 lib、运行库 .dll 在 bin）没有往系统里装，用 OCCT_ROOT 指过去；
+# Linux 继续按原来 /usr/include 找。
+set(OCCT_ROOT "" CACHE PATH "OCCT 根目录（其下应有 include/opencascade 与 lib）")
 find_path(OCCT_INCLUDE_FOUNDATION NAMES Standard.hxx
+    HINTS ${OCCT_ROOT}/include/opencascade ${OCCT_ROOT}/inc
     PATHS /usr/include/opencascade /usr/local/include/opencascade)
 find_path(OCCT_INCLUDE_AIS NAMES AIS_InteractiveContext.hxx
+    HINTS ${OCCT_ROOT}/include/opencascade ${OCCT_ROOT}/inc
     PATHS /usr/local/include/opencascade /usr/include/opencascade)
+find_path(OCCT_LIB_DIR NAMES TKernel.lib TKernel.so
+    HINTS ${OCCT_ROOT}/lib ${OCCT_ROOT}/win64/vc14/lib
+    PATHS /usr/lib/x86_64-linux-gnu /usr/local/lib /usr/lib)
 
 if(AUTOMATIONCAD_OCCT AND OCCT_INCLUDE_FOUNDATION AND OCCT_INCLUDE_AIS)
   message(STATUS "OCCT AIS 视口：启用（${OCCT_INCLUDE_FOUNDATION}; ${OCCT_INCLUDE_AIS}）")
   target_sources(automationcad-qt PRIVATE src/OcctViewport.cpp src/OcctViewport.h)
   target_include_directories(automationcad-qt PRIVATE ${OCCT_INCLUDE_FOUNDATION} ${OCCT_INCLUDE_AIS})
+  if(OCCT_LIB_DIR)
+    target_link_directories(automationcad-qt PRIVATE ${OCCT_LIB_DIR})
+  endif()
   target_compile_definitions(automationcad-qt PRIVATE AUTOMATIONCAD_HAVE_OCCT=1)
+  # OCCT 8.0 把 STL 读写从 TKSTL 拆到了 TKDESTL；7.x 还是 TKSTL。
+  # 按实际存在的库名挑，不写死版本。
+  find_library(OCCT_STL_LIB NAMES TKSTL TKDESTL HINTS ${OCCT_LIB_DIR})
+  if(NOT OCCT_STL_LIB)
+    message(STATUS "OCCT STL 库：未找到 TKSTL/TKDESTL，跳过 STL 导出链接")
+  endif()
   target_link_libraries(automationcad-qt PRIVATE
-      TKOpenGl TKV3d TKService TKMath TKBRep TKTopAlgo TKPrim TKSTL TKernel TKG3d TKGeomBase)
+      TKOpenGl TKV3d TKService TKMath TKBRep TKTopAlgo TKPrim ${OCCT_STL_LIB} TKernel TKG3d TKGeomBase)
 else()
   message(STATUS "OCCT AIS 视口：未启用（缺头文件），回退到 OpenGL STL 视口")
 endif()

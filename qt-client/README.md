@@ -328,3 +328,48 @@ QT_QPA_PLATFORM=offscreen node qt-client/tests/sse.mjs   --binary D:/build/qt-cl
 ```
 
 两个 e2e 在 Windows 上已通过：`QT_WATCH_OK`、`QT_SSE_OK`（SSE 延迟 357 ms）。
+
+## Windows + OCCT AIS 视口（2026-10-29 实测通过）
+
+AIS 视口要和 OCCT 的 C++ ABI 一致，不能用 MinGW 链 conda/官方那些 MSVC 编的库，
+所以这条链路改用 **MSVC 2022（本机已装 Community）+ Qt msvc2022_64 + OCCT 8.0.1**：
+
+| 组件 | 路径 | 说明 |
+|---|---|---|
+| MSVC | `C:\Program Files\Microsoft Visual Studio\2022\Community` | cl 14.44，vcvars64 |
+| Qt | `D:\Qt\6.8.3\msvc2022_64` | aqt 安装，qtbase |
+| OCCT | `D:\o\Library` | conda-forge `occt --no-deps` + 运行时依赖 |
+
+OCCT 装法（注意三件事：短路径、`--no-deps`、运行时依赖单独补）：
+
+```bash
+# 1) 只装 OCCT 本体（带 vtk 的全量依赖会拉 qt6-main/viskores，且长路径超 260 会解压失败）
+export MAMBA_ROOT_PREFIX=D:/m
+D:/Tools/micromamba/Library/bin/micromamba.exe create -y -p D:/o -c conda-forge occt --no-deps
+# 2) 补 AIS 需要的运行时 DLL（不做这步启动瞬间 0xC0000135）
+D:/Tools/micromamba/Library/bin/micromamba.exe install -y -p D:/o -c conda-forge \
+    freetype fontconfig tbb libexpat freeimage
+```
+
+构建：
+
+```bat
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+set PATH=D:\Qt\6.8.3\msvc2022_64\bin;D:\Qt\Tools\Ninja;D:\Qt\Tools\CMake_64\bin;%PATH%
+cmake -S qt-client -B D:/build/qt-occt -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+      -DCMAKE_PREFIX_PATH=D:/Qt/6.8.3/msvc2022_64 -DOCCT_ROOT=D:/o/Library
+cmake --build D:/build/qt-occt --parallel
+```
+
+配置阶段会打印 `OCCT AIS 视口：启用（D:/o/Library/include/opencascade; ...）`。
+
+运行要同时带上 Qt 与 OCCT 的 bin：
+
+```bat
+set PATH=D:\Qt\6.8.3\msvc2022_64\bin;D:\o\Library\bin;%PATH%
+D:\build\qt-occt\automationcad-qt.exe
+```
+
+OCCT 8.0 把 STL 从 `TKSTL` 拆成了 `TKDESTL`，CMakeLists 里按存在的库名挑，
+7.x/8.x 都能配；`--selftest` / `--export-selftest` 两个自检在 MSVC + OCCT 构建下同样通过
+（`QT_WATCH_OK`）。
