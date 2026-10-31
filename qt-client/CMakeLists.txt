@@ -48,7 +48,8 @@ find_path(OCCT_LIB_DIR NAMES TKernel.lib TKernel.so
 
 if(AUTOMATIONCAD_OCCT AND OCCT_INCLUDE_FOUNDATION AND OCCT_INCLUDE_AIS)
   message(STATUS "OCCT AIS 视口：启用（${OCCT_INCLUDE_FOUNDATION}; ${OCCT_INCLUDE_AIS}）")
-  target_sources(automationcad-qt PRIVATE src/OcctViewport.cpp src/OcctViewport.h)
+  target_sources(automationcad-qt PRIVATE src/OcctViewport.cpp src/OcctViewport.h
+      src/LinkageDialog.cpp src/LinkageDialog.h)
   target_include_directories(automationcad-qt PRIVATE ${OCCT_INCLUDE_FOUNDATION} ${OCCT_INCLUDE_AIS})
   if(OCCT_LIB_DIR)
     target_link_directories(automationcad-qt PRIVATE ${OCCT_LIB_DIR})
