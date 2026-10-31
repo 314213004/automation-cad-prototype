@@ -1,4 +1,5 @@
 import panelStyles from './panels.css?inline';
+import { syncToolMenu } from './tool-menu.ts';
 import { drawerIdForEntry } from './drawer-ids.ts';
 import { decideEntryBar } from './entry-bar.ts';
 
@@ -94,6 +95,9 @@ export function buildEntryButton(id: string, label: string, icon: string, onClic
     onClick();
   });
   target.appendChild(button);
+  // 新注册的入口直接进「工具」菜单：栏上留文字按钮会把顶栏顶爆，
+  // 降级成图标又认不出，所以入口统一收进菜单
+  syncToolMenu();
   syncEntryBarMode();
   return button;
 }

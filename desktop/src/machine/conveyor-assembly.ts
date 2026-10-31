@@ -41,15 +41,27 @@ export interface ConveyorParams {
   beltThicknessMm: number;
   /** 型材截面，mm（40 表示 4040） */
   frameSectionMm: number;
+  /**
+   * 缓存层数（1 = 普通输送线；≥2 = 立体缓存：底层输送 + 上方多层托架 + 升降机构）。
+   * 层高由 layerPitchMm 决定，层位从皮带面往上排。省略即单层。
+   */
+  layers?: number;
+  /** 层间距，mm（layers ≥ 2 时才有意义） */
+  layerPitchMm?: number;
 }
 
-export const DEFAULT_CONVEYOR: ConveyorParams = {
+/** 归一化之后的参数：层数一定存在，内部构建器只用这个类型。 */
+export type ResolvedConveyorParams = ConveyorParams & { layers: number; layerPitchMm: number };
+
+export const DEFAULT_CONVEYOR: Required<ConveyorParams> = {
   lengthMm: 2000,
   widthMm: 300,
   beltHeightMm: 850,
   pulleyDiameterMm: 50,
   beltThicknessMm: 4,
-  frameSectionMm: 40
+  frameSectionMm: 40,
+  layers: 1,
+  layerPitchMm: 400
 };
 
 export interface ConveyorPart {
@@ -88,6 +100,12 @@ function cylinder(id: string, name: string, diameter: number, height: number, ax
  */
 export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
   const p = normalizeParams(params);
+  const parts = buildSingleLayerParts(p);
+  // 立体缓存：底层还是输送线（进出料），上方按层数叠托架 + 一套升降机构
+  return p.layers > 1 ? [...parts, ...buildBufferStackParts(p)] : parts;
+}
+
+function buildSingleLayerParts(p: ResolvedConveyorParams): ConveyorPart[] {
   const halfL = p.lengthMm / 2;
   const halfW = p.widthMm / 2;
   const section = p.frameSectionMm;
@@ -290,7 +308,163 @@ export function buildConveyorParts(params: ConveyorParams): ConveyorPart[] {
   return parts;
 }
 
-function normalizeParams(params: Partial<ConveyorParams> | undefined): ConveyorParams {
+/**
+ * 立体缓存叠加层（layers ≥ 2）：4 根缓存立柱 + 每层托条/托板/传动辊/挡停 + 一套升降机构。
+ *
+ * 为什么单独一段而不是把单层线体按层复制：缓存机型的进出料仍然只有底层一条输送线，
+ * 上方各层是储位（托条 + 托板），靠一套升降台在层间搬运。复制线体会把皮带、滚筒、
+ * 电机按层数翻倍，既不真实也会让 BOM 里出现 3 条皮带的荒唐行。
+ */
+function buildBufferStackParts(p: ResolvedConveyorParams): ConveyorPart[] {
+  const parts: ConveyorPart[] = [];
+  const section = p.frameSectionMm;
+  const halfL = p.lengthMm / 2;
+  const halfW = p.widthMm / 2;
+  const outerY = halfW + section / 2 + 15;
+  const layerCount = p.layers;
+  const topLayerZ = p.beltHeightMm + (layerCount - 1) * p.layerPitchMm;
+  const columnH = topLayerZ + 240;
+  const columnY = outerY + section / 2 + 40;
+  const columnX = halfL - 120;
+
+  // 1) 缓存立柱：4 根，立在纵梁外侧（不与侧挡边、支腿、横撑同位置）
+  const columns: Array<[string, number, number]> = [
+    ['fl', -columnX, -columnY],
+    ['fr', -columnX, columnY],
+    ['bl', columnX, -columnY],
+    ['br', columnX, columnY]
+  ];
+  columns.forEach(([label, x, y], index) => {
+    parts.push({
+      id: `column-${label}`,
+      name: `缓存立柱 ${index + 1}`,
+      material: 'AL6063',
+      spec: `${section}×${section} × ${Math.round(columnH)}`,
+      features: [box(`column-${label}-body`, '型材', section, section, columnH)],
+      transform: { x: round(x), y: round(y), z: round(columnH / 2), rz: 0 }
+    });
+  });
+
+  // 2) 顶部横梁：把四根立柱在 Y 向连成门架，托架层才有支点
+  for (const [label, sign] of [['front', -1], ['back', 1]] as const) {
+    parts.push({
+      id: `top-beam-${label}`,
+      name: `顶部横梁（${label === 'front' ? '前' : '后'}）`,
+      material: 'AL6063',
+      spec: `${section}×${section} × ${Math.round(p.lengthMm - 200)}`,
+      features: [box(`top-beam-${label}-body`, '横梁', p.lengthMm - 240, section, section)],
+      transform: { x: 0, y: sign * columnY, z: round(topLayerZ + 200), rz: 0 }
+    });
+  }
+
+  // 3) 逐层储位：第 2 层起（第 1 层就是底层输送线）
+  for (let layer = 2; layer <= layerCount; layer += 1) {
+    const layerZ = p.beltHeightMm + (layer - 1) * p.layerPitchMm;
+    // 托条：两根沿 X，托住托盘两侧长边
+    for (const [label, sign] of [['left', -1], ['right', 1]] as const) {
+      parts.push({
+        id: `tray-rail-${layer}-${label}`,
+        name: `第 ${layer} 层托条（${label === 'left' ? '左' : '右'}）`,
+        material: 'AL6063',
+        spec: `${section}×${section} × ${Math.round(p.lengthMm - 320)}`,
+        features: [box(`tray-rail-${layer}-${label}-body`, '托条', p.lengthMm - 320, section, section)],
+        transform: { x: 0, y: sign * round(halfW * 0.55), z: round(layerZ - section / 2), rz: 0 }
+      });
+    }
+    // 托板：放在托条上，留 5mm 高度间隙，避免和托条共面被算成干涉
+    parts.push({
+      id: `tray-${layer}`,
+      name: `第 ${layer} 层托板`,
+      material: 'Q235',
+      spec: `3 × ${Math.round(p.widthMm * 0.9)} × ${Math.round(p.lengthMm - 340)}`,
+      features: [box(`tray-${layer}-body`, '托板', p.lengthMm - 340, round(p.widthMm * 0.9), 3)],
+      transform: { x: 0, y: 0, z: round(layerZ + 3 + 2), rz: 0 }
+    });
+    // 层内传动辊：进出各一根，托板中间让开
+    for (const [label, sign] of [['in', -1], ['out', 1]] as const) {
+      parts.push({
+        id: `tray-roller-${layer}-${label}`,
+        name: `第 ${layer} 层传动辊（${label === 'in' ? '进' : '出'}）`,
+        material: 'STEEL45',
+        spec: `φ${p.pulleyDiameterMm} × ${Math.round(p.widthMm * 0.85)}`,
+        massOverrideKg: 2.4,
+        features: [cylinder(`tray-roller-${layer}-${label}-body`, '辊筒', p.pulleyDiameterMm, round(p.widthMm * 0.85), 'y')],
+        transform: { x: sign * round(halfL - 220), y: 0, z: round(layerZ + 16), rz: 0 }
+      });
+    }
+    // 出口挡停：装在托板上方，挡住托盘
+    parts.push({
+      id: `stop-${layer}`,
+      name: `第 ${layer} 层挡停板`,
+      material: 'Q235',
+      spec: `3 × ${Math.round(p.widthMm * 0.8)} × 60`,
+      features: [box(`stop-${layer}-body`, '挡停板', 3, round(p.widthMm * 0.8), 60)],
+      transform: { x: round(halfL - 190), y: 0, z: round(layerZ + 36), rz: 0 }
+    });
+    // 层到位检测（每层一只，简化成 M12 传感器本体）
+    parts.push({
+      id: `layer-sensor-${layer}`,
+      name: `第 ${layer} 层到位光电`,
+      material: 'Q235',
+      spec: 'M12 漫反射光电',
+      massOverrideKg: 0.08,
+      features: [cylinder(`layer-sensor-${layer}-body`, 'M12 光电', 12, 40, 'y')],
+      transform: { x: round(-halfL + 300), y: round(halfW + 12), z: round(layerZ + 30), rz: 0 }
+    });
+  }
+
+  // 4) 升降机构：2 根导柱 + 升降台 + 升降电机 + 2 条链条
+  const travel = (layerCount - 1) * p.layerPitchMm;
+  const postH = travel + 320;
+  for (const [label, sign] of [['left', -1], ['right', 1]] as const) {
+    parts.push({
+      id: `lift-post-${label}`,
+      name: `升降导柱（${label === 'left' ? '左' : '右'}）`,
+      material: 'STEEL45',
+      spec: `φ${section} × ${Math.round(postH)}`,
+      features: [cylinder(`lift-post-${label}-body`, '导柱', section, postH, 'z')],
+      transform: { x: round(-halfL + 60), y: sign * round(halfW * 0.8), z: round(postH / 2 + 20), rz: 0 }
+    });
+    parts.push({
+      id: `lift-chain-${label}`,
+      name: `升降链条（${label === 'left' ? '左' : '右'}）`,
+      material: 'STEEL45',
+      spec: `8B 单排 × ${Math.round(travel + 200)}`,
+      massOverrideKg: 1.6,
+      features: [box(`lift-chain-${label}-body`, '链条', 10, 12, travel + 200)],
+      transform: { x: round(-halfL + 60), y: sign * round(halfW * 0.8), z: round((travel + 200) / 2 + 90), rz: 0 }
+    });
+  }
+  // 升降台：位于底层输送线上方一个层距处，宽度略小于皮带，避免压挡边
+  parts.push({
+    id: 'lift-platform',
+    name: '升降台',
+    material: 'Q235',
+    spec: `${Math.round(p.widthMm * 0.9)} × 320 × 16`,
+    features: [
+      box('lift-platform-body', '台面', 320, round(p.widthMm * 0.9), 16),
+      box('lift-platform-guide', '导向块', 60, 60, 40)
+    ],
+    transform: { x: round(-halfL + 240), y: 0, z: round(p.beltHeightMm + p.layerPitchMm * 0.5), rz: 0 }
+  });
+  parts.push({
+    id: 'lift-motor',
+    name: '升降减速电机',
+    material: 'Q235',
+    spec: '0.75 kW · i=40 · 带制动',
+    massOverrideKg: 12.5,
+    features: [
+      box('lift-motor-body', '电机+减速箱', 180, 140, 160),
+      cylinder('lift-motor-shaft', '输出轴', 25, 70, 'y', [0, -60, 0])
+    ],
+    // 挂在左侧立柱外侧，留 5mm 安装面
+    transform: { x: round(-halfL + 60), y: round(-(columnY + section / 2 + 80)), z: round(p.beltHeightMm), rz: 0 }
+  });
+
+  return parts;
+}
+
+function normalizeParams(params: Partial<ConveyorParams> | undefined): ResolvedConveyorParams {
   const merged = { ...DEFAULT_CONVEYOR, ...(params ?? {}) };
   const positive = (value: number, fallback: number): number =>
     Number.isFinite(value) && value > 0 ? value : fallback;
@@ -300,7 +474,9 @@ function normalizeParams(params: Partial<ConveyorParams> | undefined): ConveyorP
   const pulleyDiameterMm = clamp(positive(merged.pulleyDiameterMm, DEFAULT_CONVEYOR.pulleyDiameterMm), 20, 200);
   const beltThicknessMm = clamp(positive(merged.beltThicknessMm, DEFAULT_CONVEYOR.beltThicknessMm), 1, 20);
   const frameSectionMm = clamp(positive(merged.frameSectionMm, DEFAULT_CONVEYOR.frameSectionMm), 20, 100);
-  return { lengthMm, widthMm, beltHeightMm, pulleyDiameterMm, beltThicknessMm, frameSectionMm };
+  const layers = clamp(Math.round(positive(merged.layers ?? DEFAULT_CONVEYOR.layers, 1)), 1, 8);
+  const layerPitchMm = clamp(positive(merged.layerPitchMm ?? DEFAULT_CONVEYOR.layerPitchMm, 400), 250, 900);
+  return { lengthMm, widthMm, beltHeightMm, pulleyDiameterMm, beltThicknessMm, frameSectionMm, layers, layerPitchMm };
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -1,7 +1,8 @@
 // 六工位锁螺丝机全流程截图。使用本地 OpenAI 兼容桩驱动真实智能体会话，
 // 所有画面均由 Electron 渲染后 capturePage 捕获，不使用静态设计稿。
-import { type BrowserWindow } from 'electron';
-import { mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { nativeImage, type BrowserWindow } from 'electron';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 const SHOT_WIDTH = 1600;
@@ -102,28 +103,65 @@ function uniqueColorCount(bitmap: Buffer): number {
   return seen.size;
 }
 
+/**
+ * xvfb + SwiftShader 下 `webContents.capturePage()` 会一直返回第一帧（实测 15/16/17/18
+ * 字节完全相同），但 CDP 的 Page.captureScreenshot 是重新合成后再取，能拿到当前画面。
+ */
+/**
+ * 抓图说明（2026-10-27 审计）：
+ * xvfb + SwiftShader 下 capturePage / CDP Page.captureScreenshot 都返回同一张首帧
+ * （实测 15/16/17/18 字节完全相同），desktopCapturer 在无窗口管理器的 xvfb 里又没有窗口源。
+ * 因此这里保留最简单的 capturePage，由调用方用 sha256 去重——重复即报错，
+ * 不再产出「四张不同面板」的假截图。真正的修法是换通道（外部 CDP 连可见窗口，已在本机验证可拿到不同帧）。
+ */
+/**
+ * 抓图通道（2026-10-27 结论修正）：
+ * 一开始以为是渲染进程帧冻结，加了 ffmpeg x11grab 旁路；后来查明真因是**流程从没离开首页**
+ * （所有操作都在首页遮罩下进行），修掉首页那步之后 `capturePage()` 本身就稳定给出四个不同画面
+ * （本机连续两次实跑、CI 一次实跑都 4 张互异）。所以这里回到最简单的 capturePage，
+ * 不再依赖 ffmpeg / Xauthority，去重守卫保留——四张雷同时直接报错。
+ */
+async function grabPng(window: BrowserWindow): Promise<Buffer> {
+  const image = await window.webContents.capturePage();
+  return image.toPNG();
+}
+
 async function capture(
   window: BrowserWindow,
   outputDir: string,
   name: string,
-  label: string
+  label: string,
+  seenHashes: Map<string, string>
 ): Promise<MachineShotValidation> {
   await window.webContents.executeJavaScript(
     `document.getElementById('cadNotice')?.classList.remove('is-on');
      document.getElementById('acpToast')?.classList.remove('is-on'); true`
   );
   await settle(window);
-  const image = await window.webContents.capturePage();
+  // xvfb + SwiftShader 下窗口可能被判为被遮挡，合成器不产新帧，capturePage 会重复返回同一张。
+  // 先确保窗口可见并主动作废一帧，再等两个 rAF，最后才抓图。
+  if (!window.isVisible()) window.showInactive();
+  window.webContents.invalidate();
+  await settle(window, 320);
+  const png = await grabPng(window);
+  const image = nativeImage.createFromBuffer(png);
   const { width, height } = image.getSize();
   if (width !== SHOT_WIDTH || height !== SHOT_HEIGHT) {
     throw new Error(`${name} 尺寸 ${width}×${height}，期望 ${SHOT_WIDTH}×${SHOT_HEIGHT}`);
   }
-  const png = image.toPNG();
+  // 四张图必须真的是四个画面：字节级重复说明抓到的是同一帧（合成器没刷新），
+  // 这种「看起来成功」的截图比失败更糟，直接报错。
+  const hash = createHash('sha256').update(png).digest('hex');
+  const duplicateOf = seenHashes.get(hash);
+  if (duplicateOf) {
+    throw new Error(`${name} 与 ${duplicateOf} 字节完全相同，抓到的是同一帧（画面没刷新）`);
+  }
+  seenHashes.set(hash, name);
   const target = join(outputDir, name);
   writeFileSync(target, png);
   const bytes = statSync(target).size;
   if (bytes <= 20 * 1024) throw new Error(`${name} 仅 ${bytes} 字节，疑似空白`);
-  const uniqueColors = uniqueColorCount(image.toBitmap());
+  const uniqueColors = uniqueColorCount(nativeImage.createFromBuffer(png).toBitmap());
   if (uniqueColors <= 500) throw new Error(`${name} 唯一色数 ${uniqueColors}，疑似单色/空白`);
   console.log(`MACHINE_SHOT_OK name=${name} label=${label} size=${width}x${height} bytes=${bytes} colors=${uniqueColors}`);
   return { label, name, width, height, bytes, uniqueColors };
@@ -142,6 +180,7 @@ export async function captureMachineScreenshots(
   if (!baseUrl) throw new Error('缺少 AUTOMATIONCAD_STUB_BASE_URL，无法启动离线模型桩');
 
   window.setContentSize(SHOT_WIDTH, SHOT_HEIGHT);
+  window.webContents.setBackgroundThrottling(false);
   await delay(350);
   await waitForExtension(window);
 
@@ -158,10 +197,18 @@ export async function captureMachineScreenshots(
   );
 
   const shots: MachineShotValidation[] = [];
+  const seenHashes = new Map<string, string>();
   try {
     await window.webContents.executeJavaScript(
       `(async () => {
         const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        // 启动后停在首页；不先离开首页，后面所有操作都在首页底下进行，
+        // 抓到的四张图就都是首页（这正是之前「四张图字节相同」的真正原因）。
+        const home = document.getElementById('homeScreen');
+        if (home && !home.hidden) {
+          document.querySelector('.home-link')?.click();
+          await wait(600);
+        }
         window.AutomationCadViewer?.close();
         window.AutomationCadParametric?.close();
         document.getElementById('commissionDrawer')?.setAttribute('hidden', '');
@@ -246,7 +293,7 @@ export async function captureMachineScreenshots(
     if (!(cardState.warnings ?? []).some((text) => text.includes('缺价'))) {
       throw new Error(`方案卡缺少成本缺价警告：${JSON.stringify(cardState.warnings)}`);
     }
-    shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡'));
+    shots.push(await capture(window, options.outputDir, '15-machine-design-card.png', '机型方案卡', seenHashes));
 
     // 写操作确认现在是页面卡片：截图脚本无人值守，必须在点「应用」前装自动确认
     // （只点「允许一次」，不写死 remember；计数回读写进日志，免得看不出到底弹没弹）
@@ -357,7 +404,7 @@ export async function captureMachineScreenshots(
       throw new Error(`3D 场景状态异常：${JSON.stringify(sceneStats)}`);
     }
     console.log(`MACHINE_3D_OK stations=${sceneStats.stations} actuators=${sceneStats.actuators} sensors=${sceneStats.sensors} ticks=${sceneStats.ticks}`);
-    shots.push(await capture(window, options.outputDir, '16-machine-3d.png', '6 工位 3D 联调'));
+    shots.push(await capture(window, options.outputDir, '16-machine-3d.png', '6 工位 3D 联调', seenHashes));
 
     await window.webContents.executeJavaScript(
       `(async () => {
@@ -396,7 +443,7 @@ export async function captureMachineScreenshots(
         !bomState.hasValve || !bomState.hasCurtain || bomState.hasPending || !bomState.paneOpen) {
       throw new Error(`BOM 面板内容不完整：${JSON.stringify(bomState)}`);
     }
-    shots.push(await capture(window, options.outputDir, '17-machine-bom.png', 'BOM 真实型号'));
+    shots.push(await capture(window, options.outputDir, '17-machine-bom.png', 'BOM 真实型号', seenHashes));
 
     await window.webContents.executeJavaScript(
       `(async () => {
@@ -430,7 +477,7 @@ export async function captureMachineScreenshots(
       throw new Error(`IO 点位面板不完整：${JSON.stringify(ioState)}`);
     }
     console.log(`MACHINE_IOMAP_OK rows=${ioState.rows} meta=${String(ioState.meta)}`);
-    shots.push(await capture(window, options.outputDir, '18-machine-iomap.png', 'PLC IO 点位'));
+    shots.push(await capture(window, options.outputDir, '18-machine-iomap.png', 'PLC IO 点位', seenHashes));
 
     const validationFile = join(evalDir, 'machine-screenshots.json');
     writeFileSync(validationFile, `${JSON.stringify({
@@ -458,6 +505,189 @@ export async function captureMachineScreenshots(
       // 失败报告是辅助信息，不覆盖原始错误。
       console.warn(`[MACHINE_SCREENSHOT_FAILURE_REPORT]`, { site: 'desktop/electron/machine-screenshots.ts:398' }, error);
     }
+    return { captured: shots.length, failed: 1 };
+  }
+}
+
+/**
+ * 「从零建一台机器」的分步截图：整机设计向导 5 步 + 保存后的 3D + BOM + IO。
+ * 与 captureMachineScreenshots 的区别是**不走智能体**，纯手工走向导，
+ * 这样每一步的界面状态都能单独截下来当证据（哪一步填了什么、候选长什么样）。
+ */
+export async function captureDesignWizardScreenshots(
+  window: BrowserWindow,
+  options: MachineScreenshotOptions
+): Promise<{ captured: number; failed: number }> {
+  mkdirSync(options.outputDir, { recursive: true });
+  const shots: MachineShotValidation[] = [];
+  const seenHashes = new Map<string, string>();
+  const step = (name: string, label: string) => capture(window, options.outputDir, name, label, seenHashes);
+
+  window.setContentSize(SHOT_WIDTH, SHOT_HEIGHT);
+  window.webContents.setBackgroundThrottling(false);
+  await delay(350);
+  await waitForExtension(window);
+
+  try {
+    // 0. 首页（还没开始建机）
+    shots.push(await step('20-wizard-00-home.png', '首页：整机设计入口'));
+
+    // 1. 第一步：基本信息
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const home = document.getElementById('homeScreen');
+        if (home && !home.hidden) { document.querySelector('.home-link')?.click(); await wait(600); }
+        window.AutomationCadViewer?.close();
+        window.AutomationCadParametric?.close();
+        await window.desktop.design.clearDraft();
+        document.getElementById('designWizardEntry').click();
+        await wait(700);
+        const root = document.getElementById('designWizard');
+        const set = (name, value) => {
+          const field = root.querySelector('[name="' + name + '"]');
+          if (!field) throw new Error('字段缺失：' + name);
+          field.value = value;
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        set('name', '从零建机演示');
+        set('stations', '3');
+        set('cyclePerMin', '10');
+        set('lengthMm', '2400');
+        set('widthMm', '1600');
+        await wait(200);
+        return true;
+      })()`
+    );
+    await settle(window, 300);
+    shots.push(await step('20-wizard-01-brief.png', '第 1 步：工艺与节拍'));
+
+    // 2. 第二步：形态候选（3 个方案 + 预测节拍）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]').click();
+        await wait(1600);
+        if (root.querySelectorAll('[data-candidate]').length < 3) throw new Error('候选未生成');
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-02-candidates.png', '第 2 步：形态候选'));
+
+    // 2b. 候选预览（3D 缩略）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-preview="0"]')?.click();
+        await wait(700);
+        return true;
+      })()`
+    );
+    await settle(window, 300);
+    shots.push(await step('20-wizard-03-candidate-preview.png', '候选预览'));
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const root = document.getElementById('designWizard');
+        root.querySelector('#designPreviewClose')?.click();
+        root.querySelector('[data-action="next"]').click();
+        await new Promise((r) => setTimeout(r, 400));
+        return true;
+      })()`
+    );
+
+    // 3. 第三步：工位与执行机构（在第 3 工位加一个执行机构，让点位自动分配可见）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelectorAll('[data-station]')[2]?.click();
+        await wait(120);
+        root.querySelector('[data-action="add-actuator"]')?.click();
+        await wait(250);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-04-stations.png', '第 3 步：工位与执行机构'));
+
+    // 4. 第四步：布局
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]').click();
+        await new Promise((r) => setTimeout(r, 500));
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-05-layout.png', '第 4 步：布局'));
+
+    // 5. 第五步：评审
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-action="next"]')?.click();
+        await wait(300);
+        root.querySelector('[data-action="run-review"]')?.click();
+        await wait(600);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-06-review.png', '第 5 步：评审与保存'));
+
+    // 5b. 在第 5 步真的生成一次 BOM（不是空面板）
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        root.querySelector('[data-output="bom"]')?.click();
+        await wait(900);
+        return true;
+      })()`
+    );
+    await settle(window, 350);
+    shots.push(await step('20-wizard-06b-bom-generated.png', '第 5 步：生成 BOM'));
+
+    // 6. 保存为工程 → 3D
+    await window.webContents.executeJavaScript(
+      `(async () => {
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        const root = document.getElementById('designWizard');
+        const save = root.querySelector('[data-action="save-project"]');
+        if (!save) throw new Error('保存按钮缺失');
+        if (save.disabled) {
+          const notice = root.querySelector('.design-content')?.textContent || '';
+          throw new Error('保存按钮不可用（评审未通过）：' + notice.slice(0, 300));
+        }
+        save.click();
+        // 概念保存后向导不会自己关（要等用户点「保存并关闭」），所以这里显式走同一路径
+        await wait(2200);
+        const state = document.getElementById('designSaveState')?.textContent || '';
+        root.querySelector('[data-action="close"]')?.click();
+        for (let i = 0; i < 120 && !root.hidden; i += 1) await wait(250);
+        if (!root.hidden) throw new Error('保存后向导仍未关闭：' + state.slice(0, 200));
+        window.AutomationCadKinematics?.close();
+        document.querySelector('#cadEntryButton')?.click();
+        await wait(900);
+        return true;
+      })()`
+    );
+    await waitFor(window, `(document.getElementById('cadPartCount')?.textContent || '').trim().length > 0`, '3D 零件数就绪', 30_000);
+    await settle(window, 500);
+    shots.push(await step('20-wizard-07-3d.png', '保存后：3D 联调'));
+
+    // 注意：向导路径保存的是「概念工程」，CAD 面板里的 BOM/IO 要「应用机型方案」才有内容，
+    // 所以这里不抓那两张空面板——BOM 已在第 5 步用「生成 BOM」落成 CSV（06b）。
+
+    console.log(`DESIGN_WIZARD_SHOTS_DONE captured=${shots.length} failed=0`);
+    return { captured: shots.length, failed: 0 };
+  } catch (error) {
+    console.error('DESIGN_WIZARD_SHOTS_FAIL', error);
     return { captured: shots.length, failed: 1 };
   }
 }

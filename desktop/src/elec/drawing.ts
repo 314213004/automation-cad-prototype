@@ -137,14 +137,14 @@ function wireNoCandidates(points: readonly Pt[], value: string, net: string): Te
       if (y2 - y1 < size + 1.6) {
         // 短线：线号以线段中点为中心，允许探出线段（仍须不压任何笔画）
         if (y2 - y1 < 1.5) continue;
-        out.push({ d: 5, t: P.text(a[0] + 0.8, mid + size * 0.35, value, size, 'start', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
-        out.push({ d: 5.5, t: P.text(a[0] - 0.8, mid + size * 0.35, value, size, 'end', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d: 5, t: P.text(a[0] + 0.8, mid + size * 0.35, value, size, 'start', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d: 5.5, t: P.text(a[0] - 0.8, mid + size * 0.35, value, size, 'end', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
         continue;
       }
       for (let y = y1 + size + 0.6; y <= y2 - 0.6; y += 1.2) {
         const d = Math.abs(y - size * 0.3 - mid);
-        out.push({ d, t: P.text(a[0] + 0.8, y, value, size, 'start', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
-        out.push({ d: d + 0.5, t: P.text(a[0] - 0.8, y, value, size, 'end', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d, t: P.text(a[0] + 0.8, y, value, size, 'start', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d: d + 0.5, t: P.text(a[0] - 0.8, y, value, size, 'end', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
       }
     } else if (Math.abs(a[1] - b[1]) < 1e-6) {
       const x1 = Math.min(a[0], b[0]);
@@ -153,8 +153,8 @@ function wireNoCandidates(points: readonly Pt[], value: string, net: string): Te
       const mid = (x1 + x2) / 2;
       for (let x = x1 + w / 2 + 1; x <= x2 - w / 2 - 1; x += 1.5) {
         const d = Math.abs(x - mid);
-        out.push({ d, t: P.text(x, a[1] - 0.8, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
-        out.push({ d: d + 0.5, t: P.text(x, a[1] + 2.6, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d, t: P.text(x, a[1] - 0.8, value, size, 'middle', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
+        out.push({ d: d + 0.5, t: P.text(x, a[1] + 2.6, value, size, 'middle', 'it-s wn', 'text', { owner: net, role: 'wire-no' }) });
       }
     }
     void len;
@@ -172,8 +172,8 @@ function wireNoCandidates(points: readonly Pt[], value: string, net: string): Te
     const ys = y2 - y1 >= w + 1.2 ? Array.from({ length: Math.floor((y2 - y1 - w - 1.2) / 1.2) + 1 }, (_, k) => y1 + 0.6 + w / 2 + k * 1.2) : [mid];
     for (const y of ys) {
       const d = Math.abs(y - mid);
-      const right = { ...P.text(a[0] + 0.5 + 0.8 * size, y, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
-      const left = { ...P.text(a[0] - 0.5 - 0.22 * size, y, value, size, 'middle', 'it-s', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
+      const right = { ...P.text(a[0] + 0.5 + 0.8 * size, y, value, size, 'middle', 'it-s wn', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
+      const left = { ...P.text(a[0] - 0.5 - 0.22 * size, y, value, size, 'middle', 'it-s wn', 'text', { owner: net, role: 'wire-no' }), rot: 90 as const };
       rotated.push({ d, t: right }, { d: d + 0.5, t: left });
     }
   }

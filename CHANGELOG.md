@@ -2,7 +2,52 @@
 
 本文件按 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 组织，版本号遵循语义化版本。
 
-## [未发布] - 2026-10-26
+## [0.5.0] - 2026-10-27
+
+### Added · 缓存机台与 Qt 原生客户端（2026-10-29）
+
+- `build_machine_model` 增加 `brief` 参数：一句中文需求（"立体缓存机台：3 层缓存、每层 4 个储位，线体长 3000mm、带宽 1200mm、层间距 400mm"）直接出整机。`detectBufferLayers()` 用负向后顾读层数，避免"12 层"被读成 2 层。
+- 立体缓存机型：`layers ≥ 2` 时按层生成托条/托板/传动辊/挡停/到位光电，外加一套升降机构，不再把缓存机台画成单层输送线。
+- 工程自动入库：`build_machine_model` 成功后写 `userData/projects/<id>/`（`project.json` + `model.step` + `model.stl` + 逐件 `parts/NN-*.stl`），CAD 顶栏下拉可直接重开。
+- Qt 原生客户端接上 OCCT AIS 视口（MSVC 2022 + Qt 6.8.3 + OCCT 7.9.3），README 补了 Windows 安装/构建/运行全过程，含 `occt --no-deps` 与运行时 DLL 两个坑。
+
+### Fixed · 缓存机台整机
+
+- 装配实体上限 50 → 200，单次布尔仍按 50 分块（`MAX_ASSEMBLY_CHUNK`），3 层 56 件不再被拦。
+- 内核建模超时 30s → 180s，渲染桥对 `buildMachineModel` 单独给 240s 预算（原来 10s 直接判 `RENDERER_TIMEOUT`）。
+- 参数脏值（`11-128` 这类）只保留有限数字；存工程时带上场景可信质量；内核冷启动健康检查 3s → 90s；STL 导出用 mkstemp 避免 Windows 返回 0 字节。
+
+### Fixed · Qt 客户端
+
+- 加载几何崩溃 `0xC0000005`：`loadFromUrl` 的 lambda 读成员 `m_pending` 而不是连接时的 reply，两次请求交错时拿到未结束的新 reply，旧 reply 成了野指针。改为捕获 reply + 同 URL 去重、换 URL 排队（顺带解决 `abort()` 同步发信号导致的挂死）。
+- 视口纯黑：Windows 上 `Aspect_NeutralWindow` 建不出 GL 上下文，改用 `WNT_Window`；Qt 侧让出绘制权（`WA_PaintOnScreen` + `paintEngine()` 返回 `nullptr`），否则 backing store 会盖掉 GL 画面。
+- 自检/CI 挂死：offscreen 平台没有 HWND，改走 STL 视口；`watch.mjs` / `sse.mjs` 在 Windows 上不再强制 offscreen。
+
+
+### Added · CI 与文档守卫
+
+- 新增 `.github/workflows/ci.yml`（push main + pull_request）：`npm ci` → `tsc --noEmit` → `npm test` → `packs:validate` → `eval:agent` → `agent:report`。此前只有一个手动触发的 windows-build，PR 合并前没有自动验证。
+- 新增 `test/agent/tool-count-doc.test.mjs`：工具注册表必须与 READ_ONLY/WRITE 分类一一对应，且 README / NL-AGENT / MODULE.md / router 注释里的工具数量、README 工具清单必须一致。
+- 新增 `test/agent/kb-freshness.test.mjs`：现场重建知识索引并与提交版逐块比对，改文档忘记 `npm run kb:build` 会直接失败。
+
+### Fixed · 离线规则路由
+
+- `build_canvas_assembly` / `save_scene_as_project` 之前既没有离线规则也没有评估用例，`npm run eval:agent` 一直是红的。补规则（必须写在意图门与 `build_machine_model` 之前）+ generate 意图词 + 2 条用例，评估集 109 → 111 条，`accuracy/tools/refused` 全 1.00。
+
+### Fixed · 机型四张截图其实是同一张首页
+
+- 症状：15/16/17/18 字节完全相同，而 DOM 断言全过。真因是流程从首页开始、始终没离开首页（在首页遮罩下操作）。
+- 修法：流程开头先点 `.home-link` 离开首页；抓图改走 `ffmpeg -f x11grab` 抓 X 服务器像素（`capture-machine-screenshots.mjs` 提供 `/shot` 旁路，主进程传窗口矩形与 `XAUTHORITY`）；保留 sha256 去重守卫。
+- 结果：四张图各不相同（344,689 / 377,971 / 135,247 / 125,528 字节，色数 6,893 / 12,036 / 2,871 / 3,032）。
+
+### Fixed · 工程视图只保留一套零件列表
+
+- CAD 覆盖层打开时隐藏经典结构树（`body.cad-overlay-open`），关闭后恢复，避免两处搜索来回切。
+
+### Fixed · 文档数字与真实注册表对齐
+
+- 工具数 22/21 → **25（只读 12 + 写 13）**；README 工具集补上漏掉的 3 个工具；kb chunks 354 → 348。
+
 
 ### Added · 整机设计五步向导（`desktop/src/design/`）
 

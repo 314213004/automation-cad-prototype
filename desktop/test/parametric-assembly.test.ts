@@ -143,15 +143,15 @@ test('assembly 校验：transform 非数字被拒绝', () => {
   assert.equal(errors.filter((message) => message.includes('transform')).length >= 2, true);
 });
 
-test('assembly 校验：实体数超过 50 被拒绝', () => {
+test('assembly 校验：实体数超过上限被拒绝（整机上限定 200，内核单次装配同值）', () => {
   const instances = Array.from({ length: MAX_ASSEMBLY_INSTANCES + 1 }, (_value, index) =>
     instance({ id: `p${index + 1}`, name: `零件 ${index + 1}` })
   );
   const errors = validateAssembly(assembly(instances));
-  assert.ok(errors.some((message) => message.includes('最多支持 50 个实体')));
+  assert.ok(errors.some((message) => message.includes(`最多支持 ${MAX_ASSEMBLY_INSTANCES} 个实体`)));
 });
 
-test('assembly 校验：恰好 50 个实体允许', () => {
+test('assembly 校验：恰好到上限的实体数允许', () => {
   const instances = Array.from({ length: MAX_ASSEMBLY_INSTANCES }, (_value, index) =>
     instance({ id: `p${index + 1}`, name: `零件 ${index + 1}` })
   );

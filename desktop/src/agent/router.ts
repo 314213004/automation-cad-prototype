@@ -67,7 +67,9 @@ const RULES: IntentRule[] = [
   },
   {
     intent: 'generate',
-    strong: ['出图', '导出', '生成', '出一份', '出份', '生成报告', '生成BOM', '生成 BOM', '报价单', '输出', '另存为', '存成', '编写', '编一个', '编个'],
+    strong: ['出图', '导出', '生成', '出一份', '出份', '生成报告', '生成BOM', '生成 BOM', '报价单', '输出', '另存为', '存成', '编写', '编一个', '编个',
+      // 「存为工程」是落库到工程列表，不是导出文件；不写进来会被判成超纲
+      '存为工程', '保存为工程', '存成工程', '保存成工程'],
     normal: ['报告', 'pdf', 'PDF', 'csv', 'CSV', 'excel', '打印', '出一份', '出份']
   },
   {
@@ -255,7 +257,7 @@ export interface ToolPlan {
   resolvedLabel?: string;
 }
 
-/** 目前注册的 22 个工具里，只读 12 个、写操作 10 个。 */
+/** 目前注册的 25 个工具里，只读 12 个、写操作 13 个。 */
 export const READ_ONLY_TOOLS = new Set([
   'list_components',
   'search_components',
@@ -624,6 +626,27 @@ function planExportFiles(value: string): ToolPlan | null {
 function planToolBase(text: string): ToolPlan | null {
   const value = (text ?? '').trim();
   if (!value) return null;
+  // 这两条必须写在最前面：意图分类会把「存为工程」判成 out_of_scope 提前 return null，
+  // 也会把「画布方案生成整机 3D」抢成 build_machine_model（那是参数化整机，不是画布占位装配）。
+  // 画布方案 → 整机 3D 装配工程（离线规则此前没有入口，评估集因此报「未覆盖工具」）
+  if (/(?:画布|工作台|方案)[^。；;\n]{0,14}(?:生成|变成|转成|做成|导出|建)[^。；;\n]{0,10}(?:整机|三维|3d|装配)|(?:生成|变成|转成|做成|建)[^。；;\n]{0,6}整机[^。；;\n]{0,6}(?:三维|3d|装配)/i.test(value)) {
+    return {
+      tool: 'build_canvas_assembly',
+      args: {},
+      readOnly: false,
+      missing: [],
+      why: '把当前画布方案按工位尺寸生成示意装配工程（不含真实几何，质量为未称重，需确认）'
+    };
+  }
+  if (/(?:当前|这个|该|视口|已导入|导入的)[^。；;\n]{0,10}(?:模型|装配|场景|零件)[^。；;\n]{0,8}(?:存|保存|另存|建|落)[^。；;\n]{0,4}工程|(?:存|保存|另存)(?:为|成)?工程/.test(value)) {
+    return {
+      tool: 'save_scene_as_project',
+      args: {},
+      readOnly: false,
+      missing: [],
+      why: '把当前视口逐件导出 STL 并存成工程（需确认）'
+    };
+  }
   if (/(?:验证|模拟|自检|仿真|空跑|试跑|试运行).*(?:plc|程序)|(?:plc|程序).*(?:验证|模拟|自检|仿真|空跑|试跑|试运行)/i.test(value)) {
     return {
       tool: 'verify_plc_program',

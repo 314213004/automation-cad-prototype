@@ -12,7 +12,7 @@ import {
   partLocalMesh,
   partSidecarFeatures
 } from '../../src/machine/geometry-export.ts';
-import { MAX_ASSEMBLY_INSTANCES, compileOps, validateFeatures } from '../../src/parametric/features.ts';
+import { MAX_ASSEMBLY_CHUNK, compileOps, validateFeatures } from '../../src/parametric/features.ts';
 
 const UPDATED_AT = '2026-10-24T01:00:00+08:00';
 
@@ -103,7 +103,7 @@ test('sidecar 契约：分块 ≤ 50 实体、每块通过 validateFeatures、�
   assert.ok(bundle.chunks.length >= 3);
   const seen = new Set();
   for (const chunk of bundle.chunks) {
-    assert.ok(chunk.instances.length <= MAX_ASSEMBLY_INSTANCES);
+    assert.ok(chunk.instances.length <= MAX_ASSEMBLY_CHUNK);
     assert.equal(chunk.schemaVersion, 2);
     assert.deepEqual(validateFeatures(chunk), []);
     const compiled = compileOps(chunk);

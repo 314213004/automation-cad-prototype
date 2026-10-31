@@ -1598,5 +1598,31 @@
       "model-build"
     ],
     "note": "与「应用/落地」区分：只装配视口，不落盘。"
+  },
+  {
+    "id": "ca01",
+    "input": "把这个画布方案生成整机 3D 装配工程",
+    "intent": "generate",
+    "expect": {
+      "tool": "build_canvas_assembly",
+      "argsContains": {}
+    },
+    "tags": [
+      "model-build"
+    ],
+    "note": "画布工位 → 占位盒装配工程：不含真实几何，质量为 null，需确认。"
+  },
+  {
+    "id": "sp01",
+    "input": "把当前模型存为工程",
+    "intent": "generate",
+    "expect": {
+      "tool": "save_scene_as_project",
+      "argsContains": {}
+    },
+    "tags": [
+      "project-save"
+    ],
+    "note": "当前视口逐件导出 STL 并落库成工程，需确认。"
   }
 ]

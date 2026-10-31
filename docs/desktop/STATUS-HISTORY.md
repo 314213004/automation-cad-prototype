@@ -71,3 +71,48 @@
 | `SMOKE_LAN_SWITCH_OK` | `enabled=false host=127.0.0.1 allowlist=1`，LAN 默认关闭且仅监听回环 |
 | `SMOKE_LAN_ALLOWLIST_OK` | `allowed=1 denied=0`，同一次 smoke 验证白名单允许与非白名单拒绝 |
 | `SMOKE_OK` | 全部 smoke 分支完成后输出 |
+
+---
+
+（以下内容由 STATUS.md 归档，不进离线索引）
+
+## Smoke 断言（当前在跑的关键几条）
+
+| 断言 | 实测 |
+|------|------|
+| `SMOKE_OK` | 全部 smoke 分支完成后输出 |
+| `SMOKE_PLACEHOLDER_DIMS_OK` | `w=18 h=85 d=78.5 y=0`（插 `iC65N-C16-1P` 后包围盒等于数据包外形、贴地）；降级 smoke 无 WebGL 时打印 `SMOKE_PLACEHOLDER_DIMS_SKIP reason=no-webgl`，属正常 |
+| `SMOKE_DESIGN_WEBGL_OK` | `renderer=ANGLE (… SwiftShader …) seed=STEP_fixture:1 scene=61 partPaths=61 tree=61 placements=13` |
+| `SMOKE_AGENT_PLACE_OK` | `placed=1 undo=1` |
+| `SMOKE_DESIGN_WIZARD_OK` / `_CANDIDATES_OK` / `_LAYOUT_OK` / `_SAVE_OK` | `steps=5` / `count=3` / `placements=13 overlaps=0` / `project=Smoke-整机设计` |
+| `MACHINE_SHOTS_DONE` | `captured=4 failed=0` |
+
+完整历史断言矩阵见 [STATUS-HISTORY.md](STATUS-HISTORY.md#smoke-断言清单)。
+
+## 早期验证记录（2026-10-27）
+
+| 命令 | 结果 |
+|------|------|
+| `npm run perf:baseline` | 3000 件：`sceneBuildMs=71.0`、`tickP95Ms=2.34`、`heapPeakMb=39.0` |
+| `npm run bench:render` | 500 件 / 100,000 三角面 → `drawCalls=20`，实例合并省 96%，`budget=OK` |
+| `npm run check:orbit-webgl` | `ORBIT_WEBGL_OK mode=webgl canvases=2 pick=cyl carriageX=140 clip=1 hits=1` |
+| `npm run sync:e2e` | `SYNC_E2E_OK package=dsp_4718a1a3b50b484da618dcf611277916 dup=true diff=1 bytes=856`（真实 material-flow 后端 8899） |
+
+---
+
+（由 STATUS.md 归档，不进离线索引）
+
+## 夜间迭代（2026-10-28 夜，5 个 PR 全绿合并）
+
+| PR | 内容 | 关键数字 |
+|----|------|----------|
+| #26 | Qt 特征右键菜单（压缩/解除压缩、删除特征）+ `--feature-ops-selftest` | 压缩沉头孔 94,166.8 → **95,966.9 mm³**（差值 1,800.1 正是该特征体积）；删除被引用基体走 409 `REFERENCE_IN_USE` |
+| #27 | Qt 改 SSE 推送为主、10s 轮询兜底、断线 3s 重连 | 自检把轮询调到 30s，改树 → 刷新 **138ms** |
+| #28 | 契约服务可选落盘 `FT_DATA_DIR`（单文件 JSON + 原子写 + 快照） | 重启后 r1/高度 19 还在；重启后 undo 仍能回到 12；默认不写盘 |
+| #29 | MCP 补 `ft_set_suppressed` / `ft_delete_feature`（4 → 6 工具） | 压缩后体积变大、删除引用基体回 `REFERENCE_IN_USE` + 提示「先处理引用方」 |
+| #30 | 材料与质量：`doc.material` + `setMaterial` + Qt「工具→材质」菜单 | 铝 **0.2543 kg** vs 钢 0.7392 kg，体积都是 94,166.8 mm³ |
+
+夜间实测汇总（本机 Linux）：featuretree **35/35**、MCP **16 条 PASS**、落盘 **10/10**、
+真几何 **18 条 PASS**、Qt 三个 selftest 全过（`FT_QT_SELFTEST_OK revision=2 height=13`、
+`FT_QT_HISTORY_OK undo=r2 redo=r3`、`FT_QT_FEATUREOPS_OK suppressed=95307.2 restored=94166.8`、`QT_SSE_OK 138ms`）、
+desktop `npm test` **2589（2587 通过 / 2 跳过）**。

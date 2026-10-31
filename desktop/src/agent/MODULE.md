@@ -5,7 +5,7 @@
 ## 两个入口，一份注册表
 
 ```
-tools.ts（AgentTools + 22 个 AgentTool；含只读 `suggest_kinematics`、`get_render_stats`；含只读 `design_machine` 与写工具 `apply_machine_design`）
+tools.ts（AgentTools + 25 个 AgentTool；含只读 `suggest_kinematics`、`get_render_stats`；含只读 `design_machine` 与写工具 `apply_machine_design`）
  ├─ kb/index.ts → 构建期分块 + kb.json（≤400 KB，标题 hash）
  ├─ kb/search.ts → 纯函数 BM25（中文 2-gram + 英文词，top 3 / ≤2 KB）
  ├─ rpc.ts        → HTTP JSON-RPC，127.0.0.1:7420，Bearer token
@@ -530,6 +530,14 @@ parseFallbackCandidates(text): string[]
 
 ## 坑点
 
+- **启动瞬间 tools/list 只有 20 个**（2026-10-27 实测）：`run_cost_report` / `export_cost_report` /
+  `run_electrical_check` / `verify_plc_program` / `run_plc_generate` 受模块开关（`cost.estimation` /
+  `elec.validation` / `plcgen`）门控，而开关由渲染层读完模块设置后回填；渲染层未就绪时这 5 个不在列表里。
+  外部客户端要等 `resources/read automationcad://project/current/summary` 返回 `ok:true` 再取工具列表，
+  否则会误判「工具丢了」。`scripts/smoke-mcp.mjs` 就是按这个顺序断言的（20 → 25）。
+- 外部服务的端口不固定：LAN 关闭时用随机端口，只有开着局域网访问才是 7420；脚本应从启动日志里取
+  `[agent] http://127.0.0.1:PORT`，不要写死。
+
 1. **不要把 token 写进日志**：`startAgent` 只打印 token 文件路径。
 2. **stdio MCP 不需要 token**（父进程即信任边界），但不要把它暴露成 TCP。
 3. **写操作只能走命令总线**：否则撤销栈会错乱。独立 stdio 进程没有渲染桥时返回 `AGENT_UNAVAILABLE`。
@@ -554,7 +562,7 @@ parseFallbackCandidates(text): string[]
 ## 进度
 
 - ✅ 注册表 + 22 工具（只读 12 / 写 10）+ 鉴权 + 结构化错误码
-- ✅ MCP stdio（真实握手 `tools/list` 返回 22 个）
+- ✅ MCP stdio（真实握手 `tools/list` 返回 25 个）
 - ✅ 命令总线：注册/执行/历史/失败记录/撤销
 - ✅ 渲染桥：场景、选择、BOM、插入、移除、底板放置/撤销、干涉、导入
 - ✅ MCP 写工具本机 RPC 代理（转发/降级/超时）

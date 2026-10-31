@@ -78,7 +78,9 @@ import {
   toConveyorParams,
   RULES_ONLY_PROCESSES
 } from './machine/model-builders';
+import { detectBufferLayers, detectConveyorSpec } from './machine/spec.ts';
 import { buildEntryButton as buildPanelEntryButton, createDrawer } from './ui/panels';
+import { syncToolMenu } from './ui/tool-menu.ts';
 import { assertCadFileSize } from './shared/input-limits';
 import { recordDiagnosticError, setDiagnosticOperation } from './shared/diagnostics';
 import { identifyCadModelObjects, type CadModelObjectIdentity, type CadProjectIdentity } from './project-archive/identity';
@@ -125,6 +127,12 @@ let workerSequence = 0;
 let currentFileName = '';
 let currentSceneSource: SceneGeometrySource = 'empty';
 let currentSceneGeneration = 0;
+/**
+ * 当前视口模型的可信质量（kg）。只有参数化构建或工程记录给过才非 null；
+ * "存为工程"沿用这个值，否则同一台机器用 build_machine_model 存出 159.59 kg、
+ * 用 save_scene_as_project 存出来却是 null，工程卡片上重量凭空消失。
+ */
+let currentSceneMassKg: number | null = null;
 let currentProjectIdentity: CadProjectIdentity | null = null;
 let currentProjectStorageKey = `session:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 let currentModelObjectIdentities: CadModelObjectIdentity[] = [];
@@ -378,7 +386,7 @@ function buildOverlay(): void {
       if (domainBtn.dataset.cadDomain === 'elec') {
         // 覆盖层是全屏的，电气的入口在外壳顶栏；这里把人送回去并带上当前数据源上下文
         refreshElecView({ notify: true });
-        closeOverlay();
+        closeOverlay({ restoreCanvas: false });
         try {
           (window as unknown as { ElecDomain?: { setDomain?: (domain: string) => void } }).ElecDomain?.setDomain?.('elec');
         } catch (error) {
@@ -953,12 +961,27 @@ function requiredElement(id: string): HTMLElement {
   return element;
 }
 
+/** 进 CAD 前画布是否开着：关 CAD 时据此把画布原样还给用户（保留画布会话） */
+let canvasOpenBeforeCad = false;
+
 function openOverlay(): void {
+  // 无限画布/首页是全屏层，z-index 比覆盖层高；打开 CAD 查看前先收起来，
+  // 否则模型正常渲染但整层被盖住（表现为"点了没反应/看不到电气图"）
+  // 只在"关→开"这一刻记录，重复调用 openOverlay 不能把 true 覆盖成 false
+  if (!overlayOpen) {
+    const canvas = document.getElementById('canvasWorkbench');
+    canvasOpenBeforeCad = Boolean(canvas && !canvas.hidden);
+  }
+  closeCanvasWorkbench();
+  homeHandle?.close();
   closeEnclosure();
   buildOverlay();
   if (!root) return;
   overlayOpen = true;
   root.hidden = false;
+  // 同一屏不要两套零件列表：覆盖层打开时把经典结构树藏起来（覆盖层左栏自带分组与搜索），
+  // 关掉覆盖层再还原，避免用户在两处搜索里来回切。
+  document.body.classList.add('cad-overlay-open');
   initMechUi();
   // 顶栏工程列表：打开覆盖层时预热，点 ▾ 立刻有内容
   void refreshProjectMenu();
@@ -968,14 +991,21 @@ function openOverlay(): void {
   document.getElementById(CAD_ENTRY)?.classList.add('is-active');
 }
 
-function closeOverlay(): void {
+function closeOverlay(options: { restoreCanvas?: boolean } = {}): void {
   overlayOpen = false;
+  document.body.classList.remove('cad-overlay-open');
   if (root) root.hidden = true;
   toggleExportMenu(false);
   viewer?.setActive(false);
   document.getElementById(CAD_ENTRY)?.classList.remove('is-active');
   document.getElementById('cadStressRootTab')?.classList.remove('is-active');
   (document.getElementById(CAD_ENTRY) as HTMLButtonElement | null)?.focus();
+  // 关 CAD 回到进来时的那个界面：从画布进来的就回画布（保留画布会话），
+  // 但切去电气/机械域时不能回画布，否则又把原理图盖住
+  if (options.restoreCanvas !== false && canvasOpenBeforeCad) {
+    canvasOpenBeforeCad = false;
+    openCanvasWorkbench();
+  }
 }
 
 function updateLoading(on: boolean, text?: string, error = false): void {
@@ -1537,7 +1567,9 @@ function refreshElecView(options: { notify?: boolean } = {}): void {
     return;
   }
   if (!drawing) {
-    if (shownElecDrawing) showElecPlaceholder();
+    // 原型自带的 EL-001 示例图会留在画布上冒充"本工程的图纸"，
+    // 所以无数据源时无条件换占位页（含首次进入电气域）
+    showElecPlaceholder();
     return;
   }
   if (drawing !== shownElecDrawing) showElecDrawing(drawing, 0);
@@ -1689,8 +1721,17 @@ function projectMenuRecordOf(record: DesktopProjectRecordLike, parts: number): P
 /** 工程成为当前工程，也成为最新的电气数据源 */
 function setCurrentProject(project: ProjectMenuRecord): void {
   lastOpenedProject = project;
+  syncShellProjectTitle(project.name);
   elecSources.useProject(project);
   elecSourceChanged();
+}
+
+/** 外壳标题/文件名跟随当前工程；原来永远是原型里的「滑台气缸装配体」 */
+function syncShellProjectTitle(name: string | undefined): void {
+  const label = (name ?? '').trim();
+  document.title = label ? `${label} · 自动化设计工作台` : '自动化设计工作台';
+  const nameEl = document.getElementById('fileCurrentName');
+  if (nameEl) nameEl.textContent = label || '未命名工程';
 }
 
 let homeHandle: HomeScreenHandle | null = null;
@@ -1822,12 +1863,24 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
       buffers.push({ buffer: toArrayBuffer(bytes), name: item.name });
     }
     const merged = await parseStandardCadBuffers(buffers, 'STL');
+    // 把工程记录里的装配层级补回网格：STL 本身不带路径，不补的话 3D 左栏只能显示「未分层」
+    const pathByName = new Map<string, string[]>();
+    for (const item of (result.record.partsList ?? []) as Array<{ name: string; path?: string[] }>) {
+      if (item?.name && Array.isArray(item.path) && item.path.length > 0) pathByName.set(item.name, item.path);
+    }
+    if (pathByName.size > 0) {
+      merged.meshes.forEach((mesh) => {
+        const path = pathByName.get(mesh.name);
+        if (path) mesh.path = path;
+      });
+    }
     const label = `${result.record.name}（${merged.meshes.length} 件）`;
     openOverlay();
     const currentViewer = ensureViewer();
     currentViewer.load(merged, label);
     const scenePartCount = currentViewer.getSceneParts().length;
     currentSceneSource = result.record.design !== undefined ? 'concept-placeholder' : 'saved-model';
+    currentSceneMassKg = result.record.massKg ?? null;
     currentSceneGeneration += 1;
     const webglFallback = document.getElementById('cadWebglFallback');
     const geometryKind = result.record.design !== undefined
@@ -1867,6 +1920,50 @@ async function openSavedProject(id: string): Promise<ProjectMenuRecord | null> {
     showNotice(`工程「${result.record.name}」载入失败：${reason}。未确认场景恢复；请用主工具栏“打开 CAD”导入源文件，并在主视口与零件树非空后再校核。`, true);
     return null;
   }
+}
+
+/**
+ * 纯导入（未落成工程）时刷新标题/元信息与右侧面板，避免继续显示上一个工程的名字。
+ * 面板用 stage='import'，文案写「当前模型（未保存工程）」，不冒充工程。
+ */
+function showImportedModelStage(name: string, result: CadImportResult): void {
+  lastOpenedProject = null;
+  const title = document.getElementById('spTitle');
+  if (title) title.textContent = name;
+  const envelope = unionEnvelope(
+    (result.meshes ?? []).map((mesh) => {
+      const positions = mesh.positions;
+      let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+      for (let i = 0; i + 2 < positions.length; i += 3) {
+        const x = positions[i] ?? 0, y = positions[i + 1] ?? 0, z = positions[i + 2] ?? 0;
+        minX = Math.min(minX, x); minY = Math.min(minY, y); minZ = Math.min(minZ, z);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); maxZ = Math.max(maxZ, z);
+      }
+      return Number.isFinite(minX)
+        ? { min: [minX, minY, minZ] as [number, number, number], max: [maxX, maxY, maxZ] as [number, number, number] }
+        : { min: [0, 0, 0] as [number, number, number], max: [0, 0, 0] as [number, number, number] };
+    })
+  );
+  const meta = document.getElementById('spMeta');
+  if (meta) {
+    meta.textContent = [
+      `零件 ${result.stats.meshCount} 件`,
+      `${result.stats.triangleCount} 个三角面`,
+      envelope ? `包络 ${envelope[0]}×${envelope[1]}×${envelope[2]} mm` : null,
+      '导入模型 · 未保存工程'
+    ].filter(Boolean).join(' · ');
+  }
+  attachProjectPanel({
+    name,
+    stage: 'import',
+    parts: result.stats.meshCount,
+    envelopeMm: envelope,
+    massKg: null,
+    hasStep: /\.(stp|step|igs|iges|brep)$/i.test(name),
+    hasStl: /\.stl$/i.test(name),
+    createdAt: new Date().toISOString(),
+    materials: []
+  });
 }
 
 /**
@@ -1944,7 +2041,7 @@ async function saveSceneAsProject(input?: unknown): Promise<Record<string, unkno
   }
   const sceneParts = viewer.getSceneParts();
   const envelope = unionEnvelope(sceneParts.map((part) => ({ min: part.bbox.min, max: part.bbox.max })));
-  const triangles = sceneParts.reduce((sum, part) => sum + (Number.isFinite(part.triangles) ? part.triangles : 0), 0);
+  const triangles = Math.round(sceneParts.reduce((sum, part) => sum + (Number.isFinite(part.triangles) ? Number(part.triangles) : 0), 0));
   const base = (currentFileName || '导入模型')
     .replace(/（\s*\d+\s*件\s*）\s*$/u, '')
     .replace(/\.(stp|step|stl|igs|iges|obj|3mf|x_t)$/i, '')
@@ -1954,10 +2051,11 @@ async function saveSceneAsProject(input?: unknown): Promise<Record<string, unkno
   try {
     const saved = await window.desktop.projects.save({
       name,
-      process: 'cad-import',
+      process: currentSceneSource === 'saved-model' ? 'cad-scene' : 'cad-import',
       params: { parts: parts.length, triangles, imported: 1 },
       parts: parts.length,
-      massKg: null,
+      // 场景来自参数化构建/工程记录时带真实质量；纯导入仍是 null（不编数）
+      massKg: currentSceneMassKg,
       envelope,
       material: [],
       partData: parts
@@ -2132,6 +2230,7 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     }
     currentFileName = name;
     currentSceneSource = 'imported-model';
+    currentSceneMassKg = null;
     currentSceneGeneration += 1;
     currentProjectIdentity = nextIdentity;
     currentProjectStorageKey = nextStorageKey;
@@ -2142,6 +2241,8 @@ async function loadCadBuffer(buffer: ArrayBuffer, name: string): Promise<CadImpo
     parametric?.setSource(name, nextIdentity?.projectId, nextStorageKey);
     interference?.run([]);
     displayFileInfo(name);
+    // 导入后原型标题还挂着上一个工程名（实测：打开工程再导入 STEP，标题仍是旧工程）
+    showImportedModelStage(name, result);
     const partCount = document.getElementById('cadPartCount');
     if (partCount) partCount.textContent = String(result.stats.meshCount);
     setBusy(false);
@@ -2266,6 +2367,7 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
     params?: unknown;
     name?: unknown;
     load?: unknown;
+    brief?: unknown;
   };
   const process = typeof request.process === 'string' && request.process.trim() ? request.process.trim() : 'conveyor';
   const builder = pickModelBuilder(process);
@@ -2282,7 +2384,21 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
   if (builder.engine !== 'parametric') {
     return { ok: false, code: 'ENGINE_UNSUPPORTED', message: `机型「${process}」的构建器不是参数化引擎` };
   }
-  const normalized = normalizeModelParams(builder, request.params);
+  // 允许只给 brief：从需求原文取尺寸与层数（参数显式给了就以参数为准）
+  const briefText = typeof request.brief === 'string' ? request.brief : '';
+  const briefParams: Record<string, number> = {};
+  if (briefText && builder.process === 'conveyor') {
+    const spec = detectConveyorSpec(briefText);
+    if (spec?.lengthMm) briefParams.lengthMm = Math.round(spec.lengthMm);
+    if (spec?.widthMm) briefParams.widthMm = Math.round(spec.widthMm);
+    const layers = detectBufferLayers(briefText);
+    if (layers && layers > 1) briefParams.layers = layers;
+  }
+  const mergedParams = {
+    ...briefParams,
+    ...((typeof request.params === 'object' && request.params !== null ? request.params : {}) as Record<string, number>)
+  };
+  const normalized = normalizeModelParams(builder, mergedParams);
   if (!normalized.ok) return { ok: false, code: 'INVALID_ARGUMENT', message: normalized.message };
 
   const params = toConveyorParams(normalized.params);
@@ -2327,6 +2443,7 @@ async function buildMachineModel(input: unknown): Promise<Record<string, unknown
       ensureViewer().load(merged, label);
       currentFileName = label;
       currentSceneSource = 'saved-model';
+      currentSceneMassKg = massKg;
       currentSceneGeneration += 1;
       displayFileInfo(label);
       const partCount = document.getElementById('cadPartCount');
@@ -3123,7 +3240,11 @@ function initAgentBridge(): void {
       if (!id || !model || !category) return { ok: false, message: '缺少必填参数：零件 id/model/category' };
       try {
         const name = model || id;
-        const meshIndex = ensureViewer().addPlaceholderPart(name, id);
+        const rawDims = source.dimsMm as Record<string, unknown> | undefined;
+        const dimsMm = rawDims && typeof rawDims === 'object'
+          ? { w: Number(rawDims.w), h: Number(rawDims.h), d: Number(rawDims.d) }
+          : null;
+        const meshIndex = ensureViewer().addPlaceholderPart(name, id, dimsMm);
         return { ok: true, meshIndex, name };
       } catch (error) {
         return { ok: false, message: error instanceof Error ? error.message : String(error) };
@@ -3564,6 +3685,8 @@ function init(): void {
       console.error('[appearance] 读取界面缩放/渲染质量失败，使用默认值', error);
     }) ?? Promise.resolve();
   buildEntryButton();
+  // 顶栏入口收进「工具」下拉（机械/电气与 CAD 查看留在栏上）
+  syncToolMenu();
   initFactoryPanel();
   commission = initCommissionPanel({
     onExportReport: async () => {
@@ -3777,6 +3900,11 @@ function init(): void {
   initSyncPanel({ buildPayload: buildSyncPayload });
   initAgentPanel();
   installAgentConfirmCard();
+  // 原型切回「装配」示例时交还右侧面板（工程面板只在工程/导入视图里用）
+  (window as unknown as { __detachProjectPanel?: () => void }).__detachProjectPanel = () => {
+    detachProjectPanel();
+    lastOpenedProject = null;
+  };
   buildOverlay();
   const designWizard = initDesignWizard({
     onSaved: async () => { await refreshProjectMenu(); },
@@ -3873,7 +4001,7 @@ function init(): void {
         openOverlay();
         if (root) {
           root.hidden = false;
-          root.style.zIndex = '2147483000';
+          root.style.zIndex = '2147483400';
         }
         return true;
       },

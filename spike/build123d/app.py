@@ -32,7 +32,9 @@ def load_kernel(wait: bool = True) -> bool:
         VERSION = getattr(_bd, "__version__", "unknown")
         _KERNEL_ERROR = ""
         return True
-MAX_INSTANCES = 50
+# 整机级装配不止 50 件：立体缓存（3 层 × 4 位）56 件、光伏缓存堆叠单元 94 件。
+# 上限按"分钟级建模"给：200 件实测仍在 180 s 预算内，再多应拆子装配。
+MAX_INSTANCES = 200
 
 
 def _num(value, name: str, minimum: float = 0.0) -> float:
@@ -53,10 +55,33 @@ def build(ops: list[dict]):
         kind = op.get("op")
         if kind == "box":
             L, W, H = (_num(op.get(k), k) for k in ("length", "width", "height"))
+            # anchor：min（默认，x/y 从 0 起）/ center（几何中心在原点）。
+            # 复核带转角的零件时必须用 center：绕原点转 Z 时，只有中心在原点才是绕自身转。
+            anchor = str(op.get("anchor") or "min").lower()
+            if anchor not in ("min", "center"):
+                raise ValueError(f"box.anchor 只支持 min/center，收到：{anchor}")
             centered = bool(op.get("centered", True))
             z = 0.0 if centered else H / 2
             base = bd.Pos(0, 0, z) * bd.Box(L, W, H)
+            if anchor == "center":
+                # build123d 的 Box 默认就是几何中心在原点（align=CENTER），
+                # 所以这里**不需要**再平移半个尺寸——之前多移了一次，
+                # 导致带转角的复核件整体偏了 (L/2, W/2, H/2)，凭空造出交集体积。
+                pass
             shape = base if shape is None else shape + base
+        elif kind == "rotate":
+            # 绕原点转 Z（度）。配合 box.anchor=center 使用即为绕零件自身中心旋转。
+            if shape is None:
+                raise ValueError("rotate 之前必须有实体")
+            deg = op.get("deg")
+            if isinstance(deg, bool) or not isinstance(deg, (int, float)):
+                raise ValueError("rotate.deg 必须是数字")
+            shape = bd.Rot(0, 0, float(deg)) * shape
+        elif kind == "move":
+            if shape is None:
+                raise ValueError("move 之前必须有实体")
+            x, y, z = (float(v) for v in (op.get("x", 0), op.get("y", 0), op.get("z", 0)))
+            shape = bd.Pos(x, y, z) * shape
         elif kind == "cylinder":
             # 圆柱可以作为零件的第一个操作（滚筒、螺杆、销轴这类本身就是回转体）
             d = _num(op.get("diameter"), "diameter")

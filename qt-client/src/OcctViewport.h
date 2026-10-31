@@ -1,0 +1,155 @@
+#pragma once
+// OCCT AIS 视口：真的用 OpenCASCADE 的 V3d_View/AIS_InteractiveContext 渲染，
+// 几何来源仍是服务端 /v1/geometry.stl（客户端不重算）。
+//
+// 为什么之前没用：本机是 Debian 12/13 混源，libocct-{data-exchange,visualization}-dev
+// 被 libfreetype-dev 版本冲突卡住。现在把这两个 dev 包的**头文件**单独解出来放到
+// /usr/local/include/opencascade（运行时 .so 本来就在），所以能编能跑。
+#include <QColor>
+#include <QJsonObject>
+#include <QStringList>
+#include <QVector>
+#include <QWidget>
+
+#include <AIS_InteractiveContext.hxx>
+#include <AIS_Shape.hxx>
+#include <Aspect_NeutralWindow.hxx>
+#include <Aspect_Window.hxx>
+#include <OpenGl_GraphicDriver.hxx>
+#include <V3d_View.hxx>
+#include <V3d_Viewer.hxx>
+
+class QJsonObject;
+class QNetworkAccessManager;
+class QNetworkReply;
+
+class OcctViewport : public QWidget {
+    Q_OBJECT
+public:
+    explicit OcctViewport(QWidget *parent = nullptr);
+    ~OcctViewport() override;
+
+    /// 整机「示意装配」：把 machine-geometry 的占位体（box/cylinder）拼成一个 compound 显示。
+    /// 几何来自 desktop 管线（conceptual-estimate），客户端不重算，只摆位。
+    bool showMachineGeometry(const QJsonObject &geometry, int *shapeCount, QString *error);
+
+    /// 点选整机示意里的一个零件：返回 partId（没点到返回空）。用射线求交，不走 AIS 选择
+    /// （NeutralWindow 下 AIS 的 MoveTo/SelectDetected 实测段错误）。
+    QString pickPartAt(int x, int y);
+    /// 高亮某个零件（传空取消）
+    void highlightPart(const QString &partId);
+    /// 高亮一组零件（干涉对用：同时点亮两端）
+    void highlightParts(const QStringList &partIds);
+
+    /// 联动调试：按 desktop 预生成的帧摆零件（客户端只摆位，不算运动）。
+    /// offsets: partId → [dx,dy,dz]；rotZDeg: partId → 绕自身中心的 Z 转角。
+    void applyLinkagePose(const QJsonObject &offsets, const QJsonObject &rotZDeg);
+    /// 复位：清掉所有联动位移/转角（回到初始摆位）
+    void clearLinkagePose();
+    /// 自检用：上一帧里被摆动的零件数
+    int lastLinkageMoved() const { return m_linkageMoved; }
+
+    /// 把当前整机示意几何导出成 STL（二进制/ASCII 由 OCCT 决定）。
+    /// 注意：这是**摆位后的概念占位体**，不是制造几何。
+    bool exportMachineStl(const QString &path, int *bytes, QString *error);
+
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
+    void dragMoveEvent(QDragMoveEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
+    void ensureRevision(int revision, const QString &url);
+    void loadFromUrl(const QString &url);
+    void startRequest(const QString &url);
+    /// 剖切：沿 Z 在 z=position 处切开（只看 z 以下）。position 由调用方给，客户端不自己猜。
+    /// 返回 false 表示这个构建没有 OCCT（`-DAUTOMATIONCAD_OCCT=OFF`）。
+    bool setClipZ(double positionMm, QString *error);
+    void clearClip();
+    /// 当前显示集合的实体体积（mm³）——剖切是否真裁掉东西，用这个量，不靠像素猜
+    double displayedVolumeMm3() const;
+    bool clipActive() const { return m_clipActive; }
+    double clipZ() const { return m_clipZ; }
+
+    /// 拖动预览盒：尺寸由调用方给（来自构件库），这里只负责画一个半透明体
+    /// state: 0=正常(绿) 1=接近阈值(黄) 2=已重叠(红)
+    void showPreviewBox(double sizeX, double sizeY, double sizeZ, double x, double y, int state = 0);
+    void clearPreviewBox();
+    bool previewVisible() const { return m_previewActive; }
+
+    /// 屏幕坐标 → 地面(z=0)世界坐标；取不到返回 false（视口没准备好/射线平行地面）
+    bool screenToGround(int x, int y, double *worldX, double *worldY);
+
+    void fitView();
+    void setStandardView(int which);
+    int triangleCount() const { return m_triangles; }
+    bool ready() const { return m_viewReady; }
+
+signals:
+    /// 构件库拖进来的构件：已换算成地面落点（mm）
+    void partDropped(const QString &type, double x, double y);
+    /// 按住 Ctrl 拖动已有零件：落点（地面坐标，已吸附）
+    void partDragMove(const QString &partId, double x, double y);
+    void partDragFinished(const QString &partId, double x, double y);
+    /// 拖动中：已吸附的落点，主窗口据此画预览盒（尺寸由构件库给，Qt 不自造尺寸）
+    void dragPreview(const QString &type, double x, double y);
+    void loaded(int triangles);
+    void failed(const QString &message);
+    /// 选中面/边/点的测量结果
+    void measured(const QString &message);
+    /// 方向键微调请求（dx/dy/dz 单位 mm），由外面决定怎么应用
+    void nudgeRequested(int dx, int dy, int dz);
+    /// 点中整机示意里的零件（空 = 点到空白）
+    void partPicked(const QString &partId);
+
+protected:
+    void paintEvent(QPaintEvent *event) override;
+    // 交给 OCCT 直接画到 HWND：Qt 不能再有绘制引擎，否则会用自己的背景盖掉 GL 画面
+    QPaintEngine *paintEngine() const override { return nullptr; }
+    void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void wheelEvent(QWheelEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
+
+private:
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    Handle(AIS_Shape) m_previewHandle;
+#endif
+    bool m_previewActive = false;
+    bool m_partDragActive = false;
+    QString m_dragPartId;
+    void initializeView();
+    void displayShape(const TopoDS_Shape &shape);
+
+    Handle(OpenGl_GraphicDriver) m_driver;
+    Handle(V3d_Viewer) m_viewer;
+    Handle(V3d_View) m_view;
+    Handle(AIS_InteractiveContext) m_context;
+#ifdef AUTOMATIONCAD_HAVE_OCCT
+    /// 剖切要能「切完再还原」：整机每个零件的原始实体必须留住（整机是多件显示，不是单 compound）
+    QVector<TopoDS_Shape> m_machineSolids;
+    TopoDS_Shape m_fullShape;
+#endif
+    bool m_clipActive = false;
+    double m_clipZ = 0.0;
+    Handle(Aspect_Window) m_window;
+    Handle(AIS_Shape) m_shape;
+    QVector<Handle(AIS_Shape)> m_shapes;
+    QStringList m_shapePartIds;      // 与 m_shapes 一一对应的 partId
+    QVector<QVector3D> m_shapeCenters;  // 零件初始中心（联动旋转要绕自身中心）
+    int m_linkageMoved = 0;
+    QVector<QColor> m_shapeColors;   // 原始颜色（高亮后要能还原，不能一律变默认灰）
+    QString m_highlighted;
+    QJsonObject m_lastGeometry;  // 最近一次整机示意几何（导出 STL 用）  // 整机示意：每个零件一个 AIS 对象（各自颜色）
+    bool m_viewReady = false;
+    bool m_hasGeometry = false;
+    int m_triangles = 0;
+    int m_revision = -1;
+    QPoint m_lastPos;
+    QNetworkAccessManager *m_net = nullptr;
+    QNetworkReply *m_pending = nullptr;
+    QString m_pendingUrl;   // 正在拉取的 URL，用来合并重复请求
+    QString m_queuedUrl;    // 拉取中又来了别的 URL：排队，等这次结束再发
+};

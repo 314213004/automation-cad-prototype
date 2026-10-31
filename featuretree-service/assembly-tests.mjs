@@ -1,0 +1,253 @@
+// 装配验收：两个零件按偏移组成装配，几何由 sidecar fuse 出来（不是把体积相加）。
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(here, '..');
+const python = process.env.FT_PYTHON || resolve(repoRoot, 'spike', 'sketch', '.venv', 'bin', 'python');
+if (!existsSync(python)) {
+  console.log(`ASSEMBLY_TEST_SKIP 找不到带 build123d 的 Python：${python}`);
+  process.exit(0);
+}
+
+const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+let failures = 0;
+const ok = (cond, label, extra = '') => {
+  if (cond) { console.log(`PASS: ${label}`); return; }
+  failures += 1;
+  console.error(`FAIL: ${label} ${extra}`);
+};
+
+const sidecar = spawn(python, [resolve(here, 'rebuild-sidecar.py')], {
+  env: { ...process.env, FT_BUILD_PORT: '0' },
+  stdio: ['ignore', 'pipe', 'pipe']
+});
+sidecar.stderr.setEncoding('utf8');
+sidecar.stderr.on('data', (chunk) => process.stderr.write(`[sidecar] ${chunk}`));
+let sidecarOut = '';
+sidecar.stdout.setEncoding('utf8');
+sidecar.stdout.on('data', (chunk) => { sidecarOut += chunk; });
+let sidecarPort = '';
+// 同 build-tests：Windows 冷启动 import build123d 要 30 s 以上
+for (let attempt = 0; attempt < 200 && !sidecarPort; attempt += 1) {
+  const match = sidecarOut.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+  if (match) sidecarPort = match[1];
+  else await sleep(500);
+}
+if (!sidecarPort) {
+  console.error('ASSEMBLY_TEST_FAIL sidecar 未起来', sidecarOut.slice(0, 200));
+  sidecar.kill('SIGKILL');
+  process.exit(1);
+}
+
+const service = spawn(process.execPath, [resolve(here, 'server.mjs')], {
+  env: { ...process.env, FT_PORT: '0', FT_BUILD_URL: `http://127.0.0.1:${sidecarPort}` },
+  stdio: ['ignore', 'pipe', 'pipe']
+});
+let serviceLog = '';
+service.stdout.setEncoding('utf8');
+service.stdout.on('data', (chunk) => { serviceLog += chunk; });
+let base = '';
+for (let attempt = 0; attempt < 120 && !base; attempt += 1) {
+  const match = serviceLog.match(/http:\/\/127\.0\.0\.1:(\d+)/);
+  if (match) base = `http://127.0.0.1:${match[1]}`;
+  else await sleep(150);
+}
+if (!base) {
+  console.error('ASSEMBLY_TEST_FAIL 服务未起来', serviceLog.slice(0, 200));
+  service.kill('SIGKILL'); sidecar.kill('SIGKILL');
+  process.exit(1);
+}
+
+const http = async (method, path, body) => {
+  const response = await fetch(`${base}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return { status: response.status, json: await response.json().catch(() => null) };
+};
+
+try {
+  // 两块板：默认（12 厚）与 doc-asm-b（30 厚）
+  const created = await http('POST', '/v1/documents', { documentId: 'doc-asm-b' });
+  ok(created.status === 201, '建第二块板 doc-asm-b', `status=${created.status}`);
+  const wrote = await http('POST', '/v1/operations', {
+    documentId: 'doc-asm-b', expectedRevision: created.json.revision, actor: 'manual',
+    operation: 'updateFeatureParams', featureId: 'f-body', patch: { height: 30 }
+  });
+  ok(wrote.status === 200, 'doc-asm-b 改成 30 厚', `status=${wrote.status}`);
+
+  const volA = (await http('GET', '/v1/tree')).json.geometry.volumeMm3;
+  const volB = (await http('GET', '/v1/tree?documentId=doc-asm-b')).json.geometry.volumeMm3;
+
+  // 1) 叠放：z 方向偏移 20，两块不重叠 → 体积应为两块之和
+  const stacked = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-stacked',
+    members: [
+      { documentId: 'demo-adapter', offset: [0, 0, 0] },
+      { documentId: 'doc-asm-b', offset: [0, 0, 20] }
+    ]
+  });
+  ok(stacked.status === 201 && stacked.json.geometry, '装配创建成功（叠放）', JSON.stringify(stacked.json).slice(0, 160));
+  const stackedVolume = stacked.json.geometry?.volumeMm3 ?? 0;
+  ok(Math.abs(stackedVolume - (volA + volB)) <= 2,
+    '不重叠时体积 = 两块之和（fuse 没丢体积）', `actual=${stackedVolume} expected=${(volA + volB).toFixed(1)}`);
+  ok(Math.abs(stacked.json.geometry.bboxMm.z - (20 + 30)) <= 1,
+    '包围盒高度 = 偏移 20 + 板厚 30', JSON.stringify(stacked.json.geometry.bboxMm));
+
+  // 2) 同位置叠放：真实布尔并集，体积应显著小于两块之和
+  const overlap = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-overlap',
+    members: [
+      { documentId: 'demo-adapter', offset: [0, 0, 0] },
+      { documentId: 'doc-asm-b', offset: [0, 0, 0] }
+    ]
+  });
+  ok(overlap.status === 201, '装配创建成功（同位置）');
+  const overlapVolume = overlap.json.geometry?.volumeMm3 ?? 0;
+  ok(overlapVolume < stackedVolume - 1000,
+    '同位置叠放是布尔并集，不是体积相加', `overlap=${overlapVolume} stacked=${stackedVolume}`);
+  ok(Math.abs(overlapVolume - Math.max(volA, volB)) <= 5,
+    '并集体积 = 较大那块（小件完全被包住）', `actual=${overlapVolume} expect≈${Math.max(volA, volB)}`);
+
+  // 3) 装配 STL 能取到
+  const stl = await fetch(`${base}/v1/assemblies/asm-stacked/geometry.stl`);
+  const bytes = Buffer.from(await stl.arrayBuffer());
+  ok(stl.status === 200 && bytes.length > 1000, '装配 STL 可取', `status=${stl.status} bytes=${bytes.length}`);
+  const tris = bytes.length >= 84 ? bytes.readUInt32LE(80) : 0;
+  ok(tris > 10 && 84 + tris * 50 === bytes.length, '装配 STL 三角面数自洽', `tris=${tris}`);
+
+  // 3.5) 装配级干涉：真实布尔交集，不是 AABB 初筛
+  const interferenceOverlap = await http('POST', '/v1/assemblies/asm-overlap/interference', {});
+  ok(interferenceOverlap.status === 200, '同位置装配能跑干涉检查', `status=${interferenceOverlap.status}`);
+  const pairs = interferenceOverlap.json?.pairs ?? [];
+  ok(pairs.length === 1, '同位置两块板检出 1 对干涉', JSON.stringify(interferenceOverlap.json).slice(0, 160));
+  ok(pairs[0] && Math.abs(pairs[0].overlapMm3 - volA) <= 2,
+    '干涉体积 = 被完全包住那块（12 厚板 94,166.8）', `actual=${pairs[0]?.overlapMm3} expected=${volA}`);
+  ok(pairs[0]?.aId === 'demo-adapter' && pairs[0]?.bId === 'doc-asm-b', '干涉结果带成员 id，能定位到具体两块');
+
+  const interferenceStacked = await http('POST', '/v1/assemblies/asm-stacked/interference', {});
+  ok(interferenceStacked.status === 200 && (interferenceStacked.json?.pairs ?? []).length === 0,
+    '不重叠的装配判为无干涉', JSON.stringify(interferenceStacked.json).slice(0, 120));
+  ok(/未发现/.test(interferenceStacked.json?.summary || ''), '无干涉时给的是「未发现实体干涉」而不是空数组');
+
+  // 3.6) 成员绕 Z 轴旋转：120×60 的板转 90° 后包围盒应变成 60×120
+  const wide = await http('POST', '/v1/documents', { documentId: 'doc-wide' });
+  ok(wide.status === 201, '建第三块板 doc-wide', `status=${wide.status}`);
+  const wideEdit = await http('POST', '/v1/operations', {
+    documentId: 'doc-wide', expectedRevision: 0, actor: 'manual',
+    operation: 'updateFeatureParams', featureId: 'f-body', patch: { length: 120, width: 90 }
+  });
+  ok(wideEdit.status === 200, 'doc-wide 改成 120×90', `status=${wideEdit.status}`);
+
+  const rotated = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-rotated',
+    members: [
+      { documentId: 'doc-wide', offset: [0, 0, 0], rotateZ: 90 },
+      { documentId: 'doc-asm-b', offset: [200, 0, 0] }
+    ]
+  });
+  ok(rotated.status === 201, '带 rotateZ 的装配创建成功', JSON.stringify(rotated.json).slice(0, 140));
+  const rotatedBox = rotated.json.geometry?.bboxMm;
+  // 120×90 的板绕 Z 转 90° → X 占 90、Y 占 120；另一块板只有 90 宽，所以 Y 方向能区分「转没转」
+  ok(rotatedBox && Math.abs(rotatedBox.y - 120) <= 2,
+    '旋转 90° 后 Y 方向变成 120（未旋转时是 90）', JSON.stringify(rotatedBox));
+
+  // 3.6b) 任意轴：绕 X 转 90°，90×90×12 的板厚度方向换到 Y（12）与 Z（90）
+  const tilted = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-tilted',
+    members: [
+      { documentId: 'demo-adapter', rotate: [90, 0, 0] },
+      { documentId: 'doc-asm-b', offset: [200, 0, 0] }
+    ]
+  });
+  ok(tilted.status === 201, '带 rotate [90,0,0] 的装配创建成功', JSON.stringify(tilted.json).slice(0, 120));
+  const tiltedBox = tilted.json.geometry?.bboxMm;
+  // 注意：第二块板本身 Y 方向就是 90，所以只能看 Z（未旋转时 Z 只有 12）
+  ok(tiltedBox && Math.abs(tiltedBox.z - 90) <= 1,
+    '绕 X 转 90° 后 Z 方向从 12 变 90（第二块板 Y 本身 90，不能拿 Y 判）', JSON.stringify(tiltedBox));
+  ok(Math.abs((tilted.json.geometry?.volumeMm3 ?? 0) - stackedVolume) <= 2,
+    '纯旋转不改体积', `expect=${stackedVolume} got=${tilted.json.geometry?.volumeMm3}`);
+
+  const bothRotate = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-both-rotate',
+    members: [
+      { documentId: 'demo-adapter', rotate: [0, 0, 45], rotateZ: 30 },
+      { documentId: 'doc-asm-b' }
+    ]
+  });
+  ok(bothRotate.status === 422, 'rotate 与 rotateZ 同时给 → 422（避免顺序歧义）', `status=${bothRotate.status}`);
+
+  const shortRotate = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-short-rotate',
+    members: [{ documentId: 'demo-adapter', rotate: [0, 45] }, { documentId: 'doc-asm-b' }]
+  });
+  ok(shortRotate.status === 422, 'rotate 只给两个分量 → 422', `status=${shortRotate.status}`);
+
+  const badRotate = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-bad-rot',
+    members: [{ documentId: 'doc-wide', rotateZ: '90' }, { documentId: 'demo-adapter' }]
+  });
+  ok(badRotate.status === 422, 'rotateZ 传字符串被拒（422）', `status=${badRotate.status}`);
+
+  // 3.7) 改成员位姿（PUT）：把第二块从 z=20 挪到 z=40，包围盒应该跟着变
+  const moved = await http('PUT', '/v1/assemblies/asm-stacked', {
+    members: [
+      { documentId: 'demo-adapter', offset: [0, 0, 0] },
+      { documentId: 'doc-asm-b', offset: [0, 0, 40] }
+    ]
+  });
+  ok(moved.status === 200, 'PUT 改成员位姿成功', JSON.stringify(moved.json).slice(0, 120));
+  ok(moved.json.geometry && Math.abs(moved.json.geometry.bboxMm.z - 70) <= 1,
+    '改成 z=40 后包围盒高度 70', JSON.stringify(moved.json.geometry?.bboxMm));
+  ok(Math.abs((moved.json.geometry?.volumeMm3 ?? 0) - stackedVolume) <= 2,
+    '只挪位置不改体积', `before=${stackedVolume} after=${moved.json.geometry?.volumeMm3}`);
+
+  const dupAsm = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-stacked',
+    members: [{ documentId: 'demo-adapter' }, { documentId: 'doc-asm-b' }]
+  });
+  ok(dupAsm.status === 409, '重复创建同名装配 → 409（改成员请用 PUT）', `status=${dupAsm.status}`);
+  const putMissing = await http('PUT', '/v1/assemblies/no-such-asm', {
+    members: [{ documentId: 'demo-adapter' }, { documentId: 'doc-asm-b' }]
+  });
+  ok(putMissing.status === 404, 'PUT 不存在的装配 → 404', `status=${putMissing.status}`);
+
+  // 3.8) 装配清单（BOM）：同一文档引用两次要合并成一行 count=2，合计质量 = 单件×数量
+  const bom = await http('GET', '/v1/assemblies/asm-stacked/bom');
+  ok(bom.status === 200, '装配清单可取', `status=${bom.status} ${JSON.stringify(bom.json).slice(0, 100)}`);
+  ok(bom.json.count === 2, '清单件数 = 成员数 2', `count=${bom.json.count}`);
+  ok(Array.isArray(bom.json.members) && bom.json.members.length === 2, '两行成员', `rows=${bom.json.rows}`);
+  const first = bom.json.members?.[0] || {};
+  ok(typeof first.massKg === 'number' && first.material === 'steel', '成员带材质与质量', JSON.stringify(first).slice(0, 120));
+  const expectedMass = Math.round(((bom.json.members || []).reduce((sum, row) => sum + (row.massKg || 0) * row.count, 0)) * 10000) / 10000;
+  ok(Math.abs((bom.json.totalMassKg ?? -1) - expectedMass) < 0.001, '合计质量 = Σ(单件质量×数量)',
+    `total=${bom.json.totalMassKg} expected=${expectedMass}`);
+  const dupBom = await http('GET', '/v1/assemblies/no-such-asm/bom');
+  ok(dupBom.status === 404, '不存在的装配取清单 → 404', `status=${dupBom.status}`);
+
+  // 4) 错误路径
+  const tooFew = await http('POST', '/v1/assemblies', { documentId: 'asm-bad', members: [{ documentId: 'demo-adapter' }] });
+  ok(tooFew.status === 422, '单成员装配被拒（422）', `status=${tooFew.status}`);
+  const unknown = await http('POST', '/v1/assemblies', {
+    documentId: 'asm-bad2', members: [{ documentId: 'demo-adapter' }, { documentId: 'nope' }]
+  });
+  ok(unknown.status === 422 && /不存在/.test(unknown.json?.message || ''), '未知成员被拒且说明原因', JSON.stringify(unknown.json).slice(0, 100));
+  const list = await http('GET', '/v1/assemblies');
+  ok(list.status === 200 && list.json.assemblies.length >= 2, '装配列表可查', `count=${list.json.assemblies?.length}`);
+} catch (error) {
+  failures += 1;
+  console.error('ASSEMBLY_TEST_FAIL', error);
+} finally {
+  service.kill('SIGTERM');
+  sidecar.kill('SIGTERM');
+}
+
+if (failures > 0) {
+  console.error(`失败 ${failures} 条`);
+  process.exit(1);
+}
+console.log('ASSEMBLY_OK 装配（并集/包围盒/STL/错误路径）全部通过');

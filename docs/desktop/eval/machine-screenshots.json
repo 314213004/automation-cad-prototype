@@ -13,32 +13,32 @@
       "name": "15-machine-design-card.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
+      "bytes": 494698,
+      "uniqueColors": 7159
     },
     {
       "label": "6 工位 3D 联调",
       "name": "16-machine-3d.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
+      "bytes": 482040,
+      "uniqueColors": 11839
     },
     {
       "label": "BOM 真实型号",
       "name": "17-machine-bom.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
+      "bytes": 155911,
+      "uniqueColors": 2871
     },
     {
       "label": "PLC IO 点位",
       "name": "18-machine-iomap.png",
       "width": 1600,
       "height": 1000,
-      "bytes": 193039,
-      "uniqueColors": 3236
+      "bytes": 143456,
+      "uniqueColors": 3032
     }
   ]
 }

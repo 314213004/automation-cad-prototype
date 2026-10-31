@@ -15,6 +15,8 @@ import {
 import { assertBomRowCount } from '../shared/input-limits.ts';
 import { stageCadLoad, type LoadedPart } from './load-candidate.ts';
 import { geometryToBinaryStl, uniquePartNames } from './stl-export.ts';
+import { buildPartListEntries, filterPartList } from './part-list-view.ts';
+import { resolvePlaceholderDims } from './placeholder-dims.ts';
 
 export interface CadSelectionInfo {
   index: number;
@@ -119,6 +121,8 @@ export class CadViewer {
   private draftBomRows: Array<Omit<CadBomRow, 'no'>> = [];
   private importedResult: CadImportResult | null = null;
   private selected: number | null = null;
+  /** 左栏零件搜索词（重渲染后保留，避免每次加载都清空）。 */
+  private partQuery = '';
   private pointerDown = { x: 0, y: 0 };
   private wireframe = false;
   private active = false;
@@ -1080,7 +1084,7 @@ export class CadViewer {
     this.refreshInstanceMatrices();
   }
 
-  addPlaceholderPart(name: string, partId?: string): number {
+  addPlaceholderPart(name: string, partId?: string, dimsMm?: { w?: number; h?: number; d?: number } | null): number {
     if (this.degraded || !this.renderer) {
       throw new Error('当前环境不支持 WebGL，无法插入占位件');
     }
@@ -1089,7 +1093,9 @@ export class CadViewer {
 
     const currentBounds = this.totalBounds();
     const centerX = currentBounds.isEmpty() ? 10 : currentBounds.max.x + 12;
-    const geometry = new THREE.BoxGeometry(20, 20, 20);
+    // 占位盒按数据包外形尺寸建（mm）；缺项才回落 20mm，避免把 20mm 气缸和 2m 输送段画成一样大
+    const { dims: size, sized } = resolvePlaceholderDims(dimsMm ?? undefined);
+    const geometry = new THREE.BoxGeometry(size.w, size.h, size.d);
     const material = new THREE.MeshStandardMaterial({
       color: new THREE.Color(DEFAULT_COLORS[this.parts.length % DEFAULT_COLORS.length] ?? 0x14b8a6),
       metalness: 0.22,
@@ -1099,8 +1105,10 @@ export class CadViewer {
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = displayName;
-    mesh.position.set(centerX, 0, 10);
+    mesh.position.set(centerX, size.h / 2, 10);
     mesh.userData.placeholder = true;
+    mesh.userData.placeholderDimsMm = { ...size };
+    mesh.userData.placeholderSized = sized;
     mesh.userData.kinematicsBasePosition = mesh.position.clone();
     mesh.userData.kinematicsBaseQuaternion = mesh.quaternion.clone();
 
@@ -1389,17 +1397,80 @@ export class CadViewer {
   }
 
   private renderPartList(): void {
-    this.partsElement.innerHTML = '';
-    this.parts.forEach((part, index) => {
+    const host = this.partsElement;
+    host.innerHTML = '';
+
+    // 搜索栏（工程里 94 件时靠它找件；经典结构树的搜索在 CAD 覆盖层下看不见）
+    const bar = document.createElement('div');
+    bar.className = 'cad-part-toolbar';
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'cad-part-search';
+    input.placeholder = '搜索零件 / 装配路径';
+    input.value = this.partQuery;
+    input.setAttribute('aria-label', '搜索零件');
+    const count = document.createElement('span');
+    count.className = 'cad-part-count';
+    bar.append(input, count);
+    host.appendChild(bar);
+
+    const labels = buildPartListEntries(
+      this.parts.map((part) => ({ name: part.data.name, ...(Array.isArray(part.data.path) ? { path: part.data.path } : {}) }))
+    );
+    const rows = new Map<number, HTMLElement>();
+    const groupNodes = new Map<string, HTMLElement>();
+
+    for (const entry of labels) {
+      if (entry.kind === 'group') {
+        const header = document.createElement('div');
+        header.className = 'cad-part-group';
+        header.dataset.group = entry.label;
+        header.innerHTML = `<span class="cad-part-group-name"></span><span class="cad-part-group-count">${entry.count}</span>`;
+        const label = header.querySelector('.cad-part-group-name');
+        if (label) label.textContent = entry.label;
+        host.appendChild(header);
+        groupNodes.set(entry.label, header);
+        continue;
+      }
+      const part = this.parts[entry.index];
+      if (!part) continue;
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'cad-part-row';
-      row.dataset.partIndex = String(index);
-      row.innerHTML = `<span class="cad-part-index">${String(index + 1).padStart(2, '0')}</span><span class="cad-part-name"></span><span class="cad-part-tris">${part.triangleCount}</span>`;
+      row.dataset.partIndex = String(entry.index);
+      const haystack = [part.data.name, ...(part.data.path ?? [])].join(' ').toLowerCase();
+      row.dataset.search = haystack;
+      row.innerHTML = `<span class="cad-part-index">${String(entry.index + 1).padStart(2, '0')}</span><span class="cad-part-name"></span><span class="cad-part-tris">${part.triangleCount}</span>`;
       const name = row.querySelector('.cad-part-name');
       if (name) name.textContent = part.data.name;
-      this.partsElement.appendChild(row);
+      host.appendChild(row);
+      rows.set(entry.index, row);
+    }
+
+    const applyFilter = (raw: string): void => {
+      const query = raw.trim();
+      const result = filterPartList(
+        this.parts.map((part) => ({ name: part.data.name, ...(Array.isArray(part.data.path) ? { path: part.data.path } : {}) })),
+        query
+      );
+      for (const [index, row] of rows) {
+        row.hidden = result.active && !result.matched.has(index);
+      }
+      for (const [label, node] of groupNodes) {
+        node.hidden = result.active && !result.groups.has(label);
+      }
+      count.textContent = result.active ? `${result.matched.size} / ${this.parts.length}` : `${this.parts.length} 件`;
+      // 选中项被过滤掉时把高亮收掉，避免「看不见却仍选中」
+      const selected = this.selected;
+      if (selected !== null && result.active && !result.matched.has(selected)) {
+        this.partsElement.querySelectorAll('.cad-part-row.is-selected').forEach((row) => row.classList.remove('is-selected'));
+      }
+    };
+    input.addEventListener('input', () => {
+      this.partQuery = input.value;
+      applyFilter(input.value);
     });
+    applyFilter(this.partQuery);
   }
 
   private syncPartCount(): void {

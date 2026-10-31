@@ -49,13 +49,13 @@
   };
 
   /* ------------------------------------------------------------
-     机型参数：默认值就是 EL-001（滑台气缸控制柜）的样本值。
+     机型参数：只用于"还没打开工程"时的占位样式，不含任何具体机型名。
      工程图纸由 desktop/src/elec 引擎整页生成后经 setSchematic() 注入，
      这里保留示例值供演示页使用。
      ------------------------------------------------------------ */
   const MACHINE_DEFAULT = {
     kind: 'sample',
-    project: '滑台气缸控制柜',
+    project: '',   // 空 = 未绑定工程；标题栏回落到「未命名工程」，绝不写死某台机器
     drawingNo: 'EL-001',
     page: '3 / 12',
     breaker: { tag: '-QF1', model: 'iC65N 3P D32', spec: '32A' },
@@ -76,6 +76,8 @@
     io: []
   };
   let MACHINE = MACHINE_DEFAULT;
+  /** 页码唯一来源：注入工程图纸后以 ES.machine.page 为准，示例页才回落 3/12 */
+  const pageLabel = () => (ES.machine && ES.machine.page) || MACHINE.page || '3 / 12';
   const mc = (key, field) => (MACHINE && MACHINE[key] && MACHINE[key][field] != null ? MACHINE[key][field] : MACHINE_DEFAULT[key][field]);
   const mtag = (key) => (MACHINE && MACHINE[key] && MACHINE[key].tag) || MACHINE_DEFAULT[key].tag;
 
@@ -90,12 +92,17 @@
   ];
 
   function buildChrome() {
-    /* 电气模式按钮组（独立类名 .emode，不命中 app.js 的 .mode 委托） */
+    /* 电气视图选择：原来三个竖排文字标签只看得到字、看不出页面内容，
+       改成下拉框，选项名直接写清是哪种页面（原理图 / IO 规划 / 柜体布置） */
     const nav = $('#modesElec');
     if (nav && !nav.dataset.built) {
-      nav.innerHTML = ELEC_VIEWS.map(m =>
-        `<button type="button" class="emode" data-emode="${m.v}" role="tab" aria-selected="false">${m.label}</button>`
-      ).join('');
+      nav.innerHTML = `
+        <label class="emode-pick">
+          <span class="emode-pick-cap">页面</span>
+          <select id="elecViewSelect" class="emode-select" aria-label="选择电气页面">
+            ${ELEC_VIEWS.map(m => `<option value="${m.v}">${m.label}</option>`).join('')}
+          </select>
+        </label>`;
       nav.dataset.built = '1';
     }
 
@@ -113,7 +120,7 @@
           <span class="vsep"></span>
           <label class="switch"><input type="checkbox" checked><span>栅格 4mm</span></label>
           <label class="switch"><input type="checkbox" checked><span>端子号</span></label>
-          <div class="ctx-right"><span class="ctx-mono" id="elCtxPage">A3 420×297 · 1:1 · 页 ${MACHINE.page}</span></div>
+          <div class="ctx-right"><span class="ctx-mono" id="elCtxPage">A3 420×297 · 1:1 · 页 ${pageLabel()}</span></div>
         </div>`, bar);
       bar.insertAdjacentHTML('beforeend', `
         <div class="ctx" data-ctx="io" id="ctxIo" hidden>
@@ -172,6 +179,8 @@
     ES.view = v;
     $$('.view').forEach(s => { s.hidden = s.dataset.view !== v; });
     $$('.ctx').forEach(c => { if (c.dataset.ctx) c.hidden = c.dataset.ctx !== v; });
+    const pick = $('#elecViewSelect');
+    if (pick && pick.value !== v) pick.value = v;
     $$('.emode').forEach(b => {
       const on = b.dataset.emode === v;
       b.classList.toggle('is-active', on);
@@ -199,7 +208,7 @@
     if (el) el.textContent = '电气 · 原理图';
     const d = ES.sym ? (ES.defs[ES.sym] || SYMDEF[ES.sym]) : null;
     statusSlots(d ? (d.tag + ' · ' + d.pot) : '未选中元件',
-      '页 3/12 · A3 420×297 · 比例 1:1',
+      '页 ' + pageLabel() + ' · A3 420×297 · 比例 1:1',
       { tone: 'ok', text: '交叉引用 ' + XREF.length + ' 条' });
   }
   function statusIo() {
@@ -419,7 +428,7 @@
       <line class="ic ic-t" x1="${x + 78}" y1="${y + 29}" x2="${x + 78}" y2="${y + 39}"/>
       <line class="ic ic-t" x1="${x + 40}" y1="${y + 39}" x2="${x + 40}" y2="${y + h}"/>
       <line class="ic ic-t" x1="${x + 78}" y1="${y + 39}" x2="${x + 78}" y2="${y + h}"/>
-      <text class="it-b" x="${x + 4}" y="${y + 10}">${(MACHINE && MACHINE.project) || '滑台气缸控制柜'} · 电气原理图</text>
+      <text class="it-b" x="${x + 4}" y="${y + 10}">${(MACHINE && MACHINE.project) || '未命名工程'} · 电气原理图</text>
       <text class="it" x="${x + w - 4}" y="${y + 10}" text-anchor="end" style="font-size:4.4px">${(MACHINE && MACHINE.drawingNo) || 'EL-001'}</text>
       <text class="it-s" x="${x + 4}" y="${y + 21}">图号</text>
       <text class="it" x="${x + 20}" y="${y + 21.4}" style="font-size:4px">${(MACHINE && MACHINE.drawingNo) || 'EL-001'}</text>
@@ -738,7 +747,7 @@
     <div class="el-left">
       <div class="el-zone" style="flex:${(ES.split * 100).toFixed(0)} 1 0">
         <div class="el-zone-head">
-          <span class="t">页浏览器</span><span class="n">5 组 · 12 页</span>
+          <span class="t">页浏览器</span><span class="n" id="elPageCount">—</span>
           <span style="flex:1"></span>
           <span class="badge-warn-sm">${ICO.warn}6</span>
         </div>
@@ -822,7 +831,7 @@
       <button class="pgroup-head" type="button" data-pgroup-head>页属性<svg viewBox="0 0 16 16" class="ico"><path d="M4 6.5l4 4 4-4"/></svg></button>
       <div class="pgroup-body"><div class="pb-inner"><div class="pb-pad">
         <div class="field"><label>图号</label><div class="ctl-ro mono">${(ES.machine && ES.machine.drawingNo) || 'EL-001'}</div></div>
-        <div class="field"><label>页</label><div class="ctl-ro mono">${ES.machine ? '1 / 1' : '3 / 12'}</div></div>
+        <div class="field"><label>页</label><div class="ctl-ro mono">${pageLabel()}</div></div>
         <div class="field"><label>来源</label><div class="ctl-ro mono">${ES.machine ? (ES.machine.project || '工程生成') : '示例柜'}</div></div>
         <div class="field"><label>幅面</label><div class="ctl-ro mono">A3 · 420 × 297</div></div>
         <div class="field"><label>比例</label><div class="ctl-ro mono">1:1</div></div>
@@ -926,7 +935,7 @@
     selectSym(id);
     disarmPlace();
     statusSlots(tag + ' · ' + def.pot, '已放置 ' + def.name + ' · 自动编号 ' + tag + '（可从符号库继续取用）',
-      { tone: 'ok', text: '页 3/12' });
+      { tone: 'ok', text: '页 ' + pageLabel() });
   }
 
   function bindSchematic() {
@@ -2040,6 +2049,10 @@
   function bindGlobal() {
     /* 域切换 */
     $$('.domsw-btn').forEach(b => b.addEventListener('click', () => setDomain(b.dataset.domain)));
+    document.addEventListener('change', e => {
+      const pick = e.target && e.target.id === 'elecViewSelect' ? e.target : null;
+      if (pick) showElecView(pick.value);
+    });
 
     document.addEventListener('click', e => {
       const t = e.target;
@@ -2416,6 +2429,18 @@
       const label = $('#elSheetProject');
       if (label) label.textContent = payload.meta.project || '';
       renderMachinePageTree(payload.meta);
+      // 上下文条与状态栏的页码是页面级常量，注入后必须显式刷新，
+      // 否则顶部还写着示例的 3/12、页属性却是 1/8
+      const ctxPage = $('#elCtxPage');
+      if (ctxPage) ctxPage.textContent = 'A3 420×297 · 1:1 · 页 ' + pageLabel();
+      // 页浏览器表头也要跟着数据源走，别一直挂着示例的「5 组 · 12 页」
+      const countEl = $('#elPageCount');
+      if (countEl) {
+        const list = Array.isArray(payload.meta.pages) ? payload.meta.pages : [];
+        const groups = new Set(list.map((p) => (p && p.kind) || 'page')).size || (list.length ? 1 : 0);
+        countEl.textContent = list.length ? `${groups} 组 · ${list.length} 页` : '—';
+      }
+      if (typeof statusSchematic === 'function') statusSchematic();
     }
     applySheetState();
     ensureSheetsRerendered();

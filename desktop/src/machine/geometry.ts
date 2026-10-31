@@ -113,6 +113,13 @@ export interface GeomStation {
 
 export type GeomLayout = 'single' | 'linear' | 'dial' | 'gantry' | 'dual' | 'hybrid' | 'cell';
 
+/** 生成器自己建立的结构连接：这两件本来就该相接（立柱插横梁），干涉初筛据此放行。 */
+export interface GeomJoint {
+  a: string;
+  b: string;
+  reason: string;
+}
+
 export interface MachineGeometry {
   schemaVersion: 1;
   kind: 'machine-geometry';
@@ -131,6 +138,8 @@ export interface MachineGeometry {
   stations: GeomStation[];
   parts: GeomPart[];
   moving: GeomMovingAxis[];
+  /** 生成器显式产出的结构连接（不靠命名规则猜），干涉初筛只放行这些。 */
+  joints: GeomJoint[];
   /** 结构件 BOM（机架、底板、门架、输送线等），与 bomDraft 的执行机构/传感器分开。 */
   structureBom: { name: string; spec: string; qty: number; material: string }[];
   assumptions: string[];
@@ -1702,6 +1711,26 @@ export function generateMachineGeometry(
       bomGroup: 'structure'
     });
   }
+  // 结构连接由生成器直接产出：立柱↔台面、立柱↔下横梁、横梁交汇。
+  // 干涉初筛只放行这里声明过的对，新增构件类型必须在这里登记，否则会被报成「需人工确认」（有意为之）。
+  const frameJoints: GeomJoint[] = [];
+  const addJoint = (a: string, b: string, reason: string, contactOnly = false): void => {
+    if (a === b) return;
+    frameJoints.push({ a, b, reason, ...(contactOnly ? { contactOnly: true } : {}) });
+  };
+  const legIds = frameParts.filter((part) => part.id.startsWith('frame-leg-')).map((part) => part.id);
+  const stringerIds = frameParts.filter((part) => part.id.startsWith('frame-stringer-')).map((part) => part.id);
+  const crossIds = frameParts.filter((part) => part.id.startsWith('frame-cross-')).map((part) => part.id);
+  for (const leg of legIds) {
+    addJoint(leg, 'frame-top', '立柱接台面');
+    for (const stringer of stringerIds) addJoint(leg, stringer, '立柱插横梁');
+    for (const cross of crossIds) addJoint(leg, cross, '立柱插下横梁');
+  }
+  for (const stringer of stringerIds) {
+    for (const cross of crossIds) addJoint(stringer, cross, '下横梁交汇');
+    addJoint(stringer, 'frame-top', '横梁接台面');
+  }
+
   const allParts = [...frameParts, ...parts].map((part) => ({ ...part, estimated: true as const }));
 
   const boundsMin: Vec3 = [Infinity, Infinity, Infinity];
@@ -1711,6 +1740,48 @@ export function generateMachineGeometry(
     for (let axis = 0; axis < 3; axis += 1) {
       boundsMin[axis] = Math.min(boundsMin[axis] as number, box.min[axis] as number);
       boundsMax[axis] = Math.max(boundsMax[axis] as number, box.max[axis] as number);
+    }
+  }
+
+  // 叠装关系：声明成「只许贴合」。它们本来就面贴面，允许贴合但**不允许互穿**——
+  // 否则一张白名单会把「工位底板被推穿台面」也当成已声明连接放过去（实测会让 40 mm 排布假装收敛）。
+  for (const part of parts) {
+    if (/^st\d+-plate$/.test(part.id)) addJoint(part.id, 'frame-top', '工位底板坐台面', true);
+  }
+  const stationOf = (id: string): string | null => {
+    const match = /^(?:st(\d+)-|sensor-st(\d+)-)/.exec(id);
+    return match ? (match[1] ?? match[2] ?? null) : null;
+  };
+  for (const lower of parts) {
+    for (const upper of parts) {
+      if (lower.id === upper.id) continue;
+      if (stationOf(lower.id) !== stationOf(upper.id)) continue;
+      if (/^st\d+-plate$/.test(lower.id) && /^st\d+-rotary-\d+-base$/.test(upper.id)) addJoint(lower.id, upper.id, '底板上装转台底座', true);
+      if (/^st\d+-rotary-\d+-base$/.test(lower.id) && /^st\d+-rotary-\d+-table$/.test(upper.id)) addJoint(lower.id, upper.id, '转台底座上装转台面', true);
+      if (/^st\d+-rotary-\d+-table$/.test(lower.id) && /^st\d+-rotary-\d+-fixture$/.test(upper.id)) addJoint(lower.id, upper.id, '转台面上装夹具', true);
+      if (/^st\d+-plate$/.test(lower.id) && /^sensor-st\d+-.*-bracket$/.test(upper.id)) addJoint(lower.id, upper.id, '底板上装传感器支架', true);
+    }
+  }
+  if (parts.some((part) => part.id === 'conveyor-frame')) addJoint('frame-top', 'conveyor-frame', '输送线框坐台面', true);
+  // frame-top 不在 parts 里，跟它配对的要单独处理（之前写在循环里等于没生效）
+  for (const part of parts) {
+    if (/^sensor-st\d+-safe-/.test(part.id)) addJoint('frame-top', part.id, '台面上装安全光栅', true);
+  }
+  if (parts.some((part) => part.id === 'dial-indexer')) {
+    addJoint('frame-top', 'dial-indexer', '台面上装分度器', true);
+    if (parts.some((part) => part.id === 'dial-plate')) addJoint('dial-indexer', 'dial-plate', '分度器上装转盘', true);
+    for (const part of parts) {
+      if (/^dial-nest-\d+$/.test(part.id)) addJoint('dial-plate', part.id, '转盘上装定位座', true);
+    }
+  }
+
+  // 六工位这类组合机还有几层：气爪本体→夹爪、横梁→气爪座、底板→气爪座
+  for (const lower of parts) {
+    for (const upper of parts) {
+      if (lower.id === upper.id) continue;
+      if (/^st\d+-gripper-\d+-body$/.test(lower.id) && /^st\d+-gripper-\d+-jaw-[lr]$/.test(upper.id)) addJoint(lower.id, upper.id, '气爪本体上装夹爪', true);
+      if (/^st\d+-beam$/.test(lower.id) && /^st\d+-gripper-\d+-mount$/.test(upper.id)) addJoint(lower.id, upper.id, '横梁上装气爪座', true);
+      if (/^st\d+-plate$/.test(lower.id) && /^st\d+-gripper-\d+-nest$/.test(upper.id)) addJoint(lower.id, upper.id, '底板上装定位座', true);
     }
   }
 
@@ -1736,6 +1807,7 @@ export function generateMachineGeometry(
     bounds: { min: roundVec(boundsMin), max: roundVec(boundsMax) },
     tableHeight: D.tableHeight,
     stations,
+    joints: frameJoints,
     parts: allParts,
     moving,
     structureBom,
